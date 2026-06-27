@@ -3,6 +3,7 @@
 
 #include "common/pto_tile.hpp"
 #include "jcore/constants.hpp"
+#include "template_asm.hpp"
 
 using namespace pto;
 
@@ -55,29 +56,19 @@ void TCAST_Impl(tile_shape_out &dst, tile_shape_in &src) {
   static_assert(tile_shape_in::InnerRows == tile_shape_out::InnerRows &&
                     tile_shape_in::InnerCols == tile_shape_out::InnerCols,
                 "Error! Inner shape is not equal!");
-  static_assert(tile_shape_out::Loc != Location::Acc && 
+  static_assert(tile_shape_out::Loc != Location::Acc &&
                 tile_shape_in::Loc != Location::Acc, "Unsupport ACC to be input or output here");
-  size_t row = src.GetValidRow();
-  size_t col = src.GetValidCol();
-  static constexpr size_t row_lines =
-      tile_shape_in::Rows / (LaneNum / tile_shape_in::InnerCols);
-  if constexpr (is_Nz_layout<tile_shape_in>::value &&
-                is_Nz_layout<tile_shape_out>::value) {
-    TCast_NzLayout_Imp<tile_shape_out, tile_shape_in>
-        <<<LaneNum, row_lines, 1>>>(dst.data(), src.data());
-  } else if constexpr (tile_shape_in::isRowMajor &&
-                       tile_shape_out::isRowMajor) {
-    TCast_RowMajor_Imp<tile_shape_out, tile_shape_in>
-        <<<col, row, 1>>>(dst.data(), src.data());
-  } else if constexpr (!tile_shape_in::isRowMajor &&
-                       !tile_shape_out::isRowMajor) {
-    TCast_ColMajor_Imp<tile_shape_out, tile_shape_in>
-        <<<row, col, 1>>>(dst.data(), src.data());
-  } else {
-    static_assert(tile_shape_in::isRowMajor &&
-                      tile_shape_out::isRowMajor,
-                  "Storage layout type not supported");
-  }
+  // TCAST is a pure type cast (no layout conversion); require identical layout
+  // on src and dst. The previous SIMT <<<>>> implementation (TCast_*_Imp)
+  // crashed the ClockHands pass; use the tileblock-asm TCVT path instead
+  // (BSTART.TEPL TCVT + B.DATR SrcType/DstType), which lowers to a single
+  // hardware TCVT without launching a SIMT kernel.
+  static_assert(tile_shape_in::isRowMajor == tile_shape_out::isRowMajor &&
+                is_Nz_layout<tile_shape_in>::value ==
+                    is_Nz_layout<tile_shape_out>::value,
+                "TCAST requires identical layout on src and dst "
+                "(pure type cast, no layout convert)");
+  TCVT_T(dst, src);
 }
 
 #endif

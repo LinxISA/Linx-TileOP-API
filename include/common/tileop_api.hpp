@@ -158,6 +158,18 @@ template <is_tile_data_v tile_shape>
 void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   TOR_Impl(dst, src0, src1);
 }
+template <is_tile_data_v tile_shape>
+void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+  TXOR_Impl(dst, src0, src1);
+}
+template <is_tile_data_v tile_shape>
+void TSLL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+  TSLL_Impl(dst, src0, src1);
+}
+template <is_tile_data_v tile_shape>
+void TSRL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+  TSRL_Impl(dst, src0, src1);
+}
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in, typename T>
 void TPAD(tile_shape_out &dst, const tile_shape_in &src, T pad_value,
           size_t up_pad, size_t left_pad, size_t down_pad, size_t right_pad) {

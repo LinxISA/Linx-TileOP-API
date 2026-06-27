@@ -4,6 +4,7 @@
 #include "common/pto_tile.hpp"
 #include "jcore/constants.hpp"
 #include <assert.h>
+#include <type_traits>
 using namespace pto;
 
 template <typename tile_shape_out, typename tile_shape_in, CmpMode mode>
@@ -78,10 +79,8 @@ void TCMP_Impl(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1, Cm
   static_assert(row != DYNAMIC && col != DYNAMIC,
                 "TODO: Support tile dynamic shape!");
 
-  if constexpr (std::is_same<typename tile_shape_in::DType, int64_t>::value ||
-                std::is_same<typename tile_shape_in::DType, int32_t>::value ||
-                std::is_same<typename tile_shape_in::DType, float>::value ||
-                std::is_same<typename tile_shape_in::DType, __half>::value) {
+  if constexpr (std::is_integral<typename tile_shape_in::DType>::value ||
+                std::is_floating_point<typename tile_shape_in::DType>::value) {
     if constexpr (tile_shape_in::isRowMajor) {
       switch (cmpMode) {
         case CmpMode::EQ:
@@ -152,10 +151,8 @@ void TCMP_Impl(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1, Cm
       }
     }
   } else {
-    static_assert(std::is_same<typename tile_shape_in::DType, int64_t>::value ||
-                    std::is_same<typename tile_shape_in::DType, int32_t>::value ||
-                    std::is_same<typename tile_shape_in::DType, float>::value ||
-                    std::is_same<typename tile_shape_in::DType, __half>::value,
+    static_assert(std::is_integral<typename tile_shape_in::DType>::value ||
+                    std::is_floating_point<typename tile_shape_in::DType>::value,
                     "Dtype not support!");
   }
 }

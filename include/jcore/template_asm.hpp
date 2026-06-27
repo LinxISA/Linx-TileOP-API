@@ -202,8 +202,8 @@ void THISTOGRAM(tile_shape_out &dst, tile_shape_in &src, tile_shape_in &Idx, int
     "B.DATR %c2," BYTE_NAME ",Null\n"                                  \
     "B.DIM zero, %c3, ->LB0\n"                                         \
     "B.DIM zero, %c4, ->LB1\n"                                         \
-    "B.DIM zero, %c4, ->LB2\n"                                         \
-    "B.IOT [%5, %6], last, ->%0<%c7>\n"                                \
+    "B.DIM zero, %c5, ->LB2\n"                                         \
+    "B.IOT [%6, %7], last, ->%0<%c8>\n"                                \
     ""                                                                 \
     : "=Tr"(dst.data())                                                \
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),       \
