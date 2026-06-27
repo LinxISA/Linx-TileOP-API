@@ -6,14 +6,18 @@
 #include <type_traits>
 using namespace pto;
 
-// TSRL performs a logical (unsigned) right shift: src0 is treated as unsigned
-// before shifting, so the sign bit does not propagate. This matches the
-// hardware v.srl semantics (logical shift right).
+// TSRL performs a uniform logical (unsigned) right shift of the whole tile by
+// a scalar shift amount: dst[i] = (unsigned)src[i] >> shamt. The shift amount
+// is a scalar (compile-time constant or runtime uniform value), NOT a per-lane
+// tile. src is converted to its unsigned counterpart before shifting so the
+// sign bit does not propagate, matching the hardware v.srli/v.srl semantics.
+// When shamt is a compile-time constant, ISel lowers to v.srli; when it is a
+// runtime scalar, to v.srl (shift amount masked mod 32/64).
 template <typename tile_shape>
 void __vec__ TSrl_Vec_RowMajor(
   typename tile_shape::TileDType __out__ dst,
-  const typename tile_shape::TileDType __in__ src0,
-  const typename tile_shape::TileDType __in__ src1) {
+  const typename tile_shape::TileDType __in__ src,
+  unsigned shamt) {
   size_t i = blkv_get_index_x();
   size_t j = blkv_get_index_y();
 
@@ -21,15 +25,14 @@ void __vec__ TSrl_Vec_RowMajor(
   using UDType = std::make_unsigned_t<typename tile_shape::DType>;
   blkv_get_tile_ptr(dst)[index] =
       static_cast<typename tile_shape::DType>(
-          static_cast<UDType>(blkv_get_tile_ptr(src0)[index]) >>
-          blkv_get_tile_ptr(src1)[index]);
+          static_cast<UDType>(blkv_get_tile_ptr(src)[index]) >> shamt);
 }
 
 template <typename tile_shape>
 void __vec__ TSrl_Vec_ColMajor(
   typename tile_shape::TileDType __out__ dst,
-  const typename tile_shape::TileDType __in__ src0,
-  const typename tile_shape::TileDType __in__ src1) {
+  const typename tile_shape::TileDType __in__ src,
+  unsigned shamt) {
   size_t i = blkv_get_index_x();
   size_t j = blkv_get_index_y();
 
@@ -37,12 +40,11 @@ void __vec__ TSrl_Vec_ColMajor(
   using UDType = std::make_unsigned_t<typename tile_shape::DType>;
   blkv_get_tile_ptr(dst)[index] =
       static_cast<typename tile_shape::DType>(
-          static_cast<UDType>(blkv_get_tile_ptr(src0)[index]) >>
-          blkv_get_tile_ptr(src1)[index]);
+          static_cast<UDType>(blkv_get_tile_ptr(src)[index]) >> shamt);
 }
 
 template <is_tile_data_v tile_shape>
-void TSRL_Impl(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TSRL_Impl(tile_shape &dst, tile_shape &src, unsigned shamt) {
   static constexpr size_t row = tile_shape::ValidRow;
   static constexpr size_t col = tile_shape::ValidCol;
 
@@ -61,10 +63,10 @@ void TSRL_Impl(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
                 std::is_same<typename tile_shape::DType, unsigned char>::value) {
     if constexpr (tile_shape::isRowMajor) {
       TSrl_Vec_RowMajor<tile_shape><<<col, row, 1>>>
-                        (dst.data(), src0.data(), src1.data());
+                        (dst.data(), src.data(), shamt);
     } else {
       TSrl_Vec_ColMajor<tile_shape><<<row, col, 1>>>
-                        (dst.data(), src0.data(), src1.data());
+                        (dst.data(), src.data(), shamt);
     }
   } else {
     static_assert(std::is_same<typename tile_shape::DType, int64_t>::value ||

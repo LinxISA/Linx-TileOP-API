@@ -5,36 +5,40 @@
 #include "jcore/constants.hpp"
 using namespace pto;
 
+// TSLL performs a uniform left shift of the whole tile by a scalar shift
+// amount: dst[i] = src[i] << shamt. The shift amount is a scalar (compile-time
+// constant or runtime uniform value), NOT a per-lane tile. This matches the
+// ISA v.slli (immediate) / v.sll (scalar register) semantics. When shamt is a
+// compile-time constant, ISel lowers to v.slli; when it is a runtime scalar,
+// to v.sll with the scalar in a register (shift amount masked mod 32/64).
 template <typename tile_shape>
 void __vec__ TSll_Vec_RowMajor(
   typename tile_shape::TileDType __out__ dst,
-  const typename tile_shape::TileDType __in__ src0,
-  const typename tile_shape::TileDType __in__ src1) {
+  const typename tile_shape::TileDType __in__ src,
+  unsigned shamt) {
   size_t i = blkv_get_index_x();
   size_t j = blkv_get_index_y();
 
   size_t index = j * tile_shape::RowStride + i;
   blkv_get_tile_ptr(dst)[index] =
-      blkv_get_tile_ptr(src0)[index] <<
-      blkv_get_tile_ptr(src1)[index];
+      blkv_get_tile_ptr(src)[index] << shamt;
 }
 
 template <typename tile_shape>
 void __vec__ TSll_Vec_ColMajor(
   typename tile_shape::TileDType __out__ dst,
-  const typename tile_shape::TileDType __in__ src0,
-  const typename tile_shape::TileDType __in__ src1) {
+  const typename tile_shape::TileDType __in__ src,
+  unsigned shamt) {
   size_t i = blkv_get_index_x();
   size_t j = blkv_get_index_y();
 
   size_t index = j * tile_shape::ColStride + i;
   blkv_get_tile_ptr(dst)[index] =
-      blkv_get_tile_ptr(src0)[index] <<
-      blkv_get_tile_ptr(src1)[index];
+      blkv_get_tile_ptr(src)[index] << shamt;
 }
 
 template <is_tile_data_v tile_shape>
-void TSLL_Impl(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TSLL_Impl(tile_shape &dst, tile_shape &src, unsigned shamt) {
   static constexpr size_t row = tile_shape::ValidRow;
   static constexpr size_t col = tile_shape::ValidCol;
 
@@ -53,10 +57,10 @@ void TSLL_Impl(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
                 std::is_same<typename tile_shape::DType, unsigned char>::value) {
     if constexpr (tile_shape::isRowMajor) {
       TSll_Vec_RowMajor<tile_shape><<<col, row, 1>>>
-                        (dst.data(), src0.data(), src1.data());
+                        (dst.data(), src.data(), shamt);
     } else {
       TSll_Vec_ColMajor<tile_shape><<<row, col, 1>>>
-                        (dst.data(), src0.data(), src1.data());
+                        (dst.data(), src.data(), shamt);
     }
   } else {
     static_assert(std::is_same<typename tile_shape::DType, int64_t>::value ||
