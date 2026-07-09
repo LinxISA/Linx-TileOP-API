@@ -1,0 +1,43 @@
+# Tileop 接口使用说明
+
+> 本目录是 Linx-TileOP-API 接口的使用参考,持续更新。
+> 所有接口实现在 `include/jcore/template_asm.hpp`,一层架构(inline-asm / builtin,不走 `__vec__` kernel)。
+> 程序员 `#include <tileop-api/jcore/template_asm.hpp>`(或经 `tileop_api.hpp` 间接包含)后,直接用接口名调用。
+
+## 目录
+
+| 类别 | 文件 | 包含的接口 |
+| --- | --- | --- |
+| 数据搬运(TLSU) | [tlsu.md](tlsu.md) | TLOAD / TSTORE / MGATHER / MSCATTER / MGATHER_MASK / MSCATTER_MASK |
+| 矩阵乘(CUBE) | [cube.md](cube.md) | TMATMUL / TMATMUL_ACC / TMATMUL_BIAS / TMATMUL_MX / ACCCVT |
+| 逐元素运算(TEPL) | [elementwise.md](elementwise.md) | (待补充:TXOR / TSLL / TSRL / TADD / TSUB / TMUL / ...) |
+| 布局转换 | [layout.md](layout.md) | (待补充:TCVT / TMOV / TTRANS / ...) |
+| 约束与通用约定 | [constraints.md](constraints.md) | Tile size 128B..8KB / Acc tile / 寄存器 / 汇编 family 命名 |
+
+## 快速开始
+
+```cpp
+#include <common/pto_tileop.hpp>
+using namespace pto;
+
+void matmul_flow(float* a, float* b, float* c) {
+  using t_A = TileLeft<float, 64, 64>;
+  using t_B = TileRight<float, 64, 64>;
+  using t_C = TileAcc<float, 64, 64>;
+  using t_O = TileLeft<float, 64, 64>;
+  using gm = global_tensor<float, RowMajor<64, 64>>;
+  gm ga(a), gb(b), gc(c);
+  t_A da; t_B db; t_C dc; t_O dout;
+  TCOPYIN(da, ga); TCOPYIN(db, gb);
+  TMATMUL(dc, da, db);   // C = A*B → ACC
+  ACCCVT(dout, dc);      // ACC → tile
+  TSTORE(gc, dout);      // tile → GM
+}
+```
+
+## 如何添加新的 tileop 说明
+
+1. 找到对应类别的 `.md` 文件(如逐元素运算加到 `elementwise.md`)
+2. 按 `### 接口名 — 一句话描述` 标题追加
+3. 包含:签名、代码示例、生成汇编说明
+4. 如是全新类别,新建 `.md` 并加到上方目录表
