@@ -43,10 +43,6 @@ void MATMACCMXB(tile_shape_C &dst, tile_shape_A &src0,
   MATMACCMXB_Impl(dst, src0, src1, src1x);
 }
 
-template <is_tile_data_v tile_shape>
-void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
-  TADDS_Impl(dst, src, s);
-}
 template <is_tile_data_v tile_shape_in0, is_tile_data_v tile_shape_in1,
           is_tile_data_v tile_shape_in2, is_tile_data_v tile_shape_out>
 void TASSEMBLE(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1,
@@ -72,10 +68,6 @@ void TCOPYIN(tile_shape &dst, gm_shape &src) {
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 void TCOPYOUT(gm_shape &dst, tile_shape &src) {
   TCOPYOUT_Impl(dst, src);
-}
-template <is_tile_data_v tile_shape>
-void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
-  TDIVS_Impl(dst, src, s);
 }
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TEXPANDCOL(tile_shape_out &dst, tile_shape_in &src) {
@@ -103,26 +95,6 @@ template <is_tile_data_v tile_shape_dst, is_tile_data_v tile_shape_src,
 void TGATHER(tile_shape_dst &dst, tile_shape_src &src,
              tile_shape_indices &indices) {
   TGATHER_Impl(dst, src, indices);
-}
-template <is_tile_data_v tile_shape>
-void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
-  TMAXS_Impl(dst, src, s);
-}
-template <is_tile_data_v tile_shape>
-void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
-  TMINS_Impl(dst, src, s);
-}
-template <is_tile_data_v tile_shape>
-void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
-  TMULS_Impl(dst, src, s);
-}
-template <is_tile_data_v tile_shape>
-void TSLL(tile_shape &dst, tile_shape &src, unsigned shamt) {
-  TSLL_Impl(dst, src, shamt);
-}
-template <is_tile_data_v tile_shape>
-void TSRL(tile_shape &dst, tile_shape &src, unsigned shamt) {
-  TSRL_Impl(dst, src, shamt);
 }
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in, typename T>
 void TPAD(tile_shape_out &dst, const tile_shape_in &src, T pad_value,
@@ -159,10 +131,6 @@ template <is_tile_data_v tile_shape, is_tile_data_v tile_shape_index>
 void TSELECT(tile_shape &dst, tile_shape_index &cond, tile_shape &src0,
              tile_shape &src1) {
   TSELECT_Impl(dst, cond, src0, src1);
-}
-template <is_tile_data_v tile_shape>
-void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
-  TSUBS_Impl(dst, src, s);
 }
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TTRANS(tile_shape_out &dst, tile_shape_in &src) {
