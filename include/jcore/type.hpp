@@ -126,6 +126,14 @@ private:
 public:
   static constexpr int TilesizeCode = mapBytesToEnum(bytes);
   static constexpr int Regsize = bytes;
+  // DavinciOO active PE-local profile only allows imm4=3..9, i.e. output Tile
+  // allocation size 128 B..8 KB (see isa/intrinsic/header/B.IOT.md). Sizes
+  // outside this range (0 B, 32 B, 64 B, 16 KB..512 KB) are reserved/illegal
+  // for the active profile. The full Linx imm4 encoding is still preserved by
+  // TilesizeCode above; this flag is used by tileop templates to reject
+  // illegal active-profile sizes at compile time.
+  static constexpr bool IsValidActiveSize =
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_8KB;
 };
 
 #endif
