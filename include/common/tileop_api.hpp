@@ -43,20 +43,9 @@ void MATMACCMXB(tile_shape_C &dst, tile_shape_A &src0,
   MATMACCMXB_Impl(dst, src0, src1, src1x);
 }
 
-template <is_tile_data_v tile_shape> void TABS(tile_shape &dst, tile_shape &src) {
-  TABS_Impl(dst, src);
-}
-template <is_tile_data_v tile_shape>
-void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  TADD_Impl(dst, src0, src1);
-}
 template <is_tile_data_v tile_shape>
 void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   TADDS_Impl(dst, src, s);
-}
-template <is_tile_data_v tile_shape>
-void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  TAND_Impl(dst, src0, src1);
 }
 template <is_tile_data_v tile_shape_in0, is_tile_data_v tile_shape_in1,
           is_tile_data_v tile_shape_in2, is_tile_data_v tile_shape_out>
@@ -72,10 +61,6 @@ template <is_tile_data_v tile_shape, typename T, int descending>
 void TCI(tile_shape &dst, T s) {
   TCI_Impl<tile_shape, T, descending>(dst, s);
 }
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1, CmpMode cmpMode) {
-  TCMP_Impl(dst, src0, src1, cmpMode);
-}
 template <is_tile_data_v tile_shape>
 void TCOPY(tile_shape &dst, tile_shape &src) {
   TCOPY_Impl(dst, src);
@@ -88,20 +73,9 @@ template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 void TCOPYOUT(gm_shape &dst, tile_shape &src) {
   TCOPYOUT_Impl(dst, src);
 }
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TCVT(tile_shape_out &dst, tile_shape_in &src) {
-  TCVT_Impl(dst, src);
-}
-template <is_tile_data_v tile_shape>
-void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  TDIV_Impl(dst, src0, src1);
-}
 template <is_tile_data_v tile_shape>
 void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   TDIVS_Impl(dst, src, s);
-}
-template <is_tile_data_v tile_shape> void TEXP(tile_shape &dst, tile_shape &src) {
-  TEXP_Impl(dst, src);
 }
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TEXPANDCOL(tile_shape_out &dst, tile_shape_in &src) {
@@ -131,36 +105,16 @@ void TGATHER(tile_shape_dst &dst, tile_shape_src &src,
   TGATHER_Impl(dst, src, indices);
 }
 template <is_tile_data_v tile_shape>
-void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  TMAX_Impl(dst, src0, src1);
-}
-template <is_tile_data_v tile_shape>
 void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   TMAXS_Impl(dst, src, s);
-}
-template <is_tile_data_v tile_shape>
-void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  TMIN_Impl(dst, src0, src1);
 }
 template <is_tile_data_v tile_shape>
 void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   TMINS_Impl(dst, src, s);
 }
 template <is_tile_data_v tile_shape>
-void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  TMUL_Impl(dst, src0, src1);
-}
-template <is_tile_data_v tile_shape>
 void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   TMULS_Impl(dst, src, s);
-}
-template <is_tile_data_v tile_shape>
-void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  TOR_Impl(dst, src0, src1);
-}
-template <is_tile_data_v tile_shape>
-void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  TXOR_Impl(dst, src0, src1);
 }
 template <is_tile_data_v tile_shape>
 void TSLL(tile_shape &dst, tile_shape &src, unsigned shamt) {
@@ -174,14 +128,6 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in, typename 
 void TPAD(tile_shape_out &dst, const tile_shape_in &src, T pad_value,
           size_t up_pad, size_t left_pad, size_t down_pad, size_t right_pad) {
   TPAD_Impl(dst, src, pad_value, up_pad, left_pad, down_pad, right_pad);
-}
-template <is_tile_data_v tile_shape>
-void TRECIP(tile_shape &dst, tile_shape &src) {
-  TRECIP_Impl(dst, src);
-}
-template <is_tile_data_v tile_shape>
-void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  TREM_Impl(dst, src0, src1);
 }
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TRESHAPE(tile_shape_out &tile_out, tile_shape_in &tile_in) {
@@ -203,10 +149,6 @@ template <is_tile_data_v tile_shape>
 void TROWSUMEXPAND(tile_shape &dst, tile_shape &src) {
   TROWSUMEXPAND_Impl(dst, src);
 }
-template <is_tile_data_v tile_shape>
-void TRSQRT(tile_shape &dst, tile_shape &src) {
-  TRSQRT_Impl(dst, src);
-}
 template <is_tile_data_v tile_shape_dst, is_tile_data_v tile_shape_src,
           is_tile_data_v tile_shape_indices>
 void TSCATTER(tile_shape_dst &dst, tile_shape_src &src,
@@ -217,14 +159,6 @@ template <is_tile_data_v tile_shape, is_tile_data_v tile_shape_index>
 void TSELECT(tile_shape &dst, tile_shape_index &cond, tile_shape &src0,
              tile_shape &src1) {
   TSELECT_Impl(dst, cond, src0, src1);
-}
-template <is_tile_data_v tile_shape>
-void TSQRT(tile_shape &dst, tile_shape &src) {
-  TSQRT_Impl(dst, src);
-}
-template <is_tile_data_v tile_shape>
-void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  TSUB_Impl(dst, src0, src1);
 }
 template <is_tile_data_v tile_shape>
 void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
