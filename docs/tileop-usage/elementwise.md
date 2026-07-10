@@ -28,10 +28,9 @@
 | `TCMP(dst, s0, s1)` | 13 | 比较两 tile，写 packed predicate mask |
 | `TPRELU(dst, s0, s1)` | 14 | parametric ReLU，s1 为逐元素斜率 |
 | `TSEL(dst, s0, s1)` | 26 | 用 mask tile 在两 tile 间逐元素选择 |
-| `TPARTADD(dst, s0, s1)` | 28 | partial-valid add（DavinciOO ext） |
-| `TPARTMUL(dst, s0, s1)` | 29 | partial-valid multiply |
-| `TPARTMAX(dst, s0, s1)` | 30 | partial-valid max |
-| `TPARTMIN(dst, s0, s1)` | 31 | partial-valid min |
+| `TFMA(dst, s0, s1, s2)` | 28 | dst = s0 * s1 + s2（fused multiply-add, DavinciOO ext） |
+
+> 注意：TPARTADD/TPARTMUL/TPARTMAX/TPARTMIN 已从 Mode 0 移到 Mode 3（见 [complex.md](complex.md)）。opcode 29-31 在 Mode 0 为 reserved。
 
 ```cpp
 // 示例：两 tile 逐元素加法
