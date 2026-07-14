@@ -84,9 +84,12 @@ TCOLMAX(dst, src);   // dst[j] = max(src[:, j])
 
 ## 列广播运算（2 src）
 
-签名：`void NAME(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1)`
+签名：`void NAME(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1)`
 
-src1 为每列标量向量，广播到 src0 的各列。
+src0 与 dst 同形状（方阵 `R×C`）；src1 为每列标量向量（`1×C` 每列一个标量，或每列 32B
+数据条），**shape 可与 src0 不一致**；src0/src1/dst 三者**dtype 必须一致**（编译期
+`static_assert` 守门）。`B.DIM` 的 `ValidCol/ValidRow/Col` 均取 src0 的几何，描述 dst
+的 valid region。
 
 | 接口 | opcode | 语义 |
 | --- | --- | --- |
@@ -97,3 +100,12 @@ src1 为每列标量向量，广播到 src0 的各列。
 | `TCOLEXPANDMAX(dst, s0, s1)` | 89 | 列广播最大值 |
 | `TCOLEXPANDMIN(dst, s0, s1)` | 90 | 列广播最小值 |
 | `TCOLEXPANDEXPDIF(dst, s0, s1)` | 91 | 列指数差：dst = exp(s0 - s1) |
+
+```cpp
+// 示例：列广播乘法，src1 为每列标量向量（shape 与 src0 不同）
+using tile_mat = Tile<Location::Vec, __fp32, 16, 16, BLayout::RowMajor>;
+using tile_col = Tile<Location::Vec, __fp32, 1, 16, BLayout::RowMajor>;
+tile_mat s0, dst;
+tile_col s1(16);            // 每列一个标量
+TCOLEXPANDMUL(dst, s0, s1); // dst[i,j] = s0[i,j] * s1[0,j]
+```
