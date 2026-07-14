@@ -1,5 +1,5 @@
 #include "../data.hpp"
-#include <jcore/template_asm.hpp>  // TROWEXPAND* / TCOLEXPAND* live here (no public wrapper yet)
+#include <jcore/template_asm.hpp>  // TROWEXPAND* / TCOLEXPAND* / TCONCAT live here (no public wrapper yet)
 
 #ifdef LINX_PMC
 #include "../linxStartEnd.hpp"
@@ -68,12 +68,43 @@ void test_col_vector_src1(T *dst, T *s0, T *s1) {
   TCOPYOUT(gd, d_out);
 }
 
+// Regression for TCONCAT column-concat: dst = [src0 | src1].
+// All three shapes differ by construction (R x C0, R x C1, R x (C0+C1));
+// B.DIM now takes dst's geometry, dtype uniform, row count equal.
+template <uint16_t row, uint16_t col0, uint16_t col1, typename T>
+void test_concat(T *dst, T *s0, T *s1) {
+  using gm_mat0 = global_tensor<T, RowMajor<row, col0>>;
+  using gm_mat1 = global_tensor<T, RowMajor<row, col1>>;
+  using gm_out  = global_tensor<T, RowMajor<row, col0 + col1>>;
+
+  using tile_in0 = Tile<Location::Vec, T, row, col0, BLayout::RowMajor, row, col0>;
+  using tile_in1 = Tile<Location::Vec, T, row, col1, BLayout::RowMajor, row, col1>;
+  using tile_out = Tile<Location::Vec, T, row, col0 + col1, BLayout::RowMajor,
+                        row, col0 + col1>;
+
+  gm_mat0 g0(s0);
+  gm_mat1 g1(s1);
+  gm_out  gd(dst);
+
+  tile_in0 d0;
+  tile_in1 d1;
+  tile_out d_out;
+  TCOPYIN(d0, g0);
+  TCOPYIN(d1, g1);
+
+  TCONCAT(d_out, d0, d1);   // d_out = [d0 | d1]  (R x (C0+C1))
+
+  TCOPYOUT(gd, d_out);
+}
+
 int main() {
   const uint16_t row = 16;
   const uint16_t col = 16;
+  const uint16_t cat_half = col / 2;   // 8: concat two 16x8 -> 16x16
   size_t size_mat = row * col;
   size_t size_row_vec = row;   // R scalars for row broadcast
   size_t size_col_vec = col;   // C scalars for col broadcast
+  size_t size_half = row * cat_half;   // 16x8 each concat source
 
   __half *dst = (__half *)malloc(size_mat * sizeof(__half));
   check_mem_alloc(dst);
@@ -91,12 +122,21 @@ int main() {
   check_mem_alloc(s1_col);
   init_src_fp(s1_col, size_col_vec);
 
+  __half *c0 = (__half *)malloc(size_half * sizeof(__half));
+  check_mem_alloc(c0);
+  init_src_fp(c0, size_half);
+
+  __half *c1 = (__half *)malloc(size_half * sizeof(__half));
+  check_mem_alloc(c1);
+  init_src_fp(c1, size_half);
+
 #ifdef LINX_PMC
   PMC_START();
 #endif
 
   test_row_vector_src1<row, col, __half>(dst, s0, s1_row);
   test_col_vector_src1<row, col, __half>(dst, s0, s1_col);
+  test_concat<row, cat_half, cat_half, __half>(dst, c0, c1);
 
 #ifdef LINX_PMC
   PMC_END();
@@ -109,5 +149,7 @@ int main() {
   free(s0);
   free(s1_row);
   free(s1_col);
+  free(c0);
+  free(c1);
   return 0;
 }

@@ -3978,8 +3978,24 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
 // opcode = Mode(3) * 32 + Function = 96 + Function.
 
 // TCONCAT: column concat (opcode 96)
+// dst = [src0 | src1] along columns: dst has shape R x (C0+C1), src0 is R x C0,
+// src1 is R x C1. The three shapes are all different by construction, so this
+// is NOT a broadcast -- B.DIM must describe dst's geometry (not src0's, as the
+// broadcast ops do). dtype is uniform across all three (static_assert guarded).
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_data_v tile_shape_in1>
 void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_in1::DType>::value,
+                "TCONCAT: src0/src1 dtype must match");
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_out::TileDType>::value,
+                "TCONCAT: src0/dst dtype must match");
+  // Row count is invariant across concat (src0.Rows == src1.Rows == dst.Rows);
+  // dst's valid col / total col / row stride come from dst itself.
+  static_assert(tile_shape_in0::Rows == tile_shape_in1::Rows,
+                "TCONCAT: src0/src1 row count must match");
+  static_assert(tile_shape_in0::Rows == tile_shape_out::Rows,
+                "TCONCAT: src0/dst row count must match");
   asm volatile(
     "BSTART.TEPL 96, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -3989,9 +4005,9 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)

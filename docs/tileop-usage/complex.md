@@ -175,6 +175,9 @@ TCONCAT(c, a, b);   // c = [a | b] 列拼接
 ```
 - **签名**：`TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1)`
 - **opcode**：96（Func 0）
+- **shape**：`dst = [src0 | src1]` 沿列维拼接。三者 shape **全部不同**：`src0` 为 `R×C0`、`src1` 为 `R×C1`、`dst` 为 `R×(C0+C1)`。`B.DIM` 的 `ValidCol/ValidRow/Col` 取 **dst** 的几何（描述 dst 的 valid region），不是 src0。
+- **dtype**：`src0/src1/dst` 三者必须一致（编译期 `static_assert` 守门）。
+- **行数**：`src0/src1/dst` 三者 `Rows` 必须相同（编译期 `static_assert` 守门）。
 
 ### TGATHERB — 字节偏移 tile gather
 
