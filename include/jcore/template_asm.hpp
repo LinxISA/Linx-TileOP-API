@@ -3555,8 +3555,17 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
 }
 
 // TROWEXPANDADD: row broadcast add
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
+// src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
+// (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
+          is_tile_data_v tile_shape_in1>
+void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_in1::DType>::value,
+                "TROWEXPANDADD: src0/src1 dtype must match");
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_out::TileDType>::value,
+                "TROWEXPANDADD: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 69, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -3565,10 +3574,10 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
     "B.IOT [%5, %6], last, ->%0<%c7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+      "i"(tile_shape_in0::ValidCol),
+      "i"(tile_shape_in0::ValidRow),
+      "i"(tile_shape_in0::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -3576,8 +3585,17 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
 }
 
 // TROWEXPANDSUB: row broadcast sub
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
+// src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
+// (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
+          is_tile_data_v tile_shape_in1>
+void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_in1::DType>::value,
+                "TROWEXPANDSUB: src0/src1 dtype must match");
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_out::TileDType>::value,
+                "TROWEXPANDSUB: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 70, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -3586,10 +3604,10 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
     "B.IOT [%5, %6], last, ->%0<%c7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+      "i"(tile_shape_in0::ValidCol),
+      "i"(tile_shape_in0::ValidRow),
+      "i"(tile_shape_in0::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -3597,8 +3615,17 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
 }
 
 // TROWEXPANDMUL: row broadcast mul
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
+// src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
+// (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
+          is_tile_data_v tile_shape_in1>
+void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_in1::DType>::value,
+                "TROWEXPANDMUL: src0/src1 dtype must match");
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_out::TileDType>::value,
+                "TROWEXPANDMUL: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 71, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -3607,10 +3634,10 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
     "B.IOT [%5, %6], last, ->%0<%c7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+      "i"(tile_shape_in0::ValidCol),
+      "i"(tile_shape_in0::ValidRow),
+      "i"(tile_shape_in0::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -3618,8 +3645,17 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
 }
 
 // TROWEXPANDDIV: row broadcast div
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
+// src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
+// (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
+          is_tile_data_v tile_shape_in1>
+void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_in1::DType>::value,
+                "TROWEXPANDDIV: src0/src1 dtype must match");
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_out::TileDType>::value,
+                "TROWEXPANDDIV: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 72, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -3628,10 +3664,10 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
     "B.IOT [%5, %6], last, ->%0<%c7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+      "i"(tile_shape_in0::ValidCol),
+      "i"(tile_shape_in0::ValidRow),
+      "i"(tile_shape_in0::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -3639,8 +3675,17 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
 }
 
 // TROWEXPANDMAX: row broadcast max
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
+// src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
+// (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
+          is_tile_data_v tile_shape_in1>
+void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_in1::DType>::value,
+                "TROWEXPANDMAX: src0/src1 dtype must match");
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_out::TileDType>::value,
+                "TROWEXPANDMAX: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 73, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -3649,10 +3694,10 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
     "B.IOT [%5, %6], last, ->%0<%c7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+      "i"(tile_shape_in0::ValidCol),
+      "i"(tile_shape_in0::ValidRow),
+      "i"(tile_shape_in0::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -3660,8 +3705,17 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
 }
 
 // TROWEXPANDMIN: row broadcast min
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
+// src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
+// (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
+          is_tile_data_v tile_shape_in1>
+void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_in1::DType>::value,
+                "TROWEXPANDMIN: src0/src1 dtype must match");
+  static_assert(std::is_same<typename tile_shape_in0::DType,
+                             typename tile_shape_out::TileDType>::value,
+                "TROWEXPANDMIN: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 74, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -3670,10 +3724,10 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1
     "B.IOT [%5, %6], last, ->%0<%c7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+      "i"(tile_shape_in0::ValidCol),
+      "i"(tile_shape_in0::ValidRow),
+      "i"(tile_shape_in0::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
