@@ -5,6 +5,9 @@
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void ACCSCALE_T(tile_shape_out &dst, tile_shape_in &src, typename tile_shape_in::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape_in::DType sv = s;
   asm volatile(
     "BSTART.CUBE ACCCVT, %c1\n"
     "B.DATR NZ2ND.normal, %c1, Null\n"
@@ -17,12 +20,15 @@ void ACCSCALE_T(tile_shape_out &dst, tile_shape_in &src, typename tile_shape_in:
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "r"(s), "i"(tile_shape_in::ValidCol), "i"(tile_shape_in::ValidRow)
+      "r"(sv), "i"(tile_shape_in::ValidCol), "i"(tile_shape_in::ValidRow)
   );
 }
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void ACCSCALE_NZ2DN(tile_shape_out &dst, tile_shape_in &src, typename tile_shape_in::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape_in::DType sv = s;
   asm volatile(
     "BSTART.CUBE ACCCVT, %c1\n"
     "B.DATR NZ2DN.normal, %c1, Null\n"
@@ -35,12 +41,15 @@ void ACCSCALE_NZ2DN(tile_shape_out &dst, tile_shape_in &src, typename tile_shape
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "r"(s), "i"(tile_shape_in::ValidCol), "i"(tile_shape_in::ValidRow)
+      "r"(sv), "i"(tile_shape_in::ValidCol), "i"(tile_shape_in::ValidRow)
   );
 }
 
 template <is_tile_data_v tile_shape_max, is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void ACCCVT_RMAX_SCALE_NZ2DN(tile_shape_max &row_max, tile_shape_out &dst, tile_shape_in &src, typename tile_shape_in::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape_in::DType sv = s;
   asm volatile(
     "BSTART.CUBE ACCCVT, %c[__pto_SrcType]\n"
     "B.DATR NZ2DN.normal, %c[__pto_DstType], Null\n"
@@ -56,7 +65,7 @@ void ACCCVT_RMAX_SCALE_NZ2DN(tile_shape_max &row_max, tile_shape_out &dst, tile_
       [__pto_DstType]"i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [__pto_DstTileSize]"i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [__pto_RmaxTileSize]"i"(tile_type_traits<typename tile_shape_max::TileDType>::TilesizeCode),
-      [__pto_scale]"r"(s), [__pto_VCOL]"i"(tile_shape_in::ValidCol), [__pto_VROW]"i"(tile_shape_in::ValidRow)
+      [__pto_scale]"r"(sv), [__pto_VCOL]"i"(tile_shape_in::ValidCol), [__pto_VROW]"i"(tile_shape_in::ValidRow)
   );
 }
 
@@ -2426,6 +2435,9 @@ void TCVT(tile_shape_out &dst, tile_shape_in &src) {
 // TADDS: dst = src + scalar
 template <is_tile_data_v tile_shape>
 void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 32, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2441,13 +2453,16 @@ void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TSUBS: dst = src - scalar
 template <is_tile_data_v tile_shape>
 void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 33, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2463,13 +2478,16 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TMULS: dst = src * scalar
 template <is_tile_data_v tile_shape>
 void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 34, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2485,13 +2503,16 @@ void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TDIVS: dst = src / scalar
 template <is_tile_data_v tile_shape>
 void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 35, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2507,13 +2528,16 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TREMS: dst = rem(src, scalar)
 template <is_tile_data_v tile_shape>
 void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 36, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2529,13 +2553,16 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TFMODS: dst = fmod(src, scalar)
 template <is_tile_data_v tile_shape>
 void TFMODS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 37, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2551,13 +2578,16 @@ void TFMODS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TANDS: dst = src & scalar
 template <is_tile_data_v tile_shape>
 void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 38, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2573,13 +2603,16 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TORS: dst = src | scalar
 template <is_tile_data_v tile_shape>
 void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 39, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2595,13 +2628,16 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TXORS: dst = src ^ scalar
 template <is_tile_data_v tile_shape>
 void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 40, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2617,13 +2653,16 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TSHLS: dst = src << scalar
 template <is_tile_data_v tile_shape>
 void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 41, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2639,13 +2678,16 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TSHRS: dst = src >> scalar
 template <is_tile_data_v tile_shape>
 void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 42, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2661,13 +2703,16 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TMAXS: dst = max(src, scalar)
 template <is_tile_data_v tile_shape>
 void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 43, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2683,13 +2728,16 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TMINS: dst = min(src, scalar)
 template <is_tile_data_v tile_shape>
 void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 44, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2705,13 +2753,16 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TCMPS: compare src with scalar
 template <is_tile_data_v tile_shape>
 void TCMPS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 45, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2727,13 +2778,16 @@ void TCMPS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TLRELU: leaky ReLU with scalar slope
 template <is_tile_data_v tile_shape>
 void TLRELU(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 46, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2749,13 +2803,16 @@ void TLRELU(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TAXPY: AXPY-style fused update (DavinciOO ext)
 template <is_tile_data_v tile_shape>
 void TAXPY(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 47, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2771,13 +2828,16 @@ void TAXPY(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TADDSC: dst = src0 + scalar + src1
 template <is_tile_data_v tile_shape>
 void TADDSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile_shape &src1) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 56, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2794,13 +2854,16 @@ void TADDSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, til
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TSUBSC: dst = src0 - scalar + src1
 template <is_tile_data_v tile_shape>
 void TSUBSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile_shape &src1) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 57, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2817,13 +2880,16 @@ void TSUBSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, til
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 // TSELS: select between src tile and scalar using mask
 template <is_tile_data_v tile_shape>
 void TSELS(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile_shape &src1) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 58, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2840,7 +2906,7 @@ void TSELS(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
@@ -2898,6 +2964,10 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
 // TEXTRACT: extract sub-tile (indexRow, indexCol via B.IOR)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TEXTRACT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t indexCol) {
+  // Anti-fold: keep compile-time-constant indices (e.g. 0) off the zero
+  // register so B.IOR [zero,...]/[...,zero] still matches an instruction.
+  volatile int32_t irv = indexRow;
+  volatile int32_t icv = indexCol;
   asm volatile(
     "BSTART.TEPL 98, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2913,14 +2983,18 @@ void TEXTRACT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "r"(indexRow),
-      "r"(indexCol)
+      "r"(irv),
+      "r"(icv)
   );
 }
 
 // TINSERT: insert sub-tile (indexRow, indexCol via B.IOR)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t indexCol) {
+  // Anti-fold: keep compile-time-constant indices (e.g. 0) off the zero
+  // register so B.IOR [zero,...]/[...,zero] still matches an instruction.
+  volatile int32_t irv = indexRow;
+  volatile int32_t icv = indexCol;
   asm volatile(
     "BSTART.TEPL 99, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2936,8 +3010,8 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "r"(indexRow),
-      "r"(indexCol)
+      "r"(irv),
+      "r"(icv)
   );
 }
 
