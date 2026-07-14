@@ -3643,7 +3643,7 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TROWEXPANDADD: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TROWEXPANDADD: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 69, %c1\n"
@@ -3673,7 +3673,7 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TROWEXPANDSUB: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TROWEXPANDSUB: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 70, %c1\n"
@@ -3703,7 +3703,7 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TROWEXPANDMUL: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TROWEXPANDMUL: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 71, %c1\n"
@@ -3733,7 +3733,7 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TROWEXPANDDIV: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TROWEXPANDDIV: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 72, %c1\n"
@@ -3763,7 +3763,7 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TROWEXPANDMAX: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TROWEXPANDMAX: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 73, %c1\n"
@@ -3793,7 +3793,7 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TROWEXPANDMIN: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TROWEXPANDMIN: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 74, %c1\n"
@@ -3823,7 +3823,7 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
                              typename tile_shape_in1::DType>::value,
                 "TROWEXPANDEXPDIF: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TROWEXPANDEXPDIF: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 75, %c1\n"
@@ -3853,7 +3853,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TCOLEXPANDADD: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TCOLEXPANDADD: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 85, %c1\n"
@@ -3883,7 +3883,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TCOLEXPANDSUB: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TCOLEXPANDSUB: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 86, %c1\n"
@@ -3913,7 +3913,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TCOLEXPANDMUL: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TCOLEXPANDMUL: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 87, %c1\n"
@@ -3943,7 +3943,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TCOLEXPANDDIV: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TCOLEXPANDDIV: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 88, %c1\n"
@@ -3973,7 +3973,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TCOLEXPANDMAX: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TCOLEXPANDMAX: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 89, %c1\n"
@@ -4003,7 +4003,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_in1::DType>::value,
                 "TCOLEXPANDMIN: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TCOLEXPANDMIN: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 90, %c1\n"
@@ -4033,7 +4033,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
                              typename tile_shape_in1::DType>::value,
                 "TCOLEXPANDEXPDIF: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TCOLEXPANDEXPDIF: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 91, %c1\n"
@@ -4067,7 +4067,7 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
                              typename tile_shape_in1::DType>::value,
                 "TCONCAT: src0/src1 dtype must match");
   static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::TileDType>::value,
+                             typename tile_shape_out::DType>::value,
                 "TCONCAT: src0/dst dtype must match");
   // Row count is invariant across concat (src0.Rows == src1.Rows == dst.Rows);
   // dst's valid col / total col / row stride come from dst itself.
