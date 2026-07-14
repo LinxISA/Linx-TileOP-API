@@ -2797,7 +2797,6 @@ void TADDSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, til
       "r"(s)
   );
 }
-}
 
 // TSUBSC: dst = src0 - scalar + src1
 template <is_tile_data_v tile_shape>
@@ -2820,7 +2819,6 @@ void TSUBSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, til
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       "r"(s)
   );
-}
 }
 
 // TSELS: select between src tile and scalar using mask
@@ -2845,11 +2843,13 @@ void TSELS(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile
       "r"(s)
   );
 }
-}
 
 // TEXPANDS: broadcast scalar into dst tile
 template <is_tile_data_v tile_shape>
 void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 59, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2864,12 +2864,11 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
 
-#endif
 //===--- TEPL Mode 0 extension: TFMA (fused multiply-add, opcode 28) ---===//
 
 // TFMA: dst = src0 * src1 + src2 (fused element-wise multiply-add)
@@ -2985,6 +2984,9 @@ void TFILLPAD(tile_shape_out &dst, tile_shape_in &src) {
 // TCI: contiguous integer sequence generation
 template <is_tile_data_v tile_shape>
 void TCI(tile_shape &dst, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 102, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -2999,7 +3001,7 @@ void TCI(tile_shape &dst, typename tile_shape::DType s) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
@@ -3025,6 +3027,9 @@ void TTRI(tile_shape &dst) {
 // TRANDOM: counter-based random tile generation
 template <is_tile_data_v tile_shape>
 void TRANDOM(tile_shape &dst, typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 105, %c1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -3039,7 +3044,7 @@ void TRANDOM(tile_shape &dst, typename tile_shape::DType s) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(s)
+      "r"(sv)
   );
 }
 
@@ -4035,3 +4040,5 @@ void TGATHERB(tile_shape_out &dst, gm_shape &src, tile_shape_offset &offset) {
       "r"(src.data())
   );
 }
+
+#endif // TEMPLATE_ASM_HPP

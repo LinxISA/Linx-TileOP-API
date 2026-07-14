@@ -47,6 +47,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCAST(tile_shape_out &dst, tile_shape_in &src) {
   TCAST_Impl(dst, src);
 }
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void TRESHAPE(tile_shape_out &dst, tile_shape_in &src) {
+  TRESHAPE_Impl(dst, src);
+}
 template <is_tile_data_v tile_shape, typename T, int descending>
 void TCI(tile_shape &dst, T s) {
   TCI_Impl<tile_shape, T, descending>(dst, s);
@@ -63,16 +67,8 @@ template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 void TCOPYOUT(gm_shape &dst, tile_shape &src) {
   TCOPYOUT_Impl(dst, src);
 }
-template <is_tile_data_v tile_shape_dst, is_tile_data_v tile_shape_src,
-          is_tile_data_v tile_shape_indices>
-void TGATHER(tile_shape_dst &dst, tile_shape_src &src,
-             tile_shape_indices &indices) {
-  TGATHER_Impl(dst, src, indices);
-}
-template <is_tile_data_v tile_shape_dst, is_tile_data_v tile_shape_src,
-          is_tile_data_v tile_shape_indices>
-void TSCATTER(tile_shape_dst &dst, tile_shape_src &src,
-                   tile_shape_indices &indices) {
-  TSCATTER_Impl(dst, src, indices);
-}
+// TGATHER / TSCATTER: defined as one-layer inline-asm in
+// jcore/template_asm.hpp (no __vec__ kernel), so no wrapper here. The
+// jcore/cpu_sim *_Impl definitions remain available for callers that
+// prefer the kernel-launch form.
 #endif
