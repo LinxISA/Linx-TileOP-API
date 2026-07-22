@@ -21,6 +21,7 @@ void load_example(float* gm_data) {
 ```
 
 - **签名**:`TLOAD(tile_shape &dst, gm_shape &src)`
+- **builtin**：`blk_tload`
 - **dst**:已声明的 tile;**src**:`global_tensor` 视图
 - **生成**:`BSTART.TLSU TLOAD, <dtype>` + `B.IOT [], last, ->dst<size>` + `B.IOR [base, stride]`
 
@@ -37,6 +38,7 @@ void store_example(float* gm_out, tile_t& d) {
 ```
 
 - **签名**:`TSTORE(gm_shape &dst, tile_shape &src)`
+- **builtin**：`blk_tstore`
 - **生成**:`BSTART.TLSU TSTORE` + `B.IOT [src], last` + `B.IOR [base, stride]`
 
 ---
@@ -57,6 +59,7 @@ void gather_example(float* gm_src, uint32_t* gm_idx, tile_t& d) {
 ```
 
 - **签名**:`MGATHER(dst, src, offset)`
+- **builtin**：无（inline-asm）
 - **offset**:tile 形式的索引(先 TCOPYIN),不能直接传普通指针
 - **生成**:`BSTART.TLSU MGATHER` + `B.DATR Null` + `B.DIM(ValidCol/ValidRow/Col)` + `B.IOT [off], last, ->dst<size>` + `B.IOR [base, stride]`
 
@@ -78,6 +81,7 @@ void scatter_example(float* gm_dst, uint32_t* gm_idx, tile_t& d) {
 ```
 
 - **签名**:`MSCATTER(dst, src, offset)`
+- **builtin**：无（inline-asm）
 - **生成**:`BSTART.TLSU MSCATTER` + `B.DIM(ValidCol/ValidRow/Col)` + `B.IOT [src, off], last` + `B.IOR [base, stride]`
 
 ---
@@ -101,6 +105,7 @@ void masked_gather_example(float* gm_src, uint32_t* gm_idx, uint8_t* gm_msk,
 ```
 
 - **签名**:`MGATHER_MASK(dst, src, offset, mask)`
+- **builtin**：无（inline-asm）
 - **生成**:`BSTART.TLSU MGATHER.MASK` + `B.DATR Null` + `B.DIM(ValidCol/ValidRow/Col)` + `B.IOT [off], ->dst; [mask], last` + `B.IOR [base, stride]`
 
 ---
@@ -124,4 +129,5 @@ void masked_scatter_example(float* gm_dst, uint32_t* gm_idx, uint8_t* gm_msk,
 ```
 
 - **签名**:`MSCATTER_MASK(dst, src, offset, mask)`
+- **builtin**：无（inline-asm）
 - **生成**:`BSTART.TLSU MSCATTER.MASK` + `B.DIM(ValidCol/ValidRow/Col)` + `B.IOT [src, off]; [mask], last` + `B.IOR [base, stride]`

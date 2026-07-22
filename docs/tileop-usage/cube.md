@@ -23,6 +23,7 @@ void matmul_example(float* a, float* b, float* c) {
 ```
 
 - **签名**:`TMATMUL(c, a, b)`,c 是 `TileAcc`
+- **builtin**：`blk_matmul`
 - **约束**:c 必须是 `Location::Acc`;a/b 不能是 Acc
 - **生成**:`BSTART.CUBE TMATMUL, <dtypeA>` + `B.DIM(M/N/K)` + `B.IOT [a, b], last, ->acc<size>`
 
@@ -36,6 +37,7 @@ ACCCVT(dout, dc);
 ```
 
 - **签名**:`TMATMUL_ACC(c, a, b)`,c 既是输入 ACC 也是输出
+- **builtin**：`blk_matmul_ac`
 - **生成**:`BSTART.CUBE TMATMUL.ACC`
 
 ---
@@ -51,6 +53,7 @@ ACCCVT(dout, dc);
 ```
 
 - **签名**:`TMATMUL_BIAS(c, a, b, bias)`
+- **builtin**：`blk_matmul_ac`
 - **bias**:普通 tile(不能是 Acc),必须先 TCOPYIN 初始化
 - **生成**:`BSTART.CUBE TMATMUL.BIAS`
 
@@ -67,6 +70,7 @@ ACCCVT(dout, dc);
 ```
 
 - **签名**:`TMATMUL_MX(c, a, aScale, b, bScale)`
+- **builtin**：`blk_matmulmx`
 - **aScale/bScale**:普通 tile,必须先 TCOPYIN 初始化
 - **生成**:`BSTART.CUBE TMATMULMX`
 
@@ -79,6 +83,7 @@ ACCCVT(dout, dc);   // 把 ACC 累加器导出为普通 tile
 ```
 
 - **签名**:`ACCCVT(tile_shape_out &dst, tile_shape_in &src)`,src 是 Acc tile
+- **builtin**：`blk_acccvt`
 - **可随路做类型转换**:`dst` 和 `src` DType 不同时,自动做 convert
 - **生成**:`BSTART.CUBE ACCCVT, <srcType>` + `B.DATR NORM.normal, <dstType>, Null` + `B.IOT [], last, ->dst<size>` + `C.B.DIMI(ValidCol/ValidRow)`
 
