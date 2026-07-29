@@ -40,7 +40,7 @@ COPY = $(COMPILER_DIR)/llvm-objcopy
 CC_O = -c -O3
 CC_VER ?= -std=c++20
 else ifeq ($(PLAT), linx)
-DEFINES += -D__linx
+DEFINES += -D__linx -DENABLE_TENSOR_INSTR
 # wget http://example.com/linx_blockisa_llvm_musl.tar.gz
 COMPILER_DIR ?= /usr/bin
 AS = $(COMPILER_DIR)/clang
