@@ -520,43 +520,9 @@ void TCVT_Impl(tile_shape_out &dst, tile_shape_in &src) {
   size_t row = src.GetValidRow();
   size_t col = src.GetValidCol();
   if constexpr (tile_shape_in::Loc == Location::Acc) {
-    static_assert(is_Nz_layout<tile_shape_in>::value, "ACC layout must be Nz!");
-    if constexpr (!tile_shape_out::isBoxedLayout && tile_shape_out::isRowMajor) {
-      blk_acccvt(row, col,
-          type_traits<typename tile_shape_in::DType>::TypeCode,
-          type_traits<typename tile_shape_out::DType>::TypeCode,
-          LayoutCvtEnum::NZ2ND,
-          true,
-          dst.data(),
-          src.data());
-    } else if constexpr (!tile_shape_out::isBoxedLayout && !tile_shape_out::isRowMajor) {
-      blk_acccvt(row, col,
-          type_traits<typename tile_shape_in::DType>::TypeCode,
-          type_traits<typename tile_shape_out::DType>::TypeCode,
-          LayoutCvtEnum::NZ2DN,
-          true,
-          dst.data(),
-          src.data());
-    } else if constexpr (is_Zn_layout<tile_shape_out>::value) {
-      blk_acccvt(row, col,
-          type_traits<typename tile_shape_in::DType>::TypeCode,
-          type_traits<typename tile_shape_out::DType>::TypeCode,
-          LayoutCvtEnum::NZ2ZN,
-          true,
-          dst.data(),
-          src.data());
-    } else if constexpr (is_Nz_layout<tile_shape_out>::value) {
-      blk_acccvt(row, col,
-          type_traits<typename tile_shape_in::DType>::TypeCode,
-          type_traits<typename tile_shape_out::DType>::TypeCode,
-          LayoutCvtEnum::NORM,
-          true,
-          dst.data(),
-          src.data());
-    } else {
-      static_assert("TCVT ACC output Storage layout type not supported");
-    }
-    return;
+    static_assert(tile_shape_in::Loc != Location::Acc,
+                  "TCVT from ACC used the removed DavinciOO v5 ACCCVT "
+                  "opcode; use the corresponding TMATMUL*.FIXP variant");
   }
 
 #ifdef ENABLE_HARDEN

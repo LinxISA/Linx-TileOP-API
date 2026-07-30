@@ -1,35 +1,24 @@
 # 约束与通用约定
 
-## Tile size:128 B..8 KB
+## Tile size: 512 B..32 KB
 
-DavinciOO active PE-local profile(见 `isa/intrinsic/header/B.IOT.md`)只允许 `imm4=3..9`,对应 Tile allocation size 128 B..8 KB。
+DavinciOO v5 `B.IOT.TSize` is a 3-bit logical-Tile size code. `0` is implicit
+(no ordinary destination allocation); explicit Tile operands use `1..7`:
 
-| imm4 | size | 合法? |
-| --- | --- | --- |
-| 0 | 0 B | reserved/illegal |
-| 1 | 32 B | reserved/illegal |
-| 2 | 64 B | reserved/illegal |
-| 3 | 128 B | ✓ |
-| 4 | 256 B | ✓ |
-| 5 | 512 B | ✓ |
-| 6 | 1 KB | ✓ |
-| 7 | 2 KB | ✓ |
-| 8 | 4 KB | ✓ |
-| 9 | 8 KB | ✓ |
-| 10 | 16 KB | reserved/illegal |
-| 11 | 32 KB | reserved/illegal |
-| 12 | 64 KB | reserved/illegal |
-| 13 | 128 KB | reserved/illegal |
-| 14 | 256 KB | reserved/illegal |
-| 15 | 512 KB | reserved/illegal |
+| TSize | Logical Tile size |
+| ---: | ---: |
+| 0 | implicit |
+| 1 | 512 B |
+| 2 | 1 KB |
+| 3 | 2 KB |
+| 4 | 4 KB |
+| 5 | 8 KB |
+| 6 | 16 KB |
+| 7 | 32 KB |
 
-超出范围的 tile 在**编译期**被 `static_assert` 拒绝,报错信息:
-```
-Tile allocation size must be 128 B..8 KB (imm4=3..9) per DavinciOO
-active PE-local profile (header/B.IOT.md)
-```
-
-实现:`tile_type_traits::IsValidActiveSize`(`include/jcore/type.hpp`),各 tileop 模板在 `template_asm.hpp` 里 `static_assert` 检查 dst/src tile。
+Each PE owns a fixed quarter fragment of the logical Tile. The API maps
+`sizeof(TileDType)` through `tile_type_traits::TilesizeCode` and rejects sizes
+outside 512 B..32 KB with `IsValidActiveSize`.
 
 ## TMATMUL 系列:Acc tile 约束
 

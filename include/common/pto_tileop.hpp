@@ -7,11 +7,11 @@
 #include "common/tile_tensor_impl.hpp"
 #include "common/debug_utils.hpp"
 
-// Returns the current PE's thread index (0..kThreadsPerBlock-1).
+// Returns the current PE ID (0..3).
 // Aligned with website manual get_thread_idx(). Lowered to SSR_GET reading
-// a PE-id SSR (SSR-ID 16 placeholder, pending ISA assignment).
+// the read-only PEID SSR (0x0802).
 inline uint32_t get_thread_idx() {
-  return __builtin_linx_get_thread_idx();
+  return __builtin_linx_get_thread_id();
 }
 
 // Backward-compat alias.

@@ -1,8 +1,8 @@
 # 矩阵乘接口(CUBE family,BSTART.CUBE)
 
 > 编码 family:BSTART.CUBE
-> TMATMUL 系列的输出 C 必须是 `Location::Acc` tile(用 `TileAcc<T, M, N>` 别名)。
-> 计算结果先落在 ACC 累加器,需用 `ACCCVT` 导出到普通 tile。
+> 非 FIXP 的 TMATMUL 系列产生 implicit ACC；DavinciOO v5 不再提供独立 ACCCVT 导出。
+> 需要普通 Tile 输出时必须选择对应的 `TMATMUL*.FIXP` variant。
 
 ---
 
@@ -13,12 +13,10 @@ void matmul_example(float* a, float* b, float* c) {
   using t_A = TileLeft<float, 64, 64>;
   using t_B = TileRight<float, 64, 64>;
   using t_C = TileAcc<float, 64, 64>;       // C 必须是 Acc
-  using t_O = TileLeft<float, 64, 64>;      // 输出普通 tile
-  t_A da; t_B db; t_C dc; t_O dout;
+  t_A da; t_B db; t_C dc;
   // 先 TCOPYIN da, db ...
-  TMATMUL(dc, da, db);      // C = A*B → ACC
-  ACCCVT(dout, dc);         // ACC → 普通 tile
-  // TCOPYOUT(c, dout) ...
+  TMATMUL(dc, da, db);      // C = A*B → implicit ACC
+  // 如需普通 Tile/GM 输出，改用 TMATMUL.FIXP 对应接口。
 }
 ```
 
@@ -33,7 +31,6 @@ void matmul_example(float* a, float* b, float* c) {
 
 ```cpp
 TMATMUL_ACC(dc, da, db);    // dc 既作 ACC 输入又作输出
-ACCCVT(dout, dc);
 ```
 
 - **签名**:`TMATMUL_ACC(c, a, b)`,c 既是输入 ACC 也是输出
@@ -49,7 +46,6 @@ using t_bias = TileLeft<float, 64, 64>;
 t_bias dbi;
 // TCOPYIN dbi ...
 TMATMUL_BIAS(dc, da, db, dbi);   // bias 是第 4 个 tile(ExtraTile)
-ACCCVT(dout, dc);
 ```
 
 - **签名**:`TMATMUL_BIAS(c, a, b, bias)`
@@ -66,7 +62,6 @@ using t_S = TileLeft<float, 64, 64>;
 t_S das, dbs;
 // TCOPYIN das, dbs ...
 TMATMUL_MX(dc, da, das, db, dbs);  // 带 scale 的矩阵乘
-ACCCVT(dout, dc);
 ```
 
 - **签名**:`TMATMUL_MX(c, a, aScale, b, bScale)`
@@ -78,37 +73,26 @@ ACCCVT(dout, dc);
 
 ## ACCCVT — ACC → 普通 Tile(CUBE helper)
 
-```cpp
-ACCCVT(dout, dc);   // 把 ACC 累加器导出为普通 tile
-```
-
 - **签名**:`ACCCVT(tile_shape_out &dst, tile_shape_in &src)`,src 是 Acc tile
-- **builtin**：`blk_acccvt`
+- **状态**：DavinciOO v5 已移除独立 `ACCCVT` opcode；当前 API 对该调用给出编译期迁移错误。
 - **可随路做类型转换**:`dst` 和 `src` DType 不同时,自动做 convert
-- **生成**:`BSTART.CUBE ACCCVT, <srcType>` + `B.DATR NORM.normal, <dstType>, Null` + `B.IOT [], last, ->dst<size>` + `C.B.DIMI(ValidCol/ValidRow)`
+- **迁移**：使用对应的 `TMATMUL*.FIXP` variant 直接产生普通 Tile；不能再从 live implicit ACC 单独导出。
 
 ---
 
-## 完整示例:matmul + bias 流程
+## FIXP 迁移说明
+
+当前头文件提供以下基础 Local form：
 
 ```cpp
-#include <common/pto_tileop.hpp>
-using namespace pto;
-
-void matmul_bias_flow(float* a, float* b, float* bias, float* c) {
-  using t_A = TileLeft<float, 64, 64>;
-  using t_B = TileRight<float, 64, 64>;
-  using t_C = TileAcc<float, 64, 64>;
-  using t_O = TileLeft<float, 64, 64>;
-  using t_BI = TileLeft<float, 64, 64>;
-  using gm = global_tensor<float, RowMajor<64, 64>>;
-
-  gm ga(a), gb(b), gbi(bias), gc(c);
-  t_A da; t_B db; t_C dc; t_O dout; t_BI dbi;
-
-  TCOPYIN(da, ga); TCOPYIN(db, gb); TCOPYIN(dbi, gbi);
-  TMATMUL_BIAS(dc, da, db, dbi);   // C = A*B + bias → ACC
-  ACCCVT(dout, dc);                // ACC → tile
-  TSTORE(gc, dout);                // tile → GM
-}
+TMATMUL_FIXP(d, a, b);           // d = FIXP(a*b)
+TMATMUL_ACC_FIXP(d, acc, a, b);  // d = FIXP(acc+a*b)
 ```
+
+- `d` 是普通 Local Tile，逻辑大小为 512 B..32 KB；`a`/`b` 分别是
+  `Location::Left`/`Location::Right`。
+- `TMATMUL_ACC_FIXP` 的 `acc` 必须是 `Location::Acc`，由编译器作为专用 ACC
+  dependency 保留，不会编码成普通 `B.IOT` operand。
+- 基础 form 固定生成 `B.FPATR 0, 0, 0, 0, 0, 0, 0`，即不启用 quant、ReLU、
+  RowMax 或 GroupMax。带参数和附加输出的高级 FIXP mode 尚未开放。
+- 不能用旧 `ACCCVT` wrapper 静默替代 FIXP 写回。

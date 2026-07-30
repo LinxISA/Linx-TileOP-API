@@ -76,23 +76,15 @@ template<> struct type_traits<__uint4x2>      : public type_traits_base<__type_u
 // clang-format on
 
 
-enum __tilesize_code{
-  __tilesize_0B    = 0,
-  __tilesize_32B   = 1,
-  __tilesize_64B   = 2,
-  __tilesize_128B  = 3,
-  __tilesize_256B  = 4,
-  __tilesize_512B  = 5,
-  __tilesize_1KB   = 6,
-  __tilesize_2KB   = 7,
-  __tilesize_4KB   = 8,
-  __tilesize_8KB   = 9,
-  __tilesize_16KB  = 10,
-  __tilesize_32KB  = 11,
-  __tilesize_64KB  = 12,
-  __tilesize_128KB = 13,
-  __tilesize_256KB = 14,
-  __tilesize_512KB = 15,
+enum __tilesize_code {
+  __tilesize_implicit = 0,
+  __tilesize_512B = 1,
+  __tilesize_1KB = 2,
+  __tilesize_2KB = 3,
+  __tilesize_4KB = 4,
+  __tilesize_8KB = 5,
+  __tilesize_16KB = 6,
+  __tilesize_32KB = 7,
   __tilesize_unknown = -1
 };
 
@@ -100,40 +92,26 @@ template <typename T>
 struct tile_type_traits {
 private:
   using PlainT = std::remove_cv_t<std::remove_reference_t<T>>;
-  static constexpr std::size_t bytes = sizeof(PlainT);
+  static constexpr std::size_t peLocalBytes = sizeof(PlainT);
+  static constexpr std::size_t logicalTileBytes = peLocalBytes * 4;
 
   static constexpr int mapBytesToEnum(std::size_t b) {
     return
-      b == 0      ? __tilesize_0B   :
-      b == 32     ? __tilesize_32B  :
-      b == 64     ? __tilesize_64B  :
-      b == 128    ? __tilesize_128B :
-      b == 256    ? __tilesize_256B :
-      b == 512    ? __tilesize_512B :
-      b == 1024   ? __tilesize_1KB  :
-      b == 2048   ? __tilesize_2KB  :
-      b == 4096   ? __tilesize_4KB  :
-      b == 8192   ? __tilesize_8KB  :
-      b == 16384  ? __tilesize_16KB :
-      b == 32768  ? __tilesize_32KB :
-      b == 65536  ? __tilesize_64KB :
-      b == 131072 ? __tilesize_128KB:
-      b == 262144 ? __tilesize_256KB:
-      b == 524288 ? __tilesize_512KB:
+      b == 512   ? __tilesize_512B :
+      b == 1024  ? __tilesize_1KB  :
+      b == 2048  ? __tilesize_2KB  :
+      b == 4096  ? __tilesize_4KB  :
+      b == 8192  ? __tilesize_8KB  :
+      b == 16384 ? __tilesize_16KB :
+      b == 32768 ? __tilesize_32KB :
       __tilesize_unknown;
   }
 
 public:
-  static constexpr int TilesizeCode = mapBytesToEnum(bytes);
-  static constexpr int Regsize = bytes;
-  // DavinciOO active PE-local profile only allows imm4=3..9, i.e. output Tile
-  // allocation size 128 B..8 KB (see isa/intrinsic/header/B.IOT.md). Sizes
-  // outside this range (0 B, 32 B, 64 B, 16 KB..512 KB) are reserved/illegal
-  // for the active profile. The full Linx imm4 encoding is still preserved by
-  // TilesizeCode above; this flag is used by tileop templates to reject
-  // illegal active-profile sizes at compile time.
+  static constexpr int TilesizeCode = mapBytesToEnum(logicalTileBytes);
+  static constexpr int Regsize = peLocalBytes;
   static constexpr bool IsValidActiveSize =
-      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_8KB;
+      TilesizeCode >= __tilesize_512B && TilesizeCode <= __tilesize_32KB;
 };
 
 #endif
