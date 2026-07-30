@@ -1974,6 +1974,148 @@ void TMATMUL_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc, tile_shape_a &a,
                       d.data(), a.data(), b.data(), acc.data());
 }
 
+// TMATMUL_BIAS_FIXP: D = FIXP(A*B + bias), basic local mode.
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_a,
+          is_tile_data_v tile_shape_b, is_tile_data_v tile_shape_bias>
+void TMATMUL_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b,
+                       tile_shape_bias &bias) {
+  static_assert(tile_shape_d::Loc != Location::Acc,
+                "TMATMUL_BIAS_FIXP output D must be an ordinary local Tile");
+  static_assert(tile_shape_a::Loc == Location::Left,
+                "TMATMUL_BIAS_FIXP input A must be Location::Left");
+  static_assert(tile_shape_b::Loc == Location::Right,
+                "TMATMUL_BIAS_FIXP input B must be Location::Right");
+  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
+                "TMATMUL_BIAS_FIXP requires A.Cols == B.Rows");
+  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
+                    tile_shape_d::Cols == tile_shape_b::Cols,
+                "TMATMUL_BIAS_FIXP output shape must be M x N");
+  static_assert(
+      tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
+      "TMATMUL_BIAS_FIXP output logical Tile size must be 512 B..32 KB");
+
+  size_t M = a.GetValidRow();
+  size_t N = b.GetValidCol();
+  size_t K = a.GetValidCol();
+  blk_matmul_bias_fixp(M, N, K,
+                       type_traits<typename tile_shape_a::DType>::TypeCode,
+                       type_traits<typename tile_shape_b::DType>::TypeCode,
+                       d.data(), a.data(), b.data(), bias.data());
+}
+
+// TMATMUL_MX_FIXP: D = FIXP(MXMatMul(A, ScaleA, B, ScaleB)), basic local mode.
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_a,
+          is_tile_data_v tile_shape_sa, is_tile_data_v tile_shape_b,
+          is_tile_data_v tile_shape_sb>
+void TMATMUL_MX_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_sa &scale_a,
+                      tile_shape_b &b, tile_shape_sb &scale_b) {
+  static_assert(tile_shape_d::Loc != Location::Acc,
+                "TMATMUL_MX_FIXP output D must be an ordinary local Tile");
+  static_assert(tile_shape_a::Loc == Location::Left,
+                "TMATMUL_MX_FIXP input A must be Location::Left");
+  static_assert(tile_shape_b::Loc == Location::Right,
+                "TMATMUL_MX_FIXP input B must be Location::Right");
+  static_assert(tile_shape_sa::Loc == Location::Left,
+                "TMATMUL_MX_FIXP input ScaleA must be Location::Left");
+  static_assert(tile_shape_sb::Loc == Location::Right,
+                "TMATMUL_MX_FIXP input ScaleB must be Location::Right");
+  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
+                "TMATMUL_MX_FIXP requires A.Cols == B.Rows");
+  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
+                    tile_shape_d::Cols == tile_shape_b::Cols,
+                "TMATMUL_MX_FIXP output shape must be M x N");
+  static_assert(
+      tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
+      "TMATMUL_MX_FIXP output logical Tile size must be 512 B..32 KB");
+
+  size_t M = a.GetValidRow();
+  size_t N = b.GetValidCol();
+  size_t K = a.GetValidCol();
+  blk_matmul_mx_fixp(M, N, K,
+                     type_traits<typename tile_shape_a::DType>::TypeCode,
+                     type_traits<typename tile_shape_b::DType>::TypeCode,
+                     d.data(), a.data(), scale_a.data(),
+                     b.data(), scale_b.data());
+}
+
+// TMATMUL_MX_BIAS_FIXP: D = FIXP(MXMatMul(A, ScaleA, B, ScaleB) + Bias).
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_a,
+          is_tile_data_v tile_shape_sa, is_tile_data_v tile_shape_b,
+          is_tile_data_v tile_shape_sb, is_tile_data_v tile_shape_bias>
+void TMATMUL_MX_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a,
+                           tile_shape_sa &scale_a, tile_shape_b &b,
+                           tile_shape_sb &scale_b, tile_shape_bias &bias) {
+  static_assert(tile_shape_d::Loc != Location::Acc,
+                "TMATMUL_MX_BIAS_FIXP output D must be an ordinary local Tile");
+  static_assert(tile_shape_a::Loc == Location::Left,
+                "TMATMUL_MX_BIAS_FIXP input A must be Location::Left");
+  static_assert(tile_shape_b::Loc == Location::Right,
+                "TMATMUL_MX_BIAS_FIXP input B must be Location::Right");
+  static_assert(tile_shape_sa::Loc == Location::Left,
+                "TMATMUL_MX_BIAS_FIXP input ScaleA must be Location::Left");
+  static_assert(tile_shape_sb::Loc == Location::Right,
+                "TMATMUL_MX_BIAS_FIXP input ScaleB must be Location::Right");
+  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
+                "TMATMUL_MX_BIAS_FIXP requires A.Cols == B.Rows");
+  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
+                    tile_shape_d::Cols == tile_shape_b::Cols,
+                "TMATMUL_MX_BIAS_FIXP output shape must be M x N");
+  static_assert(
+      tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
+      "TMATMUL_MX_BIAS_FIXP output logical Tile size must be 512 B..32 KB");
+
+  size_t M = a.GetValidRow();
+  size_t N = b.GetValidCol();
+  size_t K = a.GetValidCol();
+  blk_matmul_mx_bias_fixp(M, N, K,
+                          type_traits<typename tile_shape_a::DType>::TypeCode,
+                          type_traits<typename tile_shape_b::DType>::TypeCode,
+                          d.data(), a.data(), scale_a.data(),
+                          b.data(), bias.data());
+}
+
+// TMATMUL_MX_ACC_FIXP: D = FIXP(ACC + MXMatMul(A, ScaleA, B, ScaleB)).
+// ACC is implicit, not encoded as B.IOT.
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_acc,
+          is_tile_data_v tile_shape_a, is_tile_data_v tile_shape_sa,
+          is_tile_data_v tile_shape_b, is_tile_data_v tile_shape_sb>
+void TMATMUL_MX_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc,
+                         tile_shape_a &a, tile_shape_sa &scale_a,
+                         tile_shape_b &b, tile_shape_sb &scale_b) {
+  static_assert(tile_shape_d::Loc != Location::Acc,
+                "TMATMUL_MX_ACC_FIXP output D must be an ordinary local Tile");
+  static_assert(tile_shape_acc::Loc == Location::Acc,
+                "TMATMUL_MX_ACC_FIXP input ACC must be Location::Acc");
+  static_assert(tile_shape_a::Loc == Location::Left,
+                "TMATMUL_MX_ACC_FIXP input A must be Location::Left");
+  static_assert(tile_shape_b::Loc == Location::Right,
+                "TMATMUL_MX_ACC_FIXP input B must be Location::Right");
+  static_assert(tile_shape_sa::Loc == Location::Left,
+                "TMATMUL_MX_ACC_FIXP input ScaleA must be Location::Left");
+  static_assert(tile_shape_sb::Loc == Location::Right,
+                "TMATMUL_MX_ACC_FIXP input ScaleB must be Location::Right");
+  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
+                "TMATMUL_MX_ACC_FIXP requires A.Cols == B.Rows");
+  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
+                    tile_shape_d::Cols == tile_shape_b::Cols,
+                "TMATMUL_MX_ACC_FIXP output shape must be M x N");
+  static_assert(tile_shape_acc::Rows == tile_shape_d::Rows &&
+                    tile_shape_acc::Cols == tile_shape_d::Cols,
+                "TMATMUL_MX_ACC_FIXP ACC shape must match output D");
+  static_assert(
+      tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
+      "TMATMUL_MX_ACC_FIXP output logical Tile size must be 512 B..32 KB");
+
+  size_t M = a.GetValidRow();
+  size_t N = b.GetValidCol();
+  size_t K = a.GetValidCol();
+  blk_matmul_mx_acc_fixp(M, N, K,
+                         type_traits<typename tile_shape_a::DType>::TypeCode,
+                         type_traits<typename tile_shape_b::DType>::TypeCode,
+                         d.data(), a.data(), scale_a.data(),
+                         b.data(), scale_b.data(), acc.data());
+}
+
 // TMATMUL_BIAS: C = A*B + bias (BSTART.CUBE TMATMUL.BIAS).
 // blk_matmul_ac's 3rd vector operand is the ExtraTile (bias here).
 template <is_tile_data_v tile_shape_c, is_tile_data_v tile_shape_a,
