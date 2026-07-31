@@ -3,6 +3,8 @@
 
 #include "common/pto_tile.hpp"
 
+using namespace pto;
+
 template <class...>
 inline constexpr bool pto_dependent_false_v = false;
 
@@ -105,19 +107,21 @@ void TADD_MUL_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TEPL 27, %c1\n"
     "B.DATR %c2, RNone\n"
     "B.IOT %3, mask=15, TSize=%c4, last, ->%0\n"
-    "B.DIM zero, %c5, ->lb0\n"
-    "B.DIM zero, %c6, ->lb1\n"
+    "B.DIM %5, 0, ->lb0\n"
+    "B.DIM %6, 0, ->lb1\n"
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow)
+      "r"(valid_col),
+      "r"(valid_row)
   );
 }
 
@@ -1692,10 +1696,12 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
   static_assert(
       tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
       "TLOAD dst logical Tile size must be 512 B..32 KB (TSize=1..7)");
+  const size_t valid_col = dst.GetValidCol();
+  const size_t valid_row = dst.GetValidRow();
   asm volatile(
     "BSTART.TLSU TLOAD, %c[SrcType]\n"
-    "B.DIM zero, %c[VCOL], ->lb0\n"
-    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     "B.IOT mask=15, TSize=%c[TileSize], last, ->%[d0]\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
@@ -1703,7 +1709,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
     : [s0]"r"(src.data()),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [VCOL]"i"(tile_shape::ValidCol), [VROW]"i"(tile_shape::ValidRow),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(gm_shape::RowStride * sizeof(typename gm_shape::DType))
   );
@@ -1715,17 +1721,19 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
   static_assert(tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
                 "TSTORE src logical Tile size must be 512 B..32 KB (TSize=1..7) "
                 "per DavinciOO v5 B.IOT encoding");
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TLSU TSTORE, %c[SrcType]\n"
-    "B.DIM zero, %c[VCOL], ->lb0\n"
-    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     "B.IOT %[s0], mask=15, last\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
       [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [VCOL]"i"(tile_shape::ValidCol), [VROW]"i"(tile_shape::ValidRow),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(gm_shape::RowStride * sizeof(typename gm_shape::DType))
   );
@@ -1871,42 +1879,238 @@ void ACCCVT(tile_shape_out &, tile_shape_in &) {
                 "implicit ACC; use the corresponding TMATMUL*.FIXP variant");
 }
 
-// TMATMUL: C = A(M,K) * B(K,N) (BSTART.CUBE TMATMUL, ->ACC).
-// C must be a Location::Acc tile. Uses blk_matmul builtin (ACC destination).
-template <is_tile_data_v tile_shape_c, is_tile_data_v tile_shape_a,
-          is_tile_data_v tile_shape_b>
-void TMATMUL(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b) {
-  static_assert(tile_shape_c::Loc == Location::Acc,
-                "TMATMUL output C must be a Location::Acc tile");
-  static_assert(tile_shape_a::Loc != Location::Acc &&
-                tile_shape_b::Loc != Location::Acc,
-                "TMATMUL inputs A/B cannot be ACC");
-  size_t M = a.GetValidRow();
-  size_t N = b.GetValidCol();
-  size_t K = a.GetValidCol();
-  blk_matmul(M, N, K,
-             type_traits<typename tile_shape_a::DType>::TypeCode,
-             type_traits<typename tile_shape_b::DType>::TypeCode,
-             c.data(), a.data(), b.data());
+namespace pto_matmul_detail {
+
+#define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
+  "BSTART.CUBE " OPCODE ", %c[DataTypeA]\n"                                 \
+  "B.DATR %c[DataTypeB], byte0, Null\n" EXTRA_ATTRS                         \
+  "B.DIM %[M], 0, ->lb0\n"                                                   \
+  "B.DIM %[N], 0, ->lb1\n"                                                   \
+  "B.DIM %[K], 0, ->lb2\n"
+
+#define PTO_MATMUL_COMMON_INPUTS(DstType, AType, BType, MValue, NValue, KValue) \
+  [M] "r"(MValue), [N] "r"(NValue), [K] "r"(KValue),                         \
+      [DataTypeA] "i"(type_traits<typename AType::DType>::TypeCode),           \
+      [DataTypeB] "i"(type_traits<typename BType::DType>::TypeCode),           \
+      [TileSize] "i"(                                                           \
+          tile_type_traits<typename DstType::TileDType>::TilesizeCode)
+
+template <typename Dst, typename A, typename B>
+inline void matmul(Dst &dst, A &a, B &b, size_t M, size_t N, size_t K) {
+  asm volatile(
+      PTO_MATMUL_HEADER("TMATMUL", "")
+      "B.IOT %[A], %[B], mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+      : "memory");
 }
 
-// TMATMUL_ACC: C += A*B with input ACC (BSTART.CUBE TMATMUL.ACC).
-// blk_matmul_ac takes (dst=ACC out, A, B, ACC in=c) for accumulate.
+template <typename Dst, typename A, typename SharedB>
+inline void matmul_shared(Dst &dst, A &a, SharedB &, size_t M, size_t N,
+                          size_t K) {
+  asm volatile(
+      PTO_MATMUL_HEADER("TMATMUL", "")
+      "C.B.IOS S#%c[SharedId]\n"
+      "B.IOT %[A]\n"
+      "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [A] "Tr"(a.data()), [SharedId] "i"(SharedB::SharedId),
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, SharedB, M, N, K)
+      : "memory");
+}
+
+#define PTO_DEFINE_MATMUL_3SRC_HELPER(Name, Opcode, ExtraAttrs)                 \
+template <typename Dst, typename A, typename B, typename Extra>                 \
+inline void Name(Dst &dst, A &a, B &b, Extra &extra,                            \
+                 size_t M, size_t N, size_t K) {                                \
+  asm volatile(                                                                  \
+      PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                       \
+      "B.IOT %[A], %[B], mask=15\n"                                            \
+      "B.IOT %[Extra]\n"                                                       \
+      "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                  \
+      : [Dst] "=&Tr"(dst.data())                                               \
+      : [A] "Tr"(a.data()), [B] "Tr"(b.data()),                               \
+        [Extra] "Tr"(extra.data()),                                             \
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                             \
+      : "memory");                                                             \
+}
+
+PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_acc, "TMATMUL.ACC", "")
+PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias, "TMATMUL.BIAS", "")
+PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_acc_fixp, "TMATMUL.ACC.FIXP",
+                              "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
+
+template <typename Dst, typename A, typename B>
+inline void matmul_fixp(Dst &dst, A &a, B &b, size_t M, size_t N, size_t K) {
+  asm volatile(
+      PTO_MATMUL_HEADER("TMATMUL.FIXP",
+                        "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
+      "B.IOT %[A], %[B], mask=15\n"
+      "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+      : "memory");
+}
+
+template <typename Dst, typename A, typename B, typename Bias>
+inline void matmul_bias_fixp(Dst &dst, A &a, B &b, Bias &bias,
+                             size_t M, size_t N, size_t K) {
+  asm volatile(
+      PTO_MATMUL_HEADER("TMATMUL.BIAS.FIXP",
+                        "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
+      "B.IOT %[A], %[B], mask=15\n"
+      "B.IOT %[Bias]\n"
+      "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+        [Bias] "Tr"(bias.data()),
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+      : "memory");
+}
+
+#define PTO_DEFINE_MATMUL_MX_HELPER(Name, Opcode, ExtraAttrs)                   \
+template <typename Dst, typename A, typename ScaleA, typename B,                \
+          typename ScaleB>                                                       \
+inline void Name(Dst &dst, A &a, ScaleA &scale_a, B &b, ScaleB &scale_b,        \
+                 size_t M, size_t N, size_t K) {                                 \
+  asm volatile(                                                                  \
+      PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                       \
+      "B.IOT %[A], %[ScaleA], mask=15\n"                                      \
+      "B.IOT %[B], %[ScaleB], mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"   \
+      : [Dst] "=&Tr"(dst.data())                                               \
+      : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                    \
+        [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                    \
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                             \
+      : "memory");                                                             \
+}
+
+PTO_DEFINE_MATMUL_MX_HELPER(matmul_mx, "TMATMULMX", "")
+
+template <typename Dst, typename A, typename B, typename ScaleB>
+inline void matmul_mxb(Dst &dst, A &a, B &b, ScaleB &scale_b,
+                       size_t M, size_t N, size_t K) {
+  asm volatile(
+      PTO_MATMUL_HEADER("TMATMULMX", "")
+      "B.IOT %[A], %[B], mask=15\n"
+      "B.IOT %[ScaleB]\n"
+      "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+        [ScaleB] "Tr"(scale_b.data()),
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+      : "memory");
+}
+
+template <typename Dst, typename A, typename B, typename ScaleB,
+          typename Acc>
+inline void matmul_mxb_acc(Dst &dst, A &a, B &b, ScaleB &scale_b, Acc &acc,
+                           size_t M, size_t N, size_t K) {
+  asm volatile(
+      PTO_MATMUL_HEADER("TMATMULMX.ACC", "")
+      "B.IOT %[A], %[B], mask=15\n"
+      "B.IOT %[ScaleB], %[Acc], mask=15\n"
+      "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+        [ScaleB] "Tr"(scale_b.data()), [Acc] "Tr"(acc.data()),
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+      : "memory");
+}
+
+template <typename Dst, typename A, typename ScaleA, typename B,
+          typename ScaleB>
+inline void matmul_mx_fixp(Dst &dst, A &a, ScaleA &scale_a, B &b,
+                           ScaleB &scale_b, size_t M, size_t N, size_t K) {
+  asm volatile(
+      PTO_MATMUL_HEADER("TMATMULMX.FIXP",
+                        "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
+      "B.IOT %[A], %[ScaleA], mask=15\n"
+      "B.IOT %[B], %[ScaleB], mask=15\n"
+      "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),
+        [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+      : "memory");
+}
+
+#define PTO_DEFINE_MATMUL_MX_5SRC_HELPER(Name, Opcode, ExtraAttrs)              \
+template <typename Dst, typename A, typename ScaleA, typename B,                \
+          typename ScaleB, typename Extra>                                       \
+inline void Name(Dst &dst, A &a, ScaleA &scale_a, B &b, ScaleB &scale_b,        \
+                 Extra &extra, size_t M, size_t N, size_t K) {                   \
+  asm volatile(                                                                  \
+      PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                       \
+      "B.IOT %[A], %[ScaleA], mask=15\n"                                      \
+      "B.IOT %[B], %[ScaleB], mask=15\n"                                     \
+      "B.IOT %[Extra]\n"                                                       \
+      "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                  \
+      : [Dst] "=&Tr"(dst.data())                                               \
+      : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                    \
+        [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                    \
+        [Extra] "Tr"(extra.data()),                                             \
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                             \
+      : "memory");                                                             \
+}
+
+PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_bias, "TMATMULMX.BIAS", "")
+PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_acc, "TMATMULMX.ACC", "")
+PTO_DEFINE_MATMUL_MX_5SRC_HELPER(
+    matmul_mx_bias_fixp, "TMATMULMX.BIAS.FIXP",
+    "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
+PTO_DEFINE_MATMUL_MX_5SRC_HELPER(
+    matmul_mx_acc_fixp, "TMATMULMX.ACC.FIXP",
+    "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
+
+#undef PTO_DEFINE_MATMUL_MX_5SRC_HELPER
+#undef PTO_DEFINE_MATMUL_MX_HELPER
+#undef PTO_DEFINE_MATMUL_3SRC_HELPER
+#undef PTO_MATMUL_COMMON_INPUTS
+#undef PTO_MATMUL_HEADER
+
+} // namespace pto_matmul_detail
+
+// TMATMUL: C = A(M,K) * B(K,N). All operands are ordinary Tiles. A SharedTile
+// Right operand is bound by C.B.IOS and therefore does not enter B.IOT.
 template <is_tile_data_v tile_shape_c, is_tile_data_v tile_shape_a,
-          is_tile_data_v tile_shape_b>
-void TMATMUL_ACC(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b) {
-  static_assert(tile_shape_c::Loc == Location::Acc,
-                "TMATMUL_ACC output C must be a Location::Acc tile");
-  static_assert(tile_shape_a::Loc != Location::Acc &&
-                tile_shape_b::Loc != Location::Acc,
-                "TMATMUL_ACC inputs A/B cannot be ACC");
+          is_local_or_shared_right tile_shape_b>
+void TMATMUL(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b) {
+  static_assert(tile_shape_c::Loc != Location::Acc,
+                "TMATMUL output C must be an ordinary Tile");
+  static_assert(tile_shape_a::Loc != Location::Acc,
+                "TMATMUL input A cannot be ACC");
+  size_t M = a.GetValidRow();
+  size_t K = a.GetValidCol();
+  if constexpr (is_shared_tile_v<tile_shape_b>) {
+    static_assert(tile_shape_b::Role == Location::Right,
+                  "Shared TMATMUL B must be a SharedTile of a Right tile");
+    static_assert(tile_shape_b::ValidCol != -1,
+                  "Shared TMATMUL currently requires a static valid N");
+    size_t N = tile_shape_b::ValidCol;
+    pto_matmul_detail::matmul_shared(c, a, b, M, N, K);
+  } else {
+    size_t N = b.GetValidCol();
+    pto_matmul_detail::matmul(c, a, b, M, N, K);
+  }
+}
+
+// TMATMUL_ACC: D = C + A*B. D and C are distinct ordinary Tile operands.
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_tile_data_v tile_shape_a, is_tile_data_v tile_shape_b>
+void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
+                 tile_shape_b &b) {
+  static_assert(tile_shape_d::Loc != Location::Acc &&
+                    tile_shape_c::Loc != Location::Acc,
+                "TMATMUL_ACC D/C must be ordinary Tiles");
+  static_assert(tile_shape_a::Loc == Location::Left &&
+                    tile_shape_b::Loc == Location::Right,
+                "TMATMUL_ACC requires A=Left and B=Right");
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
-  blk_matmul_ac(M, N, K,
-                type_traits<typename tile_shape_a::DType>::TypeCode,
-                type_traits<typename tile_shape_b::DType>::TypeCode,
-                c.data(), a.data(), b.data(), c.data());
+  pto_matmul_detail::matmul_acc(d, a, b, c, M, N, K);
 }
 
 // TMATMUL_FIXP: D = FIXP(A*B), basic local mode.
@@ -1933,10 +2137,7 @@ void TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b) {
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
-  blk_matmul_fixp(M, N, K,
-                  type_traits<typename tile_shape_a::DType>::TypeCode,
-                  type_traits<typename tile_shape_b::DType>::TypeCode,
-                  d.data(), a.data(), b.data());
+  pto_matmul_detail::matmul_fixp(d, a, b, M, N, K);
 }
 
 // TMATMUL_ACC_FIXP: D = FIXP(ACC + A*B), basic local mode.
@@ -1947,8 +2148,8 @@ void TMATMUL_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc, tile_shape_a &a,
                       tile_shape_b &b) {
   static_assert(tile_shape_d::Loc != Location::Acc,
                 "TMATMUL_ACC_FIXP output D must be an ordinary local Tile");
-  static_assert(tile_shape_acc::Loc == Location::Acc,
-                "TMATMUL_ACC_FIXP input ACC must be Location::Acc");
+  static_assert(tile_shape_acc::Loc != Location::Acc,
+                "TMATMUL_ACC_FIXP accumulator must be an ordinary Tile");
   static_assert(tile_shape_a::Loc == Location::Left,
                 "TMATMUL_ACC_FIXP input A must be Location::Left");
   static_assert(tile_shape_b::Loc == Location::Right,
@@ -1968,10 +2169,7 @@ void TMATMUL_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc, tile_shape_a &a,
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
-  blk_matmul_acc_fixp(M, N, K,
-                      type_traits<typename tile_shape_a::DType>::TypeCode,
-                      type_traits<typename tile_shape_b::DType>::TypeCode,
-                      d.data(), a.data(), b.data(), acc.data());
+  pto_matmul_detail::matmul_acc_fixp(d, a, b, acc, M, N, K);
 }
 
 // TMATMUL_BIAS_FIXP: D = FIXP(A*B + bias), basic local mode.
@@ -1997,10 +2195,7 @@ void TMATMUL_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b,
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
-  blk_matmul_bias_fixp(M, N, K,
-                       type_traits<typename tile_shape_a::DType>::TypeCode,
-                       type_traits<typename tile_shape_b::DType>::TypeCode,
-                       d.data(), a.data(), b.data(), bias.data());
+  pto_matmul_detail::matmul_bias_fixp(d, a, b, bias, M, N, K);
 }
 
 // TMATMUL_MX_FIXP: D = FIXP(MXMatMul(A, ScaleA, B, ScaleB)), basic local mode.
@@ -2031,11 +2226,7 @@ void TMATMUL_MX_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_sa &scale_a,
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
-  blk_matmul_mx_fixp(M, N, K,
-                     type_traits<typename tile_shape_a::DType>::TypeCode,
-                     type_traits<typename tile_shape_b::DType>::TypeCode,
-                     d.data(), a.data(), scale_a.data(),
-                     b.data(), scale_b.data());
+  pto_matmul_detail::matmul_mx_fixp(d, a, scale_a, b, scale_b, M, N, K);
 }
 
 // TMATMUL_MX_BIAS_FIXP: D = FIXP(MXMatMul(A, ScaleA, B, ScaleB) + Bias).
@@ -2067,11 +2258,8 @@ void TMATMUL_MX_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a,
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
-  blk_matmul_mx_bias_fixp(M, N, K,
-                          type_traits<typename tile_shape_a::DType>::TypeCode,
-                          type_traits<typename tile_shape_b::DType>::TypeCode,
-                          d.data(), a.data(), scale_a.data(),
-                          b.data(), bias.data());
+  pto_matmul_detail::matmul_mx_bias_fixp(d, a, scale_a, b, scale_b, bias,
+                                         M, N, K);
 }
 
 // TMATMUL_MX_ACC_FIXP: D = FIXP(ACC + MXMatMul(A, ScaleA, B, ScaleB)).
@@ -2084,8 +2272,8 @@ void TMATMUL_MX_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc,
                          tile_shape_b &b, tile_shape_sb &scale_b) {
   static_assert(tile_shape_d::Loc != Location::Acc,
                 "TMATMUL_MX_ACC_FIXP output D must be an ordinary local Tile");
-  static_assert(tile_shape_acc::Loc == Location::Acc,
-                "TMATMUL_MX_ACC_FIXP input ACC must be Location::Acc");
+  static_assert(tile_shape_acc::Loc != Location::Acc,
+                "TMATMUL_MX_ACC_FIXP accumulator must be an ordinary Tile");
   static_assert(tile_shape_a::Loc == Location::Left,
                 "TMATMUL_MX_ACC_FIXP input A must be Location::Left");
   static_assert(tile_shape_b::Loc == Location::Right,
@@ -2109,21 +2297,17 @@ void TMATMUL_MX_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc,
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
-  blk_matmul_mx_acc_fixp(M, N, K,
-                         type_traits<typename tile_shape_a::DType>::TypeCode,
-                         type_traits<typename tile_shape_b::DType>::TypeCode,
-                         d.data(), a.data(), scale_a.data(),
-                         b.data(), scale_b.data(), acc.data());
+  pto_matmul_detail::matmul_mx_acc_fixp(d, a, scale_a, b, scale_b, acc,
+                                        M, N, K);
 }
 
 // TMATMUL_BIAS: C = A*B + bias (BSTART.CUBE TMATMUL.BIAS).
-// blk_matmul_ac's 3rd vector operand is the ExtraTile (bias here).
 template <is_tile_data_v tile_shape_c, is_tile_data_v tile_shape_a,
           is_tile_data_v tile_shape_b, is_tile_data_v tile_shape_bias>
 void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b,
                   tile_shape_bias &bias) {
-  static_assert(tile_shape_c::Loc == Location::Acc,
-                "TMATMUL_BIAS output C must be a Location::Acc tile");
+  static_assert(tile_shape_c::Loc != Location::Acc,
+                "TMATMUL_BIAS output C must be an ordinary Tile");
   static_assert(tile_shape_a::Loc != Location::Acc &&
                 tile_shape_b::Loc != Location::Acc &&
                 tile_shape_bias::Loc != Location::Acc,
@@ -2131,10 +2315,7 @@ void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b,
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
-  blk_matmul_ac(M, N, K,
-                type_traits<typename tile_shape_a::DType>::TypeCode,
-                type_traits<typename tile_shape_b::DType>::TypeCode,
-                c.data(), a.data(), b.data(), bias.data());
+  pto_matmul_detail::matmul_bias(c, a, b, bias, M, N, K);
 }
 
 // TMATMUL_MX: C = (A * aScale) * (B * bScale) (BSTART.CUBE TMATMULMX).
@@ -2143,15 +2324,37 @@ template <is_tile_data_v tile_shape_c, is_tile_data_v tile_shape_a,
           is_tile_data_v tile_shape_bscale>
 void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_ascale &ascale,
                 tile_shape_b &b, tile_shape_bscale &bscale) {
-  static_assert(tile_shape_c::Loc == Location::Acc,
-                "TMATMUL_MX output C must be a Location::Acc tile");
+  static_assert(tile_shape_c::Loc != Location::Acc,
+                "TMATMUL_MX output C must be an ordinary Tile");
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
-  blk_matmulmx(M, N, K,
-               type_traits<typename tile_shape_a::DType>::TypeCode,
-               type_traits<typename tile_shape_b::DType>::TypeCode,
-               c.data(), a.data(), ascale.data(), b.data(), bscale.data());
+  pto_matmul_detail::matmul_mx(c, a, ascale, b, bscale, M, N, K);
+}
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_tile_data_v tile_shape_a, is_tile_data_v tile_shape_sa,
+          is_tile_data_v tile_shape_b, is_tile_data_v tile_shape_sb>
+void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
+                    tile_shape_sa &scale_a, tile_shape_b &b,
+                    tile_shape_sb &scale_b) {
+  size_t M = a.GetValidRow();
+  size_t N = b.GetValidCol();
+  size_t K = a.GetValidCol();
+  pto_matmul_detail::matmul_mx_acc(d, a, scale_a, b, scale_b, c, M, N, K);
+}
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_a,
+          is_tile_data_v tile_shape_sa, is_tile_data_v tile_shape_b,
+          is_tile_data_v tile_shape_sb, is_tile_data_v tile_shape_bias>
+void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
+                     tile_shape_sa &scale_a, tile_shape_b &b,
+                     tile_shape_sb &scale_b, tile_shape_bias &bias) {
+  size_t M = a.GetValidRow();
+  size_t N = b.GetValidCol();
+  size_t K = a.GetValidCol();
+  pto_matmul_detail::matmul_mx_bias(d, a, scale_a, b, scale_b, bias,
+                                    M, N, K);
 }
 
 
@@ -2203,17 +2406,19 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 // TMUL: dst = src0 * src1
 template <is_tile_data_v tile_shape>
 void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+  const size_t valid_col = src0.GetValidCol();
+  const size_t valid_row = src0.GetValidRow();
   asm volatile(
     "BSTART.TEPL 2, %c1\n"
-    "B.DIM zero, %c2, ->lb0\n"
-    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM %2, 0, ->lb0\n"
+    "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "i"(tile_shape::ValidCol),
-      "i"(tile_shape::ValidRow),
+      "r"(valid_col),
+      "r"(valid_row),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -2597,17 +2802,19 @@ void TLOG(tile_shape &dst, tile_shape &src) {
 // TRECIP: dst = 1/src
 template <is_tile_data_v tile_shape>
 void TRECIP(tile_shape &dst, tile_shape &src) {
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TEPL 20, %c1\n"
-    "B.DIM zero, %c2, ->lb0\n"
-    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM %2, 0, ->lb0\n"
+    "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "i"(tile_shape::ValidCol),
-      "i"(tile_shape::ValidRow),
+      "r"(valid_col),
+      "r"(valid_row),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -2735,18 +2942,20 @@ void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TEPL 32, %c1\n"
-    "B.DIM zero, %c2, ->lb0\n"
-    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM %2, 0, ->lb0\n"
+    "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "i"(tile_shape::ValidCol),
-      "i"(tile_shape::ValidRow),
+      "r"(valid_col),
+      "r"(valid_row),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -2785,18 +2994,20 @@ void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TEPL 34, %c1\n"
-    "B.DIM zero, %c2, ->lb0\n"
-    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM %2, 0, ->lb0\n"
+    "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "i"(tile_shape::ValidCol),
-      "i"(tile_shape::ValidRow),
+      "r"(valid_col),
+      "r"(valid_row),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -3654,17 +3865,19 @@ void TPARTMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 // TROWSUM: row sum reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TEPL 64, %c1\n"
-    "B.DIM zero, %c2, ->lb0\n"
-    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM %2, 0, ->lb0\n"
+    "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
+      "r"(valid_col),
+      "r"(valid_row),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -4003,17 +4216,19 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDMUL: src0/dst dtype must match");
+  const size_t valid_col = src0.GetValidCol();
+  const size_t valid_row = src0.GetValidRow();
   asm volatile(
     "BSTART.TEPL 71, %c1\n"
-    "B.DIM zero, %c2, ->lb0\n"
-    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM %2, 0, ->lb0\n"
+    "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
+      "r"(valid_col),
+      "r"(valid_row),
       "i"(tile_shape_in0::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),

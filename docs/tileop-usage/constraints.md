@@ -28,7 +28,7 @@ outside 512 B..32 KB with `IsValidActiveSize`.
 
 ## MGATHER/MSCATTER:offset 必须 tile
 
-- offset(索引)必须是 tile 形式,先 `TCOPYIN` 从 GM 搬进 tile
+- offset(索引)必须是 tile 形式,先 `TLOAD` 从 GM 搬进 tile
 - 不能直接传普通指针/数组(会变 global load,见 Block-C 痛点文档问题 7)
 
 ## 两 src 运算的 shape/dtype 契约

@@ -28,11 +28,11 @@ void test_rm(float *dst, float *src0, float *src1, float *src2) {
   tile_shape_src2 d2;
   tile_shape_dst d3;
 
-  TCOPYIN(d0, s0);
-  TCOPYIN(d1, s1);
-  TCOPYIN(d2, s2);
+  TLOAD(d0, s0);
+  TLOAD(d1, s1);
+  TLOAD(d2, s2);
   TASSEMBLE(d3, d0, d1, d2);
-  TCOPYOUT(res, d3);
+  TSTORE(res, d3);
 }
 
 template <size_t dst_row, size_t dst_col, size_t src0_row, size_t src0_col,
@@ -58,11 +58,11 @@ void test_rm_mask(float *dst, float *src0, float *src1, float *src2) {
   tile_shape_src2 d2;
   tile_shape_dst d3;
 
-  TCOPYIN(d0, s0);
-  TCOPYIN(d1, s1);
-  TCOPYIN(d2, s2);
+  TLOAD(d0, s0);
+  TLOAD(d1, s1);
+  TLOAD(d2, s2);
   TASSEMBLE(d3, d0, d1, d2);
-  TCOPYOUT(res, d3);
+  TSTORE(res, d3);
 }
 
 template <size_t dst_row, size_t dst_col, size_t src0_row, size_t src0_col,
@@ -88,11 +88,11 @@ void test_cm(float *dst, float *src0, float *src1, float *src2) {
   tile_shape_src2 d2;
   tile_shape_dst d3;
 
-  TCOPYIN(d0, s0);
-  TCOPYIN(d1, s1);
-  TCOPYIN(d2, s2);
+  TLOAD(d0, s0);
+  TLOAD(d1, s1);
+  TLOAD(d2, s2);
   TASSEMBLE(d3, d0, d1, d2);
-  TCOPYOUT(res, d3);
+  TSTORE(res, d3);
 }
 
 int main() {

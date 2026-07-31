@@ -23,9 +23,9 @@ void test_Nz(T *dst, T *src0) {
       auto res = gDIter(i, j);
  
       tile_shape d0, d1;
-      TCOPYIN(d0, s0);
+      TLOAD(d0, s0);
       TCOPY(d1, d0);
-      TCOPYOUT(res, d1);
+      TSTORE(res, d1);
     }
   }
 }
@@ -55,9 +55,9 @@ void test_Nz_Dynamic(T *dst, T *src0) {
 
       tile_shape d0(active_row, active_col);
       tile_shape d1(active_row, active_col);
-      TCOPYIN(d0, s0);
+      TLOAD(d0, s0);
       TCOPY(d1, d0);
-      TCOPYOUT(res, d1);
+      TSTORE(res, d1);
     }
   }
 }
@@ -79,9 +79,9 @@ void test_RowMajor(T *dst, T *src0) {
       gm_shape res(dst + offset);
   
       tile_shape d0, d1;
-      TCOPYIN(d0, s0);
+      TLOAD(d0, s0);
       TCOPY(d1, d0);
-      TCOPYOUT(res, d1);
+      TSTORE(res, d1);
     }
   }
 }
@@ -112,9 +112,9 @@ void test_RowMajor_Dynamic(T *dst, T *src0) {
 
       tile_shape d0(active_row, active_col);
       tile_shape d1(active_row, active_col);
-      TCOPYIN(d0, s0);
+      TLOAD(d0, s0);
       TCOPY(d1, d0);
-      TCOPYOUT(res, d1);
+      TSTORE(res, d1);
     }
   }
 }
@@ -136,9 +136,9 @@ void test_ColMajor(T *dst, T *src0) {
       gm_shape res(dst + offset);
   
       tile_shape d0, d1;
-      TCOPYIN(d0, s0);
+      TLOAD(d0, s0);
       TCOPY(d1, d0);
-      TCOPYOUT(res, d1);
+      TSTORE(res, d1);
     }
   }
 }

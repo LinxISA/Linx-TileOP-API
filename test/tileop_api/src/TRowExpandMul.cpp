@@ -25,8 +25,8 @@ void test_row_vector_src1(T *dst, T *s0, T *s1) {
 
   tile_mat d0, d_out;
   tile_vec d1;
-  TCOPYIN(d0, g0);
-  TCOPYIN(d1, g1);
+  TLOAD(d0, g0);
+  TLOAD(d1, g1);
 
   TROWEXPANDMUL(d_out, d0, d1);
   TROWEXPANDADD(d_out, d0, d1);
@@ -36,7 +36,7 @@ void test_row_vector_src1(T *dst, T *s0, T *s1) {
   TROWEXPANDMIN(d_out, d0, d1);
   TROWEXPANDEXPDIF(d_out, d0, d1);
 
-  TCOPYOUT(gd, d_out);
+  TSTORE(gd, d_out);
 }
 
 template <uint16_t row, uint16_t col, typename T>
@@ -54,8 +54,8 @@ void test_col_vector_src1(T *dst, T *s0, T *s1) {
 
   tile_mat d0, d_out;
   tile_vec d1;
-  TCOPYIN(d0, g0);
-  TCOPYIN(d1, g1);
+  TLOAD(d0, g0);
+  TLOAD(d1, g1);
 
   TCOLEXPANDMUL(d_out, d0, d1);
   TCOLEXPANDADD(d_out, d0, d1);
@@ -65,7 +65,7 @@ void test_col_vector_src1(T *dst, T *s0, T *s1) {
   TCOLEXPANDMIN(d_out, d0, d1);
   TCOLEXPANDEXPDIF(d_out, d0, d1);
 
-  TCOPYOUT(gd, d_out);
+  TSTORE(gd, d_out);
 }
 
 // Regression for TCONCAT column-concat: dst = [src0 | src1].
@@ -89,12 +89,12 @@ void test_concat(T *dst, T *s0, T *s1) {
   tile_in0 d0;
   tile_in1 d1;
   tile_out d_out;
-  TCOPYIN(d0, g0);
-  TCOPYIN(d1, g1);
+  TLOAD(d0, g0);
+  TLOAD(d1, g1);
 
   TCONCAT(d_out, d0, d1);   // d_out = [d0 | d1]  (R x (C0+C1))
 
-  TCOPYOUT(gd, d_out);
+  TSTORE(gd, d_out);
 }
 
 int main() {

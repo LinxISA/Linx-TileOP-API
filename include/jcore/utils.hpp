@@ -21,7 +21,7 @@ void print_tile_Impl(tile_shape &tile) {
           GlobalTensor<dtype, shape, stride, Layout::ND>,
           GlobalTensor<dtype, shape, stride, Layout::DN>>;
   gm_shape dst(d);
-  TCOPYOUT(dst, tile);
+  TSTORE(dst, tile);
 
   print_tile_info<tile_shape>();
   std::cout << std::fixed << std::scientific << std::setprecision(4);

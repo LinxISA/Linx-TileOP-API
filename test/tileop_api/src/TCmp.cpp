@@ -26,10 +26,10 @@ void test_RowMajor_CmpMode(int32_t *dst, T *src0, T *src1) {
   
       tile_shape_in d0, d1;
       tile_shape_out d2;
-      TCOPYIN(d0, s0);
-      TCOPYIN(d1, s1);
+      TLOAD(d0, s0);
+      TLOAD(d1, s1);
       TCMP(d2, d1, d0, Mode);  // 使用模板参数Mode
-      TCOPYOUT(res, d2);
+      TSTORE(res, d2);
     }
   }
 }
@@ -55,10 +55,10 @@ void test_ColMajor_CmpMode(int32_t *dst, T *src0, T *src1) {
   
       tile_shape_in d0, d1;
       tile_shape_out d2;
-      TCOPYIN(d0, s0);
-      TCOPYIN(d1, s1);
+      TLOAD(d0, s0);
+      TLOAD(d1, s1);
       TCMP(d2, d1, d0, Mode);  // 使用模板参数Mode
-      TCOPYOUT(res, d2);
+      TSTORE(res, d2);
     }
   }
 }

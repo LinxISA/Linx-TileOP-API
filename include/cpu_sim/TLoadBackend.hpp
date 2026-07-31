@@ -1,5 +1,5 @@
-#ifndef TCOPYIN_HPP
-#define TCOPYIN_HPP
+#ifndef TLOAD_BACKEND_HPP
+#define TLOAD_BACKEND_HPP
 
 #include "common/pto_tile.hpp"
 
@@ -75,7 +75,7 @@ void CopyInCol2ZnImpl1D(typename tile_shape::TileDType dst,
 }
 
 template <typename tile_shape, typename gm_shape>
-void TCopyIn_RowMajor_Impl(typename tile_shape::TileDType dst,
+void TLoad_RowMajor_Impl(typename tile_shape::TileDType dst,
                            const typename gm_shape::DType *src) {
   for (size_t i = 0; i < tile_shape::ValidRow; ++i)
     for (size_t j = 0; j < tile_shape::ValidCol; ++j) {
@@ -86,7 +86,7 @@ void TCopyIn_RowMajor_Impl(typename tile_shape::TileDType dst,
 }
 
 template <typename tile_shape, typename gm_shape>
-void TCopyIn_ColMajor_Impl(typename tile_shape::TileDType dst,
+void TLoad_ColMajor_Impl(typename tile_shape::TileDType dst,
                            const typename gm_shape::DType *src) {
   for (size_t i = 0; i < tile_shape::ValidCol; ++i)
     for (size_t j = 0; j < tile_shape::ValidRow; ++j) {
@@ -166,7 +166,7 @@ void CopyInCol2ZnImpl1D_Dynamic(tile_shape &dst,
 }
 
 template <typename tile_shape, typename gm_shape>
-void TCopyIn_RowMajor_Impl_Dynamic(tile_shape &dst,
+void TLoad_RowMajor_Impl_Dynamic(tile_shape &dst,
                                    gm_shape &src) {
   for (size_t i = 0; i < dst.GetValidRow(); ++i) {
     for (size_t j = 0; j < dst.GetValidCol(); ++j) {
@@ -178,7 +178,7 @@ void TCopyIn_RowMajor_Impl_Dynamic(tile_shape &dst,
 }
 
 template <typename tile_shape, typename gm_shape>
-void TCopyIn_ColMajor_Impl_Dynamic(tile_shape &dst,
+void TLoad_ColMajor_Impl_Dynamic(tile_shape &dst,
                                    gm_shape &src) {
   for (size_t i = 0; i < dst.GetValidCol(); ++i) {
     for (size_t j = 0; j < dst.GetValidRow(); ++j) {
@@ -190,7 +190,7 @@ void TCopyIn_ColMajor_Impl_Dynamic(tile_shape &dst,
 }
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
-void TCOPYIN_Impl(tile_shape &dst, gm_shape &src) {
+void TLOAD_Impl(tile_shape &dst, gm_shape &src) {
   static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   if (tile_shape::ValidRow == DYNAMIC || tile_shape::ValidCol == DYNAMIC) { // dynamic
     if constexpr (is_Nz_layout<tile_shape>::value) {
@@ -207,9 +207,9 @@ void TCOPYIN_Impl(tile_shape &dst, gm_shape &src) {
       }
     } else if constexpr (tile_shape::isBoxedLayout == false) {
       if constexpr (gm_shape::isRowMajor) {
-        TCopyIn_RowMajor_Impl_Dynamic<tile_shape, gm_shape>(dst, src);
+        TLoad_RowMajor_Impl_Dynamic<tile_shape, gm_shape>(dst, src);
       } else {
-        TCopyIn_ColMajor_Impl_Dynamic<tile_shape, gm_shape>(dst, src);
+        TLoad_ColMajor_Impl_Dynamic<tile_shape, gm_shape>(dst, src);
       }
     } else {
       static_assert(tile_shape::isBoxedLayout == false, "Data type not supported");
@@ -229,9 +229,9 @@ void TCOPYIN_Impl(tile_shape &dst, gm_shape &src) {
       }
     } else if constexpr (tile_shape::isBoxedLayout == false) {
       if constexpr (gm_shape::isRowMajor) {
-        TCopyIn_RowMajor_Impl<tile_shape, gm_shape>(dst.data(), src.data());
+        TLoad_RowMajor_Impl<tile_shape, gm_shape>(dst.data(), src.data());
       } else {
-        TCopyIn_ColMajor_Impl<tile_shape, gm_shape>(dst.data(), src.data());
+        TLoad_ColMajor_Impl<tile_shape, gm_shape>(dst.data(), src.data());
       }
     } else {
       static_assert(tile_shape::isBoxedLayout == false, "Data type not supported");

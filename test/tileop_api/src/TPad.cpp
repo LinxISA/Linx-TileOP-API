@@ -19,9 +19,9 @@ void test_pad_rm(T *dst, T *src, T pad_value, size_t up_pad, size_t left_pad, si
   tile_shape_src src_tensor;
   tile_shape_dst dst_tensor;
 
-  TCOPYIN(src_tensor, s0);
+  TLOAD(src_tensor, s0);
   TPAD(dst_tensor, src_tensor, pad_value, up_pad, left_pad, down_pad, right_pad);
-  TCOPYOUT(res, dst_tensor);
+  TSTORE(res, dst_tensor);
 }
 
 template <uint16_t tile_row, uint16_t tile_col, uint16_t valid_row, uint16_t valid_col,
@@ -38,9 +38,9 @@ void test_pad_cm(T *dst, T *src, T pad_value, size_t up_pad, size_t left_pad, si
   tile_shape_src src_tensor;
   tile_shape_dst dst_tensor;
 
-  TCOPYIN(src_tensor, s0);
+  TLOAD(src_tensor, s0);
   TPAD(dst_tensor, src_tensor, pad_value, up_pad, left_pad, down_pad, right_pad);
-  TCOPYOUT(res, dst_tensor);
+  TSTORE(res, dst_tensor);
 }
 
 // 测试单个数据类型的函数

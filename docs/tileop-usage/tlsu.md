@@ -53,14 +53,14 @@ void gather_example(float* gm_src, uint32_t* gm_idx, tile_t& d) {
   gm src(gm_src);
   gm_idx idx(gm_idx);
   tile_idx off;
-  TCOPYIN(off, idx);        // 先把索引搬进 tile
+  TLOAD(off, idx);        // 先把索引搬进 tile
   MGATHER(d, src, off);     // dst[i] = src[base + off[i]]
 }
 ```
 
 - **签名**:`MGATHER(dst, src, offset)`
 - **builtin**：无（inline-asm）
-- **offset**:tile 形式的索引(先 TCOPYIN),不能直接传普通指针
+- **offset**:tile 形式的索引(先 TLOAD),不能直接传普通指针
 - **生成**:`BSTART.TLSU MGATHER` + `B.DATR Null` + `B.DIM(ValidCol/ValidRow/Col)` + `B.IOT [off], last, ->dst<size>` + `B.IOR [base, stride]`
 
 ---
@@ -75,7 +75,7 @@ void scatter_example(float* gm_dst, uint32_t* gm_idx, tile_t& d) {
   gm dst(gm_dst);
   gm_idx idx(gm_idx);
   tile_idx off;
-  TCOPYIN(off, idx);
+  TLOAD(off, idx);
   MSCATTER(dst, d, off);    // dst[base + off[i]] = src[i]
 }
 ```
@@ -99,7 +99,7 @@ void masked_gather_example(float* gm_src, uint32_t* gm_idx, uint8_t* gm_msk,
   gm src(gm_src);
   gm_idx idx(gm_idx); gm_m msk(gm_msk);
   tile_idx off; tile_m mask;
-  TCOPYIN(off, idx); TCOPYIN(mask, msk);
+  TLOAD(off, idx); TLOAD(mask, msk);
   MGATHER_MASK(d, src, off, mask);    // mask[i]=0 的 lane 填 PadValue
 }
 ```
@@ -123,7 +123,7 @@ void masked_scatter_example(float* gm_dst, uint32_t* gm_idx, uint8_t* gm_msk,
   gm dst(gm_dst);
   gm_idx idx(gm_idx); gm_m msk(gm_msk);
   tile_idx off; tile_m mask;
-  TCOPYIN(off, idx); TCOPYIN(mask, msk);
+  TLOAD(off, idx); TLOAD(mask, msk);
   MSCATTER_MASK(dst, d, off, mask);   // mask[i]=0 的 lane 不写
 }
 ```

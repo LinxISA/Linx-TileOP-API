@@ -14,7 +14,7 @@ void matmul_example(float* a, float* b, float* c) {
   using t_B = TileRight<float, 64, 64>;
   using t_C = TileAcc<float, 64, 64>;       // C 必须是 Acc
   t_A da; t_B db; t_C dc;
-  // 先 TCOPYIN da, db ...
+  // 先 TLOAD da, db ...
   TMATMUL(dc, da, db);      // C = A*B → implicit ACC
   // 如需普通 Tile/GM 输出，改用 TMATMUL.FIXP 对应接口。
 }
@@ -44,13 +44,13 @@ TMATMUL_ACC(dc, da, db);    // dc 既作 ACC 输入又作输出
 ```cpp
 using t_bias = TileLeft<float, 64, 64>;
 t_bias dbi;
-// TCOPYIN dbi ...
+// TLOAD dbi ...
 TMATMUL_BIAS(dc, da, db, dbi);   // bias 是第 4 个 tile(ExtraTile)
 ```
 
 - **签名**:`TMATMUL_BIAS(c, a, b, bias)`
 - **builtin**：`blk_matmul_ac`
-- **bias**:普通 tile(不能是 Acc),必须先 TCOPYIN 初始化
+- **bias**:普通 tile(不能是 Acc),必须先 TLOAD 初始化
 - **生成**:`BSTART.CUBE TMATMUL.BIAS`
 
 ---
@@ -60,13 +60,13 @@ TMATMUL_BIAS(dc, da, db, dbi);   // bias 是第 4 个 tile(ExtraTile)
 ```cpp
 using t_S = TileLeft<float, 64, 64>;
 t_S das, dbs;
-// TCOPYIN das, dbs ...
+// TLOAD das, dbs ...
 TMATMUL_MX(dc, da, das, db, dbs);  // 带 scale 的矩阵乘
 ```
 
 - **签名**:`TMATMUL_MX(c, a, aScale, b, bScale)`
 - **builtin**：`blk_matmulmx`
-- **aScale/bScale**:普通 tile,必须先 TCOPYIN 初始化
+- **aScale/bScale**:普通 tile,必须先 TLOAD 初始化
 - **生成**:`BSTART.CUBE TMATMULMX`
 
 ---

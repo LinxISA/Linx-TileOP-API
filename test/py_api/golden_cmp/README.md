@@ -66,7 +66,7 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     · 添加固定文件头。
     . 声明要传入的参数
     . 声明矩阵的形状与layout
-    . 进行矩阵操作，并且使用TCOPYIN,TCOPYOUT函数以及上一个步骤声明的函数来进行操作。注意满足TCOPYIN,TCOPYOUT对于矩阵layout的要求。
+    . 进行矩阵操作，并且使用TLOAD,TSTORE函数以及上一个步骤声明的函数来进行操作。注意满足TLOAD,TSTORE对于矩阵layout的要求。
     . 对函数进行绑定，注意在绑定时需要进行接口的转换以及参数的传入。
     . 之后在tileop_py.cpp中加入要编译的文件名
     ```
@@ -93,10 +93,10 @@ void tadd_py(float* dst, float* src0, float* src1){
             gm_shape res(dst + offset);  
 
             tile_shape d0, d1, d2;
-            TCOPYIN(d0, s0);
-            TCOPYIN(d1, s1);
+            TLOAD(d0, s0);
+            TLOAD(d1, s1);
             TADD(d2, d0, d1);
-            TCOPYOUT(res, d2);
+            TSTORE(res, d2);
         }
     }
 }

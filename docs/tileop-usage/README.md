@@ -30,7 +30,7 @@ void matmul_flow(float* a, float* b, float* c) {
   using gm = global_tensor<float, RowMajor<64, 64>>;
   gm ga(a), gb(b), gc(c);
   t_A da; t_B db; t_C dc; t_O dout;
-  TCOPYIN(da, ga); TCOPYIN(db, gb);
+  TLOAD(da, ga); TLOAD(db, gb);
   TMATMUL(dc, da, db);   // C = A*B → ACC
   // v5: use the matching TMATMUL*.FIXP interface for an ordinary Tile.
   // Independent ACCCVT export is no longer available.

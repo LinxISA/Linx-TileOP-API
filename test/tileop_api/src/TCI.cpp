@@ -20,7 +20,7 @@ void test_rm(T *dst, T s) {
 
       tile_shape d1;
       TCI<tile_shape, T, 0>(d1, s);
-      TCOPYOUT(res, d1);
+      TSTORE(res, d1);
     }
   }
 }
@@ -40,7 +40,7 @@ void test_cm(T *dst, T s) {
 
       tile_shape d1;
       TCI<tile_shape, T, 0>(d1, s);
-      TCOPYOUT(res, d1);
+      TSTORE(res, d1);
     }
   }
 }

@@ -24,8 +24,8 @@ void test_RowMajor(T *dst, T *src0) {
       gm_shape res(dst + offset);
   
       tile_shape d0;
-      TCOPYIN(d0, s0);
-      TCOPYOUT(res, d0);
+      TLOAD(d0, s0);
+      TSTORE(res, d0);
     }
   }
 }
@@ -33,7 +33,7 @@ void test_RowMajor(T *dst, T *src0) {
 template <uint16_t gm_row, uint16_t gm_col, uint16_t tile_row, uint16_t tile_col, typename T>
 void test_RowMajor_Dynamic(T *dst, T *src0) {
   using gm_shape = global_tensor<T, RowMajor<-1, -1>>;
-  using tile_shape = Tile<Location::Vec, T, 2*tile_row, 2*tile_col, BLayout::RowMajor, -1, -1>;
+  using tile_shape = Tile<Location::Vec, T, tile_row, tile_col, BLayout::RowMajor, -1, -1>;
 
   volatile size_t tile_valid_row = tile_row - 2;
   volatile size_t tile_valid_col = tile_col - 2;
@@ -57,8 +57,8 @@ void test_RowMajor_Dynamic(T *dst, T *src0) {
       gm_shape res(dst + offset, gm_valid_row, gm_valid_col);
 
       tile_shape d0(active_row, active_col);
-      TCOPYIN(d0, s0);
-      TCOPYOUT(res, d0);
+      TLOAD(d0, s0);
+      TSTORE(res, d0);
     }
   }
 }
@@ -82,8 +82,8 @@ void test_ColMajor(T *dst, T *src0) {
       gm_shape res(dst + offset);
   
       tile_shape d0;
-      TCOPYIN(d0, s0);
-      TCOPYOUT(res, d0);
+      TLOAD(d0, s0);
+      TSTORE(res, d0);
     }
   }
 }
@@ -116,8 +116,8 @@ void test_Nz_Dynamic(T *dst, T *src0) {
 
       tile_shape d0(active_row, active_col);
       tile_shape d1(active_row, active_col);
-      TCOPYIN(d0, s0);
-      TCOPYOUT(res, d0);
+      TLOAD(d0, s0);
+      TSTORE(res, d0);
     }
   }
 }
@@ -207,9 +207,9 @@ int main() {
 
   test_RowMajor<gm_row, gm_col, tile_row, tile_col, int16_t>(dst_i16, src0_i16);
  
-  test_RowMajor<gm_row, gm_col, tile_row, tile_col, int32_t>(dst_i32, src0_i32);
+  test_ColMajor<gm_row, gm_col, tile_row, tile_col, int32_t>(dst_i32, src0_i32);
  
-  test_RowMajor<gm_row, gm_col, tile_row, tile_col, int64_t>(dst_i64, src0_i64);
+  test_ColMajor<gm_row, gm_col, tile_row, tile_col, int64_t>(dst_i64, src0_i64);
 
   test_RowMajor_Dynamic<gm_row + 1, gm_col + 1, tile_row, tile_col, int32_t>(dst1_i32, src1_i32);
 

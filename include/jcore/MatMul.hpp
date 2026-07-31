@@ -2,6 +2,7 @@
 #define MATMUL_HPP
 
 #include "common/pto_tile.hpp"
+#include "jcore/template_asm.hpp"
 
 using namespace pto;
 
@@ -29,35 +30,14 @@ void __vec__ MatMul_Vec_Impl(
 template <is_tile_data_v tile_shape_A, is_tile_data_v tile_shape_B,
           is_tile_data_v tile_shape_C>
 void MATMUL_Impl(tile_shape_C &dst, tile_shape_A &src0, tile_shape_B &src1) {
-  // static_assert(tile_shape_A::Cols == tile_shape_B::Rows,
-  //               "Error! Cude A:Columns != Cude B:Rows");
-
+  static_assert(tile_shape_A::Cols == tile_shape_B::Rows,
+                "MATMUL requires A.Cols == B.Rows");
   size_t M = dst.GetValidRow();
   size_t N = dst.GetValidCol();
-  size_t K =
-    (src0.GetValidCol() > src1.GetValidRow())
-        ? src0.GetValidCol()
-        : src1.GetValidRow();
-
-    if constexpr ((!tile_shape_A::isBoxedLayout) && 
-                  (!tile_shape_B::isBoxedLayout) &&
-                  (!tile_shape_C::isBoxedLayout)) {
-      MatMul_Vec_Impl<tile_shape_A, tile_shape_B, tile_shape_C>
-      <<<N, M, 1>>>(dst.data(), src0.data(), src1.data());
-    } else if constexpr (is_Nz_layout<tile_shape_A>::value &&
-                         is_Zn_layout<tile_shape_B>::value) {
-      static_assert(tile_shape_C::SFractalSize == 1024 &&
-                        is_Nz_layout<tile_shape_C>::value,
-                    "Error! Cude C:FractalSize != 1024 or not Nz_layout");
-      static_assert(tile_shape_A::Loc != Location::Acc && tile_shape_B::Loc != Location::Acc, "Error! Matmul input can not be ACC");
-      static_assert(tile_shape_C::Loc == Location::Acc, "Error! Matmul output only canbe ACC");
-      blk_matmul(M, N, K, type_traits<typename tile_shape_A::DType>::TypeCode, type_traits<typename tile_shape_B::DType>::TypeCode,
-                 dst.data(), src0.data(), src1.data());
-    } else {
-      static_assert((!tile_shape_A::isBoxedLayout) && 
-                    (!tile_shape_B::isBoxedLayout), 
-                    "Storage layout type not supported");
-    }
+  size_t K = src0.GetValidCol();
+  static_assert(tile_shape_C::Loc != Location::Acc,
+                "MATMUL output must be an ordinary Tile");
+  pto_matmul_detail::matmul(dst, src0, src1, M, N, K);
 }
 
 template <typename tile_shape_A, typename tile_shape_AX,
@@ -105,53 +85,10 @@ void MATMULMX_Impl(tile_shape_C &dst,
   size_t N = dst.GetValidCol();
   size_t K = src0.GetValidCol();
 
-  if constexpr (std::is_same<typename tile_shape_A::DType,
-                             typename tile_shape_B::DType>::value) {
-    if constexpr ((!tile_shape_A::isBoxedLayout)  &&
-                  (!tile_shape_AX::isBoxedLayout) &&
-                  (!tile_shape_B::isBoxedLayout)  &&
-                  (!tile_shape_BX::isBoxedLayout) &&
-                  (!tile_shape_C::isBoxedLayout)) {
-      MatMulMx_Vec_Impl<tile_shape_A, tile_shape_AX,
-                        tile_shape_B, tile_shape_BX,
-                        tile_shape_C>
-      <<<N, M, 1>>>(dst.data(),
-                    src0.data(), src0_scale.data(),
-                    src1.data(), src1_scale.data());
-    } else if constexpr (is_Nz_layout<tile_shape_A>::value &&
-                         is_Zn_layout<tile_shape_B>::value) {
-      static_assert(tile_shape_C::SFractalSize == 1024 &&
-                        is_Nz_layout<tile_shape_C>::value,
-                    "Error! Cube C:FractalSize != 1024 or not Nz_layout");
-
-      static_assert(tile_shape_A::Loc  != Location::Acc &&
-                    tile_shape_B::Loc  != Location::Acc,
-                    "Error! MatmulMx input can not be ACC");
-
-      static_assert(tile_shape_AX::Loc != Location::Acc &&
-                    tile_shape_BX::Loc != Location::Acc,
-                    "Error! MatmulMx scale input can not be ACC");
-
-      static_assert(tile_shape_C::Loc == Location::Acc,
-                    "Error! MatmulMx output only can be ACC");
-
-      blk_matmulmx(
-          M, N, K,
-          type_traits<typename tile_shape_A::DType>::TypeCode,
-          type_traits<typename tile_shape_B::DType>::TypeCode,
-          dst.data(),
-          src0.data(), src0_scale.data(),
-          src1.data(), src1_scale.data());
-    } else {
-      static_assert((!tile_shape_A::isBoxedLayout) &&
-                    (!tile_shape_B::isBoxedLayout),
-                    "Storage layout type not supported");
-    }
-  } else {
-    static_assert(std::is_same<typename tile_shape_A::DType,
-                               typename tile_shape_B::DType>::value,
-                  "Data type not supported");
-  }
+  static_assert(tile_shape_C::Loc != Location::Acc,
+                "MATMULMX output must be an ordinary Tile");
+  pto_matmul_detail::matmul_mx(dst, src0, src0_scale, src1,
+                               src1_scale, M, N, K);
 }
 
 
@@ -197,51 +134,9 @@ void MATMULMXB_Impl(tile_shape_C &dst,
   size_t N = dst.GetValidCol();
   size_t K = src0.GetValidCol();
 
-  if constexpr (std::is_same<typename tile_shape_A::DType,
-                             typename tile_shape_B::DType>::value) {
-    if constexpr ((!tile_shape_A::isBoxedLayout)  &&
-                  (!tile_shape_B::isBoxedLayout)  &&
-                  (!tile_shape_BX::isBoxedLayout) &&
-                  (!tile_shape_C::isBoxedLayout)) {
-      MatMulMxb_Vec_Impl<tile_shape_A,
-                         tile_shape_B, tile_shape_BX,
-                         tile_shape_C>
-      <<<N, M, 1>>>(dst.data(),
-                    src0.data(),
-                    src1.data(), src1_scale.data());
-    } else if constexpr (is_Nz_layout<tile_shape_A>::value &&
-                         is_Zn_layout<tile_shape_B>::value) {
-      static_assert(tile_shape_C::SFractalSize == 1024 &&
-                        is_Nz_layout<tile_shape_C>::value,
-                    "Error! Cube C:FractalSize != 1024 or not Nz_layout");
-
-      static_assert(tile_shape_A::Loc != Location::Acc &&
-                    tile_shape_B::Loc != Location::Acc,
-                    "Error! MatmulMxb input can not be ACC");
-
-      static_assert(tile_shape_BX::Loc != Location::Acc,
-                    "Error! MatmulMxb scale input can not be ACC");
-
-      static_assert(tile_shape_C::Loc == Location::Acc,
-                    "Error! MatmulMxb output only can be ACC");
-
-      blk_matmulmxb(
-          M, N, K,
-          type_traits<typename tile_shape_A::DType>::TypeCode,
-          type_traits<typename tile_shape_B::DType>::TypeCode,
-          dst.data(),
-          src0.data(),
-          src1.data(), src1_scale.data());
-    } else {
-      static_assert((!tile_shape_A::isBoxedLayout) &&
-                    (!tile_shape_B::isBoxedLayout),
-                    "Storage layout type not supported");
-    }
-  } else {
-    static_assert(std::is_same<typename tile_shape_A::DType,
-                               typename tile_shape_B::DType>::value,
-                  "Data type not supported");
-  }
+  static_assert(tile_shape_C::Loc != Location::Acc,
+                "MATMULMXB output must be an ordinary Tile");
+  pto_matmul_detail::matmul_mxb(dst, src0, src1, src1_scale, M, N, K);
 }
 
 #endif

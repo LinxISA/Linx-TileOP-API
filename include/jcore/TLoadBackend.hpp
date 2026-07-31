@@ -1,5 +1,5 @@
-#ifndef TCOPYIN_HPP
-#define TCOPYIN_HPP
+#ifndef TLOAD_BACKEND_HPP
+#define TLOAD_BACKEND_HPP
 
 #include "common/pto_tile.hpp"
 #include "template_asm.hpp"
@@ -86,7 +86,7 @@ void __mtc__ CopyInRow2ZnImpl1D(typename tile_shape::TileDType __out__ dst,
 
 //no fractal
 template <typename tile_shape, typename gm_shape>
-void __mtc__ TCopyIn_Vec_ColMajor(typename tile_shape::TileDType __out__ dst,
+void __mtc__ TLoad_Vec_ColMajor(typename tile_shape::TileDType __out__ dst,
                                   const typename gm_shape::DType __in__ *src) {
  
   size_t i = blkv_get_index_x();
@@ -98,7 +98,7 @@ void __mtc__ TCopyIn_Vec_ColMajor(typename tile_shape::TileDType __out__ dst,
 }
  
 template <typename tile_shape, typename gm_shape>
-void __mtc__ TCopyIn_Vec_RowMajor(typename tile_shape::TileDType __out__ dst,
+void __mtc__ TLoad_Vec_RowMajor(typename tile_shape::TileDType __out__ dst,
                                   typename gm_shape::DType __in__ *src) {
  
   size_t i = blkv_get_index_x();
@@ -180,7 +180,7 @@ void __mtc__ CopyInRow2ZnImpl2D_Dynamic(typename tile_shape::TileDType __out__ d
 
 //no fractal
 template <typename tile_shape, typename gm_shape>
-void __mtc__ TCopyIn_Vec_ColMajor_Dynamic(typename tile_shape::TileDType __out__ dst,
+void __mtc__ TLoad_Vec_ColMajor_Dynamic(typename tile_shape::TileDType __out__ dst,
                                           const typename gm_shape::DType __in__ *src,
                                           const size_t __in__ gm_col_stride) {
  
@@ -193,7 +193,7 @@ void __mtc__ TCopyIn_Vec_ColMajor_Dynamic(typename tile_shape::TileDType __out__
 }
 
 template <typename tile_shape, typename gm_shape>
-void __mtc__ TCopyIn_Vec_RowMajor_Dynamic(typename tile_shape::TileDType __out__ dst,
+void __mtc__ TLoad_Vec_RowMajor_Dynamic(typename tile_shape::TileDType __out__ dst,
                                           typename gm_shape::DType __in__ *src,
                                           const size_t __in__ gm_row_stride) {
  
@@ -206,7 +206,7 @@ void __mtc__ TCopyIn_Vec_RowMajor_Dynamic(typename tile_shape::TileDType __out__
 }
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
-void _TCOPYIN_Impl(tile_shape &dst, gm_shape &src) {
+void TLOAD_Legacy_Impl(tile_shape &dst, gm_shape &src) {
   size_t tile_rows = dst.GetValidRow();
   size_t tile_cols = dst.GetValidCol();
   static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
@@ -307,7 +307,7 @@ void _TCOPYIN_Impl(tile_shape &dst, gm_shape &src) {
     } else if constexpr (tile_shape::isBoxedLayout == false) {
       if constexpr (tile_shape::isRowMajor) {
         if constexpr (gm_shape::isRowMajor) {
-          TCopyIn_Vec_RowMajor_Dynamic<tile_shape, gm_shape>
+          TLoad_Vec_RowMajor_Dynamic<tile_shape, gm_shape>
               <<<tile_cols, tile_rows, 1>>>(dst.data(), src.data(), src.GetStride(3));
         } else {
           static_assert(gm_shape::isRowMajor,
@@ -315,7 +315,7 @@ void _TCOPYIN_Impl(tile_shape &dst, gm_shape &src) {
         }
       } else if constexpr (!tile_shape::isRowMajor) {
         if constexpr (!gm_shape::isRowMajor) {
-          TCopyIn_Vec_ColMajor_Dynamic<tile_shape, gm_shape>
+          TLoad_Vec_ColMajor_Dynamic<tile_shape, gm_shape>
               <<<tile_rows, tile_cols, 1>>>(dst.data(), src.data(), src.GetStride(4));
         } else {
           static_assert(!gm_shape::isRowMajor,
@@ -346,7 +346,7 @@ void _TCOPYIN_Impl(tile_shape &dst, gm_shape &src) {
     } else if constexpr (tile_shape::isBoxedLayout == false) {
       if constexpr (tile_shape::isRowMajor) {
         if constexpr (gm_shape::isRowMajor) {
-          TCopyIn_Vec_RowMajor<tile_shape, gm_shape>
+          TLoad_Vec_RowMajor<tile_shape, gm_shape>
               <<<tile_cols, tile_rows, 1>>>(dst.data(), src.data());
         } else {
           static_assert(gm_shape::isRowMajor,
@@ -354,7 +354,7 @@ void _TCOPYIN_Impl(tile_shape &dst, gm_shape &src) {
         }
       } else if constexpr (!tile_shape::isRowMajor) {
         if constexpr (!gm_shape::isRowMajor) {
-          TCopyIn_Vec_ColMajor<tile_shape, gm_shape>
+          TLoad_Vec_ColMajor<tile_shape, gm_shape>
               <<<tile_rows, tile_cols, 1>>>(dst.data(), src.data());
         } else {
           static_assert(!gm_shape::isRowMajor,
@@ -372,12 +372,12 @@ void _TCOPYIN_Impl(tile_shape &dst, gm_shape &src) {
 }
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
-void TCOPYIN_2LVL(tile_shape &dst, gm_shape &src){
+void TLOAD_2LVL_Impl(tile_shape &dst, gm_shape &src){
   using tile_tmp = Tile<Location::Vec, typename gm_shape::DType, tile_shape::Rows, tile_shape::Cols, gm_shape::isRowMajor? BLayout::RowMajor:BLayout::ColMajor, tile_shape::ValidRow, tile_shape::ValidCol>;
   tile_tmp tmp;
-  _TCOPYIN_Impl(tmp, src);
+  TLOAD_Legacy_Impl(tmp, src);
   if constexpr(gm_shape::isRowMajor && is_Nz_layout<tile_shape>::value){
-    TCVT_ND2NZ(dst, tmp);    
+    TCVT_ND2NZ(dst, tmp);
   }else if constexpr(gm_shape::isRowMajor && is_Zn_layout<tile_shape>::value){
     TCVT_ND2ZN(dst, tmp); 
   }else if constexpr(!gm_shape::isRowMajor && is_Nz_layout<tile_shape>::value){
@@ -388,11 +388,11 @@ void TCOPYIN_2LVL(tile_shape &dst, gm_shape &src){
 }
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
-void TCOPYIN_Impl(tile_shape &dst, gm_shape &src) {
+void TLOAD_Impl(tile_shape &dst, gm_shape &src) {
   #ifdef RUMINATE
-  TCOPYIN_2LVL(dst, src);
+  TLOAD_2LVL_Impl(dst, src);
   #else
-  _TCOPYIN_Impl(dst, src);
+  TLOAD_Legacy_Impl(dst, src);
   #endif
 }
 

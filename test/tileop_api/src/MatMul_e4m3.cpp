@@ -40,12 +40,12 @@ void test(float *dst, float *src0, float *src1) {
   tile_shape_LA lda;
   tile_shape_LB ldb;
 
-  TCOPYIN(d0, s0);
-  TCOPYIN(d1, s1);
+  TLOAD(d0, s0);
+  TLOAD(d1, s1);
   test_cvt<tile_shape_LA, tile_shape_A><<<M, K, 1>>>(lda.data(), d0.data());
   test_cvt<tile_shape_LB, tile_shape_B><<<K, N, 1>>>(ldb.data(), d1.data());
   MATMUL(d2, lda, ldb);
-  TCOPYOUT(res, d2);
+  TSTORE(res, d2);
 }
 
 int main() {

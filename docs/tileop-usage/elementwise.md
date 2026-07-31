@@ -36,7 +36,7 @@
 // 示例：两 tile 逐元素加法
 using tile_t = Tile<Location::Vec, float, 64, 32>;
 tile_t dst, src0, src1;
-// TCOPYIN src0, src1 ...
+// TLOAD src0, src1 ...
 TADD(dst, src0, src1);   // dst = src0 + src1
 ```
 
