@@ -1777,93 +1777,97 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
       : "memory");
 }
 
-// Explicit-ID Shared TMOV primitives. These expose the encoding but do not
-// allocate Shared SSA/version IDs; callers must provide a legal, consistently
-// ordered SharedId and obey the v5 publication/readiness rules.
-template <int SharedId, int PEMask = 15, is_tile_data_v tile_shape_src>
-void TMOV_L2S_INSERT(const tile_shape_src &src) {
+// Shared TMOV primitives. The compiler allocates the returned SharedTile
+// handle to an absolute S#0..S#255 register through the "Sr" constraint.
+// These wrappers must inline so the opaque Shared value never crosses the
+// ordinary C++ ABI as an integer or memory-resident object.
+#define PTO_SHARED_INLINE __attribute__((always_inline)) inline
+
+template <int PEMask = 15, is_tile_data_v tile_shape_src>
+PTO_SHARED_INLINE SharedTile<tile_shape_src>
+TMOV_L2S_INSERT(const tile_shape_src &src) {
   static_assert(tile_shape_src::Loc != Location::Acc,
                 "TMOV.L2S.INSERT source must be a Local ordinary Tile");
-  static_assert(SharedId >= 0 && SharedId <= 255,
-                "SharedId must be in S#0..S#255");
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
       tile_type_traits<typename tile_shape_src::TileDType>::IsValidActiveSize,
       "TMOV.L2S.INSERT logical Tile size must be 512 B..32 KB");
+  SharedTile<tile_shape_src> result;
   asm volatile(
       "BSTART.TLSU TMOV.L2S.INSERT, %c[DataType]\n"
-      "C.B.IOS S#%c[SharedId]\n"
+      "C.B.IOS %S[Shared]\n"
       "B.IOT %[src], mask=%c[PEMask], TSize=%c[TileSize], last\n"
-      :
-      : [src] "Tr"(src.data()), [SharedId] "i"(SharedId),
+      : [Shared] "=Sr"(result.handle_ref())
+      : [src] "Tr"(src.data()),
         [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_src::DType>::TypeCode),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_src::TileDType>::TilesizeCode)
       : "memory");
+  return result;
 }
 
-template <int SharedId, int PEMask = 15, is_tile_data_v tile_shape_src>
-void TMOV_L2S_PUBLISH(const tile_shape_src &src) {
+template <int PEMask = 15, is_tile_data_v tile_shape_src>
+PTO_SHARED_INLINE SharedTile<tile_shape_src>
+TMOV_L2S_PUBLISH(const tile_shape_src &src) {
   static_assert(tile_shape_src::Loc != Location::Acc,
                 "TMOV.L2S.PUBLISH source must be a Local ordinary Tile");
-  static_assert(SharedId >= 0 && SharedId <= 255,
-                "SharedId must be in S#0..S#255");
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
       tile_type_traits<typename tile_shape_src::TileDType>::IsValidActiveSize,
       "TMOV.L2S.PUBLISH logical Tile size must be 512 B..32 KB");
+  SharedTile<tile_shape_src> result;
   asm volatile(
       "BSTART.TLSU TMOV.L2S.PUBLISH, %c[DataType]\n"
-      "C.B.IOS S#%c[SharedId]\n"
+      "C.B.IOS %S[Shared]\n"
       "B.IOT %[src], mask=%c[PEMask], TSize=%c[TileSize], last\n"
-      :
-      : [src] "Tr"(src.data()), [SharedId] "i"(SharedId),
+      : [Shared] "=Sr"(result.handle_ref())
+      : [src] "Tr"(src.data()),
         [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_src::DType>::TypeCode),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_src::TileDType>::TilesizeCode)
       : "memory");
+  return result;
 }
 
-template <int SharedId, int PEMask = 15, is_tile_data_v tile_shape_dst>
-void TMOV_S2L_BROADCAST(tile_shape_dst &dst) {
+template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
+PTO_SHARED_INLINE void
+TMOV_S2L_BROADCAST(tile_shape_dst &dst,
+                   const SharedTile<LocalTile> &shared) {
   static_assert(tile_shape_dst::Loc != Location::Acc,
                 "TMOV.S2L.BROADCAST destination must be a Local ordinary Tile");
-  static_assert(SharedId >= 0 && SharedId <= 255,
-                "SharedId must be in S#0..S#255");
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "TMOV.S2L.BROADCAST logical Tile size must be 512 B..32 KB");
   asm volatile(
       "BSTART.TLSU TMOV.S2L.BROADCAST, %c[DataType]\n"
-      "C.B.IOS S#%c[SharedId]\n"
+      "C.B.IOS %S[Shared]\n"
       "B.IOT mask=%c[PEMask], TSize=%c[TileSize], last, ->%[dst]\n"
       : [dst] "=Tr"(dst.data())
-      : [SharedId] "i"(SharedId), [PEMask] "i"(PEMask),
+      : [Shared] "Sr"(shared.handle()), [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_dst::DType>::TypeCode),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_dst::TileDType>::TilesizeCode)
       : "memory");
 }
 
-template <int SharedId, int PEMask = 15, is_tile_data_v tile_shape_dst>
-void TMOV_S2L_EXTRACT(tile_shape_dst &dst) {
+template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
+PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
+    tile_shape_dst &dst, const SharedTile<LocalTile> &shared) {
   static_assert(tile_shape_dst::Loc != Location::Acc,
                 "TMOV.S2L.EXTRACT destination must be a Local ordinary Tile");
-  static_assert(SharedId >= 0 && SharedId <= 255,
-                "SharedId must be in S#0..S#255");
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "TMOV.S2L.EXTRACT logical Tile size must be 512 B..32 KB");
   asm volatile(
       "BSTART.TLSU TMOV.S2L.EXTRACT, %c[DataType]\n"
-      "C.B.IOS S#%c[SharedId]\n"
+      "C.B.IOS %S[Shared]\n"
       "B.IOT mask=%c[PEMask], TSize=%c[TileSize], last, ->%[dst]\n"
       : [dst] "=Tr"(dst.data())
-      : [SharedId] "i"(SharedId), [PEMask] "i"(PEMask),
+      : [Shared] "Sr"(shared.handle()), [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_dst::DType>::TypeCode),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_dst::TileDType>::TilesizeCode)
@@ -1907,15 +1911,15 @@ inline void matmul(Dst &dst, A &a, B &b, size_t M, size_t N, size_t K) {
 }
 
 template <typename Dst, typename A, typename SharedB>
-inline void matmul_shared(Dst &dst, A &a, SharedB &, size_t M, size_t N,
-                          size_t K) {
+PTO_SHARED_INLINE void matmul_shared(Dst &dst, A &a, SharedB &b, size_t M,
+                                     size_t N, size_t K) {
   asm volatile(
       PTO_MATMUL_HEADER("TMATMUL", "")
-      "C.B.IOS S#%c[SharedId]\n"
+      "C.B.IOS %S[Shared]\n"
       "B.IOT %[A]\n"
       "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
       : [Dst] "=&Tr"(dst.data())
-      : [A] "Tr"(a.data()), [SharedId] "i"(SharedB::SharedId),
+      : [A] "Tr"(a.data()), [Shared] "Sr"(b.handle()),
         PTO_MATMUL_COMMON_INPUTS(Dst, A, SharedB, M, N, K)
       : "memory");
 }
@@ -2076,7 +2080,8 @@ PTO_DEFINE_MATMUL_MX_5SRC_HELPER(
 // Right operand is bound by C.B.IOS and therefore does not enter B.IOT.
 template <is_tile_data_v tile_shape_c, is_tile_data_v tile_shape_a,
           is_local_or_shared_right tile_shape_b>
-void TMATMUL(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b) {
+PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
+                              tile_shape_b &b) {
   static_assert(tile_shape_c::Loc != Location::Acc,
                 "TMATMUL output C must be an ordinary Tile");
   static_assert(tile_shape_a::Loc != Location::Acc,
@@ -2095,6 +2100,8 @@ void TMATMUL(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b) {
     pto_matmul_detail::matmul(c, a, b, M, N, K);
   }
 }
+
+#undef PTO_SHARED_INLINE
 
 // TMATMUL_ACC: D = C + A*B. D and C are distinct ordinary Tile operands.
 template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,

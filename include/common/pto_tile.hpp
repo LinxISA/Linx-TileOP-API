@@ -625,11 +625,9 @@ template <typename T> concept is_boxed_data_v = is_boxed_tile<T>;
 // It preserves the wrapped Local Tile's role, shape, dtype and layout exactly
 // (per the DavinciOO v5 Shared semantics) and owns NO Local TileDType payload.
 //
-// SharedId is a compile-time architectural ID (S#0..S#255) used by the MVP.
-// It is intentionally NOT a public template parameter on TMATMUL and is only
-// surfaced to the compiler through detail::shared_handle(); Phase 4 replaces
-// it with compiler-managed SSA/version/defined_mask.
-template <typename LocalTile, int SharedId_ = 0>
+// The compiler allocates the opaque handle to S#0..S#255. It must not be
+// materialized as an ordinary integer or passed through a normal GPR ABI.
+template <typename LocalTile>
 class SharedTile {
   static_assert(is_tile<LocalTile>::value,
                 "SharedTile<LocalTile>: LocalTile must be an ordinary Tile");
@@ -637,9 +635,6 @@ class SharedTile {
                 "SharedTile cannot wrap a SharedTile (nesting not allowed)");
   static_assert(LocalTile::Loc != Location::Acc,
                 "SharedTile cannot wrap an Acc tile (ACC is implicit state)");
-  static_assert(SharedId_ >= 0 && SharedId_ <= 255,
-                "SharedId must be in S#0..S#255");
-
 public:
   using LocalTileType = LocalTile;
   using DType = typename LocalTile::DType;
@@ -657,23 +652,25 @@ public:
   static constexpr SLayout SFractal = LocalTile::SFractal;
   static constexpr int SFractalSize = LocalTile::SFractalSize;
   static constexpr PadValue PadVal = LocalTile::PadVal;
-  // Compile-time architectural Shared ID (S#0..S#255) for the MVP. Phase 4
-  // upgrades this to a compiler-managed SSA/version handle.
-  static constexpr int SharedId = SharedId_;
-
   SharedTile() = default;
 
+  unsigned long &handle_ref() { return Handle; }
+  unsigned long handle() const { return Handle; }
+
   // No data() accessor: a Shared operand must never be passed to an ordinary
-  // "Tr" inline-asm constraint. The compiler consumes SharedId only via
-  // detail::shared_handle().
+  // "Tr" inline-asm constraint. Shared-aware operations use handle() with the
+  // dedicated "Sr" constraint.
+
+private:
+  unsigned long Handle;
 };
 
 // v5 SharedTile traits. is_tile_data_v stays scoped to ordinary Local Tiles
 // so TADD/TCVT/TSTORE-Local etc. cannot accidentally accept a Shared operand;
 // APIs that explicitly support Shared use is_shared_tile_v / tile_role_v.
 template <typename T> struct is_shared_tile : std::false_type {};
-template <typename LocalTile, int SharedId_>
-struct is_shared_tile<SharedTile<LocalTile, SharedId_>> : std::true_type {};
+template <typename LocalTile>
+struct is_shared_tile<SharedTile<LocalTile>> : std::true_type {};
 
 template <typename T>
 concept is_shared_tile_v = is_shared_tile<T>::value;
@@ -707,9 +704,9 @@ inline constexpr Location tile_role_v =
 // opaque integer carrying the architectural Shared ID; it must never be forgeable
 // by ordinary integers, and must never enter a Tile-vector OverloadType list.
 namespace detail {
-template <typename LocalTile, int SharedId_>
-constexpr int shared_handle(const SharedTile<LocalTile, SharedId_> &) {
-  return SharedTile<LocalTile, SharedId_>::SharedId;
+template <typename LocalTile>
+constexpr unsigned long shared_handle(const SharedTile<LocalTile> &tile) {
+  return tile.handle();
 }
 } // namespace detail
 
