@@ -44,7 +44,6 @@ template <is_tile_data_v tile_shape>
 void TRECIP_Impl(tile_shape &dst, tile_shape &src) {
   size_t row = src.GetValidRow();
   size_t col = src.GetValidCol();
-  static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   size_t row_lines =
       row / (LaneNum / tile_shape::InnerCols);
   if constexpr (is_Nz_layout<tile_shape>::value) {

@@ -116,8 +116,6 @@ void TExtract_NzLayout_Imp_Dynamic(tile_shape_out &dst,
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TEXTRACT_Impl(tile_shape_out &dst, tile_shape_in &src, uint16_t offset_i,
               uint16_t offset_j) {
-  static_assert(tile_shape_out::Loc != Location::Acc && tile_shape_in::Loc != Location::Acc, 
-              "Unsupport ACC to be input or output here");
   if (tile_shape_out::ValidRow == DYNAMIC || tile_shape_out::ValidCol == DYNAMIC) { // dynamic
     if constexpr (is_Nz_layout<tile_shape_in>::value &&
                   is_Nz_layout<tile_shape_out>::value) {

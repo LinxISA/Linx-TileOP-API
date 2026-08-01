@@ -53,9 +53,6 @@ void TGATHER_Impl(tile_shape_dst &dst, tile_shape_src &src,
                 tile_shape_src::ValidRow != DYNAMIC && tile_shape_src::ValidCol != DYNAMIC &&
                 tile_shape_indices::ValidRow != DYNAMIC && tile_shape_indices::ValidCol != DYNAMIC,
               "TODO: Support tile dynamic shape!");
-  static_assert(tile_shape_dst::Loc != Location::Acc && 
-                tile_shape_src::Loc != Location::Acc && 
-                tile_shape_indices::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   static constexpr size_t row = tile_shape_dst::ValidRow;
   static constexpr size_t col = tile_shape_dst::ValidCol;
   if constexpr (tile_shape_src::isRowMajor &&

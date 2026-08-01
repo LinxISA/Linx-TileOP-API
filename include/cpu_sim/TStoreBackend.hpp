@@ -99,7 +99,6 @@ void TStore_RowMajor_Impl_Dynamic(gm_shape &dst,
 
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 void TSTORE_Impl(gm_shape &dst, tile_shape &src) {
-  static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   if (tile_shape::ValidRow == DYNAMIC || tile_shape::ValidCol == DYNAMIC) { // dynamic
     if constexpr (is_Nz_layout<tile_shape>::value) {
       if constexpr (gm_shape::isRowMajor) {

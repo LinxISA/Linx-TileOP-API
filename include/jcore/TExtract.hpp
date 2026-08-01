@@ -73,8 +73,6 @@ void TEXTRACT_Impl(tile_shape_out &dst, tile_shape_in &src, size_t offset_row,
       tile_shape_out::Rows / (LaneNum / tile_shape_out::InnerCols);
   static_assert(!tile_shape_out::isBoxedLayout && !tile_shape_in::isBoxedLayout,
                 "Not support Fractal layout");
-  static_assert(tile_shape_out::Loc != Location::Acc && tile_shape_in::Loc != Location::Acc, 
-              "Unsupport ACC to be input or output here");
   if constexpr (is_Nz_layout<tile_shape_in>::value &&
                 is_Nz_layout<tile_shape_in>::value) {
     TExtract_NzLayout_Imp<tile_shape_out, tile_shape_in>

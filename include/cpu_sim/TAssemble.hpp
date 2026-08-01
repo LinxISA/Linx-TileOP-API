@@ -107,10 +107,6 @@ void TASSEMBLE_Impl(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &s
                 tile_shape_in1::ValidRow != DYNAMIC && tile_shape_in1::ValidCol != DYNAMIC &&
                 tile_shape_in2::ValidRow != DYNAMIC && tile_shape_in2::ValidCol != DYNAMIC,
               "TODO: Support tile dynamic shape!");
-  static_assert(tile_shape_out::Loc != Location::Acc && 
-                tile_shape_in0::Loc != Location::Acc && 
-                tile_shape_in1::Loc != Location::Acc &&
-                tile_shape_in2::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value &&
                     std::is_same<typename tile_shape_in1::DType,

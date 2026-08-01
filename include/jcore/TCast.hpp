@@ -56,8 +56,6 @@ void TCAST_Impl(tile_shape_out &dst, tile_shape_in &src) {
   static_assert(tile_shape_in::InnerRows == tile_shape_out::InnerRows &&
                     tile_shape_in::InnerCols == tile_shape_out::InnerCols,
                 "Error! Inner shape is not equal!");
-  static_assert(tile_shape_out::Loc != Location::Acc &&
-                tile_shape_in::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   // TCAST is a pure type cast (no layout conversion); require identical layout
   // on src and dst. The previous SIMT <<<>>> implementation (TCast_*_Imp)
   // crashed the ClockHands pass; use the tileblock-asm TCVT path instead

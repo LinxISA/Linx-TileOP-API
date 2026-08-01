@@ -143,10 +143,6 @@ void TASSEMBLE_Impl(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &s
       tile_shape_out::ValidCol ==
           tile_shape_in0::ValidCol + tile_shape_in1::ValidCol + tile_shape_in2::ValidCol,
       "Error! Output columns must equal the sum of the input columns.");
-  static_assert(tile_shape_out::Loc != Location::Acc && 
-                tile_shape_in0::Loc != Location::Acc && 
-                tile_shape_in1::Loc != Location::Acc &&
-                tile_shape_in2::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   static constexpr size_t dst_row = tile_shape_out::ValidRow;
   static constexpr size_t row_lines =
       tile_shape_out::Rows / (LaneNum / tile_shape_out::InnerCols);

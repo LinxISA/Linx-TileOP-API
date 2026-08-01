@@ -516,14 +516,8 @@ TCvtNz2NzImpl2D_Dynamic(typename tile_shape_out::TileDType __out__ dst,
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCVT_Impl(tile_shape_out &dst, tile_shape_in &src) {
-  static_assert(tile_shape_out::Loc != Location::Acc, "ACC can not be output tile!");
   size_t row = src.GetValidRow();
   size_t col = src.GetValidCol();
-  if constexpr (tile_shape_in::Loc == Location::Acc) {
-    static_assert(tile_shape_in::Loc != Location::Acc,
-                  "TCVT from ACC used the removed DavinciOO v5 ACCCVT "
-                  "opcode; use the corresponding TMATMUL*.FIXP variant");
-  }
 
 #ifdef ENABLE_HARDEN
   if constexpr (tile_shape_in::isRowMajor &&
@@ -557,7 +551,6 @@ void TCVT_Impl(tile_shape_out &dst, tile_shape_in &src) {
                       is_Nz_layout<tile_shape_out>::value) {
     TCVT_NZ2NZ(dst, src);                
   } else {
-    static_assert(tile_shape_in::Loc != Location::Acc, "Unreachable code!");
     static_assert((tile_shape_in::isRowMajor &&
                   is_Nz_layout<tile_shape_out>::value) ||
                   (!tile_shape_in::isRowMajor &&
@@ -613,7 +606,6 @@ void TCVT_Impl(tile_shape_out &dst, tile_shape_in &src) {
       TCvtNz2NzImpl2D_Dynamic<tile_shape_out, tile_shape_in>
           <<<col, row, 1>>>(dst.data(), src.data(),dst.GetValidRow(), src.GetValidRow());
     } else {
-      static_assert(tile_shape_in::Loc != Location::Acc, "Unreachable code!");
       static_assert((tile_shape_in::isRowMajor &&
                     is_Nz_layout<tile_shape_out>::value) ||
                         (is_Nz_layout<tile_shape_in>::value &&
@@ -658,7 +650,6 @@ void TCVT_Impl(tile_shape_out &dst, tile_shape_in &src) {
     TCvtNz2NzImpl1D<tile_shape_out, tile_shape_in>
         <<<col, 1, 1>>>(dst.data(), src.data());
   } else {
-    static_assert(tile_shape_in::Loc != Location::Acc, "Unreachable code!");
     static_assert((tile_shape_in::isRowMajor &&
                    is_Nz_layout<tile_shape_out>::value) ||
                       (is_Nz_layout<tile_shape_in>::value &&

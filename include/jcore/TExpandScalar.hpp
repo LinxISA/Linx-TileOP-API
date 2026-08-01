@@ -96,7 +96,6 @@ void ExpandScalar2ZnImpl_Dynamic(typename tile_shape::TileDType dst,
 
 template <is_tile_data_v tile_shape>
 void TEXPANDSCALAR_Impl(tile_shape &dst, typename tile_shape::DType s) {
-  static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   size_t row = dst.GetValidRow();
   size_t col = dst.GetValidCol();
 

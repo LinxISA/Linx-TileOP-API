@@ -59,7 +59,6 @@ template <is_tile_data_v tile_shape>
 void TADD_Impl(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   size_t tile_rows = src0.GetValidRow();
   size_t tile_cols = src0.GetValidCol();
-  static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   static_assert(tile_shape::isBoxedLayout == false,
                 "TADD not support Boxed Layout!");
 

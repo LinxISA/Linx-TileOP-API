@@ -108,8 +108,6 @@ void MATMACC_Impl(tile_shape_C &dst, tile_shape_A &src0, tile_shape_B &src1) {
     static_assert(tile_shape_C::SFractalSize == 1024 &&
                       is_Nz_layout<tile_shape_C>::value,
                   "Error! Cude C:FractalSize != 1024 or not Nz_layout");
-    static_assert(tile_shape_A::Loc != Location::Acc && tile_shape_B::Loc != Location::Acc, "Error! MatMacc input can not be ACC");
-    static_assert(tile_shape_C::Loc == Location::Acc, "Error! MatMacc output only canbe ACC");
     MatMacc_Fractal<tile_shape_A, tile_shape_B, tile_shape_C>(
         M, N, K, 1, dst.data(), src0.data(), src1.data());
   } else {

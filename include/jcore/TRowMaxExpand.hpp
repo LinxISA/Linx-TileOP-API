@@ -63,7 +63,6 @@ void TROWMAXEXPAND_Impl(tile_shape &dst, tile_shape &src) {
   static constexpr size_t col = tile_shape::ValidCol;
   static_assert(row != DYNAMIC && col != DYNAMIC,
               "TODO: Support tile dynamic shape!");
-  static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   static constexpr size_t Y = row / (LaneNum / tile_shape::InnerCols);
   static_assert(!tile_shape::isBoxedLayout, "Not support Fractal layout");
   if constexpr (is_Nz_layout<tile_shape>::value) {

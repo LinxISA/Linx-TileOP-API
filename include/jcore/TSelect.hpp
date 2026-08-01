@@ -77,8 +77,6 @@ void TSELECT_Impl(tile_shape &dst, tile_shape_index &cond, tile_shape &src0,
   static_assert(tile_shape::ValidRow != DYNAMIC && tile_shape::ValidCol != DYNAMIC &&
                 tile_shape_index::ValidRow != DYNAMIC && tile_shape_index::ValidCol != DYNAMIC,
               "TODO: Support tile dynamic shape!");
-  static_assert(tile_shape::Loc != Location::Acc && tile_shape_index::Loc != Location::Acc, 
-              "Unsupport ACC to be input or output here");
   static constexpr size_t row = tile_shape::ValidRow;
   static constexpr size_t col = tile_shape::ValidCol;
   static constexpr size_t Y =

@@ -3,6 +3,7 @@
 > 编码 family:BSTART.CUBE
 > 非 FIXP 的 TMATMUL 系列产生 implicit ACC；DavinciOO v5 不再提供独立 ACCCVT 导出。
 > 需要普通 Tile 输出时必须选择对应的 `TMATMUL*.FIXP` variant。
+> `TMATMUL_FIXP` 的完整 options API、量化 descriptor、RowMax/GroupMax 和 Shared Right 用法见 [tmatmul-fixp.md](tmatmul-fixp.md)。
 
 ---
 

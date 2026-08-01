@@ -191,7 +191,6 @@ void TLoad_ColMajor_Impl_Dynamic(tile_shape &dst,
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
 void TLOAD_Impl(tile_shape &dst, gm_shape &src) {
-  static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   if (tile_shape::ValidRow == DYNAMIC || tile_shape::ValidCol == DYNAMIC) { // dynamic
     if constexpr (is_Nz_layout<tile_shape>::value) {
       if constexpr (gm_shape::isRowMajor) {

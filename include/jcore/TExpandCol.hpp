@@ -50,8 +50,6 @@ void TEXPANDCOL_Impl(tile_shape_out &dst, tile_shape_in &src) {
                 "Error! Cude A:ValidRow != Cude B:ValidRow");
   static_assert(!tile_shape_out::isBoxedLayout && !tile_shape_in::isBoxedLayout,
                 "Not support Fractal layout");
-  static_assert(tile_shape_out::Loc != Location::Acc && tile_shape_in::Loc != Location::Acc, 
-              "Unsupport ACC to be input or output here");
   size_t row = dst.GetValidRow();
   size_t col = dst.GetValidCol();
   static constexpr size_t Y =

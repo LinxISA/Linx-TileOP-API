@@ -14,7 +14,6 @@ enum class Location {
   Mat,
   Left,
   Right,
-  Acc,
   Bias,
   Scaling,
   // v5: storage-class marker for compiler-managed Shared tiles. SharedTile

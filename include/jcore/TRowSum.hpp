@@ -76,8 +76,6 @@ void TROWSUM_Impl(tile_shape_out &dst, tile_shape_in &src) {
                 "valid column must be 1.");
   static_assert(!tile_shape_out::isBoxedLayout && !tile_shape_in::isBoxedLayout,
                 "Not support Fractal layout");
-  static_assert(tile_shape_out::Loc != Location::Acc && tile_shape_in::Loc != Location::Acc, 
-              "Unsupport ACC to be input or output here");
   size_t row = src.GetValidRow();
   size_t col = src.GetValidCol();
 

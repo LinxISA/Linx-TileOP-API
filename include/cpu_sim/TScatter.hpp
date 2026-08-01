@@ -44,9 +44,6 @@ void TSCATTER_Impl(tile_shape_dst &dst, tile_shape_src &src,
                 tile_shape_src::ValidRow != DYNAMIC && tile_shape_src::ValidCol != DYNAMIC &&
                 tile_shape_indices::ValidRow != DYNAMIC && tile_shape_indices::ValidCol != DYNAMIC,
               "TODO: Support tile dynamic shape!");
-  static_assert(tile_shape_dst::Loc != Location::Acc && 
-                tile_shape_src::Loc != Location::Acc && 
-                tile_shape_indices::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   if constexpr (tile_shape_src::isRowMajor &&
                 tile_shape_indices::isRowMajor &&
                 tile_shape_dst::isRowMajor) {

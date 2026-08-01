@@ -1745,9 +1745,6 @@ template <int PEMask = 15, is_tile_data_v tile_shape_dst,
           is_tile_data_v tile_shape_src>
 void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
   static_assert(PEMask > 0 && PEMask < 16, "GMOV PEMask must be 1..15");
-  static_assert(tile_shape_dst::Loc != Location::Acc &&
-                    tile_shape_src::Loc != Location::Acc,
-                "GMOV only supports Local ordinary Tiles, not ACC");
   static_assert(std::is_same_v<typename tile_shape_dst::DType,
                                typename tile_shape_src::DType>,
                 "GMOV source and destination dtypes must match");
@@ -1786,8 +1783,6 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
 template <int PEMask = 15, is_tile_data_v tile_shape_src>
 PTO_SHARED_INLINE SharedTile<tile_shape_src>
 TMOV_L2S_INSERT(const tile_shape_src &src) {
-  static_assert(tile_shape_src::Loc != Location::Acc,
-                "TMOV.L2S.INSERT source must be a Local ordinary Tile");
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
       tile_type_traits<typename tile_shape_src::TileDType>::IsValidActiveSize,
@@ -1810,8 +1805,6 @@ TMOV_L2S_INSERT(const tile_shape_src &src) {
 template <int PEMask = 15, is_tile_data_v tile_shape_src>
 PTO_SHARED_INLINE SharedTile<tile_shape_src>
 TMOV_L2S_PUBLISH(const tile_shape_src &src) {
-  static_assert(tile_shape_src::Loc != Location::Acc,
-                "TMOV.L2S.PUBLISH source must be a Local ordinary Tile");
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
       tile_type_traits<typename tile_shape_src::TileDType>::IsValidActiveSize,
@@ -1835,8 +1828,6 @@ template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
 PTO_SHARED_INLINE void
 TMOV_S2L_BROADCAST(tile_shape_dst &dst,
                    const SharedTile<LocalTile> &shared) {
-  static_assert(tile_shape_dst::Loc != Location::Acc,
-                "TMOV.S2L.BROADCAST destination must be a Local ordinary Tile");
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
@@ -1856,8 +1847,6 @@ TMOV_S2L_BROADCAST(tile_shape_dst &dst,
 template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
 PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
     tile_shape_dst &dst, const SharedTile<LocalTile> &shared) {
-  static_assert(tile_shape_dst::Loc != Location::Acc,
-                "TMOV.S2L.EXTRACT destination must be a Local ordinary Tile");
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
@@ -1945,15 +1934,216 @@ PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias, "TMATMUL.BIAS", "")
 PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_acc_fixp, "TMATMUL.ACC.FIXP",
                               "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
 
-template <typename Dst, typename A, typename B>
+
+#define PTO_FIXP_SRC_0 \
+  "B.IOT %[A], %[B], mask=15\n"
+#define PTO_FIXP_SRC_1 \
+  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[RowIn]\n"
+#define PTO_FIXP_SRC_2 \
+  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[QuantTile]\n"
+#define PTO_FIXP_SRC_3 \
+  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[RowIn], %[QuantTile]\n"
+#define PTO_FIXP_SRC_4 \
+  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[ReluTile]\n"
+#define PTO_FIXP_SRC_5 \
+  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[RowIn], %[ReluTile]\n"
+#define PTO_FIXP_SRC_6 \
+  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[QuantTile], %[ReluTile]\n"
+#define PTO_FIXP_SRC_7 \
+  "B.IOT %[A], %[B], mask=15\n" \
+  "B.IOT %[RowIn], %[QuantTile]\n" \
+  "B.IOT %[ReluTile]\n"
+
+#define PTO_FIXP_SHARED_SRC_0 \
+  "C.B.IOS %S[Shared]\n" "B.IOT %[A]\n"
+#define PTO_FIXP_SHARED_SRC_1 \
+  "C.B.IOS %S[Shared]\n" "B.IOT %[A]\n" \
+  "B.IOT %[RowIn]\n"
+#define PTO_FIXP_SHARED_SRC_2 \
+  "C.B.IOS %S[Shared]\n" "B.IOT %[A]\n" \
+  "B.IOT %[QuantTile]\n"
+#define PTO_FIXP_SHARED_SRC_3 \
+  "C.B.IOS %S[Shared]\n" "B.IOT %[A]\n" \
+  "B.IOT %[RowIn], %[QuantTile]\n"
+#define PTO_FIXP_SHARED_SRC_4 \
+  "C.B.IOS %S[Shared]\n" "B.IOT %[A]\n" \
+  "B.IOT %[ReluTile]\n"
+#define PTO_FIXP_SHARED_SRC_5 \
+  "C.B.IOS %S[Shared]\n" "B.IOT %[A]\n" \
+  "B.IOT %[RowIn], %[ReluTile]\n"
+#define PTO_FIXP_SHARED_SRC_6 \
+  "C.B.IOS %S[Shared]\n" "B.IOT %[A]\n" \
+  "B.IOT %[QuantTile], %[ReluTile]\n"
+#define PTO_FIXP_SHARED_SRC_7 \
+  "C.B.IOS %S[Shared]\n" "B.IOT %[A]\n" \
+  "B.IOT %[RowIn], %[QuantTile]\n" "B.IOT %[ReluTile]\n"
+
+#define PTO_FIXP_IOR_0 ""
+#define PTO_FIXP_IOR_1 "B.IOR [%[QuantGpr]],[]\n"
+#define PTO_FIXP_IOR_2 "B.IOR [zero,%[LReluGpr]],[]\n"
+#define PTO_FIXP_IOR_3 "B.IOR [%[QuantGpr],%[LReluGpr]],[]\n"
+
+#define PTO_FIXP_OUT_0 \
+  "B.IOT mask=15, TSize=%c[DstSize], last, ->%[Dst]\n"
+#define PTO_FIXP_OUT_1 \
+  "B.IOT mask=15, TSize=%c[DstSize], ->%[Dst]\n" \
+  "B.IOT mask=15, TSize=%c[RowSize], last, ->%[RowOut]\n"
+#define PTO_FIXP_OUT_2 \
+  "B.IOT mask=15, TSize=%c[DstSize], ->%[Dst]\n" \
+  "B.IOT mask=15, TSize=%c[GroupSize], last, ->%[GroupOut]\n"
+#define PTO_FIXP_OUT_3 \
+  "B.IOT mask=15, TSize=%c[DstSize], ->%[Dst]\n" \
+  "B.IOT mask=15, TSize=%c[RowSize], ->%[RowOut]\n" \
+  "B.IOT mask=15, TSize=%c[GroupSize], last, ->%[GroupOut]\n"
+
+#define PTO_FIXP_OUT_DECL_0 [Dst] "=&Tr"(dst.data())
+#define PTO_FIXP_OUT_DECL_1 \
+  [Dst] "=&Tr"(dst.data()), [RowOut] "=&Tr"(row_out.data())
+#define PTO_FIXP_OUT_DECL_2 \
+  [Dst] "=&Tr"(dst.data()), [GroupOut] "=&Tr"(group_out.data())
+#define PTO_FIXP_OUT_DECL_3 \
+  [Dst] "=&Tr"(dst.data()), [RowOut] "=&Tr"(row_out.data()), \
+  [GroupOut] "=&Tr"(group_out.data())
+
+#define PTO_FIXP_ATTR \
+  "B.FPATR %c[PreQuant], %c[ReluMode], %c[GroupNCode], %c[RowMaxEn], " \
+  "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn]\n"
+
+#define PTO_FIXP_ATTR_INPUTS \
+  [PreQuant] "i"(static_cast<uint8_t>(Attr.PreQuant)), \
+  [ReluMode] "i"(static_cast<uint8_t>(Attr.Relu)), \
+  [GroupNCode] "i"(Attr.GroupNCode), [RowMaxEn] "i"(Attr.RowMaxEn), \
+  [GroupMaxEn] "i"(Attr.GroupMaxEn), \
+  [RowMaxInit] "i"(Attr.RowMaxInit), [MaxAbsEn] "i"(Attr.MaxAbsEn)
+
+#define PTO_FIXP_EMIT_LOCAL(SRC, OUT, IOR) \
+  asm volatile(                                                               \
+      PTO_MATMUL_HEADER("TMATMUL.FIXP", PTO_FIXP_ATTR)                    \
+      PTO_FIXP_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR                                \
+      : PTO_FIXP_OUT_DECL_##OUT                                              \
+      : [A] "Tr"(a.data()), [B] "Tr"(b.data()),                            \
+        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),  \
+        [ReluTile] "Tr"(relu_tile.data()),                                  \
+        [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),              \
+        PTO_FIXP_ATTR_INPUTS,                                                 \
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                        \
+        [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), \
+        [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), \
+        [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+
+#define PTO_FIXP_EMIT_SHARED(SRC, OUT, IOR) \
+  asm volatile(                                                               \
+      PTO_MATMUL_HEADER("TMATMUL.FIXP", PTO_FIXP_ATTR)                    \
+      PTO_FIXP_SHARED_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR                          \
+      : PTO_FIXP_OUT_DECL_##OUT                                              \
+      : [A] "Tr"(a.data()), [Shared] "Sr"(b.handle()),                    \
+        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),  \
+        [ReluTile] "Tr"(relu_tile.data()),                                  \
+        [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),              \
+        PTO_FIXP_ATTR_INPUTS,                                                 \
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                        \
+        [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), \
+        [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), \
+        [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+
+#define PTO_FIXP_DISPATCH_OUT(EMIT, SRC, IOR)                                 \
+  if constexpr (OutMask == 0) { EMIT(SRC, 0, IOR); }                          \
+  else if constexpr (OutMask == 1) { EMIT(SRC, 1, IOR); }                     \
+  else if constexpr (OutMask == 2) { EMIT(SRC, 2, IOR); }                     \
+  else { EMIT(SRC, 3, IOR); }
+
+#define PTO_FIXP_DISPATCH_SRC(EMIT, IOR)                                      \
+  if constexpr (SrcMask == 0) { PTO_FIXP_DISPATCH_OUT(EMIT, 0, IOR); }        \
+  else if constexpr (SrcMask == 1) { PTO_FIXP_DISPATCH_OUT(EMIT, 1, IOR); }   \
+  else if constexpr (SrcMask == 2) { PTO_FIXP_DISPATCH_OUT(EMIT, 2, IOR); }  \
+  else if constexpr (SrcMask == 3) { PTO_FIXP_DISPATCH_OUT(EMIT, 3, IOR); }  \
+  else if constexpr (SrcMask == 4) { PTO_FIXP_DISPATCH_OUT(EMIT, 4, IOR); }  \
+  else if constexpr (SrcMask == 5) { PTO_FIXP_DISPATCH_OUT(EMIT, 5, IOR); }  \
+  else if constexpr (SrcMask == 6) { PTO_FIXP_DISPATCH_OUT(EMIT, 6, IOR); }  \
+  else { PTO_FIXP_DISPATCH_OUT(EMIT, 7, IOR); }
+
+#define PTO_FIXP_DISPATCH(EMIT)                                               \
+  if constexpr (IorMode == 0) { PTO_FIXP_DISPATCH_SRC(EMIT, 0); }              \
+  else if constexpr (IorMode == 1) { PTO_FIXP_DISPATCH_SRC(EMIT, 1); }         \
+  else if constexpr (IorMode == 2) { PTO_FIXP_DISPATCH_SRC(EMIT, 2); }        \
+  else { PTO_FIXP_DISPATCH_SRC(EMIT, 3); }
+
+template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+          typename Dst, typename A, typename B, typename RowIn,
+          typename QuantTile, typename ReluTile,
+          typename RowOut, typename GroupOut>
+inline void emit_fixp_local(
+    Dst &dst, A &a, B &b, RowIn &row_in, QuantTile &quant_tile,
+    ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
+    uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  PTO_FIXP_DISPATCH(PTO_FIXP_EMIT_LOCAL);
+}
+
+template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+          typename Dst, typename A, typename SharedB, typename RowIn,
+          typename QuantTile,
+          typename ReluTile, typename RowOut, typename GroupOut>
+PTO_SHARED_INLINE void emit_fixp_shared(
+    Dst &dst, A &a, SharedB &b, RowIn &row_in, QuantTile &quant_tile,
+    ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
+    uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  using B = SharedB;
+  PTO_FIXP_DISPATCH(PTO_FIXP_EMIT_SHARED);
+}
+
+#undef PTO_FIXP_DISPATCH
+#undef PTO_FIXP_ATTR_INPUTS
+#undef PTO_FIXP_ATTR
+#undef PTO_FIXP_DISPATCH_SRC
+#undef PTO_FIXP_DISPATCH_OUT
+#undef PTO_FIXP_EMIT_SHARED
+#undef PTO_FIXP_EMIT_LOCAL
+#undef PTO_FIXP_OUT_DECL_3
+#undef PTO_FIXP_OUT_DECL_2
+#undef PTO_FIXP_OUT_DECL_1
+#undef PTO_FIXP_OUT_DECL_0
+#undef PTO_FIXP_OUT_3
+#undef PTO_FIXP_OUT_2
+#undef PTO_FIXP_OUT_1
+#undef PTO_FIXP_OUT_0
+#undef PTO_FIXP_IOR_3
+#undef PTO_FIXP_IOR_2
+#undef PTO_FIXP_IOR_1
+#undef PTO_FIXP_IOR_0
+#undef PTO_FIXP_SHARED_SRC_7
+#undef PTO_FIXP_SHARED_SRC_6
+#undef PTO_FIXP_SHARED_SRC_5
+#undef PTO_FIXP_SHARED_SRC_4
+#undef PTO_FIXP_SHARED_SRC_3
+#undef PTO_FIXP_SHARED_SRC_2
+#undef PTO_FIXP_SHARED_SRC_1
+#undef PTO_FIXP_SHARED_SRC_0
+#undef PTO_FIXP_SRC_7
+#undef PTO_FIXP_SRC_6
+#undef PTO_FIXP_SRC_5
+#undef PTO_FIXP_SRC_4
+#undef PTO_FIXP_SRC_3
+#undef PTO_FIXP_SRC_2
+#undef PTO_FIXP_SRC_1
+#undef PTO_FIXP_SRC_0
+
+template <FixpAttr Attr, typename Dst, typename A, typename B>
 inline void matmul_fixp(Dst &dst, A &a, B &b, size_t M, size_t N, size_t K) {
   asm volatile(
-      PTO_MATMUL_HEADER("TMATMUL.FIXP",
-                        "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
+      PTO_MATMUL_HEADER("TMATMUL.FIXP", "")
+      "B.FPATR %c[PreQuant], %c[Relu], %c[GroupNCode], %c[RowMaxEn], "
+      "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn]\n"
       "B.IOT %[A], %[B], mask=15\n"
       "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
       : [Dst] "=&Tr"(dst.data())
       : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+        [PreQuant] "i"(static_cast<uint8_t>(Attr.PreQuant)),
+        [Relu] "i"(static_cast<uint8_t>(Attr.Relu)),
+        [GroupNCode] "i"(Attr.GroupNCode), [RowMaxEn] "i"(Attr.RowMaxEn),
+        [GroupMaxEn] "i"(Attr.GroupMaxEn),
+        [RowMaxInit] "i"(Attr.RowMaxInit), [MaxAbsEn] "i"(Attr.MaxAbsEn),
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
       : "memory");
 }
@@ -2082,10 +2272,6 @@ template <is_tile_data_v tile_shape_c, is_tile_data_v tile_shape_a,
           is_local_or_shared_right tile_shape_b>
 PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
                               tile_shape_b &b) {
-  static_assert(tile_shape_c::Loc != Location::Acc,
-                "TMATMUL output C must be an ordinary Tile");
-  static_assert(tile_shape_a::Loc != Location::Acc,
-                "TMATMUL input A cannot be ACC");
   size_t M = a.GetValidRow();
   size_t K = a.GetValidCol();
   if constexpr (is_shared_tile_v<tile_shape_b>) {
@@ -2108,9 +2294,6 @@ template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
           is_tile_data_v tile_shape_a, is_tile_data_v tile_shape_b>
 void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
                  tile_shape_b &b) {
-  static_assert(tile_shape_d::Loc != Location::Acc &&
-                    tile_shape_c::Loc != Location::Acc,
-                "TMATMUL_ACC D/C must be ordinary Tiles");
   static_assert(tile_shape_a::Loc == Location::Left &&
                     tile_shape_b::Loc == Location::Right,
                 "TMATMUL_ACC requires A=Left and B=Right");
@@ -2120,14 +2303,221 @@ void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
   pto_matmul_detail::matmul_acc(d, a, b, c, M, N, K);
 }
 
-// TMATMUL_FIXP: D = FIXP(A*B), basic local mode.
-// The basic mode disables pre-quantization, ReLU and max outputs and writes an
-// ordinary local Tile directly instead of leaving a live implicit ACC.
+
+namespace pto_matmul_detail {
+
+template <bool Use, typename Pointer, typename Dummy>
+decltype(auto) select_fixp_operand(Pointer *PointerValue, Dummy &DummyValue) {
+  if constexpr (Use)
+    return *PointerValue;
+  else
+    return (DummyValue);
+}
+
+} // namespace pto_matmul_detail
+
+// Unified TMATMUL_FIXP interface. All FIXP attributes and auxiliary operands
+// are carried by one compile-time-shaped options object; scalar descriptors
+// remain runtime GPR values and tile operands remain runtime tile registers.
 template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+__attribute__((always_inline)) inline void
+TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a,
+                                    tile_shape_b &b, const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_valid_fixp_attr(Attr),
+                "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_FIXP destination dtype does not match PreQuantMode");
+  static_assert(tile_shape_a::Loc == Location::Left,
+                "TMATMUL_FIXP input A must be Location::Left");
+  static_assert(tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL_FIXP input B must be a Right tile");
+  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
+                "TMATMUL_FIXP requires A.Cols == B.Rows");
+  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
+                    tile_shape_d::Cols == tile_shape_b::Cols,
+                "TMATMUL_FIXP output shape must be M x N");
+  static_assert(tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
+                "TMATMUL_FIXP output logical Tile size must be 512 B..32 KB");
+
+  constexpr bool HasVectorQuant =
+      is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant =
+      is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) |
+                          (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) |
+                          (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant ==
+                    !std::is_same_v<typename Options::QuantTile,
+                                    fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(!HasVectorQuant ==
+                    std::is_same_v<typename Options::QuantTile,
+                                    fixp::NoOperand>,
+                "quant parameter Tile is only valid for vector PreQuant");
+  static_assert(HasPRelu ==
+                    !std::is_same_v<typename Options::ReluTile,
+                                    fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(!HasPRelu ==
+                    std::is_same_v<typename Options::ReluTile,
+                                    fixp::NoOperand>,
+                "PReLU parameter Tile is only valid for PRelu mode");
+  static_assert(HasRowIn ==
+                    !std::is_same_v<typename Options::RowMaxIn,
+                                    fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(!HasRowIn ==
+                    std::is_same_v<typename Options::RowMaxIn,
+                                    fixp::NoOperand>,
+                "RowMaxIn is only valid for RowMaxInit");
+  static_assert(HasRowOut ==
+                    !std::is_same_v<typename Options::RowMaxOut,
+                                    fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut ==
+                    !std::is_same_v<typename Options::GroupMaxOut,
+                                    fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  if constexpr (HasVectorQuant) {
+    using QuantTile = typename Options::QuantTile;
+    static_assert(
+        tile_type_traits<typename QuantTile::TileDType>::IsValidActiveSize,
+        "TMATMUL_FIXP quant parameter Tile must occupy 512 B..32 KB; pad the "
+        "physical Tile and keep ValidRow=1, ValidCol=N when necessary");
+    static_assert(QuantTile::ValidRow == -1 || QuantTile::ValidRow == 1,
+                  "TMATMUL_FIXP vector quant parameter must have ValidRow=1");
+    static_assert(QuantTile::ValidCol == -1 || tile_shape_b::ValidCol == -1 ||
+                      QuantTile::ValidCol == tile_shape_b::ValidCol,
+                  "TMATMUL_FIXP vector quant parameter must have ValidCol=N");
+  }
+  if constexpr (HasPRelu) {
+    using ReluTile = typename Options::ReluTile;
+    static_assert(
+        tile_type_traits<typename ReluTile::TileDType>::IsValidActiveSize,
+        "TMATMUL_FIXP PReLU parameter Tile must occupy 512 B..32 KB; pad the "
+        "physical Tile and keep ValidRow=1, ValidCol=N when necessary");
+    static_assert(ReluTile::ValidRow == -1 || ReluTile::ValidRow == 1,
+                  "TMATMUL_FIXP PReLU parameter must have ValidRow=1");
+    static_assert(ReluTile::ValidCol == -1 || tile_shape_b::ValidCol == -1 ||
+                      ReluTile::ValidCol == tile_shape_b::ValidCol,
+                  "TMATMUL_FIXP PReLU parameter must have ValidCol=N");
+  }
+  if constexpr (HasRowOut) {
+    using RowOut = typename Options::RowMaxOut;
+    static_assert(RowOut::ValidRow == -1 || tile_shape_a::ValidRow == -1 ||
+                      RowOut::ValidRow == tile_shape_a::ValidRow,
+                  "TMATMUL_FIXP RowMaxOut must have ValidRow=M");
+    static_assert(RowOut::ValidCol == -1 || RowOut::ValidCol == 1,
+                  "TMATMUL_FIXP RowMaxOut must have ValidCol=1");
+    static_assert(type_traits<typename RowOut::DType>::TypeCode == __type_fp32 ||
+                      type_traits<typename RowOut::DType>::TypeCode ==
+                          __type_int32,
+                  "TMATMUL_FIXP RowMaxOut dtype must be FP32 or S32 AccType");
+    static_assert(
+        tile_type_traits<typename RowOut::TileDType>::IsValidActiveSize,
+        "TMATMUL_FIXP RowMaxOut physical Tile must occupy 512 B..32 KB");
+  }
+  if constexpr (HasRowIn) {
+    using RowIn = typename Options::RowMaxIn;
+    using RowOut = typename Options::RowMaxOut;
+    static_assert(RowIn::ValidRow == RowOut::ValidRow &&
+                      RowIn::ValidCol == RowOut::ValidCol,
+                  "TMATMUL_FIXP RowMaxIn/RowMaxOut valid shapes must match");
+    static_assert(std::is_same_v<typename RowIn::DType,
+                                 typename RowOut::DType>,
+                  "TMATMUL_FIXP RowMaxIn/RowMaxOut dtypes must match");
+    static_assert(
+        tile_type_traits<typename RowIn::TileDType>::IsValidActiveSize,
+        "TMATMUL_FIXP RowMaxIn physical Tile must occupy 512 B..32 KB");
+  }
+  if constexpr (HasGroupOut) {
+    using GroupOut = typename Options::GroupMaxOut;
+    constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
+    constexpr int ExpectedCols =
+        tile_shape_b::ValidCol == -1
+            ? -1
+            : (tile_shape_b::ValidCol + GroupN - 1) / GroupN;
+    static_assert(GroupOut::ValidRow == -1 || tile_shape_a::ValidRow == -1 ||
+                      GroupOut::ValidRow == tile_shape_a::ValidRow,
+                  "TMATMUL_FIXP GroupMaxOut must have ValidRow=M");
+    static_assert(GroupOut::ValidCol == -1 || ExpectedCols == -1 ||
+                      GroupOut::ValidCol == ExpectedCols,
+                  "TMATMUL_FIXP GroupMaxOut must have ValidCol=ceil(N/GroupN)");
+    static_assert(
+        type_traits<typename GroupOut::DType>::TypeCode == __type_fp32 ||
+            type_traits<typename GroupOut::DType>::TypeCode == __type_int32,
+        "TMATMUL_FIXP GroupMaxOut dtype must be FP32 or S32 AccType");
+    static_assert(
+        tile_type_traits<typename GroupOut::TileDType>::IsValidActiveSize,
+        "TMATMUL_FIXP GroupMaxOut physical Tile must occupy 512 B..32 KB");
+  }
+
+  if constexpr (is_shared_tile_v<tile_shape_b>) {
+    static_assert(tile_shape_b::ValidCol != -1,
+                  "Shared TMATMUL_FIXP requires a static valid N");
+  }
+
+  size_t M = a.GetValidRow();
+  size_t N = [&]() -> size_t {
+    if constexpr (is_shared_tile_v<tile_shape_b>)
+      return tile_shape_b::ValidCol;
+    else
+      return b.GetValidCol();
+  }();
+  size_t K = a.GetValidCol();
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(
+      options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(
+      options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(
+      options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(
+      options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(
+      options.GroupOut, d);
+
+  volatile uint64_t quant_gpr = options.QuantDescriptor;
+  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  if constexpr (is_shared_tile_v<tile_shape_b>) {
+    pto_matmul_detail::emit_fixp_shared<Attr, SrcMask, OutMask, IorMode>(
+        d, a, b, row_in, quant_tile, relu_tile, row_out, group_out,
+        quant_gpr, lrelu_gpr, M, N, K);
+  } else {
+    pto_matmul_detail::emit_fixp_local<Attr, SrcMask, OutMask, IorMode>(
+        d, a, b, row_in, quant_tile, relu_tile, row_out, group_out,
+        quant_gpr, lrelu_gpr, M, N, K);
+  }
+}
+
+
+// TMATMUL_FIXP: D = FIXP(A*B), parameter-free local mode. Attr may select
+// keeping the accumulator type, FP16/BF16 conversion, and optional plain ReLU.
+// Modes requiring scalar/vector parameters or extra max outputs use dedicated
+// overloads rather than silently emitting an incomplete operand stream.
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
+          is_tile_data_v tile_shape_a,
           is_tile_data_v tile_shape_b>
 void TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b) {
-  static_assert(tile_shape_d::Loc != Location::Acc,
-                "TMATMUL_FIXP output D must be an ordinary local Tile");
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_FIXP overload supports only parameter-free conversion "
+      "and ReLU; quant parameters, PReLU, RowMax and GroupMax require a "
+      "dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_FIXP destination dtype does not match B.FPATR PreQuant mode");
   static_assert(tile_shape_a::Loc == Location::Left,
                 "TMATMUL_FIXP input A must be Location::Left");
   static_assert(tile_shape_b::Loc == Location::Right,
@@ -2144,7 +2534,7 @@ void TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b) {
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
-  pto_matmul_detail::matmul_fixp(d, a, b, M, N, K);
+  pto_matmul_detail::matmul_fixp<Attr>(d, a, b, M, N, K);
 }
 
 // TMATMUL_ACC_FIXP: D = FIXP(ACC + A*B), basic local mode.
@@ -2153,10 +2543,6 @@ template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_acc,
           is_tile_data_v tile_shape_a, is_tile_data_v tile_shape_b>
 void TMATMUL_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc, tile_shape_a &a,
                       tile_shape_b &b) {
-  static_assert(tile_shape_d::Loc != Location::Acc,
-                "TMATMUL_ACC_FIXP output D must be an ordinary local Tile");
-  static_assert(tile_shape_acc::Loc != Location::Acc,
-                "TMATMUL_ACC_FIXP accumulator must be an ordinary Tile");
   static_assert(tile_shape_a::Loc == Location::Left,
                 "TMATMUL_ACC_FIXP input A must be Location::Left");
   static_assert(tile_shape_b::Loc == Location::Right,
@@ -2184,8 +2570,6 @@ template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_a,
           is_tile_data_v tile_shape_b, is_tile_data_v tile_shape_bias>
 void TMATMUL_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b,
                        tile_shape_bias &bias) {
-  static_assert(tile_shape_d::Loc != Location::Acc,
-                "TMATMUL_BIAS_FIXP output D must be an ordinary local Tile");
   static_assert(tile_shape_a::Loc == Location::Left,
                 "TMATMUL_BIAS_FIXP input A must be Location::Left");
   static_assert(tile_shape_b::Loc == Location::Right,
@@ -2211,8 +2595,6 @@ template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_a,
           is_tile_data_v tile_shape_sb>
 void TMATMUL_MX_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_sa &scale_a,
                       tile_shape_b &b, tile_shape_sb &scale_b) {
-  static_assert(tile_shape_d::Loc != Location::Acc,
-                "TMATMUL_MX_FIXP output D must be an ordinary local Tile");
   static_assert(tile_shape_a::Loc == Location::Left,
                 "TMATMUL_MX_FIXP input A must be Location::Left");
   static_assert(tile_shape_b::Loc == Location::Right,
@@ -2243,8 +2625,6 @@ template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_a,
 void TMATMUL_MX_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a,
                            tile_shape_sa &scale_a, tile_shape_b &b,
                            tile_shape_sb &scale_b, tile_shape_bias &bias) {
-  static_assert(tile_shape_d::Loc != Location::Acc,
-                "TMATMUL_MX_BIAS_FIXP output D must be an ordinary local Tile");
   static_assert(tile_shape_a::Loc == Location::Left,
                 "TMATMUL_MX_BIAS_FIXP input A must be Location::Left");
   static_assert(tile_shape_b::Loc == Location::Right,
@@ -2277,10 +2657,6 @@ template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_acc,
 void TMATMUL_MX_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc,
                          tile_shape_a &a, tile_shape_sa &scale_a,
                          tile_shape_b &b, tile_shape_sb &scale_b) {
-  static_assert(tile_shape_d::Loc != Location::Acc,
-                "TMATMUL_MX_ACC_FIXP output D must be an ordinary local Tile");
-  static_assert(tile_shape_acc::Loc != Location::Acc,
-                "TMATMUL_MX_ACC_FIXP accumulator must be an ordinary Tile");
   static_assert(tile_shape_a::Loc == Location::Left,
                 "TMATMUL_MX_ACC_FIXP input A must be Location::Left");
   static_assert(tile_shape_b::Loc == Location::Right,
@@ -2313,12 +2689,6 @@ template <is_tile_data_v tile_shape_c, is_tile_data_v tile_shape_a,
           is_tile_data_v tile_shape_b, is_tile_data_v tile_shape_bias>
 void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b,
                   tile_shape_bias &bias) {
-  static_assert(tile_shape_c::Loc != Location::Acc,
-                "TMATMUL_BIAS output C must be an ordinary Tile");
-  static_assert(tile_shape_a::Loc != Location::Acc &&
-                tile_shape_b::Loc != Location::Acc &&
-                tile_shape_bias::Loc != Location::Acc,
-                "TMATMUL_BIAS inputs A/B/bias cannot be ACC");
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();
@@ -2331,8 +2701,6 @@ template <is_tile_data_v tile_shape_c, is_tile_data_v tile_shape_a,
           is_tile_data_v tile_shape_bscale>
 void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_ascale &ascale,
                 tile_shape_b &b, tile_shape_bscale &bscale) {
-  static_assert(tile_shape_c::Loc != Location::Acc,
-                "TMATMUL_MX output C must be an ordinary Tile");
   size_t M = a.GetValidRow();
   size_t N = b.GetValidCol();
   size_t K = a.GetValidCol();

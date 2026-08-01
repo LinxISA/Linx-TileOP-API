@@ -55,9 +55,6 @@ void TSCATTER_Impl(tile_shape_dst &dst, tile_shape_src &src,
   static_assert(!tile_shape_dst::isBoxedLayout && !tile_shape_src::isBoxedLayout &&
                    !tile_shape_indices::isBoxedLayout,
                 "Not support Fractal layout");
-  static_assert(tile_shape_dst::Loc != Location::Acc && 
-                tile_shape_src::Loc != Location::Acc && 
-                tile_shape_indices::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   if constexpr (tile_shape_src::isRowMajor &&
                 tile_shape_indices::isRowMajor &&
                 tile_shape_dst::isRowMajor) {

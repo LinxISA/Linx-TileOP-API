@@ -65,7 +65,6 @@ void TMIN_Impl(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   static constexpr size_t col = tile_shape::ValidCol;
   static_assert(row != DYNAMIC && col != DYNAMIC,
               "TODO: Support tile dynamic shape!");
-  static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   static constexpr size_t Y =
       tile_shape::Rows / (LaneNum / tile_shape::InnerCols);
 

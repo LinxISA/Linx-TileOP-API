@@ -75,8 +75,6 @@ void TFILLPAD_Impl(tile_shape_out &dst, tile_shape_in &src) {
   static_assert(tile_shape_out::Rows == tile_shape_in::Rows && tile_shape_out::Cols == tile_shape_in::Cols,
                 "Dst and src must be same shape!");
   static_assert(tile_shape_out::PadVal == PadValue::Zero, "Only support pad zero!");
-  static_assert(tile_shape_out::Loc != Location::Acc && tile_shape_in::Loc != Location::Acc, 
-              "Unsupport ACC to be input or output here");
   static constexpr size_t dst_row = tile_shape_out::Rows;
   static constexpr size_t dst_col = tile_shape_out::Cols;
 

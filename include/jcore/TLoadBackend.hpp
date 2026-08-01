@@ -209,7 +209,6 @@ template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
 void TLOAD_Legacy_Impl(tile_shape &dst, gm_shape &src) {
   size_t tile_rows = dst.GetValidRow();
   size_t tile_cols = dst.GetValidCol();
-  static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   static_assert(gm_shape::staticStride[0] == 1 &&
                 gm_shape::staticStride[1] == 1,
                 "TODO: Support global tensor more than 3 dimensions");

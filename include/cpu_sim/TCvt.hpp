@@ -192,7 +192,6 @@ void TCVT_Impl(tile_shape_out &dst, tile_shape_in &src) {
     static_assert(tile_shape_in::ValidRow != DYNAMIC && tile_shape_in::ValidCol != DYNAMIC &&
                 tile_shape_out::ValidRow != DYNAMIC && tile_shape_out::ValidCol != DYNAMIC,
               "TODO: Support tile dynamic shape!");
-    static_assert(tile_shape_out::Loc != Location::Acc, "ACC can not be output tile!");
     if constexpr (is_Zn_layout<tile_shape_in>::value && is_Nz_layout<tile_shape_out>::value) {
         TCvt_Zn2Nz_Imp<tile_shape_out, tile_shape_in>(dst.data(), src.data());
     } else if constexpr (is_Nz_layout<tile_shape_in>::value && is_Zn_layout<tile_shape_out>::value) {

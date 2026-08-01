@@ -155,7 +155,6 @@ template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 void TSTORE_Impl(gm_shape &dst, tile_shape &src) {
   size_t tile_rows = src.GetValidRow();
   size_t tile_cols = src.GetValidCol();
-  static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
 #ifdef ENABLE_TENSOR_INSTR
   static_assert(!tile_shape::isBoxedLayout || tile_shape::SFractalSize == 512,
                     "Error! Cude blk_tload:FractalSize != 512");

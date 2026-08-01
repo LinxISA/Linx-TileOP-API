@@ -48,7 +48,6 @@ template <is_tile_data_v tile_shape>
 void TMAX_Impl(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   size_t row = src0.GetValidRow();
   size_t col = src0.GetValidCol();
-  static_assert(tile_shape::Loc != Location::Acc, "Unsupport ACC to be input or output here");
   static constexpr size_t Y =
       tile_shape::Rows / (LaneNum / tile_shape::InnerCols);
   if constexpr (is_Nz_layout<tile_shape>::value) {

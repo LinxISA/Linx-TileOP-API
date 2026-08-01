@@ -3,6 +3,7 @@
 
 #include "common/layout.hpp"
 #include <common/type.hpp>
+#include <cstdint>
 
 namespace pto {
 
@@ -31,6 +32,240 @@ enum class PadValue {
   Min = 2,
   Null = 3,
 };
+
+enum class FixpPreQuantMode : uint8_t {
+  None = 0,
+  F322F16 = 1,
+  VREQS8Pre = 2,
+  REQS8Pre = 3,
+  VDEQF16 = 4,
+  DEQF16 = 5,
+  VSHIFTS322S16 = 12,
+  SHIFTS322S16 = 13,
+  F322BF16 = 16,
+  QF322S4Pre = 17,
+  VQF322S4Pre = 18,
+  QF322S16Pre = 19,
+  VQF322S16Pre = 20,
+  VQF322S8Pre = 23,
+  QF322S8Pre = 24,
+  QF322HIF8Pre = 25,
+  QF322FP8Pre = 26,
+  QF322F32Pre = 27,
+  VQF322HIF8Pre = 28,
+  QF322F16Pre = 32,
+  VQF322F16Pre = 33,
+  QF322BF16Pre = 34,
+  QS322BF16Pre = 35,
+  VQF322BF16Pre = 36,
+  VQF322FP8Pre = 37,
+  VQF322F32Pre = 38,
+  VQS322BF16Pre = 39,
+};
+
+enum class FixpReluMode : uint8_t {
+  None = 0,
+  Relu = 1,
+  LRelu = 2,
+  PRelu = 3,
+};
+
+struct FixpAttr {
+  FixpPreQuantMode PreQuant = FixpPreQuantMode::None;
+  FixpReluMode Relu = FixpReluMode::None;
+  uint8_t GroupNCode = 0;
+  bool RowMaxEn = false;
+  bool GroupMaxEn = false;
+  bool RowMaxInit = false;
+  bool MaxAbsEn = false;
+
+  static constexpr FixpAttr keep_acc(
+      FixpReluMode ReluMode = FixpReluMode::None) {
+    FixpAttr Attr;
+    Attr.Relu = ReluMode;
+    return Attr;
+  }
+
+  static constexpr FixpAttr f16(
+      FixpReluMode ReluMode = FixpReluMode::None) {
+    FixpAttr Attr;
+    Attr.PreQuant = FixpPreQuantMode::F322F16;
+    Attr.Relu = ReluMode;
+    return Attr;
+  }
+
+  static constexpr FixpAttr bf16(
+      FixpReluMode ReluMode = FixpReluMode::None) {
+    FixpAttr Attr;
+    Attr.PreQuant = FixpPreQuantMode::F322BF16;
+    Attr.Relu = ReluMode;
+    return Attr;
+  }
+
+  constexpr uint32_t encoding() const {
+    return (static_cast<uint32_t>(PreQuant) << 26) |
+           (static_cast<uint32_t>(Relu) << 23) |
+           (static_cast<uint32_t>(GroupNCode) << 19) |
+           (static_cast<uint32_t>(RowMaxEn) << 18) |
+           (static_cast<uint32_t>(GroupMaxEn) << 17) |
+           (static_cast<uint32_t>(RowMaxInit) << 16) |
+           (static_cast<uint32_t>(MaxAbsEn) << 15) | 0x2023;
+  }
+
+  constexpr bool operator==(const FixpAttr &) const = default;
+};
+
+constexpr bool is_valid_fixp_pre_quant(FixpPreQuantMode Mode) {
+  switch (Mode) {
+  case FixpPreQuantMode::None:
+  case FixpPreQuantMode::F322F16:
+  case FixpPreQuantMode::VREQS8Pre:
+  case FixpPreQuantMode::REQS8Pre:
+  case FixpPreQuantMode::VDEQF16:
+  case FixpPreQuantMode::DEQF16:
+  case FixpPreQuantMode::VSHIFTS322S16:
+  case FixpPreQuantMode::SHIFTS322S16:
+  case FixpPreQuantMode::F322BF16:
+  case FixpPreQuantMode::QF322S4Pre:
+  case FixpPreQuantMode::VQF322S4Pre:
+  case FixpPreQuantMode::QF322S16Pre:
+  case FixpPreQuantMode::VQF322S16Pre:
+  case FixpPreQuantMode::VQF322S8Pre:
+  case FixpPreQuantMode::QF322S8Pre:
+  case FixpPreQuantMode::QF322HIF8Pre:
+  case FixpPreQuantMode::QF322FP8Pre:
+  case FixpPreQuantMode::QF322F32Pre:
+  case FixpPreQuantMode::VQF322HIF8Pre:
+  case FixpPreQuantMode::QF322F16Pre:
+  case FixpPreQuantMode::VQF322F16Pre:
+  case FixpPreQuantMode::QF322BF16Pre:
+  case FixpPreQuantMode::QS322BF16Pre:
+  case FixpPreQuantMode::VQF322BF16Pre:
+  case FixpPreQuantMode::VQF322FP8Pre:
+  case FixpPreQuantMode::VQF322F32Pre:
+  case FixpPreQuantMode::VQS322BF16Pre:
+    return true;
+  }
+  return false;
+}
+
+constexpr bool is_valid_fixp_attr(FixpAttr Attr) {
+  if (!is_valid_fixp_pre_quant(Attr.PreQuant) ||
+      static_cast<uint8_t>(Attr.Relu) >
+          static_cast<uint8_t>(FixpReluMode::PRelu) ||
+      Attr.GroupNCode > 9)
+    return false;
+  if (!Attr.RowMaxEn && Attr.RowMaxInit)
+    return false;
+  if (Attr.GroupMaxEn != (Attr.GroupNCode != 0))
+    return false;
+  if (!Attr.RowMaxEn && !Attr.GroupMaxEn && Attr.MaxAbsEn)
+    return false;
+  return true;
+}
+
+constexpr bool is_basic_fixp_attr(FixpAttr Attr) {
+  const bool ParameterFreePreQuant =
+      Attr.PreQuant == FixpPreQuantMode::None ||
+      Attr.PreQuant == FixpPreQuantMode::F322F16 ||
+      Attr.PreQuant == FixpPreQuantMode::F322BF16;
+  const bool ParameterFreeRelu = Attr.Relu == FixpReluMode::None ||
+                                 Attr.Relu == FixpReluMode::Relu;
+  return ParameterFreePreQuant && ParameterFreeRelu && !Attr.RowMaxEn &&
+         !Attr.GroupMaxEn && !Attr.RowMaxInit && !Attr.MaxAbsEn;
+}
+
+constexpr bool is_parameter_free_fixp_pre_quant(FixpPreQuantMode Mode) {
+  return Mode == FixpPreQuantMode::None || Mode == FixpPreQuantMode::F322F16 ||
+         Mode == FixpPreQuantMode::F322BF16;
+}
+
+constexpr bool is_scalar_fixp_pre_quant(FixpPreQuantMode Mode) {
+  switch (Mode) {
+  case FixpPreQuantMode::REQS8Pre:
+  case FixpPreQuantMode::DEQF16:
+  case FixpPreQuantMode::SHIFTS322S16:
+  case FixpPreQuantMode::QF322S4Pre:
+  case FixpPreQuantMode::QF322S16Pre:
+  case FixpPreQuantMode::QF322S8Pre:
+  case FixpPreQuantMode::QF322HIF8Pre:
+  case FixpPreQuantMode::QF322FP8Pre:
+  case FixpPreQuantMode::QF322F32Pre:
+  case FixpPreQuantMode::QF322F16Pre:
+  case FixpPreQuantMode::QF322BF16Pre:
+  case FixpPreQuantMode::QS322BF16Pre:
+    return true;
+  default:
+    return false;
+  }
+}
+
+constexpr bool is_vector_fixp_pre_quant(FixpPreQuantMode Mode) {
+  switch (Mode) {
+  case FixpPreQuantMode::VREQS8Pre:
+  case FixpPreQuantMode::VDEQF16:
+  case FixpPreQuantMode::VSHIFTS322S16:
+  case FixpPreQuantMode::VQF322S4Pre:
+  case FixpPreQuantMode::VQF322S16Pre:
+  case FixpPreQuantMode::VQF322S8Pre:
+  case FixpPreQuantMode::VQF322HIF8Pre:
+  case FixpPreQuantMode::VQF322F16Pre:
+  case FixpPreQuantMode::VQF322BF16Pre:
+  case FixpPreQuantMode::VQF322FP8Pre:
+  case FixpPreQuantMode::VQF322F32Pre:
+  case FixpPreQuantMode::VQS322BF16Pre:
+    return true;
+  default:
+    return false;
+  }
+}
+
+template <FixpAttr Attr, typename DType>
+constexpr bool is_fixp_output_type() {
+  constexpr int TypeCode = type_traits<DType>::TypeCode;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::None)
+    return TypeCode == __type_fp32 || TypeCode == __type_int32;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::F322F16 ||
+                Attr.PreQuant == FixpPreQuantMode::VDEQF16 ||
+                Attr.PreQuant == FixpPreQuantMode::DEQF16 ||
+                Attr.PreQuant == FixpPreQuantMode::QF322F16Pre ||
+                Attr.PreQuant == FixpPreQuantMode::VQF322F16Pre)
+    return TypeCode == __type_fp16;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::F322BF16 ||
+                Attr.PreQuant == FixpPreQuantMode::QF322BF16Pre ||
+                Attr.PreQuant == FixpPreQuantMode::QS322BF16Pre ||
+                Attr.PreQuant == FixpPreQuantMode::VQF322BF16Pre ||
+                Attr.PreQuant == FixpPreQuantMode::VQS322BF16Pre)
+    return TypeCode == __type_bf16;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::VREQS8Pre ||
+                Attr.PreQuant == FixpPreQuantMode::REQS8Pre ||
+                Attr.PreQuant == FixpPreQuantMode::VQF322S8Pre ||
+                Attr.PreQuant == FixpPreQuantMode::QF322S8Pre)
+    return TypeCode == __type_int8;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::VSHIFTS322S16 ||
+                Attr.PreQuant == FixpPreQuantMode::SHIFTS322S16 ||
+                Attr.PreQuant == FixpPreQuantMode::QF322S16Pre ||
+                Attr.PreQuant == FixpPreQuantMode::VQF322S16Pre)
+    return TypeCode == __type_int16;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::QF322S4Pre ||
+                Attr.PreQuant == FixpPreQuantMode::VQF322S4Pre)
+    return TypeCode == __type_int4x2;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::QF322HIF8Pre ||
+                Attr.PreQuant == FixpPreQuantMode::VQF322HIF8Pre)
+    return TypeCode == __type_hif8;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::QF322FP8Pre ||
+                Attr.PreQuant == FixpPreQuantMode::VQF322FP8Pre)
+    return TypeCode == __type_fp8_e4m3 || TypeCode == __type_fp8_e5m2;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::QF322F32Pre ||
+                Attr.PreQuant == FixpPreQuantMode::VQF322F32Pre)
+    return TypeCode == __type_fp32;
+  return false;
+}
+
+template <FixpAttr Attr, typename DType>
+constexpr bool is_basic_fixp_output_type() {
+  return is_fixp_output_type<Attr, DType>();
+}
 
 /// Layout for GlobalTensor
 /// ND: lower tow dimensions are arranged in RowMajor order;
@@ -473,12 +708,6 @@ using TileRight =
   Tile<Location::Right, Element_, Rows_, Cols_, BLayout::RowMajor,
        RowValid_, ColValid_, SLayout::ColMajor, 512>;
 
-template <typename Element_, const int Rows_, const int Cols_,
-          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
-using TileAcc =
-  Tile<Location::Acc, Element_, Rows_, Cols_, BLayout::ColMajor,
-       RowValid_, ColValid_, SLayout::RowMajor, 1024>;
-
 template <int Rows, int Cols, bool RowMajor>
 struct stride_selector;
 
@@ -633,8 +862,6 @@ class SharedTile {
                 "SharedTile<LocalTile>: LocalTile must be an ordinary Tile");
   static_assert(LocalTile::Loc != Location::Shared,
                 "SharedTile cannot wrap a SharedTile (nesting not allowed)");
-  static_assert(LocalTile::Loc != Location::Acc,
-                "SharedTile cannot wrap an Acc tile (ACC is implicit state)");
 public:
   using LocalTileType = LocalTile;
   using DType = typename LocalTile::DType;
@@ -678,7 +905,7 @@ concept is_shared_tile_v = is_shared_tile<T>::value;
 // An ordinary (non-Shared) Tile that can own a Local register payload.
 template <typename T>
 concept is_local_tile_v =
-    is_tile<T>::value && T::Loc != Location::Shared && T::Loc != Location::Acc;
+    is_tile<T>::value && T::Loc != Location::Shared;
 
 // A TMATMUL-style Right operand: either an ordinary Local Right Tile, or a
 // SharedTile wrapping a Right Tile. The public TMATMUL signature dispatches on
@@ -709,6 +936,229 @@ constexpr unsigned long shared_handle(const SharedTile<LocalTile> &tile) {
   return tile.handle();
 }
 } // namespace detail
+
+namespace fixp {
+
+struct NoOperand {};
+
+constexpr FixpAttr with_relu(FixpAttr Attr, FixpReluMode Mode) {
+  Attr.Relu = Mode;
+  return Attr;
+}
+
+constexpr FixpAttr with_row_max(FixpAttr Attr, bool Init) {
+  Attr.RowMaxEn = true;
+  Attr.RowMaxInit = Init;
+  return Attr;
+}
+
+constexpr FixpAttr with_group_max(FixpAttr Attr, uint8_t GroupNCode) {
+  Attr.GroupMaxEn = true;
+  Attr.GroupNCode = GroupNCode;
+  return Attr;
+}
+
+constexpr FixpAttr with_max_abs(FixpAttr Attr) {
+  Attr.MaxAbsEn = true;
+  return Attr;
+}
+
+constexpr int group_n_from_code(uint8_t Code) {
+  constexpr int Values[] = {0, 8, 16, 32, 48, 64, 80, 96, 112, 128};
+  return Code <= 9 ? Values[Code] : 0;
+}
+
+template <int GroupN> constexpr uint8_t group_n_code() {
+  static_assert(GroupN == 8 || GroupN == 16 || GroupN == 32 || GroupN == 48 ||
+                    GroupN == 64 || GroupN == 80 || GroupN == 96 ||
+                    GroupN == 112 || GroupN == 128,
+                "TMATMUL_FIXP GroupN must be 8, 16, 32, 48, 64, 80, 96, "
+                "112 or 128");
+  if constexpr (GroupN == 8)
+    return 1;
+  if constexpr (GroupN == 16)
+    return 2;
+  if constexpr (GroupN == 32)
+    return 3;
+  if constexpr (GroupN == 48)
+    return 4;
+  if constexpr (GroupN == 64)
+    return 5;
+  if constexpr (GroupN == 80)
+    return 6;
+  if constexpr (GroupN == 96)
+    return 7;
+  if constexpr (GroupN == 112)
+    return 8;
+  return 9;
+}
+
+template <FixpAttr Attr_, typename QuantTile_ = NoOperand,
+          typename ReluTile_ = NoOperand, typename RowMaxIn_ = NoOperand,
+          typename RowMaxOut_ = NoOperand,
+          typename GroupMaxOut_ = NoOperand>
+struct Options {
+  static constexpr FixpAttr Attr = Attr_;
+  using QuantTile = QuantTile_;
+  using ReluTile = ReluTile_;
+  using RowMaxIn = RowMaxIn_;
+  using RowMaxOut = RowMaxOut_;
+  using GroupMaxOut = GroupMaxOut_;
+
+  uint64_t QuantDescriptor = 0;
+  uint64_t LReluDescriptor = 0;
+  QuantTile *Quant = nullptr;
+  ReluTile *Relu = nullptr;
+  RowMaxIn *RowIn = nullptr;
+  RowMaxOut *RowOut = nullptr;
+  GroupMaxOut *GroupOut = nullptr;
+
+  constexpr Options() = default;
+
+  constexpr Options(uint64_t QuantDescriptor, uint64_t LReluDescriptor,
+                    QuantTile *Quant, ReluTile *Relu, RowMaxIn *RowIn,
+                    RowMaxOut *RowOut, GroupMaxOut *GroupOut)
+      : QuantDescriptor(QuantDescriptor), LReluDescriptor(LReluDescriptor),
+        Quant(Quant), Relu(Relu), RowIn(RowIn), RowOut(RowOut),
+        GroupOut(GroupOut) {}
+
+  constexpr auto relu() const {
+    static_assert(Attr.Relu == FixpReluMode::None,
+                  "TMATMUL_FIXP ReLU mode was already selected");
+    constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::Relu);
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
+                                RowIn, RowOut, GroupOut);
+  }
+
+  constexpr auto lrelu(uint64_t Descriptor) const {
+    static_assert(Attr.Relu == FixpReluMode::None,
+                  "TMATMUL_FIXP ReLU mode was already selected");
+    constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::LRelu);
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut>(QuantDescriptor, Descriptor, Quant, Relu,
+                                RowIn, RowOut, GroupOut);
+  }
+
+  template <is_local_tile_v Tile>
+  constexpr auto prelu(Tile &Parameter) const {
+    static_assert(Attr.Relu == FixpReluMode::None,
+                  "TMATMUL_FIXP ReLU mode was already selected");
+    static_assert(std::is_same_v<ReluTile, NoOperand>,
+                  "TMATMUL_FIXP PReLU Tile was already supplied");
+    constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::PRelu);
+    return Options<NewAttr, QuantTile, Tile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant,
+                                &Parameter, RowIn, RowOut, GroupOut);
+  }
+
+  template <is_local_tile_v Tile>
+  constexpr auto row_max(Tile &Output) const {
+    static_assert(!Attr.RowMaxEn,
+                  "TMATMUL_FIXP RowMax was already enabled");
+    static_assert(std::is_same_v<RowMaxIn, NoOperand> &&
+                      std::is_same_v<RowMaxOut, NoOperand>,
+                  "TMATMUL_FIXP RowMax operands were already supplied");
+    constexpr FixpAttr NewAttr = with_row_max(Attr, false);
+    return Options<NewAttr, QuantTile, ReluTile, NoOperand, Tile,
+                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
+                                nullptr, &Output, GroupOut);
+  }
+
+  template <is_local_tile_v InputTile, is_local_tile_v OutputTile>
+  constexpr auto row_max(InputTile &Input, OutputTile &Output) const {
+    static_assert(!Attr.RowMaxEn,
+                  "TMATMUL_FIXP RowMax was already enabled");
+    static_assert(std::is_same_v<RowMaxIn, NoOperand> &&
+                      std::is_same_v<RowMaxOut, NoOperand>,
+                  "TMATMUL_FIXP RowMax operands were already supplied");
+    constexpr FixpAttr NewAttr = with_row_max(Attr, true);
+    return Options<NewAttr, QuantTile, ReluTile, InputTile, OutputTile,
+                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
+                                &Input, &Output, GroupOut);
+  }
+
+  template <int GroupN, is_local_tile_v Tile>
+  constexpr auto group_max(Tile &Output) const {
+    static_assert(!Attr.GroupMaxEn,
+                  "TMATMUL_FIXP GroupMax was already enabled");
+    static_assert(std::is_same_v<GroupMaxOut, NoOperand>,
+                  "TMATMUL_FIXP GroupMax output was already supplied");
+    constexpr FixpAttr NewAttr =
+        with_group_max(Attr, group_n_code<GroupN>());
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut, Tile>(
+        QuantDescriptor, LReluDescriptor, Quant, Relu, RowIn, RowOut, &Output);
+  }
+
+  constexpr auto max_abs() const {
+    static_assert(Attr.RowMaxEn || Attr.GroupMaxEn,
+                  "TMATMUL_FIXP max_abs requires RowMax or GroupMax");
+    constexpr FixpAttr NewAttr = with_max_abs(Attr);
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
+                                RowIn, RowOut, GroupOut);
+  }
+};
+
+template <FixpPreQuantMode Mode = FixpPreQuantMode::None>
+constexpr auto convert() {
+  static_assert(is_parameter_free_fixp_pre_quant(Mode),
+                "fixp::convert accepts only parameter-free PreQuant modes");
+  constexpr FixpAttr Attr = [] {
+    FixpAttr Value;
+    Value.PreQuant = Mode;
+    return Value;
+  }();
+  return Options<Attr>{};
+}
+
+template <FixpPreQuantMode Mode>
+constexpr auto scalar(uint64_t QuantDescriptor) {
+  static_assert(is_scalar_fixp_pre_quant(Mode),
+                "fixp::scalar requires a scalar-parameter PreQuant mode");
+  constexpr FixpAttr Attr = [] {
+    FixpAttr Value;
+    Value.PreQuant = Mode;
+    return Value;
+  }();
+  return Options<Attr>(QuantDescriptor, 0, nullptr, nullptr, nullptr, nullptr,
+                       nullptr);
+}
+
+template <FixpPreQuantMode Mode, is_local_tile_v Tile>
+constexpr auto vector(Tile &QuantParameter) {
+  static_assert(is_vector_fixp_pre_quant(Mode),
+                "fixp::vector requires a vector-parameter PreQuant mode");
+  constexpr FixpAttr Attr = [] {
+    FixpAttr Value;
+    Value.PreQuant = Mode;
+    return Value;
+  }();
+  return Options<Attr, Tile>(0, 0, &QuantParameter, nullptr, nullptr, nullptr,
+                             nullptr);
+}
+
+constexpr auto keep_acc() { return convert<FixpPreQuantMode::None>(); }
+constexpr auto f16() { return convert<FixpPreQuantMode::F322F16>(); }
+constexpr auto bf16() { return convert<FixpPreQuantMode::F322BF16>(); }
+constexpr auto s8(uint64_t QuantDescriptor) {
+  return scalar<FixpPreQuantMode::QF322S8Pre>(QuantDescriptor);
+}
+
+template <is_local_tile_v Tile> constexpr auto s8(Tile &QuantParameter) {
+  return vector<FixpPreQuantMode::VQF322S8Pre>(QuantParameter);
+}
+
+template <typename T> struct is_options : std::false_type {};
+template <FixpAttr Attr, typename QuantTile, typename ReluTile,
+          typename RowMaxIn, typename RowMaxOut, typename GroupMaxOut>
+struct is_options<Options<Attr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                          GroupMaxOut>> : std::true_type {};
+
+template <typename T>
+concept is_options_v = is_options<std::remove_cv_t<T>>::value;
+
+} // namespace fixp
 
 
 template <typename shape> int index(int i, int j) {

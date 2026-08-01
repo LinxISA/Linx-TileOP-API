@@ -37,8 +37,6 @@ void MATMACC_Impl(tile_shape_C &dst, tile_shape_A &src0, tile_shape_B &src1) {
   size_t M = dst.GetValidRow();
   size_t N = dst.GetValidCol();
   size_t K = src0.GetValidCol();
-  static_assert(tile_shape_C::Loc != Location::Acc,
-                "MATMACC output must be an ordinary Tile");
   pto_matmul_detail::matmul_acc(dst, src0, src1, dst, M, N, K);
 }
 
@@ -88,8 +86,6 @@ void MATMACCMX_Impl(tile_shape_C &dst,
   size_t N = dst.GetValidCol();
   size_t K = src0.GetValidCol();
 
-  static_assert(tile_shape_C::Loc != Location::Acc,
-                "MATMACCMX output must be an ordinary Tile");
   pto_matmul_detail::matmul_mx_acc(dst, src0, src0x, src1, src1x,
                                    dst, M, N, K);
 }
@@ -139,8 +135,6 @@ void MATMACCMXB_Impl(tile_shape_C &dst,
   size_t N = dst.GetValidCol();
   size_t K = src0.GetValidCol();
 
-  static_assert(tile_shape_C::Loc != Location::Acc,
-                "MATMACCMXB output must be an ordinary Tile");
   pto_matmul_detail::matmul_mxb_acc(dst, src0, src1, src1x,
                                     dst, M, N, K);
 }
