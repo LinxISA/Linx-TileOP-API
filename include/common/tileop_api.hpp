@@ -3,6 +3,7 @@
 
 #include "common/tileop_api_impl.hpp"
 
+#ifndef __linx
 template <is_tile_data_v tile_shape_A, is_tile_data_v tile_shape_B,
               is_tile_data_v tile_shape_C>
 void MATMACC(tile_shape_C &dst, tile_shape_A &src0, tile_shape_B &src1) {
@@ -73,4 +74,5 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
 // jcore/template_asm.hpp (no __vec__ kernel), so no wrapper here. The
 // jcore/cpu_sim *_Impl definitions remain available for callers that
 // prefer the kernel-launch form.
+#endif
 #endif
