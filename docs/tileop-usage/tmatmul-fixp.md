@@ -6,8 +6,9 @@
 TMATMUL_FIXP(dst, a, right, options);
 ```
 
-- `dst`、`a` 和所有辅助 Tile 都是普通 Local Tile。
-- `right` 可以是普通 `Tile<Location::Right, ...>`，也可以是 `SharedTile<RightTile>`。
+- `dst` 和所有 FIXP 辅助 Tile 都是普通 Local Tile。
+- 矩阵 `a`、`right` 支持 Local/Local、Local/Shared-Right，以及 Shared-Left/Shared-Right。
+- `a` 使用 Shared 时，`right` 也必须使用 Shared；单独 Shared-Left 当前没有无歧义编码。
 - 所有 `B.FPATR` 配置和可选 operand 都封装在唯一的 `options` 参数中。
 - options 的类型在编译期确定模式；scalar descriptor 的值和 Tile 寄存器内容可在运行时确定。
 
@@ -262,7 +263,7 @@ TMATMUL_FIXP(
 
 ```cpp
 using right_tile = Tile<Location::Right, __half, 32, 32>;
-SharedTile<right_tile> shared_b;
+auto shared_b = TMOV_L2S_PUBLISH(b);
 
 TMATMUL_FIXP(dst_fp32, a, shared_b, fixp::keep_acc());
 TMATMUL_FIXP(dst_s8, a, shared_b, fixp::s8(quant_desc));

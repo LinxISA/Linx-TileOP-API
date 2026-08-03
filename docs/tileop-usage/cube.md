@@ -26,6 +26,52 @@ void matmul_example(float* a, float* b, float* c) {
 - **约束**:c 必须是 `Location::Acc`;a/b 不能是 Acc
 - **生成**:`BSTART.CUBE TMATMUL, <dtypeA>` + `B.DIM(M/N/K)` + `B.IOT [a, b], last, ->acc<size>`
 
+### Shared A/B 矩阵
+
+所有公开 `TMATMUL*` 接口使用相同的参数顺序，矩阵 `A`、`B` 可以通过
+`TMOV_L2S_PUBLISH` 或 `TMOV_L2S_INSERT` 转换成 `SharedTile`。当前支持三种存储组合：
+
+```cpp
+using A = TileLeft<float, 16, 16>;
+using B = TileRight<float, 16, 16>;
+using C = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
+
+void example(C &dst, A &a, B &b) {
+  TMATMUL(dst, a, b);  // Local A, Local B
+
+  auto shared_b = TMOV_L2S_PUBLISH(b);
+  TMATMUL(dst, a, shared_b);  // Local A, Shared B
+
+  auto shared_a = TMOV_L2S_PUBLISH(a);
+  TMATMUL(dst, shared_a, shared_b);  // Shared A, Shared B
+}
+```
+
+双 Shared 形式会为两个矩阵分别分配 Shared 寄存器，并按矩阵 source 顺序生成：
+
+```asm
+BSTART.CUBE TMATMUL, FP32
+...
+C.B.IOS S#0
+C.B.IOS S#1
+B.IOT mask=1111, last, ->dst<size>
+```
+
+矩阵 `A`、`B` 不再出现在 `B.IOT` source stream 中。`TMATMULMX*` 的
+`scale_a`、`scale_b` 以及 BIAS/ACC/FIXP 的附加 Tile 仍是普通 Local Tile，继续编码为
+`B.IOT`。
+
+目前不支持只有 `A` 是 Shared、`B` 是 Local 的组合。单条 `C.B.IOS` 已用于既有的
+Shared-Right ABI，无法区分 Shared-A/Local-B；该写法会在编译期给出明确错误。若 `A`
+使用 Shared，请同时将 `B` 转换为 Shared。
+
+以下接口均支持 Local/Local、Local/Shared-B 和 Shared-A/Shared-B：
+
+- `TMATMUL`、`TMATMUL_ACC`、`TMATMUL_BIAS`
+- `TMATMUL_FIXP`、`TMATMUL_ACC_FIXP`、`TMATMUL_BIAS_FIXP`
+- `TMATMUL_MX`、`TMATMUL_MX_ACC`、`TMATMUL_MX_BIAS`
+- `TMATMUL_MX_FIXP`、`TMATMUL_MX_ACC_FIXP`、`TMATMUL_MX_BIAS_FIXP`
+
 ---
 
 ## TMATMUL_ACC — C += A × B(累加)

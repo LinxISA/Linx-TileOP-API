@@ -19,7 +19,7 @@ enum class Location {
   // v5: storage-class marker for compiler-managed Shared tiles. SharedTile
   // wraps a Local Tile and only changes its storage class (Local -> Shared),
   // never its matrix role / shape / dtype / layout. Used by TMATMUL Shared
-  // Right lowering (C.B.IOS binder) — see SharedTile<LocalTile>.
+  // matrix lowering (C.B.IOS binder) — see SharedTile<LocalTile>.
   Shared,
 };
 
