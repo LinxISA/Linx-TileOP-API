@@ -20,11 +20,11 @@ Each PE owns a fixed quarter fragment of the logical Tile. The API maps
 `sizeof(TileDType)` through `tile_type_traits::TilesizeCode` and rejects sizes
 outside 512 B..32 KB with `IsValidActiveSize`.
 
-## TMATMUL 系列:Acc tile 约束
+## TMATMUL 系列：普通 Tile 输出与累加输入
 
-- 输出 C 必须是 `Location::Acc` tile(用 `TileAcc<T, M, N>` 别名)
-- 输入 A/B/bias/scale 不能是 Acc
-- C 的数据先落在 ACC 累加器,需 `ACCCVT` 导出到普通 tile
+- v5 不再使用 Acc register class；TMATMUL 系列输出均为普通 Tile。
+- `TMATMUL_ACC(dst, acc, a, b)` 的 `dst` 与 `acc` 都是普通 Tile，`acc` 作为普通 B.IOT source。
+- `ACCCVT` 已删除；FIXP、Bias、RowMax 等结果由对应 TMATMUL 接口直接写入普通 Tile。
 
 ## MGATHER/MSCATTER:offset 必须 tile
 
@@ -49,3 +49,34 @@ outside 512 B..32 KB with `IsValidActiveSize`.
 - 数据搬运:TMA 已改名为 **TLSU**(编码不变,`BSTART.TLSU`)
 - 矩阵乘:**CUBE**(`BSTART.CUBE`)
 - 逐元素运算:**TEPL**(`BSTART.TEPL`)
+
+
+## Dynamic Valid Shape
+
+Linx one-level TileOP supports runtime `ValidRow`/`ValidCol` across the public
+inline-assembly interfaces. The physical Tile allocation remains compile-time
+fixed; only the active region is dynamic.
+
+```cpp
+using tile_t = Tile<Location::Vec, float,
+                    16, 512, BLayout::RowMajor,
+                    -1, -1>;
+
+tile_t tile(runtime_rows, runtime_cols);
+```
+
+The first `Rows`/`Cols` pair determines register capacity, layout, and B.IOT
+TileSize encoding and therefore cannot be `-1`. The final `RowValid`/`ColValid`
+pair may be `-1`; constructors then store the runtime values and every Linx
+one-level TileOP emits register-form dimensions such as:
+
+```asm
+B.DIM x3, 0, ->lb0
+B.DIM x4, 0, ->lb1
+```
+
+Operations with several same-shaped operands require callers to construct them
+with matching runtime valid dimensions. Matrix operations derive `M`, `N`, and
+`K` from their Left/Right operands. `SharedTile` preserves these runtime values
+when produced by `TMOV_L2S_INSERT` or `TMOV_L2S_PUBLISH`, so Shared Matmul uses
+the same dynamic `B.DIM` path as Local Matmul.

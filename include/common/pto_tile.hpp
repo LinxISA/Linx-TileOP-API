@@ -879,7 +879,17 @@ public:
   static constexpr SLayout SFractal = LocalTile::SFractal;
   static constexpr int SFractalSize = LocalTile::SFractalSize;
   static constexpr PadValue PadVal = LocalTile::PadVal;
-  SharedTile() = default;
+
+  SharedTile()
+      : RowMaskInternal(ValidRow == DYNAMIC ? 0 : ValidRow),
+        ColMaskInternal(ValidCol == DYNAMIC ? 0 : ValidCol) {}
+
+  explicit SharedTile(const LocalTile &local)
+      : RowMaskInternal(local.GetValidRow()),
+        ColMaskInternal(local.GetValidCol()) {}
+
+  int GetValidRow() const { return RowMaskInternal; }
+  int GetValidCol() const { return ColMaskInternal; }
 
   unsigned long &handle_ref() { return Handle; }
   unsigned long handle() const { return Handle; }
@@ -890,6 +900,8 @@ public:
 
 private:
   unsigned long Handle;
+  int RowMaskInternal;
+  int ColMaskInternal;
 };
 
 // v5 SharedTile traits. is_tile_data_v stays scoped to ordinary Local Tiles
