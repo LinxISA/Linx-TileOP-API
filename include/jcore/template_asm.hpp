@@ -39,7 +39,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_
 void TMAX_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   asm volatile(
     "BSTART.VPAR 0b0000100011, %c3\n"
-    "B.IOT %1, %2, mask=15, TSize=%c4, last, ->%0\n"
+    "B.IOT %1, %2, mask=15, last, ->%0<%Z4>\n"
     "B.DIM %5, 0, ->lb0\n"
     "B.DIM %6, 0, ->lb1\n"
 
@@ -56,7 +56,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_
 void TSUB_EXP_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   asm volatile(
     "BSTART.VPAR 0b0001000011, %c3\n"
-    "B.IOT %1, %2, mask=15, TSize=%c4, last, ->%0\n"
+    "B.IOT %1, %2, mask=15, last, ->%0<%Z4>\n"
     "B.DIM %5, 0, ->lb0\n"
     "B.DIM %6, 0, ->lb1\n"
 
@@ -73,7 +73,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_
 void TMUL_ADD_ROWSUM_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1, tile_shape_in2 &src2) {
   asm volatile(
     "BSTART.VPAR 0b0001100011, %c4\n"
-    "B.IOT %1, %2, mask=15, 0, TSize=%c5, ->%0\n"
+    "B.IOT %1, %2, mask=15, 0, ->%0<%Z5>\n"
     "B.IOT %3, mask=15, last\n"
     "B.DIM %6, 0, ->lb0\n"
     "B.DIM %7, 0, ->lb1\n"
@@ -91,7 +91,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_
 void TADD_MUL_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1, tile_shape_in2 &src2) {
   asm volatile(
     "BSTART.VPAR 0b0010000011, %c4\n"
-    "B.IOT %1, %2, mask=15, 0, TSize=%c5, ->%0\n"
+    "B.IOT %1, %2, mask=15, 0, ->%0<%Z5>\n"
     "B.IOT %3, mask=15, last\n"
     "B.DIM %6, 0, ->lb0\n"
     "B.DIM %7, 0, ->lb1\n"
@@ -112,7 +112,7 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
   asm volatile(
     "BSTART.TEPL 27, %c1\n"
     "B.DATR %c2, RNone\n"
-    "B.IOT %3, mask=15, TSize=%c4, last, ->%0\n"
+    "B.IOT %3, mask=15, last, ->%0<%Z4>\n"
     "B.DIM %5, 0, ->lb0\n"
     "B.DIM %6, 0, ->lb1\n"
     : "=Tr"(dst.data())
@@ -131,7 +131,7 @@ void TMOV_##LAYOUT_NAME(tile_shape_out &dst, tile_shape_in &src) {              
   asm volatile(                                                                  \
     "BSTART.TLSU 2, %c2\n"                                                        \
     "B.DATR " #LAYOUT_NAME ".normal, Null\n"                                     \
-    "B.IOT %1, mask=15, TSize=%c3, last, ->%0\n"                                              \
+    "B.IOT %1, mask=15, last, ->%0<%Z3>\n"                                              \
     "B.DIM %4, 0, ->lb0\n"                                                   \
     "B.DIM %5, 0, ->lb1\n"                                                   \
     : "=Tr"(dst.data())                                                          \
@@ -158,7 +158,7 @@ void TMOV_DN2NZ_DYN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
     "BSTART.TLSU 2, %c2\n"
     "B.DATR DN2NZ.normal, Null\n"
-    "B.IOT %1, mask=15, TSize=%c3, last, ->%0\n"
+    "B.IOT %1, mask=15, last, ->%0<%Z3>\n"
     "B.DIM %4, 0, ->lb0\n"
     "B.DIM %5, 0, ->lb1\n"
 
@@ -180,7 +180,7 @@ void THISTOGRAM(tile_shape_out &dst, tile_shape_in &src, tile_shape_in &Idx, int
     "B.DIM %3, 0, ->LB0\n"                                         \
     "B.DIM %4, 0, ->LB1\n"                                         \
     "B.DIM zero, %c5, ->LB2\n"                                         \
-    "B.IOT %6, %7, mask=15, TSize=%c8, last, ->%0\n"                                \
+    "B.IOT %6, %7, mask=15, last, ->%0<%Z8>\n"                                \
     ""                                                                 \
     : "=Tr"(dst.data())                                                \
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),       \
@@ -223,8 +223,8 @@ void TLOAD2_ND2NZ(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[__pto_d0]\n"
-    "B.IOT mask=15, TSize=%c[__pto_TileSize], last, ->%[__pto_d1]\n"
+    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, last, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data())
     : [__pto_s0]"r"(src.data()),
@@ -246,8 +246,8 @@ void TLOAD2_ND2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[__pto_d0]\n"
-    "B.IOT mask=15, TSize=%c[__pto_TileSize], last, ->%[__pto_d1]\n"
+    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, last, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data())
     : [__pto_s0]"r"(src.data()),
@@ -269,8 +269,8 @@ void TLOAD2_DN2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[__pto_d0]\n"
-    "B.IOT mask=15, TSize=%c[__pto_TileSize], last, ->%[__pto_d1]\n"
+    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, last, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data())
     : [__pto_s0]"r"(src.data()),
@@ -313,10 +313,10 @@ void TLOAD4_ND2NZ(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[__pto_d0]\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[__pto_d1]\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[d2]\n"
-    "B.IOT mask=15, TSize=%c[__pto_TileSize], last, ->%[d3]\n"
+    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, 0, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, 0, ->%[d2]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, last, ->%[d3]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data()),[d2]"=Tr"(dst2.data()),[d3]"=Tr"(dst3.data())
     : [__pto_s0]"r"(src.data()),
@@ -338,10 +338,10 @@ void TLOAD4_ND2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[__pto_d0]\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[__pto_d1]\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[d2]\n"
-    "B.IOT mask=15, TSize=%c[__pto_TileSize], last, ->%[d3]\n"
+    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, 0, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, 0, ->%[d2]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, last, ->%[d3]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data()),[d2]"=Tr"(dst2.data()),[d3]"=Tr"(dst3.data())
     : [__pto_s0]"r"(src.data()),
@@ -363,10 +363,10 @@ void TLOAD4_DN2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[__pto_d0]\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[__pto_d1]\n"
-    "B.IOT mask=15, 0, TSize=%c[__pto_TileSize], ->%[d2]\n"
-    "B.IOT mask=15, TSize=%c[__pto_TileSize], last, ->%[d3]\n"
+    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, 0, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, 0, ->%[d2]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=15, last, ->%[d3]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data()),[d2]"=Tr"(dst2.data()),[d3]"=Tr"(dst3.data())
     : [__pto_s0]"r"(src.data()),
@@ -399,7 +399,7 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], mask=15, TSize=%c[TileSize], last, ->%[dst]\n"
+      "B.IOT %[off], mask=15, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base], %[GmStride]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -455,7 +455,7 @@ inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], mask=15, 0, TSize=%c[TileSize], ->%[dst]\n"
+      "B.IOT %[off], mask=15, 0, ->%[dst]<%Z[TileSize]>\n"
       "B.IOT %[mask], mask=15, last\n"
       "B.IOR [%[base], %[GmStride]], []\n"
       : [dst] "=Tr"(dst.data())
@@ -1703,7 +1703,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOT mask=15, TSize=%c[TileSize], last, ->%[d0]\n"
+    "B.IOT mask=15, last, ->%[d0]<%Z[TileSize]>\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
     : [d0]"=Tr"(dst.data())
     : [s0]"r"(src.data()),
@@ -1767,7 +1767,7 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
                 "GMOV source and destination logical sizes must match");
   asm volatile(
       "BSTART.TLSU GMOV, %c[DataType]\n"
-      "B.IOT %[src], mask=%c[PEMask], TSize=%c[TileSize], last, ->%[dst]\n"
+      "B.IOT %[src], mask=%c[PEMask], last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[peer]],[]\n"
       : [dst] "=Tr"(dst.data())
       : [src] "Tr"(src.data()), [peer] "r"(peer_tid),
@@ -1839,7 +1839,7 @@ TMOV_S2L_BROADCAST(tile_shape_dst &dst,
   asm volatile(
       "BSTART.TLSU TMOV.S2L.BROADCAST, %c[DataType]\n"
       "C.B.IOS %S[Shared]\n"
-      "B.IOT mask=%c[PEMask], TSize=%c[TileSize], last, ->%[dst]\n"
+      "B.IOT mask=%c[PEMask], last, ->%[dst]<%Z[TileSize]>\n"
       : [dst] "=Tr"(dst.data())
       : [Shared] "Sr"(shared.handle()), [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_dst::DType>::TypeCode),
@@ -1858,7 +1858,7 @@ PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
   asm volatile(
       "BSTART.TLSU TMOV.S2L.EXTRACT, %c[DataType]\n"
       "C.B.IOS %S[Shared]\n"
-      "B.IOT mask=%c[PEMask], TSize=%c[TileSize], last, ->%[dst]\n"
+      "B.IOT mask=%c[PEMask], last, ->%[dst]<%Z[TileSize]>\n"
       : [dst] "=Tr"(dst.data())
       : [Shared] "Sr"(shared.handle()), [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_dst::DType>::TypeCode),
@@ -1916,7 +1916,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", "")
-        "B.IOT %[A], %[B], mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+        "B.IOT %[A], %[B], mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
@@ -1926,7 +1926,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
         PTO_MATMUL_HEADER("TMATMUL", "")
         "C.B.IOS %S[SharedA]\n"
         "B.IOT %[B]\n"
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
@@ -1936,7 +1936,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
         PTO_MATMUL_HEADER("TMATMUL", "")
         "C.B.IOS %S[SharedB]\n"
         "B.IOT %[A]\n"
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
@@ -1946,7 +1946,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
         PTO_MATMUL_HEADER("TMATMUL", "")
         "C.B.IOS %S[SharedA]\n"
         "C.B.IOS %S[SharedB]\n"
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
@@ -1964,7 +1964,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
         PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                    \
         "B.IOT %[A], %[B], mask=15\n"                                         \
         "B.IOT %[Extra]\n"                                                    \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                       \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [A] "Tr"(a.data()), [B] "Tr"(b.data()),                             \
           [Extra] "Tr"(extra.data()),                                          \
@@ -1976,7 +1976,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
         "C.B.IOS %S[SharedA]\n"                                               \
         "B.IOT %[B]\n"                                                       \
         "B.IOT %[Extra]\n"                                                    \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                       \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),                     \
           [Extra] "Tr"(extra.data()),                                          \
@@ -1988,7 +1988,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
         "C.B.IOS %S[SharedB]\n"                                               \
         "B.IOT %[A]\n"                                                       \
         "B.IOT %[Extra]\n"                                                    \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                       \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),                     \
           [Extra] "Tr"(extra.data()),                                          \
@@ -2000,7 +2000,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
         "C.B.IOS %S[SharedA]\n"                                               \
         "C.B.IOS %S[SharedB]\n"                                               \
         "B.IOT %[Extra]\n"                                                    \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                       \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),             \
           [Extra] "Tr"(extra.data()),                                          \
@@ -2105,17 +2105,17 @@ PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias_fixp, "TMATMUL.BIAS.FIXP",
 #define PTO_FIXP_IOR_3 "B.IOR [%[QuantGpr],%[LReluGpr]],[]\n"
 
 #define PTO_FIXP_OUT_0 \
-  "B.IOT mask=15, TSize=%c[DstSize], last, ->%[Dst]\n"
+  "B.IOT mask=15, last, ->%[Dst]<%Z[DstSize]>\n"
 #define PTO_FIXP_OUT_1 \
-  "B.IOT mask=15, TSize=%c[DstSize], ->%[Dst]\n" \
-  "B.IOT mask=15, TSize=%c[RowSize], last, ->%[RowOut]\n"
+  "B.IOT mask=15, ->%[Dst]<%Z[DstSize]>\n" \
+  "B.IOT mask=15, last, ->%[RowOut]<%Z[RowSize]>\n"
 #define PTO_FIXP_OUT_2 \
-  "B.IOT mask=15, TSize=%c[DstSize], ->%[Dst]\n" \
-  "B.IOT mask=15, TSize=%c[GroupSize], last, ->%[GroupOut]\n"
+  "B.IOT mask=15, ->%[Dst]<%Z[DstSize]>\n" \
+  "B.IOT mask=15, last, ->%[GroupOut]<%Z[GroupSize]>\n"
 #define PTO_FIXP_OUT_3 \
-  "B.IOT mask=15, TSize=%c[DstSize], ->%[Dst]\n" \
-  "B.IOT mask=15, TSize=%c[RowSize], ->%[RowOut]\n" \
-  "B.IOT mask=15, TSize=%c[GroupSize], last, ->%[GroupOut]\n"
+  "B.IOT mask=15, ->%[Dst]<%Z[DstSize]>\n" \
+  "B.IOT mask=15, ->%[RowOut]<%Z[RowSize]>\n" \
+  "B.IOT mask=15, last, ->%[GroupOut]<%Z[GroupSize]>\n"
 
 #define PTO_FIXP_OUT_DECL_0 [Dst] "=&Tr"(dst.data())
 #define PTO_FIXP_OUT_DECL_1 \
@@ -2307,7 +2307,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                   \
         "B.IOT %[A], %[ScaleA], mask=15\n"                                    \
-        "B.IOT %[B], %[ScaleB], mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"     \
+        "B.IOT %[B], %[ScaleB], mask=15, last, ->%[Dst]<%Z[TileSize]>\n"     \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -2319,7 +2319,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "C.B.IOS %S[SharedA]\n"                                              \
         "B.IOT %[ScaleA], %[B], mask=15\n"                                   \
         "B.IOT %[ScaleB]\n"                                                  \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                      \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -2331,7 +2331,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "C.B.IOS %S[SharedB]\n"                                              \
         "B.IOT %[A], %[ScaleA], mask=15\n"                                   \
         "B.IOT %[ScaleB]\n"                                                  \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                      \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
@@ -2343,7 +2343,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "C.B.IOS %S[SharedA]\n"                                              \
         "C.B.IOS %S[SharedB]\n"                                              \
         "B.IOT %[ScaleA], %[ScaleB], mask=15\n"                              \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                      \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
@@ -2370,7 +2370,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "B.IOT %[A], %[ScaleA], mask=15\n"                                    \
         "B.IOT %[B], %[ScaleB], mask=15\n"                                   \
         "B.IOT %[Extra]\n"                                                   \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                      \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -2383,7 +2383,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "C.B.IOS %S[SharedA]\n"                                              \
         "B.IOT %[ScaleA], %[B], mask=15\n"                                   \
         "B.IOT %[ScaleB], %[Extra], mask=15\n"                               \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                      \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -2396,7 +2396,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "C.B.IOS %S[SharedB]\n"                                              \
         "B.IOT %[A], %[ScaleA], mask=15\n"                                   \
         "B.IOT %[ScaleB], %[Extra], mask=15\n"                               \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                      \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
@@ -2410,7 +2410,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "C.B.IOS %S[SharedB]\n"                                              \
         "B.IOT %[ScaleA], %[ScaleB], mask=15\n"                              \
         "B.IOT %[Extra]\n"                                                   \
-        "B.IOT mask=15, TSize=%c[TileSize], last, ->%[Dst]\n"                      \
+        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
@@ -2914,7 +2914,7 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -2935,7 +2935,7 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -2958,7 +2958,7 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -2979,7 +2979,7 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3000,7 +3000,7 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3021,7 +3021,7 @@ void TFMOD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3042,7 +3042,7 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3063,7 +3063,7 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3084,7 +3084,7 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3105,7 +3105,7 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3126,7 +3126,7 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3147,7 +3147,7 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3168,7 +3168,7 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3189,7 +3189,7 @@ void TCMP(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3210,7 +3210,7 @@ void TPRELU(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3231,7 +3231,7 @@ void TSEL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3252,7 +3252,7 @@ void TABS(tile_shape &dst, tile_shape &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3272,7 +3272,7 @@ void TNOT(tile_shape &dst, tile_shape &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3292,7 +3292,7 @@ void TNEG(tile_shape &dst, tile_shape &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3312,7 +3312,7 @@ void TEXP(tile_shape &dst, tile_shape &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3332,7 +3332,7 @@ void TLOG(tile_shape &dst, tile_shape &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3354,7 +3354,7 @@ void TRECIP(tile_shape &dst, tile_shape &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3374,7 +3374,7 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3394,7 +3394,7 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3414,7 +3414,7 @@ void TRELU(tile_shape &dst, tile_shape &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3435,7 +3435,7 @@ void TADDC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=15\n"
-    "B.IOT %7, mask=15, TSize=%c8, last, ->%0\n"
+    "B.IOT %7, mask=15, last, ->%0<%Z8>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3458,7 +3458,7 @@ void TSUBC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=15\n"
-    "B.IOT %7, mask=15, TSize=%c8, last, ->%0\n"
+    "B.IOT %7, mask=15, last, ->%0<%Z8>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -3494,7 +3494,7 @@ void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3519,7 +3519,7 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3546,7 +3546,7 @@ void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3571,7 +3571,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3596,7 +3596,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3621,7 +3621,7 @@ void TFMODS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3646,7 +3646,7 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3671,7 +3671,7 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3696,7 +3696,7 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3721,7 +3721,7 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3746,7 +3746,7 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3771,7 +3771,7 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3796,7 +3796,7 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3821,7 +3821,7 @@ void TCMPS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3846,7 +3846,7 @@ void TLRELU(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3871,7 +3871,7 @@ void TAXPY(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3896,7 +3896,7 @@ void TADDSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, til
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     "B.IOR [%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3922,7 +3922,7 @@ void TSUBSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, til
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     "B.IOR [%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3948,7 +3948,7 @@ void TSELS(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     "B.IOR [%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3974,7 +3974,7 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT mask=15, TSize=%c5, last, ->%0\n"
+    "B.IOT mask=15, last, ->%0<%Z5>\n"
     "B.IOR [%6],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -3999,7 +3999,7 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=15\n"
-    "B.IOT %7, mask=15, TSize=%c8, last, ->%0\n"
+    "B.IOT %7, mask=15, last, ->%0<%Z8>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -4027,7 +4027,7 @@ void TEXTRACT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7,%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -4054,7 +4054,7 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7,%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -4077,7 +4077,7 @@ void TIMG2COL(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4097,7 +4097,7 @@ void TFILLPAD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4120,7 +4120,7 @@ void TCI(tile_shape &dst, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT mask=15, TSize=%c5, last, ->%0\n"
+    "B.IOT mask=15, last, ->%0<%Z5>\n"
     "B.IOR [%6],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -4141,7 +4141,7 @@ void TTRI(tile_shape &dst) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT mask=15, TSize=%c5, last, ->%0\n"
+    "B.IOT mask=15, last, ->%0<%Z5>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -4163,7 +4163,7 @@ void TRANDOM(tile_shape &dst, typename tile_shape::DType s) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT mask=15, TSize=%c5, last, ->%0\n"
+    "B.IOT mask=15, last, ->%0<%Z5>\n"
     "B.IOR [%6],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -4184,7 +4184,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4204,7 +4204,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4224,7 +4224,7 @@ void TSORT32(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4244,7 +4244,7 @@ void TMRGSORT(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -4265,7 +4265,7 @@ void TTRANS(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4285,7 +4285,7 @@ void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -4307,7 +4307,7 @@ void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -4329,7 +4329,7 @@ void TPARTADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -4350,7 +4350,7 @@ void TPARTMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -4371,7 +4371,7 @@ void TPARTMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -4392,7 +4392,7 @@ void TPARTMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -4417,7 +4417,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4437,7 +4437,7 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4457,7 +4457,7 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4477,7 +4477,7 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4497,7 +4497,7 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4517,7 +4517,7 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4537,7 +4537,7 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4557,7 +4557,7 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4577,7 +4577,7 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4597,7 +4597,7 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4617,7 +4617,7 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4637,7 +4637,7 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4657,7 +4657,7 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4677,7 +4677,7 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -4706,7 +4706,7 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -4736,7 +4736,7 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -4768,7 +4768,7 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -4798,7 +4798,7 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -4828,7 +4828,7 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -4858,7 +4858,7 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -4888,7 +4888,7 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -4918,7 +4918,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -4948,7 +4948,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -4978,7 +4978,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -5008,7 +5008,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -5038,7 +5038,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -5068,7 +5068,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -5098,7 +5098,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -5138,7 +5138,7 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, TSize=%c7, last, ->%0\n"
+    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -5159,7 +5159,7 @@ void TGATHERB(tile_shape_out &dst, gm_shape &src, tile_shape_offset &offset) {
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, TSize=%c6, last, ->%0\n"
+    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
     "B.IOR [%7], []\n"
     ""
     : "=Tr"(dst.data())
