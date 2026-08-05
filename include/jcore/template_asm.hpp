@@ -2477,21 +2477,7 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
 template <is_tile_data_v tile_shape_c, is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
-                              tile_shape_b &b, const Options &options) {
-  constexpr FixpAttr Attr = Options::Attr;
-  static_assert(tile_role_v<tile_shape_a> == Location::Left,
-                "TMATMUL input A must be a Left tile");
-  static_assert(tile_role_v<tile_shape_b> == Location::Right,
-                "TMATMUL input B must be a Right tile");
-  static_assert(is_basic_fixp_attr(Attr),
-                "TMATMUL supports only parameter-free FPATR options "
-                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
-                "require a .FIXP variant");
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul<Attr>(c, a, b, M, N, K);
-}
+                              tile_shape_b &b, const Options &options);
 
 // TMATMUL_ACC: D = C + A*B. D and C are distinct ordinary Tile operands.
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
@@ -2714,6 +2700,18 @@ TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a,
   pto_matmul_detail::emit_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, a, b, row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
+}
+
+// TMATMUL(D, A, B, options): the active Function 0 operation carries the
+// full PostProcess capability (quant/PReLU/RowMax/GroupMax) via options. It
+// forwards to the shared emit_fixp lowering (formerly the TMATMUL_FIXP
+// implementation), emitting BSTART.CUBE TMATMUL + one B.FPATR + the B.IOT
+// source/aux stream dictated by Config. No .FIXP mnemonic is produced.
+template <is_tile_data_v tile_shape_c, is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
+                              tile_shape_b &b, const Options &options) {
+  TMATMUL_FIXP(c, a, b, options);
 }
 
 
