@@ -14,18 +14,13 @@ void shared_matmul_all(C &dst, C &extra, A &a, B &b, ScaleA &scale_a,
   auto shared_b = TMOV_L2S_PUBLISH(b);
 
   TMATMUL(dst, shared_a, shared_b);
-  TMATMUL_ACC(dst, extra, shared_a, shared_b);
+  TMATMUL_ACC(dst, extra, shared_a, shared_b, fixp::keep_acc());
   TMATMUL_FIXP(dst, shared_a, shared_b);
   TMATMUL_FIXP(dst, shared_a, shared_b, fixp::keep_acc());
-  TMATMUL_ACC_FIXP(dst, extra, shared_a, shared_b);
-  TMATMUL_BIAS(dst, shared_a, shared_b, extra);
-  TMATMUL_BIAS_FIXP(dst, shared_a, shared_b, extra);
-  TMATMUL_MX(dst, shared_a, scale_a, shared_b, scale_b);
-  TMATMUL_MX_ACC(dst, extra, shared_a, scale_a, shared_b, scale_b);
-  TMATMUL_MX_BIAS(dst, shared_a, scale_a, shared_b, scale_b, extra);
-  TMATMUL_MX_FIXP(dst, shared_a, scale_a, shared_b, scale_b);
-  TMATMUL_MX_ACC_FIXP(dst, extra, shared_a, scale_a, shared_b, scale_b);
-  TMATMUL_MX_BIAS_FIXP(dst, shared_a, scale_a, shared_b, scale_b, extra);
+  TMATMUL_BIAS(dst, shared_a, shared_b, extra, fixp::keep_acc());
+  TMATMUL_MX(dst, shared_a, scale_a, shared_b, scale_b, fixp::keep_acc());
+  TMATMUL_MX_ACC(dst, extra, shared_a, scale_a, shared_b, scale_b, fixp::keep_acc());
+  TMATMUL_MX_BIAS(dst, shared_a, scale_a, shared_b, scale_b, extra, fixp::keep_acc());
 }
 
 int main() { return 0; }
