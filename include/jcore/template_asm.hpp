@@ -1902,6 +1902,24 @@ inline size_t matrix_valid_col(const Matrix &matrix) {
   return matrix.GetValidCol();
 }
 
+// PTO_FIXP_ATTR / PTO_FIXP_ATTR_INPUTS emit the B.FPATR line and its seven
+// immediate operands. Every TMATMUL/TMATMULMX CUBE bundle carries exactly one
+// B.FPATR after B.DATR, so these are shared by the whole family, not just the
+// .FIXP variants. The macros reference the template parameter Attr, so the
+// helper templates below take FixpAttr Attr as an NTTP. Defined here (before
+// any helper that uses them) so the plain matmul free function can also use
+// PTO_FIXP_ATTR.
+#define PTO_FIXP_ATTR \
+  "B.FPATR %c[PreQuant], %c[ReluMode], %c[GroupNCode], %c[RowMaxEn], " \
+  "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn]\n"
+
+#define PTO_FIXP_ATTR_INPUTS \
+  [PreQuant] "i"(static_cast<uint8_t>(Attr.PreQuant)), \
+  [ReluMode] "i"(static_cast<uint8_t>(Attr.Relu)), \
+  [GroupNCode] "i"(Attr.GroupNCode), [RowMaxEn] "i"(Attr.RowMaxEn), \
+  [GroupMaxEn] "i"(Attr.GroupMaxEn), \
+  [RowMaxInit] "i"(Attr.RowMaxInit), [MaxAbsEn] "i"(Attr.MaxAbsEn)
+
 template <typename A, typename B>
 constexpr void validate_shared_matrix_pair() {
   static_assert(!is_shared_tile_v<A> || is_shared_tile_v<B>,
@@ -1909,70 +1927,76 @@ constexpr void validate_shared_matrix_pair() {
                 "C.B.IOS binder denotes the existing Shared-Right form");
 }
 
-template <typename Dst, typename A, typename B>
+template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B>
 PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
                               size_t K) {
   validate_shared_matrix_pair<A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL", "")
+        PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
         "B.IOT %[A], %[B], mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+          PTO_FIXP_ATTR_INPUTS,
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL", "")
+        PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
         "C.B.IOS %S[SharedA]\n"
         "B.IOT %[B]\n"
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),
+          PTO_FIXP_ATTR_INPUTS,
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
     asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL", "")
+        PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
         "C.B.IOS %S[SharedB]\n"
         "B.IOT %[A]\n"
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),
+          PTO_FIXP_ATTR_INPUTS,
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   } else {
     asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL", "")
+        PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
         "C.B.IOS %S[SharedA]\n"
         "C.B.IOS %S[SharedB]\n"
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),
+          PTO_FIXP_ATTR_INPUTS,
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   }
 }
 
-#define PTO_DEFINE_MATMUL_3SRC_HELPER(Name, Opcode, ExtraAttrs)                 \
-template <typename Dst, typename A, typename B, typename Extra>                 \
+#define PTO_DEFINE_MATMUL_3SRC_HELPER(Name, Opcode)                            \
+template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B,      \
+          typename Extra>                                                        \
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 \
                             size_t M, size_t N, size_t K) {                      \
   validate_shared_matrix_pair<A, B>();                                            \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                 \
     asm volatile(                                                                \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                    \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
         "B.IOT %[A], %[B], mask=15\n"                                         \
         "B.IOT %[Extra]\n"                                                    \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [A] "Tr"(a.data()), [B] "Tr"(b.data()),                             \
           [Extra] "Tr"(extra.data()),                                          \
+          PTO_FIXP_ATTR_INPUTS,                                                 \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                          \
         : "memory");                                                           \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {           \
     asm volatile(                                                                \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                    \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
         "C.B.IOS %S[SharedA]\n"                                               \
         "B.IOT %[B]\n"                                                       \
         "B.IOT %[Extra]\n"                                                    \
@@ -1980,11 +2004,12 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
         : [Dst] "=&Tr"(dst.data())                                             \
         : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),                     \
           [Extra] "Tr"(extra.data()),                                          \
+          PTO_FIXP_ATTR_INPUTS,                                                 \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                          \
         : "memory");                                                           \
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {           \
     asm volatile(                                                                \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                    \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
         "C.B.IOS %S[SharedB]\n"                                               \
         "B.IOT %[A]\n"                                                       \
         "B.IOT %[Extra]\n"                                                    \
@@ -1992,11 +2017,12 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
         : [Dst] "=&Tr"(dst.data())                                             \
         : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),                     \
           [Extra] "Tr"(extra.data()),                                          \
+          PTO_FIXP_ATTR_INPUTS,                                                 \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                          \
         : "memory");                                                           \
   } else {                                                                       \
     asm volatile(                                                                \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                    \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
         "C.B.IOS %S[SharedA]\n"                                               \
         "C.B.IOS %S[SharedB]\n"                                               \
         "B.IOT %[Extra]\n"                                                    \
@@ -2004,17 +2030,16 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
         : [Dst] "=&Tr"(dst.data())                                             \
         : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),             \
           [Extra] "Tr"(extra.data()),                                          \
+          PTO_FIXP_ATTR_INPUTS,                                                 \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                          \
         : "memory");                                                           \
   }                                                                              \
 }
 
-PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_acc, "TMATMUL.ACC", "")
-PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias, "TMATMUL.BIAS", "")
-PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_acc_fixp, "TMATMUL.ACC.FIXP",
-                              "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
-PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias_fixp, "TMATMUL.BIAS.FIXP",
-                              "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
+PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_acc, "TMATMUL.ACC")
+PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias, "TMATMUL.BIAS")
+PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_acc_fixp, "TMATMUL.ACC.FIXP")
+PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias_fixp, "TMATMUL.BIAS.FIXP")
 
 
 #define PTO_FIXP_SRC_0 \
@@ -2126,17 +2151,6 @@ PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias_fixp, "TMATMUL.BIAS.FIXP",
   [Dst] "=&Tr"(dst.data()), [RowOut] "=&Tr"(row_out.data()), \
   [GroupOut] "=&Tr"(group_out.data())
 
-#define PTO_FIXP_ATTR \
-  "B.FPATR %c[PreQuant], %c[ReluMode], %c[GroupNCode], %c[RowMaxEn], " \
-  "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn]\n"
-
-#define PTO_FIXP_ATTR_INPUTS \
-  [PreQuant] "i"(static_cast<uint8_t>(Attr.PreQuant)), \
-  [ReluMode] "i"(static_cast<uint8_t>(Attr.Relu)), \
-  [GroupNCode] "i"(Attr.GroupNCode), [RowMaxEn] "i"(Attr.RowMaxEn), \
-  [GroupMaxEn] "i"(Attr.GroupMaxEn), \
-  [RowMaxInit] "i"(Attr.RowMaxInit), [MaxAbsEn] "i"(Attr.MaxAbsEn)
-
 #define PTO_FIXP_EMIT_LOCAL(SRC, OUT, IOR) \
   asm volatile(                                                               \
       PTO_MATMUL_HEADER("TMATMUL.FIXP", PTO_FIXP_ATTR)                    \
@@ -2244,8 +2258,6 @@ PTO_SHARED_INLINE void emit_fixp(
 }
 
 #undef PTO_FIXP_DISPATCH
-#undef PTO_FIXP_ATTR_INPUTS
-#undef PTO_FIXP_ATTR
 #undef PTO_FIXP_DISPATCH_SRC
 #undef PTO_FIXP_DISPATCH_OUT
 #undef PTO_FIXP_EMIT_SHARED_AB
@@ -2297,25 +2309,26 @@ PTO_SHARED_INLINE void emit_fixp(
 #undef PTO_FIXP_SRC_1
 #undef PTO_FIXP_SRC_0
 
-#define PTO_DEFINE_MATMUL_MX_HELPER(Name, Opcode, ExtraAttrs)                  \
-template <typename Dst, typename A, typename ScaleA, typename B,               \
-          typename ScaleB>                                                      \
+#define PTO_DEFINE_MATMUL_MX_HELPER(Name, Opcode)                             \
+template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename ScaleA,  \
+          typename B, typename ScaleB>                                           \
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
                             ScaleB &scale_b, size_t M, size_t N, size_t K) {     \
   validate_shared_matrix_pair<A, B>();                                            \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                   \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOT %[A], %[ScaleA], mask=15\n"                                    \
         "B.IOT %[B], %[ScaleB], mask=15, last, ->%[Dst]<%Z[TileSize]>\n"     \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
+          PTO_FIXP_ATTR_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                   \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "C.B.IOS %S[SharedA]\n"                                              \
         "B.IOT %[ScaleA], %[B], mask=15\n"                                   \
         "B.IOT %[ScaleB]\n"                                                  \
@@ -2323,11 +2336,12 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
+          PTO_FIXP_ATTR_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                   \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "C.B.IOS %S[SharedB]\n"                                              \
         "B.IOT %[A], %[ScaleA], mask=15\n"                                   \
         "B.IOT %[ScaleB]\n"                                                  \
@@ -2335,11 +2349,12 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
+          PTO_FIXP_ATTR_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else {                                                                      \
     asm volatile(                                                               \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                   \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "C.B.IOS %S[SharedA]\n"                                              \
         "C.B.IOS %S[SharedB]\n"                                              \
         "B.IOT %[ScaleA], %[ScaleB], mask=15\n"                              \
@@ -2347,26 +2362,25 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
+          PTO_FIXP_ATTR_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   }                                                                             \
 }
 
-PTO_DEFINE_MATMUL_MX_HELPER(matmul_mx, "TMATMULMX", "")
-PTO_DEFINE_MATMUL_MX_HELPER(
-    matmul_mx_fixp, "TMATMULMX.FIXP",
-    "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
+PTO_DEFINE_MATMUL_MX_HELPER(matmul_mx, "TMATMULMX")
+PTO_DEFINE_MATMUL_MX_HELPER(matmul_mx_fixp, "TMATMULMX.FIXP")
 
-#define PTO_DEFINE_MATMUL_MX_5SRC_HELPER(Name, Opcode, ExtraAttrs)             \
-template <typename Dst, typename A, typename ScaleA, typename B,               \
-          typename ScaleB, typename Extra>                                      \
+#define PTO_DEFINE_MATMUL_MX_5SRC_HELPER(Name, Opcode)                          \
+template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename ScaleA,  \
+          typename B, typename ScaleB, typename Extra>                           \
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
                             ScaleB &scale_b, Extra &extra, size_t M, size_t N,   \
                             size_t K) {                                          \
   validate_shared_matrix_pair<A, B>();                                            \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                   \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOT %[A], %[ScaleA], mask=15\n"                                    \
         "B.IOT %[B], %[ScaleB], mask=15\n"                                   \
         "B.IOT %[Extra]\n"                                                   \
@@ -2375,11 +2389,12 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
           [Extra] "Tr"(extra.data()),                                         \
+          PTO_FIXP_ATTR_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                   \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "C.B.IOS %S[SharedA]\n"                                              \
         "B.IOT %[ScaleA], %[B], mask=15\n"                                   \
         "B.IOT %[ScaleB], %[Extra], mask=15\n"                               \
@@ -2388,11 +2403,12 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
           [Extra] "Tr"(extra.data()),                                         \
+          PTO_FIXP_ATTR_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                   \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "C.B.IOS %S[SharedB]\n"                                              \
         "B.IOT %[A], %[ScaleA], mask=15\n"                                   \
         "B.IOT %[ScaleB], %[Extra], mask=15\n"                               \
@@ -2401,11 +2417,12 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
           [Extra] "Tr"(extra.data()),                                         \
+          PTO_FIXP_ATTR_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else {                                                                      \
     asm volatile(                                                               \
-        PTO_MATMUL_HEADER(Opcode, ExtraAttrs)                                   \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "C.B.IOS %S[SharedA]\n"                                              \
         "C.B.IOS %S[SharedB]\n"                                              \
         "B.IOT %[ScaleA], %[ScaleB], mask=15\n"                              \
@@ -2415,19 +2432,16 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
           [Extra] "Tr"(extra.data()),                                         \
+          PTO_FIXP_ATTR_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   }                                                                             \
 }
 
-PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_bias, "TMATMULMX.BIAS", "")
-PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_acc, "TMATMULMX.ACC", "")
-PTO_DEFINE_MATMUL_MX_5SRC_HELPER(
-    matmul_mx_bias_fixp, "TMATMULMX.BIAS.FIXP",
-    "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
-PTO_DEFINE_MATMUL_MX_5SRC_HELPER(
-    matmul_mx_acc_fixp, "TMATMULMX.ACC.FIXP",
-    "B.FPATR 0, 0, 0, 0, 0, 0, 0\n")
+PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_bias, "TMATMULMX.BIAS")
+PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_acc, "TMATMULMX.ACC")
+PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_bias_fixp, "TMATMULMX.BIAS.FIXP")
+PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_acc_fixp, "TMATMULMX.ACC.FIXP")
 
 #undef PTO_DEFINE_MATMUL_MX_5SRC_HELPER
 #undef PTO_DEFINE_MATMUL_MX_HELPER
@@ -2441,7 +2455,8 @@ PTO_DEFINE_MATMUL_MX_5SRC_HELPER(
 // Local/Local, Local/Shared-Right, and Shared-Left/Shared-Right. A lone Shared
 // Left is intentionally rejected because the single-binder stream is reserved
 // for the existing Shared-Right ABI.
-template <is_tile_data_v tile_shape_c, is_local_or_shared_left tile_shape_a,
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b>
 PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
                               tile_shape_b &b) {
@@ -2449,25 +2464,71 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
                 "TMATMUL input A must be a Left tile");
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
                 "TMATMUL input B must be a Right tile");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul(c, a, b, M, N, K);
+  pto_matmul_detail::matmul<Attr>(c, a, b, M, N, K);
+}
+
+template <is_tile_data_v tile_shape_c, is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
+                              tile_shape_b &b, const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(tile_role_v<tile_shape_a> == Location::Left,
+                "TMATMUL input A must be a Left tile");
+  static_assert(tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL input B must be a Right tile");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul<Attr>(c, a, b, M, N, K);
 }
 
 // TMATMUL_ACC: D = C + A*B. D and C are distinct ordinary Tile operands.
-template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
-          is_local_or_shared_left tile_shape_a,
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
+          is_tile_data_v tile_shape_c, is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b>
 PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
                  tile_shape_b &b) {
   static_assert(tile_role_v<tile_shape_a> == Location::Left &&
                     tile_role_v<tile_shape_b> == Location::Right,
                 "TMATMUL_ACC requires A=Left and B=Right");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_ACC supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul_acc(d, a, b, c, M, N, K);
+  pto_matmul_detail::matmul_acc<Attr>(d, a, b, c, M, N, K);
+}
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
+                 tile_shape_b &b, const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(tile_role_v<tile_shape_a> == Location::Left &&
+                    tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL_ACC requires A=Left and B=Right");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_ACC supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul_acc<Attr>(d, a, b, c, M, N, K);
 }
 
 
@@ -2692,11 +2753,21 @@ PTO_SHARED_INLINE void TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape
 
 // TMATMUL_ACC_FIXP: D = FIXP(ACC + A*B), basic local mode.
 // ACC remains a dedicated compiler dependency and is not encoded as B.IOT.
-template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_acc,
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
+          is_tile_data_v tile_shape_acc,
           is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b>
 PTO_SHARED_INLINE void TMATMUL_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc, tile_shape_a &a,
                       tile_shape_b &b) {
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_ACC_FIXP overload supports only parameter-free conversion "
+      "and ReLU; quant parameters, PReLU, RowMax and GroupMax require a "
+      "dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_ACC_FIXP destination dtype does not match B.FPATR PreQuant mode");
   static_assert(tile_role_v<tile_shape_a> == Location::Left,
                 "TMATMUL_ACC_FIXP input A must be Location::Left");
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
@@ -2716,16 +2787,62 @@ PTO_SHARED_INLINE void TMATMUL_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc, ti
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul_acc_fixp(d, a, b, acc, M, N, K);
+  pto_matmul_detail::matmul_acc_fixp<Attr>(d, a, b, acc, M, N, K);
+}
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_acc,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc, tile_shape_a &a,
+                      tile_shape_b &b, const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_ACC_FIXP overload supports only parameter-free conversion "
+      "and ReLU; quant parameters, PReLU, RowMax and GroupMax require a "
+      "dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_ACC_FIXP destination dtype does not match B.FPATR PreQuant mode");
+  static_assert(tile_role_v<tile_shape_a> == Location::Left,
+                "TMATMUL_ACC_FIXP input A must be Location::Left");
+  static_assert(tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL_ACC_FIXP input B must be Location::Right");
+  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
+                "TMATMUL_ACC_FIXP requires A.Cols == B.Rows");
+  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
+                    tile_shape_d::Cols == tile_shape_b::Cols,
+                "TMATMUL_ACC_FIXP output shape must be M x N");
+  static_assert(tile_shape_acc::Rows == tile_shape_d::Rows &&
+                    tile_shape_acc::Cols == tile_shape_d::Cols,
+                "TMATMUL_ACC_FIXP ACC shape must match output D");
+  static_assert(
+      tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
+      "TMATMUL_ACC_FIXP output logical Tile size must be 512 B..32 KB");
+
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul_acc_fixp<Attr>(d, a, b, acc, M, N, K);
 }
 
 // TMATMUL_BIAS_FIXP: D = FIXP(A*B + bias), basic local mode.
-template <is_tile_data_v tile_shape_d,
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
           is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b,
           is_tile_data_v tile_shape_bias>
 PTO_SHARED_INLINE void TMATMUL_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b,
                        tile_shape_bias &bias) {
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_BIAS_FIXP overload supports only parameter-free conversion "
+      "and ReLU; quant parameters, PReLU, RowMax and GroupMax require a "
+      "dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_BIAS_FIXP destination dtype does not match B.FPATR PreQuant mode");
   static_assert(tile_role_v<tile_shape_a> == Location::Left,
                 "TMATMUL_BIAS_FIXP input A must be Location::Left");
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
@@ -2742,17 +2859,61 @@ PTO_SHARED_INLINE void TMATMUL_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a, tile_
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul_bias_fixp(d, a, b, bias, M, N, K);
+  pto_matmul_detail::matmul_bias_fixp<Attr>(d, a, b, bias, M, N, K);
+}
+
+template <is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b,
+          is_tile_data_v tile_shape_bias, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b,
+                       tile_shape_bias &bias, const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_BIAS_FIXP overload supports only parameter-free conversion "
+      "and ReLU; quant parameters, PReLU, RowMax and GroupMax require a "
+      "dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_BIAS_FIXP destination dtype does not match B.FPATR PreQuant mode");
+  static_assert(tile_role_v<tile_shape_a> == Location::Left,
+                "TMATMUL_BIAS_FIXP input A must be Location::Left");
+  static_assert(tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL_BIAS_FIXP input B must be Location::Right");
+  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
+                "TMATMUL_BIAS_FIXP requires A.Cols == B.Rows");
+  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
+                    tile_shape_d::Cols == tile_shape_b::Cols,
+                "TMATMUL_BIAS_FIXP output shape must be M x N");
+  static_assert(
+      tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
+      "TMATMUL_BIAS_FIXP output logical Tile size must be 512 B..32 KB");
+
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul_bias_fixp<Attr>(d, a, b, bias, M, N, K);
 }
 
 // TMATMUL_MX_FIXP: D = FIXP(MXMatMul(A, ScaleA, B, ScaleB)), basic local mode.
-template <is_tile_data_v tile_shape_d,
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
           is_local_or_shared_left tile_shape_a,
           is_tile_data_v tile_shape_sa,
           is_local_or_shared_right tile_shape_b,
           is_tile_data_v tile_shape_sb>
 PTO_SHARED_INLINE void TMATMUL_MX_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_sa &scale_a,
                       tile_shape_b &b, tile_shape_sb &scale_b) {
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_MX_FIXP overload supports only parameter-free conversion "
+      "and ReLU; quant parameters, PReLU, RowMax and GroupMax require a "
+      "dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_MX_FIXP destination dtype does not match B.FPATR PreQuant mode");
   static_assert(tile_role_v<tile_shape_a> == Location::Left,
                 "TMATMUL_MX_FIXP input A must be Location::Left");
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
@@ -2773,11 +2934,52 @@ PTO_SHARED_INLINE void TMATMUL_MX_FIXP(tile_shape_d &d, tile_shape_a &a, tile_sh
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul_mx_fixp(d, a, scale_a, b, scale_b, M, N, K);
+  pto_matmul_detail::matmul_mx_fixp<Attr>(d, a, scale_a, b, scale_b, M, N, K);
+}
+
+template <is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a,
+          is_tile_data_v tile_shape_sa,
+          is_local_or_shared_right tile_shape_b,
+          is_tile_data_v tile_shape_sb, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_sa &scale_a,
+                      tile_shape_b &b, tile_shape_sb &scale_b,
+                      const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_MX_FIXP overload supports only parameter-free conversion "
+      "and ReLU; quant parameters, PReLU, RowMax and GroupMax require a "
+      "dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_MX_FIXP destination dtype does not match B.FPATR PreQuant mode");
+  static_assert(tile_role_v<tile_shape_a> == Location::Left,
+                "TMATMUL_MX_FIXP input A must be Location::Left");
+  static_assert(tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL_MX_FIXP input B must be Location::Right");
+  static_assert(tile_shape_sa::Loc == Location::Left,
+                "TMATMUL_MX_FIXP input ScaleA must be Location::Left");
+  static_assert(tile_shape_sb::Loc == Location::Right,
+                "TMATMUL_MX_FIXP input ScaleB must be Location::Right");
+  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
+                "TMATMUL_MX_FIXP requires A.Cols == B.Rows");
+  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
+                    tile_shape_d::Cols == tile_shape_b::Cols,
+                "TMATMUL_MX_FIXP output shape must be M x N");
+  static_assert(
+      tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
+      "TMATMUL_MX_FIXP output logical Tile size must be 512 B..32 KB");
+
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul_mx_fixp<Attr>(d, a, scale_a, b, scale_b, M, N, K);
 }
 
 // TMATMUL_MX_BIAS_FIXP: D = FIXP(MXMatMul(A, ScaleA, B, ScaleB) + Bias).
-template <is_tile_data_v tile_shape_d,
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
           is_local_or_shared_left tile_shape_a,
           is_tile_data_v tile_shape_sa,
           is_local_or_shared_right tile_shape_b,
@@ -2785,6 +2987,15 @@ template <is_tile_data_v tile_shape_d,
 PTO_SHARED_INLINE void TMATMUL_MX_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a,
                            tile_shape_sa &scale_a, tile_shape_b &b,
                            tile_shape_sb &scale_b, tile_shape_bias &bias) {
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_MX_BIAS_FIXP overload supports only parameter-free "
+      "conversion and ReLU; quant parameters, PReLU, RowMax and GroupMax "
+      "require a dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_MX_BIAS_FIXP destination dtype does not match B.FPATR PreQuant mode");
   static_assert(tile_role_v<tile_shape_a> == Location::Left,
                 "TMATMUL_MX_BIAS_FIXP input A must be Location::Left");
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
@@ -2805,13 +3016,58 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a,
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul_mx_bias_fixp(d, a, scale_a, b, scale_b, bias,
-                                         M, N, K);
+  pto_matmul_detail::matmul_mx_bias_fixp<Attr>(d, a, scale_a, b, scale_b, bias,
+                                               M, N, K);
+}
+
+template <is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a,
+          is_tile_data_v tile_shape_sa,
+          is_local_or_shared_right tile_shape_b,
+          is_tile_data_v tile_shape_sb, is_tile_data_v tile_shape_bias,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_BIAS_FIXP(tile_shape_d &d, tile_shape_a &a,
+                           tile_shape_sa &scale_a, tile_shape_b &b,
+                           tile_shape_sb &scale_b, tile_shape_bias &bias,
+                           const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_MX_BIAS_FIXP overload supports only parameter-free "
+      "conversion and ReLU; quant parameters, PReLU, RowMax and GroupMax "
+      "require a dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_MX_BIAS_FIXP destination dtype does not match B.FPATR PreQuant mode");
+  static_assert(tile_role_v<tile_shape_a> == Location::Left,
+                "TMATMUL_MX_BIAS_FIXP input A must be Location::Left");
+  static_assert(tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL_MX_BIAS_FIXP input B must be Location::Right");
+  static_assert(tile_shape_sa::Loc == Location::Left,
+                "TMATMUL_MX_BIAS_FIXP input ScaleA must be Location::Left");
+  static_assert(tile_shape_sb::Loc == Location::Right,
+                "TMATMUL_MX_BIAS_FIXP input ScaleB must be Location::Right");
+  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
+                "TMATMUL_MX_BIAS_FIXP requires A.Cols == B.Rows");
+  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
+                    tile_shape_d::Cols == tile_shape_b::Cols,
+                "TMATMUL_MX_BIAS_FIXP output shape must be M x N");
+  static_assert(
+      tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
+      "TMATMUL_MX_BIAS_FIXP output logical Tile size must be 512 B..32 KB");
+
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul_mx_bias_fixp<Attr>(d, a, scale_a, b, scale_b, bias,
+                                               M, N, K);
 }
 
 // TMATMUL_MX_ACC_FIXP: D = FIXP(ACC + MXMatMul(A, ScaleA, B, ScaleB)).
 // ACC is implicit, not encoded as B.IOT.
-template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_acc,
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
+          is_tile_data_v tile_shape_acc,
           is_local_or_shared_left tile_shape_a,
           is_tile_data_v tile_shape_sa,
           is_local_or_shared_right tile_shape_b,
@@ -2819,6 +3075,15 @@ template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_acc,
 PTO_SHARED_INLINE void TMATMUL_MX_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc,
                          tile_shape_a &a, tile_shape_sa &scale_a,
                          tile_shape_b &b, tile_shape_sb &scale_b) {
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_MX_ACC_FIXP overload supports only parameter-free "
+      "conversion and ReLU; quant parameters, PReLU, RowMax and GroupMax "
+      "require a dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_MX_ACC_FIXP destination dtype does not match B.FPATR PreQuant mode");
   static_assert(tile_role_v<tile_shape_a> == Location::Left,
                 "TMATMUL_MX_ACC_FIXP input A must be Location::Left");
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
@@ -2842,50 +3107,163 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc,
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul_mx_acc_fixp(d, a, scale_a, b, scale_b, acc,
-                                        M, N, K);
+  pto_matmul_detail::matmul_mx_acc_fixp<Attr>(d, a, scale_a, b, scale_b, acc,
+                                              M, N, K);
+}
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_acc,
+          is_local_or_shared_left tile_shape_a,
+          is_tile_data_v tile_shape_sa,
+          is_local_or_shared_right tile_shape_b,
+          is_tile_data_v tile_shape_sb, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC_FIXP(tile_shape_d &d, tile_shape_acc &acc,
+                         tile_shape_a &a, tile_shape_sa &scale_a,
+                         tile_shape_b &b, tile_shape_sb &scale_b,
+                         const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(
+      is_basic_fixp_attr(Attr),
+      "this TMATMUL_MX_ACC_FIXP overload supports only parameter-free "
+      "conversion and ReLU; quant parameters, PReLU, RowMax and GroupMax "
+      "require a dedicated overload");
+  static_assert(
+      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+      "TMATMUL_MX_ACC_FIXP destination dtype does not match B.FPATR PreQuant mode");
+  static_assert(tile_role_v<tile_shape_a> == Location::Left,
+                "TMATMUL_MX_ACC_FIXP input A must be Location::Left");
+  static_assert(tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL_MX_ACC_FIXP input B must be Location::Right");
+  static_assert(tile_shape_sa::Loc == Location::Left,
+                "TMATMUL_MX_ACC_FIXP input ScaleA must be Location::Left");
+  static_assert(tile_shape_sb::Loc == Location::Right,
+                "TMATMUL_MX_ACC_FIXP input ScaleB must be Location::Right");
+  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
+                "TMATMUL_MX_ACC_FIXP requires A.Cols == B.Rows");
+  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
+                    tile_shape_d::Cols == tile_shape_b::Cols,
+                "TMATMUL_MX_ACC_FIXP output shape must be M x N");
+  static_assert(tile_shape_acc::Rows == tile_shape_d::Rows &&
+                    tile_shape_acc::Cols == tile_shape_d::Cols,
+                "TMATMUL_MX_ACC_FIXP ACC shape must match output D");
+  static_assert(
+      tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
+      "TMATMUL_MX_ACC_FIXP output logical Tile size must be 512 B..32 KB");
+
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul_mx_acc_fixp<Attr>(d, a, scale_a, b, scale_b, acc,
+                                              M, N, K);
 }
 
 // TMATMUL_BIAS: C = A*B + bias (BSTART.CUBE TMATMUL.BIAS).
-template <is_tile_data_v tile_shape_c,
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b,
           is_tile_data_v tile_shape_bias>
 PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b,
                   tile_shape_bias &bias) {
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_BIAS supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul_bias(c, a, b, bias, M, N, K);
+  pto_matmul_detail::matmul_bias<Attr>(c, a, b, bias, M, N, K);
+}
+
+template <is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b,
+          is_tile_data_v tile_shape_bias, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b,
+                  tile_shape_bias &bias, const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_BIAS supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul_bias<Attr>(c, a, b, bias, M, N, K);
 }
 
 // TMATMUL_MX: C = (A * aScale) * (B * bScale) (BSTART.CUBE TMATMULMX).
-template <is_tile_data_v tile_shape_c,
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
           is_tile_data_v tile_shape_ascale,
           is_local_or_shared_right tile_shape_b,
           is_tile_data_v tile_shape_bscale>
 PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_ascale &ascale,
                 tile_shape_b &b, tile_shape_bscale &bscale) {
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_MX supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul_mx(c, a, ascale, b, bscale, M, N, K);
+  pto_matmul_detail::matmul_mx<Attr>(c, a, ascale, b, bscale, M, N, K);
 }
 
-template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+template <is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_tile_data_v tile_shape_ascale,
+          is_local_or_shared_right tile_shape_b,
+          is_tile_data_v tile_shape_bscale, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_ascale &ascale,
+                tile_shape_b &b, tile_shape_bscale &bscale,
+                const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_MX supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul_mx<Attr>(c, a, ascale, b, bscale, M, N, K);
+}
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
+          is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a, is_tile_data_v tile_shape_sa,
           is_local_or_shared_right tile_shape_b, is_tile_data_v tile_shape_sb>
 PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
                     tile_shape_sa &scale_a, tile_shape_b &b,
                     tile_shape_sb &scale_b) {
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_MX_ACC supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul_mx_acc(d, a, scale_a, b, scale_b, c, M, N, K);
+  pto_matmul_detail::matmul_mx_acc<Attr>(d, a, scale_a, b, scale_b, c, M, N, K);
 }
 
-template <is_tile_data_v tile_shape_d,
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a, is_tile_data_v tile_shape_sa,
+          is_local_or_shared_right tile_shape_b, is_tile_data_v tile_shape_sb,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
+                    tile_shape_sa &scale_a, tile_shape_b &b,
+                    tile_shape_sb &scale_b, const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_MX_ACC supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul_mx_acc<Attr>(d, a, scale_a, b, scale_b, c, M, N, K);
+}
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
           is_local_or_shared_left tile_shape_a,
           is_tile_data_v tile_shape_sa,
           is_local_or_shared_right tile_shape_b,
@@ -2893,11 +3271,37 @@ template <is_tile_data_v tile_shape_d,
 PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
                      tile_shape_sa &scale_a, tile_shape_b &b,
                      tile_shape_sb &scale_b, tile_shape_bias &bias) {
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_MX_BIAS supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
-  pto_matmul_detail::matmul_mx_bias(d, a, scale_a, b, scale_b, bias,
-                                    M, N, K);
+  pto_matmul_detail::matmul_mx_bias<Attr>(d, a, scale_a, b, scale_b, bias,
+                                          M, N, K);
+}
+
+template <is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a,
+          is_tile_data_v tile_shape_sa,
+          is_local_or_shared_right tile_shape_b,
+          is_tile_data_v tile_shape_sb, is_tile_data_v tile_shape_bias,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
+                     tile_shape_sa &scale_a, tile_shape_b &b,
+                     tile_shape_sb &scale_b, tile_shape_bias &bias,
+                     const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_MX_BIAS supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require a .FIXP variant");
+  size_t M = pto_matmul_detail::matrix_valid_row(a);
+  size_t N = pto_matmul_detail::matrix_valid_col(b);
+  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::matmul_mx_bias<Attr>(d, a, scale_a, b, scale_b, bias,
+                                          M, N, K);
 }
 
 #undef PTO_SHARED_INLINE
