@@ -76,15 +76,18 @@ template<> struct type_traits<__uint4x2>      : public type_traits_base<__type_u
 // clang-format on
 
 
+// TSize is a 3-bit code encoding the per-PE (fragment) tile size. The API
+// defines tiles at PE granularity; the hardware multiplies by 4 to derive the
+// full core (4-PE) size. Legal explicit sizes are 128 B..8 KB per PE.
 enum __tilesize_code {
   __tilesize_implicit = 0,
-  __tilesize_512B = 1,
-  __tilesize_1KB = 2,
-  __tilesize_2KB = 3,
-  __tilesize_4KB = 4,
-  __tilesize_8KB = 5,
-  __tilesize_16KB = 6,
-  __tilesize_32KB = 7,
+  __tilesize_128B = 1,
+  __tilesize_256B = 2,
+  __tilesize_512B = 3,
+  __tilesize_1KB = 4,
+  __tilesize_2KB = 5,
+  __tilesize_4KB = 6,
+  __tilesize_8KB = 7,
   __tilesize_unknown = -1
 };
 
@@ -92,26 +95,27 @@ template <typename T>
 struct tile_type_traits {
 private:
   using PlainT = std::remove_cv_t<std::remove_reference_t<T>>;
-  static constexpr std::size_t peLocalBytes = sizeof(PlainT);
-  static constexpr std::size_t logicalTileBytes = peLocalBytes * 4;
+  // sizeof(PlainT) is the whole logical (4-PE core) tile in bytes. The
+  // per-PE fragment is one quarter of it.
+  static constexpr std::size_t coreTileBytes = sizeof(PlainT);
 
   static constexpr int mapBytesToEnum(std::size_t b) {
     return
+      b == 128   ? __tilesize_128B :
+      b == 256   ? __tilesize_256B :
       b == 512   ? __tilesize_512B :
       b == 1024  ? __tilesize_1KB  :
       b == 2048  ? __tilesize_2KB  :
       b == 4096  ? __tilesize_4KB  :
       b == 8192  ? __tilesize_8KB  :
-      b == 16384 ? __tilesize_16KB :
-      b == 32768 ? __tilesize_32KB :
       __tilesize_unknown;
   }
 
 public:
-  static constexpr int TilesizeCode = mapBytesToEnum(logicalTileBytes);
-  static constexpr int Regsize = peLocalBytes;
+  static constexpr int TilesizeCode = mapBytesToEnum(coreTileBytes / 4);
+  static constexpr int Regsize = coreTileBytes / 4;
   static constexpr bool IsValidActiveSize =
-      TilesizeCode >= __tilesize_512B && TilesizeCode <= __tilesize_32KB;
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_8KB;
 };
 
 #endif

@@ -1,24 +1,28 @@
 # 约束与通用约定
 
-## Tile size: 512 B..32 KB
+## Tile size: 128 B..8 KB（PE 粒度）
 
 DavinciOO v5 `B.IOT.TSize` is a 3-bit logical-Tile size code. `0` is implicit
-(no ordinary destination allocation); explicit Tile operands use `1..7`:
+(no ordinary destination allocation); explicit Tile operands use `1..7`.
 
-| TSize | Logical Tile size |
-| ---: | ---: |
-| 0 | implicit |
-| 1 | 512 B |
-| 2 | 1 KB |
-| 3 | 2 KB |
-| 4 | 4 KB |
-| 5 | 8 KB |
-| 6 | 16 KB |
-| 7 | 32 KB |
+The size is encoded at **PE granularity**: the developer defines the tile at
+per-PE (fragment) granularity, and the hardware automatically multiplies it by 4
+to derive the full core (4-PE) size.
 
-Each PE owns a fixed quarter fragment of the logical Tile. The API maps
-`sizeof(TileDType)` through `tile_type_traits::TilesizeCode` and rejects sizes
-outside 512 B..32 KB with `IsValidActiveSize`.
+| TSize | Per-PE (fragment) size | Full core (×4) size |
+| ---: | ---: | ---: |
+| 0 | implicit | implicit |
+| 1 | 128 B | 512 B |
+| 2 | 256 B | 1 KB |
+| 3 | 512 B | 2 KB |
+| 4 | 1 KB | 4 KB |
+| 5 | 2 KB | 8 KB |
+| 6 | 4 KB | 16 KB |
+| 7 | 8 KB | 32 KB |
+
+Each PE owns one fixed fragment of the logical Tile. The API maps
+`sizeof(TileDType) / 4` through `tile_type_traits::TilesizeCode` and rejects
+per-PE sizes outside 128 B..8 KB with `IsValidActiveSize`.
 
 ## TMATMUL 系列：普通 Tile 输出与累加输入
 
