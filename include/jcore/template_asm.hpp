@@ -1794,7 +1794,7 @@ TMOV_L2S_INSERT(const tile_shape_src &src) {
   SharedTile<tile_shape_src> result(src);
   asm volatile(
       "BSTART.TLSU TMOV.L2S.INSERT, %c[DataType]\n"
-      "C.B.IOS %S[Shared]\n"
+      "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
       "B.IOT %[src], mask=%c[PEMask], TSize=%c[TileSize], last\n"
       : [Shared] "=Sr"(result.handle_ref())
       : [src] "Tr"(src.data()),
@@ -1816,7 +1816,7 @@ TMOV_L2S_PUBLISH(const tile_shape_src &src) {
   SharedTile<tile_shape_src> result(src);
   asm volatile(
       "BSTART.TLSU TMOV.L2S.PUBLISH, %c[DataType]\n"
-      "C.B.IOS %S[Shared]\n"
+      "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
       "B.IOT %[src], mask=%c[PEMask], TSize=%c[TileSize], last\n"
       : [Shared] "=Sr"(result.handle_ref())
       : [src] "Tr"(src.data()),
@@ -1838,7 +1838,7 @@ TMOV_S2L_BROADCAST(tile_shape_dst &dst,
       "TMOV.S2L.BROADCAST logical Tile size must be 512 B..32 KB");
   asm volatile(
       "BSTART.TLSU TMOV.S2L.BROADCAST, %c[DataType]\n"
-      "C.B.IOS %S[Shared]\n"
+      "B.IOS %S[Shared], mask=%c[PEMask]\n"
       "B.IOT mask=%c[PEMask], last, ->%[dst]<%Z[TileSize]>\n"
       : [dst] "=Tr"(dst.data())
       : [Shared] "Sr"(shared.handle()), [PEMask] "i"(PEMask),
@@ -1857,7 +1857,7 @@ PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
       "TMOV.S2L.EXTRACT logical Tile size must be 512 B..32 KB");
   asm volatile(
       "BSTART.TLSU TMOV.S2L.EXTRACT, %c[DataType]\n"
-      "C.B.IOS %S[Shared]\n"
+      "B.IOS %S[Shared], mask=%c[PEMask]\n"
       "B.IOT mask=%c[PEMask], last, ->%[dst]<%Z[TileSize]>\n"
       : [dst] "=Tr"(dst.data())
       : [Shared] "Sr"(shared.handle()), [PEMask] "i"(PEMask),
@@ -1924,7 +1924,7 @@ template <typename A, typename B>
 constexpr void validate_shared_matrix_pair() {
   static_assert(!is_shared_tile_v<A> || is_shared_tile_v<B>,
                 "Shared matmul A requires B to be Shared as well; a lone "
-                "C.B.IOS binder denotes the existing Shared-Right form");
+                "B.IOS binder denotes the existing Shared-Right form");
 }
 
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B>
@@ -1943,7 +1943,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "C.B.IOS %S[SharedA]\n"
+        "B.IOS %S[SharedA], mask=1111\n"
         "B.IOT %[B]\n"
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
@@ -1954,7 +1954,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "C.B.IOS %S[SharedB]\n"
+        "B.IOS %S[SharedB], mask=1111\n"
         "B.IOT %[A]\n"
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
@@ -1965,8 +1965,8 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   } else {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "C.B.IOS %S[SharedA]\n"
-        "C.B.IOS %S[SharedB]\n"
+        "B.IOS %S[SharedA], mask=1111\n"
+        "B.IOS %S[SharedB], mask=1111\n"
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),
@@ -1997,7 +1997,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {           \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
-        "C.B.IOS %S[SharedA]\n"                                               \
+        "B.IOS %S[SharedA], mask=1111\n"                                               \
         "B.IOT %[B]\n"                                                       \
         "B.IOT %[Extra]\n"                                                    \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
@@ -2010,7 +2010,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {           \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
-        "C.B.IOS %S[SharedB]\n"                                               \
+        "B.IOS %S[SharedB], mask=1111\n"                                               \
         "B.IOT %[A]\n"                                                       \
         "B.IOT %[Extra]\n"                                                    \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
@@ -2023,8 +2023,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
   } else {                                                                       \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
-        "C.B.IOS %S[SharedA]\n"                                               \
-        "C.B.IOS %S[SharedB]\n"                                               \
+        "B.IOS %S[SharedA], mask=1111\n"                                               \
+        "B.IOS %S[SharedB], mask=1111\n"                                               \
         "B.IOT %[Extra]\n"                                                    \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
@@ -2062,52 +2062,52 @@ PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias_fixp, "TMATMUL.BIAS.FIXP")
   "B.IOT %[ReluTile]\n"
 
 #define PTO_FIXP_SHARED_B_SRC_0 \
-  "C.B.IOS %S[SharedB]\n" "B.IOT %[A]\n"
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n"
 #define PTO_FIXP_SHARED_B_SRC_1 \
-  "C.B.IOS %S[SharedB]\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   "B.IOT %[RowIn]\n"
 #define PTO_FIXP_SHARED_B_SRC_2 \
-  "C.B.IOS %S[SharedB]\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   "B.IOT %[QuantTile]\n"
 #define PTO_FIXP_SHARED_B_SRC_3 \
-  "C.B.IOS %S[SharedB]\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   "B.IOT %[RowIn], %[QuantTile]\n"
 #define PTO_FIXP_SHARED_B_SRC_4 \
-  "C.B.IOS %S[SharedB]\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   "B.IOT %[ReluTile]\n"
 #define PTO_FIXP_SHARED_B_SRC_5 \
-  "C.B.IOS %S[SharedB]\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   "B.IOT %[RowIn], %[ReluTile]\n"
 #define PTO_FIXP_SHARED_B_SRC_6 \
-  "C.B.IOS %S[SharedB]\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   "B.IOT %[QuantTile], %[ReluTile]\n"
 #define PTO_FIXP_SHARED_B_SRC_7 \
-  "C.B.IOS %S[SharedB]\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   "B.IOT %[RowIn], %[QuantTile]\n" "B.IOT %[ReluTile]\n"
 
 #define PTO_FIXP_SHARED_A_SRC_0 \
-  "C.B.IOS %S[SharedA]\n" "B.IOT %[B]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n"
 #define PTO_FIXP_SHARED_A_SRC_1 \
-  "C.B.IOS %S[SharedA]\n" "B.IOT %[B], %[RowIn]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n"
 #define PTO_FIXP_SHARED_A_SRC_2 \
-  "C.B.IOS %S[SharedA]\n" "B.IOT %[B], %[QuantTile]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile]\n"
 #define PTO_FIXP_SHARED_A_SRC_3 \
-  "C.B.IOS %S[SharedA]\n" "B.IOT %[B], %[RowIn]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
   "B.IOT %[QuantTile]\n"
 #define PTO_FIXP_SHARED_A_SRC_4 \
-  "C.B.IOS %S[SharedA]\n" "B.IOT %[B], %[ReluTile]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[ReluTile]\n"
 #define PTO_FIXP_SHARED_A_SRC_5 \
-  "C.B.IOS %S[SharedA]\n" "B.IOT %[B], %[RowIn]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
   "B.IOT %[ReluTile]\n"
 #define PTO_FIXP_SHARED_A_SRC_6 \
-  "C.B.IOS %S[SharedA]\n" "B.IOT %[B], %[QuantTile]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile]\n" \
   "B.IOT %[ReluTile]\n"
 #define PTO_FIXP_SHARED_A_SRC_7 \
-  "C.B.IOS %S[SharedA]\n" "B.IOT %[B], %[RowIn]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
   "B.IOT %[QuantTile], %[ReluTile]\n"
 
 #define PTO_FIXP_SHARED_AB_SRC_0 \
-  "C.B.IOS %S[SharedA]\n" "C.B.IOS %S[SharedB]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_1 \
   PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn]\n"
 #define PTO_FIXP_SHARED_AB_SRC_2 \
@@ -2329,7 +2329,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "C.B.IOS %S[SharedA]\n"                                              \
+        "B.IOS %S[SharedA], mask=1111\n"                                              \
         "B.IOT %[ScaleA], %[B], mask=15\n"                                   \
         "B.IOT %[ScaleB]\n"                                                  \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
@@ -2342,7 +2342,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "C.B.IOS %S[SharedB]\n"                                              \
+        "B.IOS %S[SharedB], mask=1111\n"                                              \
         "B.IOT %[A], %[ScaleA], mask=15\n"                                   \
         "B.IOT %[ScaleB]\n"                                                  \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
@@ -2355,8 +2355,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else {                                                                      \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "C.B.IOS %S[SharedA]\n"                                              \
-        "C.B.IOS %S[SharedB]\n"                                              \
+        "B.IOS %S[SharedA], mask=1111\n"                                              \
+        "B.IOS %S[SharedB], mask=1111\n"                                              \
         "B.IOT %[ScaleA], %[ScaleB], mask=15\n"                              \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
@@ -2395,7 +2395,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "C.B.IOS %S[SharedA]\n"                                              \
+        "B.IOS %S[SharedA], mask=1111\n"                                              \
         "B.IOT %[ScaleA], %[B], mask=15\n"                                   \
         "B.IOT %[ScaleB], %[Extra], mask=15\n"                               \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
@@ -2409,7 +2409,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "C.B.IOS %S[SharedB]\n"                                              \
+        "B.IOS %S[SharedB], mask=1111\n"                                              \
         "B.IOT %[A], %[ScaleA], mask=15\n"                                   \
         "B.IOT %[ScaleB], %[Extra], mask=15\n"                               \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
@@ -2423,8 +2423,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else {                                                                      \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "C.B.IOS %S[SharedA]\n"                                              \
-        "C.B.IOS %S[SharedB]\n"                                              \
+        "B.IOS %S[SharedA], mask=1111\n"                                              \
+        "B.IOS %S[SharedB], mask=1111\n"                                              \
         "B.IOT %[ScaleA], %[ScaleB], mask=15\n"                              \
         "B.IOT %[Extra]\n"                                                   \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \

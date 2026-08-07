@@ -850,7 +850,7 @@ template <typename T> concept is_boxed_data_v = is_boxed_tile<T>;
 
 // v5 Shared storage-class wrapper. SharedTile<LocalTile> is public C++ sugar
 // that changes a matrix operand's storage class (Local -> Shared) so the
-// compiler lowers it via a C.B.IOS binder instead of a B.IOT source stream.
+// compiler lowers it via a B.IOS binder instead of a B.IOT source stream.
 // It preserves the wrapped Local Tile's role, shape, dtype and layout exactly
 // (per the DavinciOO v5 Shared semantics) and owns NO Local TileDType payload.
 //
@@ -921,7 +921,7 @@ concept is_local_tile_v =
 
 // TMATMUL matrix operands may live in either Local or Shared storage. Their
 // matrix role remains Left/Right; only the instruction operand transport
-// changes (Local B.IOT versus Shared C.B.IOS binder).
+// changes (Local B.IOT versus Shared B.IOS binder).
 template <typename T>
 concept is_local_or_shared_left =
     (is_tile<T>::value && T::Loc == Location::Left) ||
