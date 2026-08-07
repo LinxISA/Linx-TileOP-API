@@ -1690,7 +1690,7 @@ blkv_bf16x2_max(const BLKV_BF16X2_TYPE &src_l,
 // All variants below are the NORM (no layout conversion) generic form.
 //===----------------------------------------------------------------------===//
 
-// TLOAD: GM -> Tile (BSTART.TLSU TLOAD). dst[i,j] = src[r0+i, c0+j].
+// TLOAD: GM -> Local Tile (BSTART.TLSU TLOAD). dst[i,j] = src[r0+i, c0+j].
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
 void TLOAD(tile_shape &dst, gm_shape &src) {
   static_assert(
@@ -1713,6 +1713,38 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(gm_shape::RowStride * sizeof(typename gm_shape::DType))
   );
+}
+
+// TLOAD: GM -> Shared Tile (PTO v0.58 reissue). The destination is one
+// absolute Core-local Shared register; B.IOS carries the per-PE size and PE
+// mask. B.IOR carries only the GM address operands (RegDst is zero).
+template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
+SharedTile<shp> TLOAD(const gm_shape &src) {
+  using shp_dtype = typename shp::TileDType;
+  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(
+      tile_type_traits<shp_dtype>::IsValidActiveSize,
+      "TLOAD Shared dst logical Tile size must be 128 B..8 KB (TSize=1..7)");
+  SharedTile<shp> result;
+  const size_t valid_col = result.GetValidCol();
+  const size_t valid_row = result.GetValidRow();
+  asm volatile(
+    "BSTART.TLSU TLOAD, %c[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(result.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(gm_shape::RowStride * sizeof(typename gm_shape::DType))
+  );
+  return result;
 }
 
 // TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
