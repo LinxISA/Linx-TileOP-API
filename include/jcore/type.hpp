@@ -76,9 +76,9 @@ template<> struct type_traits<__uint4x2>      : public type_traits_base<__type_u
 // clang-format on
 
 
-// TSize is a 3-bit code encoding the per-PE (fragment) tile size. The API
-// defines tiles at PE granularity; the hardware multiplies by 4 to derive the
-// full core (4-PE) size. Legal explicit sizes are 128 B..8 KB per PE.
+// TSize is a 3-bit code encoding the per-PE tile size. There is no 4-PE
+// (whole-core) multiplier: the developer's byte count is the size that flows
+// directly into the encoded TSize. Legal explicit sizes are 128 B..8 KB.
 enum __tilesize_code {
   __tilesize_implicit = 0,
   __tilesize_128B = 1,
@@ -95,9 +95,9 @@ template <typename T>
 struct tile_type_traits {
 private:
   using PlainT = std::remove_cv_t<std::remove_reference_t<T>>;
-  // sizeof(PlainT) is the whole logical (4-PE core) tile in bytes. The
-  // per-PE fragment is one quarter of it.
-  static constexpr std::size_t coreTileBytes = sizeof(PlainT);
+  // sizeof(PlainT) is the per-PE tile size in bytes; there is no 4-PE
+  // multiplier, so the developer's byte count encodes directly.
+  static constexpr std::size_t PETileBytes = sizeof(PlainT);
 
   static constexpr int mapBytesToEnum(std::size_t b) {
     return
@@ -112,8 +112,8 @@ private:
   }
 
 public:
-  static constexpr int TilesizeCode = mapBytesToEnum(coreTileBytes / 4);
-  static constexpr int Regsize = coreTileBytes / 4;
+  static constexpr int TilesizeCode = mapBytesToEnum(PETileBytes);
+  static constexpr int Regsize = PETileBytes;
   static constexpr bool IsValidActiveSize =
       TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_8KB;
 };
