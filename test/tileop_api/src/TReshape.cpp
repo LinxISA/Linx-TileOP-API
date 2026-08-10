@@ -19,7 +19,7 @@ void test(T *dst, T *src) {
   tile_shape_in d0;
   tile_shape_out d1;
   TLOAD(d0, s0);
-  TRESHAPE(d1, d0);
+  TReshape(d1, d0);
   TSTORE(res, d1);
 }
 

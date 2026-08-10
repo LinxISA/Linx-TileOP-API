@@ -165,9 +165,13 @@ class Compile_Linx:
         if not os.path.exists(LLVM_LINX):
             sys.exit("Error! {} not exist.".format(LLVM_LINX))
 
-        pmc_paras = self.readying(BenchMark_dir, LLVM_LINX, pmc_able)
+        pmc_paras = self.readying(pmc_able)
         cmp_paras = (
-            self.Compile_T.cmp_paras + " " + "-fenable-matrix -mlxbc" + " " + pmc_paras
+            self.Compile_T.cmp_paras
+            + " --target=linx64 -fenable-matrix -I"
+            + os.path.join(BenchMark_dir, "include")
+            + " "
+            + pmc_paras
         )
         # cpp -> elf
         subName_cFiles = self.Compile_T.get_file(test_lists, BenchMark_dir, ".cpp")
@@ -183,10 +187,7 @@ class Compile_Linx:
 
         return self.elf_dir
 
-    def readying(self, BenchMark_dir, LLVM_LINX, pmc_able):
-
-        self.cp_hpp_to_llvmlib(LLVM_LINX, BenchMark_dir)
-
+    def readying(self, pmc_able):
         # mkdir elf dir
         if os.path.exists(self.elf_dir):
             shutil.rmtree(self.elf_dir)
@@ -200,22 +201,13 @@ class Compile_Linx:
 
         return pmc_paras
 
-    def cp_hpp_to_llvmlib(self, LLVM_LINX, BenchMark_dir):
-
-        include_dir = os.path.join(BenchMark_dir, "include")
-        llvm_bin_dir = LLVM_LINX.replace(LLVM_LINX.split("/")[-1], "")
-        llvm_lib = os.path.join(llvm_bin_dir, "../lib/clang/15.0.4/include/tileop-api")
-        shell = "rm -r {}/*; cp -r {}/* {}".format(llvm_lib, include_dir, llvm_lib)
-        print(shell)
-        os.system(shell)
-
     def cmp_i(self, LLVM_LINX, subName_cFiles, cmp_paras, pmc_paras):
 
         tasks = []
         with ThreadPoolExecutor(max_workers=g_max_threads) as executor:
             for sub_name, file in subName_cFiles.items():
                 elf_file = os.path.join(self.elf_dir, sub_name + ".i")
-                shell = "{} {} -mlxbc -E {} {} -o {}".format(
+                shell = "{} {} -E {} {} -o {}".format(
                     LLVM_LINX, cmp_paras, pmc_paras, file, elf_file
                 )
                 task = executor.submit(self.Compile_T.run, shell)
@@ -882,13 +874,13 @@ if __name__ == "__main__":
         "-lc",
         type=str,
         default="None",
-        help="linx clang++ dir, case: /xx/linx_blockisa_llvm/bin/clang++",
+        help="LinxISA v0.58 clang++ path, case: /opt/linx/bin/clang++",
     )
     argParser.add_argument(
         "-hc",
         type=str,
         default="None",
-        help="linx clang++ dir, case: /xx/llvm-15.0.4/bin/clang++",
+        help="host clang++ path, case: /usr/bin/clang++",
     )
     argParser.add_argument("-qemu", default="None", type=str, help="qemu-linx path")
     argParser.add_argument("-gfrun", default="None", type=str, help="gfrun path")

@@ -49,8 +49,8 @@ void TCAST(tile_shape_out &dst, tile_shape_in &src) {
   TCAST_Impl(dst, src);
 }
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TRESHAPE(tile_shape_out &dst, tile_shape_in &src) {
-  TRESHAPE_Impl(dst, src);
+void TReshape(tile_shape_out &dst, tile_shape_in &src) {
+  TReshapeImpl(dst, src);
 }
 template <is_tile_data_v tile_shape, typename T, int descending>
 void TCI(tile_shape &dst, T s) {

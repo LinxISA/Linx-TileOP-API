@@ -9,8 +9,8 @@
   -src          需要编译的目录（递归的）, case: /xx/PTOTileLib/test/tileop_api/src/
                 默认等于lib
   -m            test model: cmp or run, default cmp
-  -lc           linx clang++ path, case: /xx/linx_blockisa_llvm/bin/clang++
-  -hc           cpu_sim clang++ path, case: /xx/llvm-15.0.4/bin/clang++
+  -lc           LinxISA v0.58 clang++ path, case: /opt/linx/bin/clang++
+  -hc           host clang++ path, case: /usr/bin/clang++
   -qemu         qemu-linx path
   -gfrun        gfrun path
   -case         单一测例测试时的测例名，缺省时运行所有测例, case: TAdd
@@ -29,16 +29,16 @@ run: 编译 + 运行
 ## 使用实例
 
 - 编译 cpu_sim版本
-python3 /xx/test.py -lib /xx/PTOTileLib/ -src /xx/PTOTileLib/test/tileop_api/src -hc /xx/llvm-15.0.4/bin/clang++
+python3 /xx/test.py -lib /xx/PTOTileLib/ -src /xx/PTOTileLib/test/tileop_api/src -hc /usr/bin/clang++
 
 - 编译 jcore版本
-python3 /xx/test.py -lib /xx/PTOTileLib/ -src /xx/PTOTileLib/test/tileop_api/src -lc /xx/linx_blockisa_llvm/bin/clang++
+python3 /xx/test.py -lib /xx/PTOTileLib/ -src /xx/PTOTileLib/test/tileop_api/src -lc /opt/linx/bin/clang++
 
 - 编译+运行 cpu_sim版本
-python3 /xx/test.py -lib /xx/PTOTileLib/ -src /xx/PTOTileLib/test/tileop_api/src -hc /xx/llvm-15.0.4/bin/clang++ -m run
+python3 /xx/test.py -lib /xx/PTOTileLib/ -src /xx/PTOTileLib/test/tileop_api/src -hc /usr/bin/clang++ -m run
 
 - 编译+运行+功能验证 jcore版本
-python3 /xx/test.py -lib /xx/PTOTileLib/ -src /xx/PTOTileLib/test/tileop_api/src -lc /xx/linx_blockisa_llvm/bin/clang++ -hc /xx/llvm-15.0.4/bin/clang++ -qemu /xx/qemu-linx -m run
+python3 /xx/test.py -lib /xx/PTOTileLib/ -src /xx/PTOTileLib/test/tileop_api/src -lc /opt/linx/bin/clang++ -hc /usr/bin/clang++ -qemu /xx/qemu-linx -m run
 
 - 编译+运行+功能验证 单用例
 python3 {$REPO}/test/tileop_api/test_tileop.py -lib {$REPO} -src {$REPO}/test/tileop_api/src -lc {$L_CHAIN}/bin/clang++ -hc {$H_CHAIN}/bin/clang++ -qemu {$QEMU}/qemu-linx -m run -case=Txxx

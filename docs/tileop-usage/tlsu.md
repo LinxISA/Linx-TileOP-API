@@ -1,133 +1,36 @@
-# 数据搬运接口(TLSU family,BSTART.TLSU)
+# TLSU operations
 
-> 编码 family:BSTART.TLSU(原 BSTART.TMA,已改名对齐 DavinciOO,编码不变)
-> 涉及 GM ↔ Tile 的数据搬运、离散地址 gather/scatter
+TLSU owns `TLOAD`, `TSTORE`, `TMOV`, `TPREFETCH`, `MGATHER`, `MSCATTER`, their masked forms,
+compare-and-swap gather, and `GMOV`. The canonical operation list and function values are generated
+in [engines.md](engines.md).
 
----
+## Load and store stride
 
-## TLOAD — GM → Tile
+`TLOAD` and `TSTORE` carry the global-memory base and row stride through `B.IOR`. An omitted scalar
+input uses the operation's dense-row default. An explicitly encoded zero register means zero stride;
+it is not the omitted form. The C++ wrapper passes the row stride in logical elements exactly as
+required by the v0.58 architecture contract; address scaling by element size is architectural.
 
-```cpp
-#include <common/pto_tileop.hpp>
-using namespace pto;
-
-void load_example(float* gm_data) {
-  using gm = global_tensor<float, RowMajor<64, 32>>;
-  using tile_t = Tile<Location::Vec, float, 64, 32>;
-  gm src(gm_data);
-  tile_t d;
-  TLOAD(d, src);            // 把 GM 数据搬进 tile 缓冲区
-}
+```asm
+BSTART.TLOAD F32
+B.DIM a0, 0, ->lb0
+B.DIM a1, 0, ->lb1
+B.DIM zero, a2, ->lb2
+B.IOT mask=1111, last, ->t0<3>
+B.IOR [a3,a4], []
 ```
 
-- **签名**:`TLOAD(tile_shape &dst, gm_shape &src)`
-- **builtin**：`blk_tload`
-- **dst**:已声明的 tile;**src**:`global_tensor` 视图
-- **生成**:`BSTART.TLSU TLOAD, <dtype>` + `B.IOT [], last, ->dst<size>` + `B.IOR [base, stride]`
+## Local and Shared moves
 
----
+Local operands use `B.IOT`. Shared operands use `B.IOS`; the PE mask on `B.IOS` selects the
+participating quarters. A Shared destination carries its own `TSize` and allocates a new descriptor.
 
-## TSTORE — Tile → GM
+The released catalog assigns distinct encodings to `TMOV.L2S.INSERT`, `TMOV.L2S.PUBLISH`,
+`TMOV.S2L.BROADCAST`, and `TMOV.S2L.EXTRACT`, but the current standalone assembler spelling does
+not distinguish them. The four C++ wrappers therefore fail at compile time instead of silently
+emitting base `TMOV`. Object-level support remains tracked by LinxISA issue 166 and LLVM issue 37.
 
-```cpp
-void store_example(float* gm_out, tile_t& d) {
-  using gm = global_tensor<float, RowMajor<64, 32>>;
-  gm dst(gm_out);
-  TSTORE(dst, d);           // 把 tile 数据写回 GM
-}
-```
+## Gather and scatter
 
-- **签名**:`TSTORE(gm_shape &dst, tile_shape &src)`
-- **builtin**：`blk_tstore`
-- **生成**:`BSTART.TLSU TSTORE` + `B.IOT [src], last` + `B.IOR [base, stride]`
-
----
-
-## MGATHER — 离散地址 gather
-
-```cpp
-void gather_example(float* gm_src, uint32_t* gm_idx, tile_t& d) {
-  using gm = global_tensor<float, RowMajor<64, 32>>;
-  using gm_idx = global_tensor<uint32_t, RowMajor<64, 32>>;
-  using tile_idx = Tile<Location::Vec, uint32_t, 64, 32>;
-  gm src(gm_src);
-  gm_idx idx(gm_idx);
-  tile_idx off;
-  TLOAD(off, idx);        // 先把索引搬进 tile
-  MGATHER(d, src, off);     // dst[i] = src[base + off[i]]
-}
-```
-
-- **签名**:`MGATHER(dst, src, offset)`
-- **builtin**：无（inline-asm）
-- **offset**:tile 形式的索引(先 TLOAD),不能直接传普通指针
-- **生成**:`BSTART.TLSU MGATHER` + `B.DATR Null` + `B.DIM(ValidCol/ValidRow/Col)` + `B.IOT [off], last, ->dst<size>` + `B.IOR [base, stride]`
-
----
-
-## MSCATTER — 离散地址 scatter
-
-```cpp
-void scatter_example(float* gm_dst, uint32_t* gm_idx, tile_t& d) {
-  using gm = global_tensor<float, RowMajor<64, 32>>;
-  using gm_idx = global_tensor<uint32_t, RowMajor<64, 32>>;
-  using tile_idx = Tile<Location::Vec, uint32_t, 64, 32>;
-  gm dst(gm_dst);
-  gm_idx idx(gm_idx);
-  tile_idx off;
-  TLOAD(off, idx);
-  MSCATTER(dst, d, off);    // dst[base + off[i]] = src[i]
-}
-```
-
-- **签名**:`MSCATTER(dst, src, offset)`
-- **builtin**：无（inline-asm）
-- **生成**:`BSTART.TLSU MSCATTER` + `B.DIM(ValidCol/ValidRow/Col)` + `B.IOT [src, off], last` + `B.IOR [base, stride]`
-
----
-
-## MGATHER_MASK — 带 mask 的 gather
-
-```cpp
-void masked_gather_example(float* gm_src, uint32_t* gm_idx, uint8_t* gm_msk,
-                           tile_t& d) {
-  using gm = global_tensor<float, RowMajor<64, 32>>;
-  using gm_idx = global_tensor<uint32_t, RowMajor<64, 32>>;
-  using gm_m = global_tensor<uint8_t, RowMajor<64, 32>>;
-  using tile_idx = Tile<Location::Vec, uint32_t, 64, 32>;
-  using tile_m = Tile<Location::Vec, uint8_t, 64, 32>;
-  gm src(gm_src);
-  gm_idx idx(gm_idx); gm_m msk(gm_msk);
-  tile_idx off; tile_m mask;
-  TLOAD(off, idx); TLOAD(mask, msk);
-  MGATHER_MASK(d, src, off, mask);    // mask[i]=0 的 lane 填 PadValue
-}
-```
-
-- **签名**:`MGATHER_MASK(dst, src, offset, mask)`
-- **builtin**：无（inline-asm）
-- **生成**:`BSTART.TLSU MGATHER.MASK` + `B.DATR Null` + `B.DIM(ValidCol/ValidRow/Col)` + `B.IOT [off], ->dst; [mask], last` + `B.IOR [base, stride]`
-
----
-
-## MSCATTER_MASK — 带 mask 的 scatter
-
-```cpp
-void masked_scatter_example(float* gm_dst, uint32_t* gm_idx, uint8_t* gm_msk,
-                            tile_t& d) {
-  using gm = global_tensor<float, RowMajor<64, 32>>;
-  using gm_idx = global_tensor<uint32_t, RowMajor<64, 32>>;
-  using gm_m = global_tensor<uint8_t, RowMajor<64, 32>>;
-  using tile_idx = Tile<Location::Vec, uint32_t, 64, 32>;
-  using tile_m = Tile<Location::Vec, uint8_t, 64, 32>;
-  gm dst(gm_dst);
-  gm_idx idx(gm_idx); gm_m msk(gm_msk);
-  tile_idx off; tile_m mask;
-  TLOAD(off, idx); TLOAD(mask, msk);
-  MSCATTER_MASK(dst, d, off, mask);   // mask[i]=0 的 lane 不写
-}
-```
-
-- **签名**:`MSCATTER_MASK(dst, src, offset, mask)`
-- **builtin**：无（inline-asm）
-- **生成**:`BSTART.TLSU MSCATTER.MASK` + `B.DIM(ValidCol/ValidRow/Col)` + `B.IOT [src, off]; [mask], last` + `B.IOR [base, stride]`
+Gather/scatter offset and mask tiles are Local operands. The global base and row stride are scalar
+inputs. Destination/source tile size remains the per-PE 128 B..8 KB `TSize` domain.
