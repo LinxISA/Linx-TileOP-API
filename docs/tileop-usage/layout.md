@@ -1,12 +1,10 @@
-# 布局转换接口
+# Layout helpers
 
-> Tile 之间的 layout 转换、类型转换、转置等
+`TMOV` layout helpers convert between supported tile layouts without introducing a separate engine
+class. They are TLSU operations and use `B.DATR` to select the source and destination layout.
 
-(待补充)
+`TTRANS`, `TFILLPAD`, extraction, insertion, and concatenation are SFU operations because their
+hardware is more complex than elementwise VEC execution. The canonical classification is generated
+in [engines.md](engines.md).
 
-已有接口(在 `template_asm.hpp`):
-- `TCVT_T(dst, src)` — 类型转换(inline-asm)
-- `TMOV_ND2NZ` / `TMOV_NZ2ND` / `TMOV_NORM` 等 — layout 转换(宏模板)
-
-待补接口(按需添加):
-- TTRANS / TRESHAPE / TFILLPAD / ...
+The C++ helper `TReshape` is a host/API shape-copy utility and is not an ISA mnemonic.

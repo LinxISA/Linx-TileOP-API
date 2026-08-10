@@ -25,9 +25,9 @@ void tcvtnz2zn(float* dst, float* src) {
     
 
     TLOAD(d0, s);
-    TRESHAPE(d1, d0);
+    TReshape(d1, d0);
     TCVT(d2, d1);
-    TRESHAPE(d3, d2);
+    TReshape(d3, d2);
     TSTORE(res, d3);
 }
 
@@ -51,9 +51,9 @@ void tcvtzn2nz(float* dst, float* src) {
     
 
     TLOAD(d0, s);
-    TRESHAPE(d1, d0);
+    TReshape(d1, d0);
     TCVT(d2, d1);
-    TRESHAPE(d3, d2);
+    TReshape(d3, d2);
     TSTORE(res, d3);
     
 }
@@ -76,9 +76,9 @@ void tcvtnz2rowmajor(float* dst, float* src) {
     
 
     TLOAD(d0, s);
-    TRESHAPE(d1, d0);
+    TReshape(d1, d0);
     TCVT(d2, d1);
-    TRESHAPE(d3, d2);
+    TReshape(d3, d2);
     TSTORE(res, d3);
 }
 
@@ -103,9 +103,9 @@ void tcvtrowmajor2nz(float* dst, float* src) {
     
 
     TLOAD(d0, s);
-    TRESHAPE(d1, d0);
+    TReshape(d1, d0);
     TCVT(d2, d1);
-    TRESHAPE(d3, d2);
+    TReshape(d3, d2);
     TSTORE(res, d3);
 }
 

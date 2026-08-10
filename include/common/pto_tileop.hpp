@@ -14,7 +14,7 @@ inline uint32_t get_thread_idx() {
   return __builtin_linx_get_thread_id();
 }
 
-// Backward-compat alias.
+// API convenience alias; this is not a separate architectural operation.
 inline uint32_t get_thread_id() {
   return get_thread_idx();
 }

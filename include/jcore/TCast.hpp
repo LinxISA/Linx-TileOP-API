@@ -59,7 +59,7 @@ void TCAST_Impl(tile_shape_out &dst, tile_shape_in &src) {
   // TCAST is a pure type cast (no layout conversion); require identical layout
   // on src and dst. The previous SIMT <<<>>> implementation (TCast_*_Imp)
   // crashed the ClockHands pass; use the tileblock-asm TCVT path instead
-  // (BSTART.TEPL TCVT + B.DATR SrcType/DstType), which lowers to a single
+  // (BSTART.VEC TCVT + B.DATR SrcType/DstType), which lowers to a single
   // hardware TCVT without launching a SIMT kernel.
   static_assert(tile_shape_in::isRowMajor == tile_shape_out::isRowMajor &&
                 is_Nz_layout<tile_shape_in>::value ==

@@ -1,5 +1,5 @@
 LIBNAME = tileop-api
-VERSION = 1.0
+VERSION = 0.58
 HEADERS = $(wildcard include/*.h) $(wildcard include/*.hpp) include/jcore include/cpu_sim include/aarch64 include/common
 
 
@@ -7,7 +7,12 @@ HEADERS = $(wildcard include/*.h) $(wildcard include/*.hpp) include/jcore includ
 CLANG_PREFIX ?=
 INSTALL_DIR = $(shell $(CLANG_PREFIX)/bin/clang -print-resource-dir)/include/$(LIBNAME)
 
-.PHONY: install uninstall
+.PHONY: check install uninstall
+
+check:
+	python3 tools/generate_engine_docs.py --check
+	python3 test/test_v058_engine_contract.py
+	git diff --check
 
 install:
 	@echo "Installing $(LIBNAME) to Clang toolchain at $(INSTALL_DIR)"
