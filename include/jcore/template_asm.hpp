@@ -1757,13 +1757,10 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
       : "memory");
 }
 
-// Shared TMOV primitives remain fail-closed until the compiler exposes a
-// unique source-level Shared-register contract.  These wrappers must inline so
-// the opaque Shared value never crosses the ordinary C++ ABI.
+// Shared TMOV primitives use the compiler's dedicated `S` register constraint.
+// These wrappers must inline so the opaque Shared value never crosses the
+// ordinary C++ ABI.
 #define PTO_SHARED_INLINE __attribute__((always_inline)) inline
-
-template <typename...>
-inline constexpr bool shared_tmov_source_form_is_unique = false;
 
 template <int PEMask = 15, is_tile_data_v tile_shape_src>
 PTO_SHARED_INLINE SharedTile<tile_shape_src>
@@ -1772,11 +1769,18 @@ TMOV_L2S_INSERT(const tile_shape_src &src) {
   static_assert(
       tile_shape_src::IsValidActiveSize,
       "TMOV.L2S.INSERT logical Tile size must be 128 B..8 KB");
-  static_assert(
-      shared_tmov_source_form_is_unique<tile_shape_src>,
-      "TMOV_L2S_INSERT is unavailable until the v0.58 assembler can select "
-      "the distinct TMOV.L2S.INSERT encoding");
-  return SharedTile<tile_shape_src>(src);
+  SharedTile<tile_shape_src> shared(src);
+  asm volatile(
+      "BSTART.TMOV.L2S.INSERT %c[DataType]\n"
+      "B.IOT %[Src], mask=" PTO_PE_MASK_ASM "\n"
+      "B.IOS mask=" PTO_PE_MASK_ASM
+      ", ->%S[Shared]<%c[TileSize]>\n"
+      : [Shared] "=S"(shared.handle_ref())
+      : [Src] "r"(src.data()), PTO_PE_MASK_INPUTS(PEMask),
+        [DataType] "i"(type_traits<typename tile_shape_src::DType>::TypeCode),
+        [TileSize] "i"(tile_shape_src::TilesizeCode)
+      : "memory");
+  return shared;
 }
 
 template <int PEMask = 15, is_tile_data_v tile_shape_src>
@@ -1786,11 +1790,18 @@ TMOV_L2S_PUBLISH(const tile_shape_src &src) {
   static_assert(
       tile_shape_src::IsValidActiveSize,
       "TMOV.L2S.PUBLISH logical Tile size must be 128 B..8 KB");
-  static_assert(
-      shared_tmov_source_form_is_unique<tile_shape_src>,
-      "TMOV_L2S_PUBLISH is unavailable until the v0.58 assembler can select "
-      "the distinct TMOV.L2S.PUBLISH encoding");
-  return SharedTile<tile_shape_src>(src);
+  SharedTile<tile_shape_src> shared(src);
+  asm volatile(
+      "BSTART.TMOV.L2S.PUBLISH %c[DataType]\n"
+      "B.IOT %[Src], mask=" PTO_PE_MASK_ASM "\n"
+      "B.IOS mask=" PTO_PE_MASK_ASM
+      ", ->%S[Shared]<%c[TileSize]>\n"
+      : [Shared] "=S"(shared.handle_ref())
+      : [Src] "r"(src.data()), PTO_PE_MASK_INPUTS(PEMask),
+        [DataType] "i"(type_traits<typename tile_shape_src::DType>::TypeCode),
+        [TileSize] "i"(tile_shape_src::TilesizeCode)
+      : "memory");
+  return shared;
 }
 
 template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
@@ -1801,12 +1812,19 @@ TMOV_S2L_BROADCAST(tile_shape_dst &dst,
   static_assert(
       tile_shape_dst::IsValidActiveSize,
       "TMOV.S2L.BROADCAST logical Tile size must be 128 B..8 KB");
-  static_assert(
-      shared_tmov_source_form_is_unique<tile_shape_dst, LocalTile>,
-      "TMOV_S2L_BROADCAST is unavailable until the v0.58 assembler can select "
-      "the distinct TMOV.S2L.BROADCAST encoding");
-  (void)dst;
-  (void)shared;
+  static_assert(std::is_same_v<typename tile_shape_dst::DType,
+                               typename LocalTile::DType>,
+                "TMOV.S2L.BROADCAST source and destination dtypes must match");
+  asm volatile(
+      "BSTART.TMOV.S2L.BROADCAST %c[DataType]\n"
+      "B.IOS %S[Shared], mask=" PTO_PE_MASK_ASM "\n"
+      "B.IOT mask=" PTO_PE_MASK_ASM
+      ", last, ->%q[Dst]<%c[TileSize]>\n"
+      : [Dst] "=&r"(dst.data())
+      : [Shared] "S"(shared.handle()), PTO_PE_MASK_INPUTS(PEMask),
+        [DataType] "i"(type_traits<typename tile_shape_dst::DType>::TypeCode),
+        [TileSize] "i"(tile_shape_dst::TilesizeCode)
+      : "memory");
 }
 
 template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
@@ -1816,12 +1834,19 @@ PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
   static_assert(
       tile_shape_dst::IsValidActiveSize,
       "TMOV.S2L.EXTRACT logical Tile size must be 128 B..8 KB");
-  static_assert(
-      shared_tmov_source_form_is_unique<tile_shape_dst, LocalTile>,
-      "TMOV_S2L_EXTRACT is unavailable until the v0.58 assembler can select "
-      "the distinct TMOV.S2L.EXTRACT encoding");
-  (void)dst;
-  (void)shared;
+  static_assert(std::is_same_v<typename tile_shape_dst::DType,
+                               typename LocalTile::DType>,
+                "TMOV.S2L.EXTRACT source and destination dtypes must match");
+  asm volatile(
+      "BSTART.TMOV.S2L.EXTRACT %c[DataType]\n"
+      "B.IOS %S[Shared], mask=" PTO_PE_MASK_ASM "\n"
+      "B.IOT mask=" PTO_PE_MASK_ASM
+      ", last, ->%q[Dst]<%c[TileSize]>\n"
+      : [Dst] "=&r"(dst.data())
+      : [Shared] "S"(shared.handle()), PTO_PE_MASK_INPUTS(PEMask),
+        [DataType] "i"(type_traits<typename tile_shape_dst::DType>::TypeCode),
+        [TileSize] "i"(tile_shape_dst::TilesizeCode)
+      : "memory");
 }
 
 namespace pto_matmul_detail {
@@ -1860,9 +1885,6 @@ constexpr void validate_cube_attributes() {
 
 template <typename A, typename B>
 constexpr void validate_shared_matrix_pair() {
-  static_assert(!is_shared_tile_v<A> && !is_shared_tile_v<B>,
-                "Shared matrix operands are unavailable until the compiler "
-                "exposes a unique Shared-register source contract");
   static_assert(!is_shared_tile_v<A> || is_shared_tile_v<B>,
                 "Shared matmul A requires B to be Shared as well; a lone "
                 "B.IOS source denotes the existing Shared-Right form");
@@ -1885,20 +1907,20 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", "")
         "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOT %[B]\n"
+        "B.IOT %[B], mask=1111\n"
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"
         : [Dst] "=&r"(dst.data())
-        : [SharedA] "r"(a.handle()), [B] "r"(b.data()),
+        : [SharedA] "S"(a.handle()), [B] "r"(b.data()),
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", "")
         "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT %[A]\n"
+        "B.IOT %[A], mask=1111\n"
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"
         : [Dst] "=&r"(dst.data())
-        : [A] "r"(a.data()), [SharedB] "r"(b.handle()),
+        : [A] "r"(a.data()), [SharedB] "S"(b.handle()),
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   } else {
@@ -1908,7 +1930,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
         "B.IOS %S[SharedB], mask=1111\n"
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"
         : [Dst] "=&r"(dst.data())
-        : [SharedA] "r"(a.handle()), [SharedB] "r"(b.handle()),
+        : [SharedA] "S"(a.handle()), [SharedB] "S"(b.handle()),
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   }
@@ -1925,7 +1947,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, "")                                           \
         "B.IOT %[A], %[B], mask=1111\n"                                         \
-        "B.IOT %[Extra]\n"                                                    \
+        "B.IOT %[Extra], mask=1111\n"                                                    \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                       \
         : [Dst] "=&r"(dst.data())                                             \
         : [A] "r"(a.data()), [B] "r"(b.data()),                             \
@@ -1936,11 +1958,11 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, "")                                           \
         "B.IOS %S[SharedA], mask=1111\n"                                               \
-        "B.IOT %[B]\n"                                                       \
-        "B.IOT %[Extra]\n"                                                    \
+        "B.IOT %[B], mask=1111\n"                                                       \
+        "B.IOT %[Extra], mask=1111\n"                                                    \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                       \
         : [Dst] "=&r"(dst.data())                                             \
-        : [SharedA] "r"(a.handle()), [B] "r"(b.data()),                     \
+        : [SharedA] "S"(a.handle()), [B] "r"(b.data()),                     \
           [Extra] "r"(extra.data()),                                          \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                          \
         : "memory");                                                           \
@@ -1948,11 +1970,11 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, "")                                           \
         "B.IOS %S[SharedB], mask=1111\n"                                               \
-        "B.IOT %[A]\n"                                                       \
-        "B.IOT %[Extra]\n"                                                    \
+        "B.IOT %[A], mask=1111\n"                                                       \
+        "B.IOT %[Extra], mask=1111\n"                                                    \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                       \
         : [Dst] "=&r"(dst.data())                                             \
-        : [A] "r"(a.data()), [SharedB] "r"(b.handle()),                     \
+        : [A] "r"(a.data()), [SharedB] "S"(b.handle()),                     \
           [Extra] "r"(extra.data()),                                          \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                          \
         : "memory");                                                           \
@@ -1961,10 +1983,10 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
         PTO_MATMUL_HEADER(Opcode, "")                                           \
         "B.IOS %S[SharedA], mask=1111\n"                                               \
         "B.IOS %S[SharedB], mask=1111\n"                                               \
-        "B.IOT %[Extra]\n"                                                    \
+        "B.IOT %[Extra], mask=1111\n"                                                    \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                       \
         : [Dst] "=&r"(dst.data())                                             \
-        : [SharedA] "r"(a.handle()), [SharedB] "r"(b.handle()),             \
+        : [SharedA] "S"(a.handle()), [SharedB] "S"(b.handle()),             \
           [Extra] "r"(extra.data()),                                          \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                          \
         : "memory");                                                           \
@@ -1978,84 +2000,84 @@ PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias, "TMATMUL.BIAS")
 #define PTO_FIXP_SRC_0 \
   "B.IOT %[A], %[B], mask=1111\n"
 #define PTO_FIXP_SRC_1 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], mask=1111\n"
 #define PTO_FIXP_SRC_2 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SRC_3 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[QuantTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SRC_4 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[ReluTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SRC_5 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[ReluTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SRC_6 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile], %[ReluTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SRC_7 \
   "B.IOT %[A], %[B], mask=1111\n" \
-  "B.IOT %[RowIn], %[QuantTile]\n" \
-  "B.IOT %[ReluTile]\n"
+  "B.IOT %[RowIn], %[QuantTile], mask=1111\n" \
+  "B.IOT %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_SHARED_B_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n"
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[RowIn]\n"
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
+  "B.IOT %[RowIn], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[QuantTile]\n"
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
+  "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[RowIn], %[QuantTile]\n"
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
+  "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[ReluTile]\n"
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
+  "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[RowIn], %[ReluTile]\n"
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
+  "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[QuantTile], %[ReluTile]\n"
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
+  "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[RowIn], %[QuantTile]\n" "B.IOT %[ReluTile]\n"
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
+  "B.IOT %[RowIn], %[QuantTile], mask=1111\n" "B.IOT %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_SHARED_A_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
-  "B.IOT %[QuantTile]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n" \
+  "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[ReluTile]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
-  "B.IOT %[ReluTile]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n" \
+  "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile]\n" \
-  "B.IOT %[ReluTile]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile], mask=1111\n" \
+  "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
-  "B.IOT %[QuantTile], %[ReluTile]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n" \
+  "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_SHARED_AB_SRC_0 \
   "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_1 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_2 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_3 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[QuantTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_4 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[ReluTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_5 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[ReluTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_6 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile], %[ReluTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_7 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[QuantTile]\n" \
-  "B.IOT %[ReluTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[QuantTile], mask=1111\n" \
+  "B.IOT %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_IOR_0 ""
 #define PTO_FIXP_IOR_1 "B.IOR [%[QuantGpr]],[]\n"
@@ -2104,7 +2126,7 @@ PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias, "TMATMUL.BIAS")
       PTO_MATMUL_HEADER("TMATMUL", "")                    \
       PTO_FIXP_SHARED_B_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR       \
       : PTO_FIXP_OUT_DECL_##OUT                                              \
-      : [A] "r"(a.data()), [SharedB] "r"(b.handle()),                   \
+      : [A] "r"(a.data()), [SharedB] "S"(b.handle()),                   \
         [RowIn] "r"(row_in.data()), [QuantTile] "r"(quant_tile.data()),  \
         [ReluTile] "r"(relu_tile.data()),                                  \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),              \
@@ -2119,7 +2141,7 @@ PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias, "TMATMUL.BIAS")
       PTO_MATMUL_HEADER("TMATMUL", "")                      \
       PTO_FIXP_SHARED_A_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR       \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [SharedA] "r"(a.handle()), [B] "r"(b.data()),                    \
+      : [SharedA] "S"(a.handle()), [B] "r"(b.data()),                    \
         [RowIn] "r"(row_in.data()), [QuantTile] "r"(quant_tile.data()),   \
         [ReluTile] "r"(relu_tile.data()),                                   \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
@@ -2134,7 +2156,7 @@ PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias, "TMATMUL.BIAS")
       PTO_MATMUL_HEADER("TMATMUL", "")                      \
       PTO_FIXP_SHARED_AB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR      \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [SharedA] "r"(a.handle()), [SharedB] "r"(b.handle()),            \
+      : [SharedA] "S"(a.handle()), [SharedB] "S"(b.handle()),            \
         [RowIn] "r"(row_in.data()), [QuantTile] "r"(quant_tile.data()),   \
         [ReluTile] "r"(relu_tile.data()),                                   \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
@@ -2264,10 +2286,10 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         PTO_MATMUL_HEADER(Opcode, "")                               \
         "B.IOS %S[SharedA], mask=1111\n"                                              \
         "B.IOT %[ScaleA], %[B], mask=1111\n"                                   \
-        "B.IOT %[ScaleB]\n"                                                  \
+        "B.IOT %[ScaleB], mask=1111\n"                                                  \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                      \
         : [Dst] "=&r"(dst.data())                                            \
-        : [SharedA] "r"(a.handle()), [ScaleA] "r"(scale_a.data()),         \
+        : [SharedA] "S"(a.handle()), [ScaleA] "r"(scale_a.data()),         \
           [B] "r"(b.data()), [ScaleB] "r"(scale_b.data()),                 \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
@@ -2276,11 +2298,11 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         PTO_MATMUL_HEADER(Opcode, "")                               \
         "B.IOS %S[SharedB], mask=1111\n"                                              \
         "B.IOT %[A], %[ScaleA], mask=1111\n"                                   \
-        "B.IOT %[ScaleB]\n"                                                  \
+        "B.IOT %[ScaleB], mask=1111\n"                                                  \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                      \
         : [Dst] "=&r"(dst.data())                                            \
         : [A] "r"(a.data()), [ScaleA] "r"(scale_a.data()),                 \
-          [SharedB] "r"(b.handle()), [ScaleB] "r"(scale_b.data()),         \
+          [SharedB] "S"(b.handle()), [ScaleB] "r"(scale_b.data()),         \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else {                                                                      \
@@ -2291,8 +2313,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "B.IOT %[ScaleA], %[ScaleB], mask=1111\n"                              \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                      \
         : [Dst] "=&r"(dst.data())                                            \
-        : [SharedA] "r"(a.handle()), [ScaleA] "r"(scale_a.data()),         \
-          [SharedB] "r"(b.handle()), [ScaleB] "r"(scale_b.data()),         \
+        : [SharedA] "S"(a.handle()), [ScaleA] "r"(scale_a.data()),         \
+          [SharedB] "S"(b.handle()), [ScaleB] "r"(scale_b.data()),         \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   }                                                                             \
@@ -2313,7 +2335,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         PTO_MATMUL_HEADER(Opcode, "")                               \
         "B.IOT %[A], %[ScaleA], mask=1111\n"                                    \
         "B.IOT %[B], %[ScaleB], mask=1111\n"                                   \
-        "B.IOT %[Extra]\n"                                                   \
+        "B.IOT %[Extra], mask=1111\n"                                                   \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                      \
         : [Dst] "=&r"(dst.data())                                            \
         : [A] "r"(a.data()), [ScaleA] "r"(scale_a.data()),                 \
@@ -2329,7 +2351,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "B.IOT %[ScaleB], %[Extra], mask=1111\n"                               \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                      \
         : [Dst] "=&r"(dst.data())                                            \
-        : [SharedA] "r"(a.handle()), [ScaleA] "r"(scale_a.data()),         \
+        : [SharedA] "S"(a.handle()), [ScaleA] "r"(scale_a.data()),         \
           [B] "r"(b.data()), [ScaleB] "r"(scale_b.data()),                 \
           [Extra] "r"(extra.data()),                                         \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
@@ -2343,7 +2365,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                      \
         : [Dst] "=&r"(dst.data())                                            \
         : [A] "r"(a.data()), [ScaleA] "r"(scale_a.data()),                 \
-          [SharedB] "r"(b.handle()), [ScaleB] "r"(scale_b.data()),         \
+          [SharedB] "S"(b.handle()), [ScaleB] "r"(scale_b.data()),         \
           [Extra] "r"(extra.data()),                                         \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
@@ -2353,11 +2375,11 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "B.IOS %S[SharedA], mask=1111\n"                                              \
         "B.IOS %S[SharedB], mask=1111\n"                                              \
         "B.IOT %[ScaleA], %[ScaleB], mask=1111\n"                              \
-        "B.IOT %[Extra]\n"                                                   \
+        "B.IOT %[Extra], mask=1111\n"                                                   \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                      \
         : [Dst] "=&r"(dst.data())                                            \
-        : [SharedA] "r"(a.handle()), [ScaleA] "r"(scale_a.data()),         \
-          [SharedB] "r"(b.handle()), [ScaleB] "r"(scale_b.data()),         \
+        : [SharedA] "S"(a.handle()), [ScaleA] "r"(scale_a.data()),         \
+          [SharedB] "S"(b.handle()), [ScaleB] "r"(scale_b.data()),         \
           [Extra] "r"(extra.data()),                                         \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
