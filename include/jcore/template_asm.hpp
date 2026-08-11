@@ -1747,6 +1747,33 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
   return result;
 }
 
+template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
+void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
+  using shp_dtype = typename shp::TileDType;
+  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(
+      tile_type_traits<shp_dtype>::IsValidActiveSize,
+      "TLOAD Shared dst logical Tile size must be 128 B..8 KB (TSize=1..7)");
+  const size_t valid_col = dst.GetValidCol();
+  const size_t valid_row = dst.GetValidRow();
+  asm volatile(
+    "BSTART.TLSU TLOAD, %c[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(dst.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(gm_shape::RowStride * sizeof(typename gm_shape::DType))
+  );
+}
+
 // TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 void TSTORE(gm_shape &dst, tile_shape &src) {
@@ -1817,46 +1844,62 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
 #define PTO_SHARED_INLINE __attribute__((always_inline)) inline
 
 template <int PEMask = 15, is_tile_data_v tile_shape_src>
-PTO_SHARED_INLINE SharedTile<tile_shape_src>
-TMOV_L2S_INSERT(const tile_shape_src &src) {
+PTO_SHARED_INLINE void
+TMOV_L2S_INSERT(SharedTile<tile_shape_src> &dst,
+                const tile_shape_src &src) {
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
       tile_type_traits<typename tile_shape_src::TileDType>::IsValidActiveSize,
       "TMOV.L2S.INSERT logical Tile size must be 512 B..32 KB");
-  SharedTile<tile_shape_src> result(src);
+  dst.SetValidShape(src);
   asm volatile(
       "BSTART.TLSU TMOV.L2S.INSERT, %c[DataType]\n"
       "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
-      "B.IOT %[src], mask=%c[PEMask], TSize=%c[TileSize], last\n"
-      : [Shared] "=Sr"(result.handle_ref())
+      "B.IOT %[src], mask=%c[PEMask], last\n"
+      : [Shared] "=Sr"(dst.handle_ref())
       : [src] "Tr"(src.data()),
         [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_src::DType>::TypeCode),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_src::TileDType>::TilesizeCode)
       : "memory");
+}
+
+template <int PEMask = 15, is_tile_data_v tile_shape_src>
+PTO_SHARED_INLINE SharedTile<tile_shape_src>
+TMOV_L2S_INSERT(const tile_shape_src &src) {
+  SharedTile<tile_shape_src> result(src);
+  TMOV_L2S_INSERT<PEMask>(result, src);
   return result;
+}
+
+template <int PEMask = 15, is_tile_data_v tile_shape_src>
+PTO_SHARED_INLINE void
+TMOV_L2S_PUBLISH(SharedTile<tile_shape_src> &dst,
+                 const tile_shape_src &src) {
+  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(
+      tile_type_traits<typename tile_shape_src::TileDType>::IsValidActiveSize,
+      "TMOV.L2S.PUBLISH logical Tile size must be 512 B..32 KB");
+  dst.SetValidShape(src);
+  asm volatile(
+      "BSTART.TLSU TMOV.L2S.PUBLISH, %c[DataType]\n"
+      "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
+      "B.IOT %[src], mask=%c[PEMask], last\n"
+      : [Shared] "=Sr"(dst.handle_ref())
+      : [src] "Tr"(src.data()),
+        [PEMask] "i"(PEMask),
+        [DataType] "i"(type_traits<typename tile_shape_src::DType>::TypeCode),
+        [TileSize] "i"(
+            tile_type_traits<typename tile_shape_src::TileDType>::TilesizeCode)
+      : "memory");
 }
 
 template <int PEMask = 15, is_tile_data_v tile_shape_src>
 PTO_SHARED_INLINE SharedTile<tile_shape_src>
 TMOV_L2S_PUBLISH(const tile_shape_src &src) {
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
-  static_assert(
-      tile_type_traits<typename tile_shape_src::TileDType>::IsValidActiveSize,
-      "TMOV.L2S.PUBLISH logical Tile size must be 512 B..32 KB");
   SharedTile<tile_shape_src> result(src);
-  asm volatile(
-      "BSTART.TLSU TMOV.L2S.PUBLISH, %c[DataType]\n"
-      "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
-      "B.IOT %[src], mask=%c[PEMask], TSize=%c[TileSize], last\n"
-      : [Shared] "=Sr"(result.handle_ref())
-      : [src] "Tr"(src.data()),
-        [PEMask] "i"(PEMask),
-        [DataType] "i"(type_traits<typename tile_shape_src::DType>::TypeCode),
-        [TileSize] "i"(
-            tile_type_traits<typename tile_shape_src::TileDType>::TilesizeCode)
-      : "memory");
+  TMOV_L2S_PUBLISH<PEMask>(result, src);
   return result;
 }
 

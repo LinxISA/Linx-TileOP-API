@@ -84,3 +84,18 @@ with matching runtime valid dimensions. Matrix operations derive `M`, `N`, and
 `K` from their Left/Right operands. `SharedTile` preserves these runtime values
 when produced by `TMOV_L2S_INSERT` or `TMOV_L2S_PUBLISH`, so Shared Matmul uses
 the same dynamic `B.DIM` path as Local Matmul.
+
+Both Shared-producing TMOV operations support return-value and output-parameter
+forms:
+
+```cpp
+auto shared = TMOV_L2S_PUBLISH(local);
+
+SharedTile<LocalTile> shared;
+TMOV_L2S_PUBLISH(shared, local);
+```
+
+The output-parameter form copies the Local Tile's runtime valid dimensions into
+the `SharedTile` metadata. The Shared handle must still remain inside an inlined
+SSA flow; a non-inlined function that writes a caller-owned `SharedTile&` would
+require a separate Shared register ABI.

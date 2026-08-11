@@ -5,6 +5,7 @@ make clean;make TESTCASE=MatMacc
 make clean;make TESTCASE=MatMul_e4m3
 make clean;make TESTCASE=MatMul
 make clean;make TESTCASE=SharedMatmul
+make clean;make TESTCASE=SharedTLoad
 make clean;make TESTCASE=TAbs
 make clean;make TESTCASE=TAdd_mask
 make clean;make TESTCASE=TAdd

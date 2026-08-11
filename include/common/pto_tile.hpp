@@ -891,6 +891,11 @@ public:
   int GetValidRow() const { return RowMaskInternal; }
   int GetValidCol() const { return ColMaskInternal; }
 
+  void SetValidShape(const LocalTile &local) {
+    RowMaskInternal = local.GetValidRow();
+    ColMaskInternal = local.GetValidCol();
+  }
+
   unsigned long &handle_ref() { return Handle; }
   unsigned long handle() const { return Handle; }
 
