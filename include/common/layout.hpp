@@ -2,8 +2,12 @@
 #define LAYOUT_HPP
 
 #include <stdint.h>
+#include <stddef.h>
 
+#ifndef __linx
 #include <iostream>
+#include <stdio.h>
+#endif
 #include <type_traits>
 
 #include "common/math_utils.hpp"
@@ -14,14 +18,19 @@ enum class Location {
   Mat,
   Left,
   Right,
+  Acc,
   Bias,
   Scaling,
   // v5: storage-class marker for compiler-managed Shared tiles. SharedTile
   // wraps a Local Tile and only changes its storage class (Local -> Shared),
   // never its matrix role / shape / dtype / layout. Used by TMATMUL Shared
-  // matrix lowering (C.B.IOS binder) — see SharedTile<LocalTile>.
+  // matrix lowering (B.IOS source) — see SharedTile<LocalTile>.
   Shared,
 };
+
+// PTOAS historically spells the tile role enum as TileType. Keep the Linx
+// target source-compatible while retaining Location as the canonical API name.
+using TileType = Location;
 
 enum class BLayout {
   RowMajor,
@@ -32,6 +41,15 @@ enum class SLayout {
   NoneBox,
   RowMajor,
   ColMajor,
+};
+
+// Linx v0.58 does not encode Ascend compact modes. The trailing template
+// parameter is accepted so PTOAS can share one typed EmitC surface across
+// targets; non-Null values remain a compile-time descriptor only.
+enum class CompactMode {
+  Null,
+  Normal,
+  RowPlusOne,
 };
 
 enum class LayoutEnum {
@@ -69,6 +87,7 @@ const char *layout_type_to_str(LayoutEnum type) {
   return "UnsupportedLayout";
 }
 
+#ifndef __linx
 class MatrixLayoutPrettyPrinter {
   template <typename Layout>
   static void print(std::ostream &out, const Layout &layout) {
@@ -77,6 +96,7 @@ class MatrixLayoutPrettyPrinter {
         << Layout::ColStride << ">, Numel = " << Layout::Numel;
   }
 };
+#endif
 
 template <const int Rows_, const int Cols_, const int RowStride_,
           const int ColStride_,
@@ -176,12 +196,14 @@ struct BlockMatrixLayout {
   }
 
   void dump() const {
+#ifndef __linx
     for (int i = 0; i < Rows; ++i) {
       for (int j = 0; j < Cols; ++j) {
         printf("%d, ", operator()(i, j));
       }
       printf("\n");
     }
+#endif
   }
 
   auto get_outer_layout() const { return decltype(outer_){}; }
@@ -200,6 +222,7 @@ private:
 };
 
 /// @brief Pretty printer for BlockMatrixLayout
+#ifndef __linx
 template <typename OuterLayout_, typename InnerLayout_>
 static std::ostream &
 operator<<(std::ostream &out,
@@ -210,6 +233,7 @@ operator<<(std::ostream &out,
       << "  }";
   return out;
 }
+#endif
 
 template <typename OuterLayout_, typename InnerLayout_>
 concept BlockRowMajorLayout =

@@ -4,6 +4,8 @@
 #include <type_traits>
 #include <cstddef>
 
+#include "jcore/linx_compat_types.hpp"
+
 enum __type_code {
   __type_fp64 = 0,
   __type_fp32 = 1,

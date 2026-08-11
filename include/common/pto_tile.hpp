@@ -548,7 +548,8 @@ template <Location Loc_, typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_,
           const SLayout SFractal_ = SLayout::NoneBox,
           const int SFractalSize_ = 512,
-          const PadValue PadVal_ = PadValue::Null>
+          const PadValue PadVal_ = PadValue::Null,
+          const CompactMode Compact_ = CompactMode::Null>
 struct Tile {
 public:
   using DType = Element_;
@@ -605,6 +606,19 @@ public:
 
   static constexpr int SFractalSize = SFractalSize_;
   static constexpr PadValue PadVal = PadVal_;
+  static constexpr CompactMode Compact = Compact_;
+  static constexpr int LogicalTileBytes =
+      (Rows * Cols * type_traits<DType>::bits + 7) / 8;
+  static constexpr int TilesizeCode =
+      LogicalTileBytes == 128  ? __tilesize_128B :
+      LogicalTileBytes == 256  ? __tilesize_256B :
+      LogicalTileBytes == 512  ? __tilesize_512B :
+      LogicalTileBytes == 1024 ? __tilesize_1KB :
+      LogicalTileBytes == 2048 ? __tilesize_2KB :
+      LogicalTileBytes == 4096 ? __tilesize_4KB :
+      LogicalTileBytes == 8192 ? __tilesize_8KB : __tilesize_unknown;
+  static constexpr bool IsValidActiveSize =
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_8KB;
 
   // constructor for static shape
   Tile() { };
@@ -659,7 +673,7 @@ public:
                 "SFractalSize_ illegal");
 
 #ifdef __linx
-  using TileDType = DType tile_size(Rows *Cols / (sizeof(DType) * 8 / type_traits<DType>::bits));
+  using TileDType = int32_t __attribute__((ext_vector_type(1024)));
 #else
   using TileDType = DType[Rows * Cols];
 #endif
@@ -850,11 +864,11 @@ template <typename T> concept is_boxed_data_v = is_boxed_tile<T>;
 
 // v5 Shared storage-class wrapper. SharedTile<LocalTile> is public C++ sugar
 // that changes a matrix operand's storage class (Local -> Shared) so the
-// compiler lowers it via a C.B.IOS binder instead of a B.IOT source stream.
+// compiler lowers it via a B.IOS source instead of a B.IOT source stream.
 // It preserves the wrapped Local Tile's role, shape, dtype and layout exactly
-// (per the DavinciOO v5 Shared semantics) and owns NO Local TileDType payload.
+// (per the LinxISA v0.58 Shared semantics) and owns no Local TileDType payload.
 //
-// The compiler allocates the opaque handle to S#0..S#255. It must not be
+// The compiler allocates the opaque handle to S0..S255. It must not be
 // materialized as an ordinary integer or passed through a normal GPR ABI.
 template <typename LocalTile>
 class SharedTile {
@@ -895,8 +909,9 @@ public:
   unsigned long handle() const { return Handle; }
 
   // No data() accessor: a Shared operand must never be passed to an ordinary
-  // "Tr" inline-asm constraint. Shared-aware operations use handle() with the
-  // dedicated "Sr" constraint.
+  // tile-register inline-asm operand. Shared-aware operations use handle() with
+  // a dedicated compiler contract; Shared operations remain fail-closed until
+  // that contract exists.
 
 private:
   unsigned long Handle;
@@ -921,7 +936,7 @@ concept is_local_tile_v =
 
 // TMATMUL matrix operands may live in either Local or Shared storage. Their
 // matrix role remains Left/Right; only the instruction operand transport
-// changes (Local B.IOT versus Shared C.B.IOS binder).
+// changes (Local B.IOT versus Shared B.IOS source).
 template <typename T>
 concept is_local_or_shared_left =
     (is_tile<T>::value && T::Loc == Location::Left) ||
@@ -1222,6 +1237,7 @@ const char* get_layout_str() {
 
 template <typename tile_shape>
 void print_tile_info() {
+#ifndef __linx
   std::cout << "Tile Rows Number: " << tile_shape::Rows << std::endl;
   std::cout << "Tile Columns Number: " << tile_shape::Cols << std::endl;
   std::cout << "Tile Active Rows Number: " << tile_shape::ValidRow << std::endl;
@@ -1233,6 +1249,9 @@ void print_tile_info() {
   std::cout << "Tile Size: " << tile_shape::Numel << std::endl;
   std::cout << "Tile Layout: " << get_layout_str<tile_shape>() << std::endl;
   std::cout << "Tile Data Dump: " << std::endl;
+#else
+  (void)sizeof(tile_shape);
+#endif
 }
 
 } // namespace pto

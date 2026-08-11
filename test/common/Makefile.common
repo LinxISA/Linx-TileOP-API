@@ -2,7 +2,7 @@ ROOT := $(shell git rev-parse --show-toplevel)
 TEST_ROOT := $(ROOT)/test
 CATEGORY := $(strip $(subst $(TEST_ROOT)/,, $(CURDIR)))
 CATEGORY_NAME := $(shell echo $(CATEGORY) | sed -e 's/\//_/g')
-OBJ_ROOT := $(shell realpath $(TEST_ROOT)/../output)
+OBJ_ROOT := $(abspath $(TEST_ROOT)/../output)
 CASE_SRC_DIR := $(CATEGORY)/src
 ELF_DIR := $(OBJ_ROOT)/$(CATEGORY)/elf
 SRC_DIR := $(shell dirname $(SRC_FILE))
@@ -17,7 +17,6 @@ PLAT ?= linx
 
 ifeq ($(PLAT), cpu)
 DEFINES += -D__cpu_sim__
-# wget http://10.50.84.202:8888/other/bisa_share/toolchain/open_source/clang-x86/clang%2Bllvm-15.0.4-x86_64-linux-gnu-rhel-8.4.tar.xz
 COMPILER_DIR ?= /usr/bin
 AS = $(COMPILER_DIR)/clang
 CC = $(COMPILER_DIR)/clang
@@ -29,7 +28,6 @@ CC_O = -c -O3
 CC_VER ?= -std=c++20
 else ifeq ($(PLAT), arm_sme)
 DEFINES += -D__ARM_FEATURE_SME
-# wget http://10.50.84.202:8888/other/bisa_share/toolchain/open_source/clang-x86/clang%2Bllvm-15.0.4-x86_64-linux-gnu-rhel-8.4.tar.xz
 COMPILER_DIR ?= /usr/bin
 AS = $(COMPILER_DIR)/clang
 CC = $(COMPILER_DIR)/clang
@@ -41,7 +39,6 @@ CC_O = -c -O3
 CC_VER ?= -std=c++20
 else ifeq ($(PLAT), linx)
 DEFINES += -D__linx -DENABLE_TENSOR_INSTR
-# wget http://example.com/linx_blockisa_llvm_musl.tar.gz
 COMPILER_DIR ?= /usr/bin
 AS = $(COMPILER_DIR)/clang
 CC = $(COMPILER_DIR)/clang 
@@ -49,8 +46,9 @@ CXX = $(COMPILER_DIR)/clang++
 LINK = $(COMPILER_DIR)/clang++
 DUMP = $(COMPILER_DIR)/llvm-objdump
 COPY = $(COMPILER_DIR)/llvm-objcopy
-CC_O = -c -mlxbc -fenable-matrix -O2 -mllvm -enable-all-vector-as-tilereg=true
+CC_O = --target=linx64 -c -fenable-matrix -O2
 CC_VER ?= -std=c++20
+CC_LINK += --target=linx64
 # COMM_SRC_FILE += $(ROOT)/test/common/_start.s
 # COMM_SRC_DIR = $(shell dirname $(COMM_SRC_FILE))
 # COMM_OBJ += $(patsubst %.s, %.o, $(subst $(COMM_SRC_DIR), $(OBJ_DIR), $(COMM_SRC_FILE)))
