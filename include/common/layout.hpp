@@ -14,6 +14,7 @@ enum class Location {
   Mat,
   Left,
   Right,
+  Acc,
   Bias,
   Scaling,
   // v5: storage-class marker for compiler-managed Shared tiles. SharedTile
@@ -22,6 +23,10 @@ enum class Location {
   // matrix lowering (B.IOS source) — see SharedTile<LocalTile>.
   Shared,
 };
+
+// PTOAS historically spells the tile role enum as TileType. Keep the Linx
+// target source-compatible while retaining Location as the canonical API name.
+using TileType = Location;
 
 enum class BLayout {
   RowMajor,
@@ -32,6 +37,15 @@ enum class SLayout {
   NoneBox,
   RowMajor,
   ColMajor,
+};
+
+// Linx v0.58 does not encode Ascend compact modes. The trailing template
+// parameter is accepted so PTOAS can share one typed EmitC surface across
+// targets; non-Null values remain a compile-time descriptor only.
+enum class CompactMode {
+  Null,
+  Normal,
+  RowPlusOne,
 };
 
 enum class LayoutEnum {

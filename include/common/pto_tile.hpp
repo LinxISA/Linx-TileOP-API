@@ -548,7 +548,8 @@ template <Location Loc_, typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_,
           const SLayout SFractal_ = SLayout::NoneBox,
           const int SFractalSize_ = 512,
-          const PadValue PadVal_ = PadValue::Null>
+          const PadValue PadVal_ = PadValue::Null,
+          const CompactMode Compact_ = CompactMode::Null>
 struct Tile {
 public:
   using DType = Element_;
@@ -605,6 +606,7 @@ public:
 
   static constexpr int SFractalSize = SFractalSize_;
   static constexpr PadValue PadVal = PadVal_;
+  static constexpr CompactMode Compact = Compact_;
 
   // constructor for static shape
   Tile() { };
