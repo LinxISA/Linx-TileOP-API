@@ -1772,7 +1772,7 @@ TMOV_L2S_INSERT(const tile_shape_src &src) {
   SharedTile<tile_shape_src> shared(src);
   asm volatile(
       "BSTART.TMOV.L2S.INSERT %c[DataType]\n"
-      "B.IOT %[Src], mask=" PTO_PE_MASK_ASM "\n"
+      "B.IOT %[Src], mask=" PTO_PE_MASK_ASM ", last\n"
       "B.IOS mask=" PTO_PE_MASK_ASM
       ", ->%S[Shared]<%c[TileSize]>\n"
       : [Shared] "=S"(shared.handle_ref())
@@ -1793,7 +1793,7 @@ TMOV_L2S_PUBLISH(const tile_shape_src &src) {
   SharedTile<tile_shape_src> shared(src);
   asm volatile(
       "BSTART.TMOV.L2S.PUBLISH %c[DataType]\n"
-      "B.IOT %[Src], mask=" PTO_PE_MASK_ASM "\n"
+      "B.IOT %[Src], mask=" PTO_PE_MASK_ASM ", last\n"
       "B.IOS mask=" PTO_PE_MASK_ASM
       ", ->%S[Shared]<%c[TileSize]>\n"
       : [Shared] "=S"(shared.handle_ref())
