@@ -57,7 +57,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_shared_tile_bindings_use_b_ios(self) -> None:
         self.assertNotIn("C.B.IOS", self.header)
         self.assertRegex(self.header, r"B\.IOS %S\[Shared[AB]\], mask=1111")
-        self.assertNotRegex(self.header, r'"B\.IOS mask=" PTO_PE_MASK_ASM')
+        self.assertRegex(self.header, r'"B\.IOS mask=" PTO_PE_MASK_ASM')
 
     def test_pe_masks_are_four_binary_digits(self) -> None:
         active_text = "\n".join(
@@ -68,6 +68,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         )
         self.assertNotRegex(active_text, r"mask=(?![01]{4}(?=[^0-9]|$))[0-9]+")
         self.assertIn("%c[PEMask3]%c[PEMask2]%c[PEMask1]%c[PEMask0]", self.header)
+        iot_records = re.findall(r'"B\.IOT ([^"]*)\\n"', self.header)
+        self.assertTrue(iot_records)
+        for record in iot_records:
+            self.assertIn("mask=", record, record)
 
     def test_retired_tile_operations_are_not_exposed(self) -> None:
         retired = set(self.contract["deleted_tile_names"])
@@ -130,17 +134,21 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("logical elements", tlsu_doc)
         self.assertNotIn("after multiplying", tlsu_doc)
 
-    def test_shared_tmov_fails_closed_until_source_forms_are_unique(self) -> None:
-        for operation in (
-            "TMOV_L2S_INSERT",
-            "TMOV_L2S_PUBLISH",
-            "TMOV_S2L_BROADCAST",
-            "TMOV_S2L_EXTRACT",
+    def test_shared_tmov_uses_unique_source_forms_and_shared_registers(self) -> None:
+        for source_form in (
+            "BSTART.TMOV.L2S.INSERT",
+            "BSTART.TMOV.L2S.PUBLISH",
+            "BSTART.TMOV.S2L.BROADCAST",
+            "BSTART.TMOV.S2L.EXTRACT",
         ):
-            self.assertRegex(
-                self.header,
-                rf"{operation}[\s\S]*?shared_tmov_source_form_is_unique",
-            )
+            self.assertIn(source_form, self.header)
+        self.assertNotIn("shared_tmov_source_form_is_unique", self.header)
+        self.assertRegex(self.header, r'\[Shared\]\s+"=S"')
+        self.assertRegex(self.header, r'\[Shared\]\s+"S"')
+        self.assertNotRegex(
+            self.header,
+            r'\[Shared[A-Za-z]*\]\s+"r"\([^\n]*handle\(\)',
+        )
 
     def test_generated_engine_document_is_fresh(self) -> None:
         generated = ROOT / "docs" / "tileop-usage" / "engines.md"
