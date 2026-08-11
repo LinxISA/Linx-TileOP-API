@@ -149,6 +149,12 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             self.header,
             r'\[Shared[A-Za-z]*\]\s+"r"\([^\n]*handle\(\)',
         )
+        self.assertEqual(
+            self.header.count(
+                '"B.IOT %[Src], mask=" PTO_PE_MASK_ASM ", last\\n"'
+            ),
+            2,
+        )
 
     def test_generated_engine_document_is_fresh(self) -> None:
         generated = ROOT / "docs" / "tileop-usage" / "engines.md"
