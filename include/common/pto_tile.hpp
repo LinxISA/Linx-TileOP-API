@@ -910,8 +910,7 @@ public:
 
   // No data() accessor: a Shared operand must never be passed to an ordinary
   // tile-register inline-asm operand. Shared-aware operations use handle() with
-  // a dedicated compiler contract; Shared operations remain fail-closed until
-  // that contract exists.
+  // the compiler's dedicated `S` register constraint.
 
 private:
   unsigned long Handle;

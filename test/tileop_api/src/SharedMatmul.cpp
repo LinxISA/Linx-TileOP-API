@@ -2,25 +2,34 @@
 
 using namespace pto;
 
+using Global = global_tensor<float, RowMajor<16, 16>>;
 using A = TileLeft<float, 16, 16>;
 using B = TileRight<float, 16, 16>;
 using C = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
-using ScaleA = TileLeft<float, 16, 16>;
-using ScaleB = TileRight<float, 16, 16>;
 
-void shared_matmul_all(C &dst, C &extra, A &a, B &b, ScaleA &scale_a,
-                       ScaleB &scale_b) {
-  auto shared_a = TMOV_L2S_PUBLISH(a);
+void shared_matmul_roundtrip(float *dst, float *lhs, float *rhs) {
+  Global global_a(lhs);
+  Global global_b(rhs);
+  Global global_c(dst);
+  A a;
+  B b;
+  A restored_a;
+  B restored_b;
+  C shared_result;
+  C roundtrip_result;
+
+  TLOAD(a, global_a);
+  TLOAD(b, global_b);
+
+  auto shared_a = TMOV_L2S_INSERT(a);
   auto shared_b = TMOV_L2S_PUBLISH(b);
+  TMOV_S2L_BROADCAST(restored_a, shared_a);
+  TMOV_S2L_EXTRACT(restored_b, shared_b);
 
-  TMATMUL(dst, shared_a, shared_b);
-  TMATMUL_ACC(dst, extra, shared_a, shared_b, fixp::keep_acc());
-  TMATMUL_FIXP(dst, shared_a, shared_b);
-  TMATMUL_FIXP(dst, shared_a, shared_b, fixp::keep_acc());
-  TMATMUL_BIAS(dst, shared_a, shared_b, extra, fixp::keep_acc());
-  TMATMUL_MX(dst, shared_a, scale_a, shared_b, scale_b, fixp::keep_acc());
-  TMATMUL_MX_ACC(dst, extra, shared_a, scale_a, shared_b, scale_b, fixp::keep_acc());
-  TMATMUL_MX_BIAS(dst, shared_a, scale_a, shared_b, scale_b, extra, fixp::keep_acc());
+  TMATMUL(shared_result, a, shared_b);
+  TMATMUL(roundtrip_result, restored_a, restored_b);
+  TADD(shared_result, shared_result, roundtrip_result);
+  TSTORE(global_c, shared_result);
 }
 
 int main() { return 0; }
