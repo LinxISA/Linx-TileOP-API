@@ -87,8 +87,28 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             for path in root.rglob("*")
             if path.is_file()
         )
-        for spelling in ("BSTART.PAR", "B.IOD", "C.B.IOS"):
+        for spelling in (
+            "BSTART.PAR",
+            "B.IOD",
+            "C.B.IOS",
+            "B.FPATR",
+            ".FIXP\"",
+        ):
             self.assertNotIn(spelling, active_implementation)
+
+    def test_inline_asm_uses_current_compiler_contract(self) -> None:
+        self.assertNotRegex(self.header, r'"[=+&]*(?:Tr|vr)"')
+        self.assertNotIn("%Z", self.header)
+        self.assertRegex(self.header, r"B\.DATR[^\n]*%D")
+        self.assertIn("->%q", self.header)
+
+    def test_tile_carrier_preserves_logical_size(self) -> None:
+        tile_header = (ROOT / "include" / "common" / "pto_tile.hpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("ext_vector_type(1024)", tile_header)
+        self.assertIn("LogicalTileBytes", tile_header)
+        self.assertIn("TilesizeCode", tile_header)
 
     def test_active_surface_uses_tlsu_and_per_pe_tsize(self) -> None:
         active_text = "\n".join(
