@@ -9,6 +9,8 @@
 #ifndef PTO_TEST_LINX_HOST_TYPE_SHIM_HPP
 #define PTO_TEST_LINX_HOST_TYPE_SHIM_HPP
 
+#define PTO_LINX_COMPAT_TYPES_PROVIDED 1
+
 // The production Linx compiler provides these scalar types and the tile_size
 // type modifier.  Define layout-compatible host substitutes so a normal C++
 // compiler can validate the public template surface without pretending to

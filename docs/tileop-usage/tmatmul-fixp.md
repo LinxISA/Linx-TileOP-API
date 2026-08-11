@@ -1,16 +1,17 @@
-# Fixed-point matrix wrappers
+# Matrix post-processing compatibility surface
 
-Fixed-point matrix variants are CUBE operations. The wrapper encodes fixed-point attributes with
-`B.FPATR`, binds matrix and parameter tiles in their architectural order, and writes ordinary Local
-tile destinations.
+The active CUBE contract defines twelve named matrix operations and no separate
+post-processing attribute command. The historical fixed-point wrapper names are
+retained only to produce a compile-time diagnostic; they do not emit an
+instruction bundle.
 
 Requirements:
 
-- M, N, and K are powers of two.
-- Each Local or Shared tile uses a per-PE `TSize` from 128 B through 8 KiB.
-- Valid rows and columns do not exceed allocated rows and columns.
-- Shared matrix operands use absolute `S0` through `S255` names allocated by the compiler.
-- Local and Shared inputs may be mixed only in combinations supported by the corresponding wrapper.
+- Use one of the twelve named matrix operations for executable code.
+- Use only default matrix attributes; non-default post-processing options fail
+  during template instantiation.
+- Shared matrix sources also fail closed until the compiler exposes a unique
+  source-selection contract.
 
-The concrete matrix operation name, extra parameter ordering, and result arity must match the pinned
-LinxISA v0.58 contract. No compatibility wrapper may synthesize a removed machine operation.
+No compatibility wrapper may synthesize a removed machine operation or silently
+drop a requested attribute.

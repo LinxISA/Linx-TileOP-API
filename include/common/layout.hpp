@@ -2,8 +2,12 @@
 #define LAYOUT_HPP
 
 #include <stdint.h>
+#include <stddef.h>
 
+#ifndef __linx
 #include <iostream>
+#include <stdio.h>
+#endif
 #include <type_traits>
 
 #include "common/math_utils.hpp"
@@ -83,6 +87,7 @@ const char *layout_type_to_str(LayoutEnum type) {
   return "UnsupportedLayout";
 }
 
+#ifndef __linx
 class MatrixLayoutPrettyPrinter {
   template <typename Layout>
   static void print(std::ostream &out, const Layout &layout) {
@@ -91,6 +96,7 @@ class MatrixLayoutPrettyPrinter {
         << Layout::ColStride << ">, Numel = " << Layout::Numel;
   }
 };
+#endif
 
 template <const int Rows_, const int Cols_, const int RowStride_,
           const int ColStride_,
@@ -190,12 +196,14 @@ struct BlockMatrixLayout {
   }
 
   void dump() const {
+#ifndef __linx
     for (int i = 0; i < Rows; ++i) {
       for (int j = 0; j < Cols; ++j) {
         printf("%d, ", operator()(i, j));
       }
       printf("\n");
     }
+#endif
   }
 
   auto get_outer_layout() const { return decltype(outer_){}; }
@@ -214,6 +222,7 @@ private:
 };
 
 /// @brief Pretty printer for BlockMatrixLayout
+#ifndef __linx
 template <typename OuterLayout_, typename InnerLayout_>
 static std::ostream &
 operator<<(std::ostream &out,
@@ -224,6 +233,7 @@ operator<<(std::ostream &out,
       << "  }";
   return out;
 }
+#endif
 
 template <typename OuterLayout_, typename InnerLayout_>
 concept BlockRowMajorLayout =
