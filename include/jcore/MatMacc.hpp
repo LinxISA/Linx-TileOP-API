@@ -37,7 +37,7 @@ void MATMACC_Impl(tile_shape_C &dst, tile_shape_A &src0, tile_shape_B &src1) {
   size_t M = dst.GetValidRow();
   size_t N = dst.GetValidCol();
   size_t K = src0.GetValidCol();
-  pto_matmul_detail::matmul_acc(dst, src0, src1, dst, M, N, K);
+  pto_matmul_detail::matmul_acc(dst, dst, src0, src1, M, N, K);
 }
 
 template <typename tile_shape_A, typename tile_shape_AX,
