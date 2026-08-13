@@ -3068,6 +3068,14 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   "B.IOT mask=1111, last, ->%q[GroupOut]<%c[GroupSize]>\n"
 
 #define PTO_FIXP_OUT_DECL_0 [Dst] "=&r"(dst.data())
+// Every destination uses an early-clobber constraint. This gives the
+// read-old/write-new contract required by handoff Sec 6.2/5:
+//   * D == C (ACC variants) reads the old C tile, writes the new D tile;
+//   * D / RowMaxOut / GroupMaxOut are distinct outputs that must not alias
+//     (each is bound to its own early-clobbered register).
+// A caller passing the same Tile object for two outputs (or for an output and
+// an input the bundle must read) is a programming error; the asm constraint
+// does not attempt to detect it.
 #define PTO_FIXP_OUT_DECL_1 \
   [Dst] "=&r"(dst.data()), [RowOut] "=&r"(row_out.data())
 #define PTO_FIXP_OUT_DECL_2 \
@@ -3901,10 +3909,6 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
   pto_matmul_detail::matmul<Attr>(c, a, b, M, N, K);
 }
 
-template <is_tile_data_v tile_shape_c, is_local_or_shared_left tile_shape_a,
-          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
-PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
-                              tile_shape_b &b, const Options &options);
 
 // TMATMUL_ACC: D = C + A*B. D and C are distinct ordinary Tile operands.
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
@@ -4003,30 +4007,31 @@ decltype(auto) select_fixp_operand(Pointer *PointerValue, Dummy &DummyValue) {
 
 } // namespace pto_matmul_detail
 
-// Unified TMATMUL_FIXP interface. All FIXP attributes and auxiliary operands
-// are carried by one compile-time-shaped options object; scalar descriptors
-// remain runtime GPR values and tile operands remain runtime tile registers.
+// TMATMUL(D, A, B, options): carries the full PostProcess capability
+// (quant/PReLU/RowMax/GroupMax) via a compile-time-shaped options object;
+// scalar descriptors remain runtime GPR values and tile operands remain
+// runtime tile registers.
 template <is_tile_data_v tile_shape_d, is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
 __attribute__((always_inline)) inline void
-TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a,
+TMATMUL(tile_shape_d &d, tile_shape_a &a,
                                     tile_shape_b &b, const Options &options) {
   constexpr FixpAttr Attr = Options::Attr;
   static_assert(is_valid_fixp_attr(Attr),
                 "invalid CUBE post-process options");
   static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
-                "TMATMUL_FIXP destination dtype does not match PreQuantMode");
+                "TMATMUL destination dtype does not match PreQuantMode");
   static_assert(tile_role_v<tile_shape_a> == Location::Left,
-                "TMATMUL_FIXP input A must be Location::Left");
+                "TMATMUL input A must be Location::Left");
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
-                "TMATMUL_FIXP input B must be a Right tile");
+                "TMATMUL input B must be a Right tile");
   static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
-                "TMATMUL_FIXP requires A.Cols == B.Rows");
+                "TMATMUL requires A.Cols == B.Rows");
   static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
                     tile_shape_d::Cols == tile_shape_b::Cols,
-                "TMATMUL_FIXP output shape must be M x N");
+                "TMATMUL output shape must be M x N");
   static_assert(tile_shape_d::IsValidActiveSize,
-                "TMATMUL_FIXP output logical Tile size must be 128 B..8 KB");
+                "TMATMUL output logical Tile size must be 128 B..8 KB");
 
   constexpr bool HasVectorQuant =
       is_vector_fixp_pre_quant(Attr.PreQuant);
@@ -4079,40 +4084,40 @@ TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a,
     using QuantTile = typename Options::QuantTile;
     static_assert(
         QuantTile::IsValidActiveSize,
-        "TMATMUL_FIXP quant parameter Tile must occupy 128 B..8 KB; pad the "
+        "TMATMUL quant parameter Tile must occupy 128 B..8 KB; pad the "
         "physical Tile and keep ValidRow=1, ValidCol=N when necessary");
     static_assert(QuantTile::ValidRow == -1 || QuantTile::ValidRow == 1,
-                  "TMATMUL_FIXP vector quant parameter must have ValidRow=1");
+                  "TMATMUL vector quant parameter must have ValidRow=1");
     static_assert(QuantTile::ValidCol == -1 || tile_shape_b::ValidCol == -1 ||
                       QuantTile::ValidCol == tile_shape_b::ValidCol,
-                  "TMATMUL_FIXP vector quant parameter must have ValidCol=N");
+                  "TMATMUL vector quant parameter must have ValidCol=N");
   }
   if constexpr (HasPRelu) {
     using ReluTile = typename Options::ReluTile;
     static_assert(
         ReluTile::IsValidActiveSize,
-        "TMATMUL_FIXP PReLU parameter Tile must occupy 128 B..8 KB; pad the "
+        "TMATMUL PReLU parameter Tile must occupy 128 B..8 KB; pad the "
         "physical Tile and keep ValidRow=1, ValidCol=N when necessary");
     static_assert(ReluTile::ValidRow == -1 || ReluTile::ValidRow == 1,
-                  "TMATMUL_FIXP PReLU parameter must have ValidRow=1");
+                  "TMATMUL PReLU parameter must have ValidRow=1");
     static_assert(ReluTile::ValidCol == -1 || tile_shape_b::ValidCol == -1 ||
                       ReluTile::ValidCol == tile_shape_b::ValidCol,
-                  "TMATMUL_FIXP PReLU parameter must have ValidCol=N");
+                  "TMATMUL PReLU parameter must have ValidCol=N");
   }
   if constexpr (HasRowOut) {
     using RowOut = typename Options::RowMaxOut;
     static_assert(RowOut::ValidRow == -1 || tile_shape_a::ValidRow == -1 ||
                       RowOut::ValidRow == tile_shape_a::ValidRow,
-                  "TMATMUL_FIXP RowMaxOut must have ValidRow=M");
+                  "TMATMUL RowMaxOut must have ValidRow=M");
     static_assert(RowOut::ValidCol == -1 || RowOut::ValidCol == 1,
-                  "TMATMUL_FIXP RowMaxOut must have ValidCol=1");
+                  "TMATMUL RowMaxOut must have ValidCol=1");
     static_assert(type_traits<typename RowOut::DType>::TypeCode == __type_fp32 ||
                       type_traits<typename RowOut::DType>::TypeCode ==
                           __type_int32,
-                  "TMATMUL_FIXP RowMaxOut dtype must be FP32 or S32 AccType");
+                  "TMATMUL RowMaxOut dtype must be FP32 or S32 AccType");
     static_assert(
         RowOut::IsValidActiveSize,
-        "TMATMUL_FIXP RowMaxOut physical Tile must occupy 128 B..8 KB");
+        "TMATMUL RowMaxOut physical Tile must occupy 128 B..8 KB");
   }
   if constexpr (HasRowIn) {
     using RowIn = typename Options::RowMaxIn;
@@ -4123,13 +4128,13 @@ TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a,
                       (RowIn::ValidCol == DYNAMIC ||
                        RowOut::ValidCol == DYNAMIC ||
                        RowIn::ValidCol == RowOut::ValidCol),
-                  "TMATMUL_FIXP RowMaxIn/RowMaxOut valid shapes must match");
+                  "TMATMUL RowMaxIn/RowMaxOut valid shapes must match");
     static_assert(std::is_same_v<typename RowIn::DType,
                                  typename RowOut::DType>,
-                  "TMATMUL_FIXP RowMaxIn/RowMaxOut dtypes must match");
+                  "TMATMUL RowMaxIn/RowMaxOut dtypes must match");
     static_assert(
         RowIn::IsValidActiveSize,
-        "TMATMUL_FIXP RowMaxIn physical Tile must occupy 128 B..8 KB");
+        "TMATMUL RowMaxIn physical Tile must occupy 128 B..8 KB");
   }
   if constexpr (HasGroupOut) {
     using GroupOut = typename Options::GroupMaxOut;
@@ -4140,17 +4145,17 @@ TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a,
             : (tile_shape_b::ValidCol + GroupN - 1) / GroupN;
     static_assert(GroupOut::ValidRow == -1 || tile_shape_a::ValidRow == -1 ||
                       GroupOut::ValidRow == tile_shape_a::ValidRow,
-                  "TMATMUL_FIXP GroupMaxOut must have ValidRow=M");
+                  "TMATMUL GroupMaxOut must have ValidRow=M");
     static_assert(GroupOut::ValidCol == -1 || ExpectedCols == -1 ||
                       GroupOut::ValidCol == ExpectedCols,
-                  "TMATMUL_FIXP GroupMaxOut must have ValidCol=ceil(N/GroupN)");
+                  "TMATMUL GroupMaxOut must have ValidCol=ceil(N/GroupN)");
     static_assert(
         type_traits<typename GroupOut::DType>::TypeCode == __type_fp32 ||
             type_traits<typename GroupOut::DType>::TypeCode == __type_int32,
-        "TMATMUL_FIXP GroupMaxOut dtype must be FP32 or S32 AccType");
+        "TMATMUL GroupMaxOut dtype must be FP32 or S32 AccType");
     static_assert(
         GroupOut::IsValidActiveSize,
-        "TMATMUL_FIXP GroupMaxOut physical Tile must occupy 128 B..8 KB");
+        "TMATMUL GroupMaxOut physical Tile must occupy 128 B..8 KB");
   }
 
   size_t M = pto_matmul_detail::matrix_valid_row(a);
@@ -4173,54 +4178,6 @@ TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a,
   pto_matmul_detail::emit_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, a, b, row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
-}
-
-// TMATMUL(D, A, B, options): the active Function 0 operation carries the
-// full PostProcess capability (quant/PReLU/RowMax/GroupMax) via options. It
-// forwards to the shared post-process lowering. The active CUBE contract has
-// no architectural post-process attribute command, so this overload fails
-// closed in emit_fixp.
-template <is_tile_data_v tile_shape_c, is_local_or_shared_left tile_shape_a,
-          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
-PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
-                              tile_shape_b &b, const Options &options) {
-  TMATMUL_FIXP(c, a, b, options);
-}
-
-
-// TMATMUL_FIXP: D = FIXP(A*B), parameter-free local mode. Attr may select
-// keeping the accumulator type, FP16/BF16 conversion, and optional plain ReLU.
-// Modes requiring scalar/vector parameters or extra max outputs use dedicated
-// overloads rather than silently emitting an incomplete operand stream.
-template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
-          is_local_or_shared_left tile_shape_a,
-          is_local_or_shared_right tile_shape_b>
-PTO_SHARED_INLINE void TMATMUL_FIXP(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b) {
-  static_assert(is_valid_fixp_attr(Attr),
-                "invalid CUBE post-process options");
-  static_assert(
-      is_basic_fixp_attr(Attr),
-      "this TMATMUL_FIXP overload supports only parameter-free conversion "
-      "and ReLU; quant parameters, PReLU, RowMax and GroupMax require a "
-      "dedicated overload");
-  static_assert(
-      is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
-      "TMATMUL_FIXP destination dtype does not match PreQuant mode");
-  static_assert(tile_role_v<tile_shape_a> == Location::Left,
-                "TMATMUL_FIXP input A must be Location::Left");
-  static_assert(tile_role_v<tile_shape_b> == Location::Right,
-                "TMATMUL_FIXP input B must be Location::Right");
-  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
-                "TMATMUL_FIXP requires A.Cols == B.Rows");
-  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
-                    tile_shape_d::Cols == tile_shape_b::Cols,
-                "TMATMUL_FIXP output shape must be M x N");
-  static_assert(
-      tile_shape_d::IsValidActiveSize,
-      "TMATMUL_FIXP output logical Tile size must be 128 B..8 KB");
-
-  fixp::Options<Attr> options;
-  TMATMUL_FIXP(d, a, b, options);
 }
 
 // TMATMUL_BIAS: C = A*B + bias (BSTART.TMATMUL.BIAS).
