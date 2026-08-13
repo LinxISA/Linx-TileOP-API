@@ -16,14 +16,37 @@ namespace pto {
 ///     // signed less than comparison
 /// }
 /// @endcode
-enum class CmpMode {
-  EQ,  ///< Equal (==)
-  NE,  ///< Not equal (!=)
-  GT,  ///< Greater than (>)
-  LT,  ///< Less than (<)
-  GE,  ///< Greater than or equal (>=)
-  LE,  ///< Less than or equal (<=)
+// PTO 0.58 B.DATR CMode[31:29] encoding. Values are explicit and MUST match
+// the ISA: EQ=0 NE=1 LT=2 GT=3 LE=4 GE=5 (do not rely on declaration order).
+enum class CmpMode : uint8_t {
+  EQ = 0,  ///< Equal (==)
+  NE = 1,  ///< Not equal (!=)
+  LT = 2,  ///< Less than (<)
+  GT = 3,  ///< Greater than (>)
+  LE = 4,  ///< Less than or equal (<=)
+  GE = 5,  ///< Greater than or equal (>=)
 };
+
+/// Compile-time validity check for the six ISA comparison modes. Rejects any
+/// out-of-range value that a bogus static_cast would otherwise smuggle into
+/// the B.DATR CMode field.
+constexpr bool is_valid_cmp_mode(CmpMode Mode) {
+  switch (Mode) {
+  case CmpMode::EQ:
+  case CmpMode::NE:
+  case CmpMode::LT:
+  case CmpMode::GT:
+  case CmpMode::LE:
+  case CmpMode::GE:
+    return true;
+  }
+  return false;
+}
+
+/// CmpMode -> B.DATR CMode[31:29] immediate (the enum value itself).
+constexpr unsigned cmp_mode_code(CmpMode Mode) {
+  return static_cast<unsigned>(Mode);
+}
 
 /// Padding Value : keep SAME with asm encoding
 enum class PadValue {

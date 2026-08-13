@@ -5146,25 +5146,131 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   );
 }
 
-// TCMP: compare src0 and src1, write packed predicate
-template <is_tile_data_v tile_shape>
-void TCMP(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  asm volatile(
-    "BSTART.TEPL 13, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
-  );
+// TCMP: compare src0 and src1, write packed predicate. The comparison mode is
+// a compile-time template parameter encoded into B.DATR CMode[31:29]; the
+// zero-arg form is kept as a deprecated EQ default (PTO 0.58).
+template <CmpMode Mode, is_tile_data_v tile_shape_out,
+          is_tile_data_v tile_shape_in>
+void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
+  static_assert(is_valid_cmp_mode(Mode), "TCMP requires a valid CmpMode");
+  static_assert(tile_shape_in::Rows == tile_shape_out::Rows &&
+                    tile_shape_in::Cols == tile_shape_out::Cols,
+                "TCMP output shape must match input shape");
+  if constexpr (Mode == CmpMode::EQ) {
+    asm volatile(
+      "BSTART.TEPL 13, %c[TCode]\n"
+      "B.DATR Zero, eq\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src0.GetValidCol()),
+        [VROW] "r"(src0.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S0] "Tr"(src0.data()),
+        [S1] "Tr"(src1.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+    );
+  } else if constexpr (Mode == CmpMode::NE) {
+    asm volatile(
+      "BSTART.TEPL 13, %c[TCode]\n"
+      "B.DATR Zero, ne\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src0.GetValidCol()),
+        [VROW] "r"(src0.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S0] "Tr"(src0.data()),
+        [S1] "Tr"(src1.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+    );
+  } else if constexpr (Mode == CmpMode::LT) {
+    asm volatile(
+      "BSTART.TEPL 13, %c[TCode]\n"
+      "B.DATR Zero, lt\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src0.GetValidCol()),
+        [VROW] "r"(src0.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S0] "Tr"(src0.data()),
+        [S1] "Tr"(src1.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+    );
+  } else if constexpr (Mode == CmpMode::GT) {
+    asm volatile(
+      "BSTART.TEPL 13, %c[TCode]\n"
+      "B.DATR Zero, gt\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src0.GetValidCol()),
+        [VROW] "r"(src0.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S0] "Tr"(src0.data()),
+        [S1] "Tr"(src1.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+    );
+  } else if constexpr (Mode == CmpMode::LE) {
+    asm volatile(
+      "BSTART.TEPL 13, %c[TCode]\n"
+      "B.DATR Zero, le\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src0.GetValidCol()),
+        [VROW] "r"(src0.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S0] "Tr"(src0.data()),
+        [S1] "Tr"(src1.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+    );
+  } else if constexpr (Mode == CmpMode::GE) {
+    asm volatile(
+      "BSTART.TEPL 13, %c[TCode]\n"
+      "B.DATR Zero, ge\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src0.GetValidCol()),
+        [VROW] "r"(src0.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S0] "Tr"(src0.data()),
+        [S1] "Tr"(src1.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+    );
+  }
+}
+
+// Deprecated EQ-default form retained for old callers.
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
+  TCMP<CmpMode::EQ>(dst, src0, src1);
 }
 
 // TPRELU: parametric ReLU with per-element slope
@@ -5775,29 +5881,142 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   );
 }
 
-// TCMPS: compare src with scalar
-template <is_tile_data_v tile_shape>
-void TCMPS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
+// TCMPS: compare src with scalar. The comparison mode is a compile-time
+// template parameter encoded into B.DATR CMode[31:29]; scalar travels via the
+// canonical B.IOR slot, never as a Tile source (PTO 0.58).
+template <CmpMode Mode, is_tile_data_v tile_shape_out,
+          is_tile_data_v tile_shape_in>
+void TCMPS(tile_shape_out &dst, tile_shape_in &src,
+           typename tile_shape_in::DType s) {
+  static_assert(is_valid_cmp_mode(Mode), "TCMPS requires a valid CmpMode");
+  static_assert(tile_shape_in::Rows == tile_shape_out::Rows &&
+                    tile_shape_in::Cols == tile_shape_out::Cols,
+                "TCMPS output shape must match input shape");
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
-  volatile typename tile_shape::DType sv = s;
-  asm volatile(
-    "BSTART.TEPL 45, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
-    "B.IOR [%7],[]\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
-  );
+  volatile typename tile_shape_in::DType sv = s;
+  if constexpr (Mode == CmpMode::EQ) {
+    asm volatile(
+      "BSTART.TEPL 45, %c[TCode]\n"
+      "B.DATR Zero, eq\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOR [%[Scalar]],[]\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src.GetValidCol()),
+        [VROW] "r"(src.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S] "Tr"(src.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [Scalar] "r"(sv)
+    );
+  } else if constexpr (Mode == CmpMode::NE) {
+    asm volatile(
+      "BSTART.TEPL 45, %c[TCode]\n"
+      "B.DATR Zero, ne\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOR [%[Scalar]],[]\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src.GetValidCol()),
+        [VROW] "r"(src.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S] "Tr"(src.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [Scalar] "r"(sv)
+    );
+  } else if constexpr (Mode == CmpMode::LT) {
+    asm volatile(
+      "BSTART.TEPL 45, %c[TCode]\n"
+      "B.DATR Zero, lt\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOR [%[Scalar]],[]\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src.GetValidCol()),
+        [VROW] "r"(src.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S] "Tr"(src.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [Scalar] "r"(sv)
+    );
+  } else if constexpr (Mode == CmpMode::GT) {
+    asm volatile(
+      "BSTART.TEPL 45, %c[TCode]\n"
+      "B.DATR Zero, gt\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOR [%[Scalar]],[]\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src.GetValidCol()),
+        [VROW] "r"(src.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S] "Tr"(src.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [Scalar] "r"(sv)
+    );
+  } else if constexpr (Mode == CmpMode::LE) {
+    asm volatile(
+      "BSTART.TEPL 45, %c[TCode]\n"
+      "B.DATR Zero, le\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOR [%[Scalar]],[]\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src.GetValidCol()),
+        [VROW] "r"(src.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S] "Tr"(src.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [Scalar] "r"(sv)
+    );
+  } else if constexpr (Mode == CmpMode::GE) {
+    asm volatile(
+      "BSTART.TEPL 45, %c[TCode]\n"
+      "B.DATR Zero, ge\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOR [%[Scalar]],[]\n"
+      ""
+      : [D] "=Tr"(dst.data())
+      : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [VCOL] "r"(src.GetValidCol()),
+        [VROW] "r"(src.GetValidRow()),
+        [Cols] "i"(tile_shape_in::Cols),
+        [S] "Tr"(src.data()),
+        [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [Scalar] "r"(sv)
+    );
+  }
+}
+
+// Deprecated EQ-default form retained for old callers.
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void TCMPS(tile_shape_out &dst, tile_shape_in &src,
+           typename tile_shape_in::DType s) {
+  TCMPS<CmpMode::EQ>(dst, src, s);
 }
 
 // TLRELU: leaky ReLU with scalar slope
