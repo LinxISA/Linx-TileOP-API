@@ -12,16 +12,16 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void ACCSCALE_T(tile_shape_out &, tile_shape_in &,
                 typename tile_shape_in::DType) {
   static_assert(pto_dependent_false_v<tile_shape_out, tile_shape_in>,
-                "ACCSCALE_T used the removed v5 ACCCVT opcode; use a "
-                "TMATMUL*.FIXP operation that produces an ordinary Tile");
+                "ACCSCALE_T used the removed v5 ACCCVT opcode; use the "
+                "active TMATMUL operation with B.FPATR");
 }
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void ACCSCALE_NZ2DN(tile_shape_out &, tile_shape_in &,
                     typename tile_shape_in::DType) {
   static_assert(pto_dependent_false_v<tile_shape_out, tile_shape_in>,
-                "ACCSCALE_NZ2DN used the removed v5 ACCCVT opcode; use a "
-                "TMATMUL*.FIXP operation that produces an ordinary Tile");
+                "ACCSCALE_NZ2DN used the removed v5 ACCCVT opcode; use the "
+                "active TMATMUL operation with B.FPATR");
 }
 
 template <is_tile_data_v tile_shape_max, is_tile_data_v tile_shape_out,
@@ -32,7 +32,7 @@ void ACCCVT_RMAX_SCALE_NZ2DN(tile_shape_max &, tile_shape_out &,
   static_assert(
       pto_dependent_false_v<tile_shape_max, tile_shape_out, tile_shape_in>,
       "ACCCVT_RMAX_SCALE_NZ2DN used the removed v5 ACCCVT opcode; migrate "
-      "to the matching TMATMUL*.FIXP variant and its RowMax operands");
+      "to the active TMATMUL operation with B.FPATR and its RowMax operands");
 }
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_data_v tile_shape_in1>
@@ -1986,7 +1986,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void ACCCVT(tile_shape_out &, tile_shape_in &) {
   static_assert(pto_dependent_false_v<tile_shape_out, tile_shape_in>,
                 "ACCCVT was removed from DavinciOO v5 and cannot export the "
-                "implicit ACC; use the corresponding TMATMUL*.FIXP variant");
+                "implicit ACC; use the active TMATMUL operation with B.FPATR");
 }
 
 namespace pto_matmul_detail {
@@ -2153,8 +2153,6 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
 }
 
 PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias, "TMATMUL.BIAS")
-PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_acc_fixp, "TMATMUL.ACC.FIXP")
-PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias_fixp, "TMATMUL.BIAS.FIXP")
 
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename C, typename A,
           typename B>
