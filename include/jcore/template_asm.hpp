@@ -4257,9 +4257,9 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
 
 template <is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
-          is_tile_data_v tile_shape_ascale,
+          is_any_tile_data_v tile_shape_ascale,
           is_local_or_shared_right tile_shape_b,
-          is_tile_data_v tile_shape_bscale, fixp::is_options_v Options>
+          is_any_tile_data_v tile_shape_bscale, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_ascale &ascale,
                 tile_shape_b &b, tile_shape_bscale &bscale,
                 const Options &options) {
@@ -4322,8 +4322,8 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
 }
 
 template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
-          is_local_or_shared_left tile_shape_a, is_tile_data_v tile_shape_sa,
-          is_local_or_shared_right tile_shape_b, is_tile_data_v tile_shape_sb,
+          is_local_or_shared_left tile_shape_a, is_any_tile_data_v tile_shape_sa,
+          is_local_or_shared_right tile_shape_b, is_any_tile_data_v tile_shape_sb,
           fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
                     tile_shape_sa &scale_a, tile_shape_b &b,
@@ -4389,9 +4389,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
 
 template <is_tile_data_v tile_shape_d,
           is_local_or_shared_left tile_shape_a,
-          is_tile_data_v tile_shape_sa,
+          is_any_tile_data_v tile_shape_sa,
           is_local_or_shared_right tile_shape_b,
-          is_tile_data_v tile_shape_sb, is_tile_data_v tile_shape_bias,
+          is_any_tile_data_v tile_shape_sb, is_tile_data_v tile_shape_bias,
           fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
                      tile_shape_sa &scale_a, tile_shape_b &b,
