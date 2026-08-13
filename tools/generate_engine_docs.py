@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Generate the v0.58 engine index from the pinned LinxISA projection."""
+"""Generate the v0.58 engine index from the pinned LinxISA projection.
+
+The output mirrors the PTO-ISA v0.58 tile-operation catalog
+(spec/catalog/tile-operations.json) for the four architectural engine
+classes: **VEC**, **SFU**, **TLSU**, and **CUBE**.  Engine and
+classification are decoupled (per ADR 0057): TEXP/TLOG/... are SFU-executed
+elementwise operations, TGATHER/TSCATTER/TCONCAT are SFU-executed
+layout/irregular operations, and TMOV is a TLSU-executed layout operation.
+The historical TEPL name is only the unchanged encoding carrier; TileOP API
+emits the canonical `BSTART.VEC` / `BSTART.SFU` assembly aliases.
+"""
 
 from __future__ import annotations
 
@@ -60,6 +70,40 @@ def render() -> str:
         for row in contract[key]:
             lines.append(f"| `{row['name']}` | `{row['mnemonic']}` | {row['function']} |")
         lines.append("")
+
+    lines.extend(
+        [
+            "## Classification semantics",
+            "",
+            "PTO-ISA v0.58 decouples the execution engine from the operation",
+            "classification (ADR 0057). Operations in the `elementwise-tile-tile`",
+            "and `tile-scalar-and-immediate` classes run elementwise on VEC, but a",
+            "few elementwise-class operations (`TEXP`, `TLOG`, `TRECIP`, `TSQRT`,",
+            "`TRSQRT`) are executed by SFU. `reduce-and-expand`, `layout-and-",
+            "rearrangement`, and `irregular-and-complex` classes are SFU-executed.",
+            "All TLSU and CUBE operations are executed by their own engine class.",
+            "The `BSTART.VEC` / `BSTART.SFU` spellings are canonical aliases of",
+            "the historical `BSTART.TEPL` encoding carrier (ADR 0057); TileOP API",
+            "never emits `TEPL`.",
+            "",
+        ]
+    )
+
+    deleted = contract.get("deleted_tile_names", [])
+    if deleted:
+        lines.extend(
+            [
+                "## Removed from earlier versions",
+                "",
+                "The following operations existed in pre-0.58 versions and were",
+                "removed (they are not emitted by this library):",
+                "",
+                "```text",
+                ", ".join(sorted(deleted)),
+                "```",
+                "",
+            ]
+        )
 
     return "\n".join(lines)
 

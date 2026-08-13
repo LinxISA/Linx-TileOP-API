@@ -1675,15 +1675,20 @@ blkv_bf16x2_max(const BLKV_BF16X2_TYPE &src_l,
 //===----------------------------------------------------------------------===//
 // One-layer inline-asm tileop templates (header-form, no __vec__ kernel).
 //
-// These map 1:1 to the released LinxISA v0.58 block ISA. The interface name is
-// the tile operation name: programmers call TLOAD /
-// TSTORE / MGATHER / ... and get the hand-written block assembly directly.
+// These map 1:1 to the PTO-ISA v0.58 (LinxISA) tile-operation catalog. The
+// interface name IS the tileop name: programmers call TLOAD / TSTORE /
+// MGATHER / ... and get the hand-written block assembly directly.
 //
-// Canonical v0.58 assembly surface:
-//   TLSU: TLOAD, TSTORE, TMOV, MGATHER, MSCATTER, and their named forms.
-//   CUBE: TMATMUL, TMATMUL.BIAS, TMATMUL.ACC,
-//                   TMATMULMX=3, TMATMULMX.BIAS=4, TMATMULMX.ACC=5,
-//                   TMATMUL*.FIXP=9..14
+// Block-start operations per the pinned LinxISA v0.58.1 catalog
+// (contracts/linxisa-v0.58-engine-ops.json):
+//   TLSU: BSTART.TLOAD, BSTART.TSTORE, BSTART.TMOV, BSTART.TPREFETCH,
+//         BSTART.MGATHER*, BSTART.MSCATTER*, and BSTART.GMOV.
+//   CUBE: BSTART.TMATMUL*, BSTART.TMATMULMX*, BSTART.TGEMV*, and
+//         BSTART.TGEMVMX*.
+//   TEPL carrier operations use the semantic BSTART.VEC/BSTART.SFU aliases.
+// The historical `TMATMUL*.FIXP` suffix was an implementation-local name;
+// PTO-ISA 0.58 carries post-processing through the B.FPATR attribute, so the
+// canonical emission is a named CUBE block start plus `B.FPATR`.
 // All variants below are the NORM (no layout conversion) generic form.
 //===----------------------------------------------------------------------===//
 
@@ -1950,6 +1955,14 @@ PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
       : "memory");
 }
 
+// ACCCVT was removed from PTO-ISA v0.58. Post-processed matrix operations
+// write an ordinary Tile directly and are the supported replacement.
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void ACCCVT(tile_shape_out &, tile_shape_in &) {
+  static_assert(pto_dependent_false_v<tile_shape_out, tile_shape_in>,
+                "ACCCVT is retired and cannot export an implicit ACC; use "
+                "the corresponding TMATMUL operation with B.FPATR");
+}
 namespace pto_matmul_detail {
 
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
@@ -1976,12 +1989,33 @@ inline size_t matrix_valid_col(const Matrix &matrix) {
   return matrix.GetValidCol();
 }
 
+// PTO_FIXP_ATTR / PTO_FIXP_ATTR_INPUTS emit the B.FPATR line and its seven
+// immediate operands. Every TMATMUL/TMATMULMX CUBE bundle carries exactly one
+// B.FPATR after B.DATR, so these are shared by the whole family, not just the
+// .FIXP variants. The macros reference the template parameter Attr, so the
+// helper templates below take FixpAttr Attr as an NTTP. Defined here (before
+// any helper that uses them) so the plain matmul free function can also use
+// PTO_FIXP_ATTR.
+// PTO-ISA v0.58 B.FPATR fields:
+//   PreQuantMode(6b@26) ReluMode(3b@23) GroupNCode(4b@19, <=9)
+//   RowMaxEn(1b@18) GroupMaxEn(1b@17) RowMaxInit(1b@16) MaxAbsEn(1b@15)
+#define PTO_FIXP_ATTR \
+  "B.FPATR %c[PreQuant], %c[ReluMode], %c[GroupNCode], %c[RowMaxEn], " \
+  "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn]\n"
+
+#define PTO_FIXP_ATTR_INPUTS \
+  [PreQuant] "i"(static_cast<uint8_t>(Attr.PreQuant)), \
+  [ReluMode] "i"(static_cast<uint8_t>(Attr.Relu)), \
+  [GroupNCode] "i"(Attr.GroupNCode), [RowMaxEn] "i"(Attr.RowMaxEn), \
+  [GroupMaxEn] "i"(Attr.GroupMaxEn), \
+  [RowMaxInit] "i"(Attr.RowMaxInit), [MaxAbsEn] "i"(Attr.MaxAbsEn)
+
 template <FixpAttr Attr>
 constexpr void validate_cube_attributes() {
-  static_assert(
-      Attr == FixpAttr{},
-      "the active CUBE contract has no post-process attribute command; "
-      "non-default FixpAttr values are unsupported");
+  static_assert(static_cast<uint8_t>(Attr.Relu) <= 3,
+                "B.FPATR ReluMode must be in the architectural 0..3 range");
+  static_assert(Attr.GroupNCode <= 9,
+                "B.FPATR GroupNCode must be in the architectural 0..9 range");
 }
 
 template <typename A, typename B>
