@@ -24,6 +24,11 @@ void TCmp_Vec_RowMajor(typename tile_shape_out::TileDType dst,
           dst[idx] = static_cast<typename tile_shape_out::DType>( src0[idx] >= src1[idx]);
       } else if constexpr (mode == CmpMode::LE) {
           dst[idx] = static_cast<typename tile_shape_out::DType>( src0[idx] <= src1[idx]);
+      } else {
+          static_assert(mode == CmpMode::EQ || mode == CmpMode::NE ||
+                            mode == CmpMode::LT || mode == CmpMode::GT ||
+                            mode == CmpMode::LE || mode == CmpMode::GE,
+                        "TCMP mode must be one of the six ISA comparison modes");
       }
     }
 }
@@ -48,6 +53,11 @@ void TCmp_Vec_ColMajor(
           dst[idx] = static_cast<typename tile_shape_out::DType>( src0[idx] >= src1[idx]);
       } else if constexpr (mode == CmpMode::LE) {
           dst[idx] = static_cast<typename tile_shape_out::DType>( src0[idx] <= src1[idx]);
+      } else {
+          static_assert(mode == CmpMode::EQ || mode == CmpMode::NE ||
+                            mode == CmpMode::LT || mode == CmpMode::GT ||
+                            mode == CmpMode::LE || mode == CmpMode::GE,
+                        "TCMP mode must be one of the six ISA comparison modes");
       }
     }
 }

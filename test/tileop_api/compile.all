@@ -24,6 +24,7 @@ make clean;make TESTCASE=TMatmulAllOptions
 make clean;make TESTCASE=TGEMVAllOptions
 make clean;make TESTCASE=PostProcessCombos
 make clean;make TESTCASE=SharedMatrixForms
+make clean;make TESTCASE=TCmpMode
 make clean;make TESTCASE=SharedTLoad
 make clean;make TESTCASE=TAbs
 make clean;make TESTCASE=TAdd_mask
