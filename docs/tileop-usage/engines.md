@@ -139,3 +139,24 @@ The table is projected from the pinned LinxISA release recorded in
 | `TGEMV_MX` | `BSTART.TGEMVMX` | 20 |
 | `TGEMV_MX_BIAS` | `BSTART.TGEMVMX.BIAS` | 21 |
 | `TGEMV_MX_ACC` | `BSTART.TGEMVMX.ACC` | 22 |
+
+## Classification semantics
+
+PTO-ISA v0.58 decouples the execution engine from the operation
+classification (ADR 0057). Operations in the `elementwise-tile-tile`
+and `tile-scalar-and-immediate` classes run elementwise on VEC, but a
+few elementwise-class operations (`TEXP`, `TLOG`, `TRECIP`, `TSQRT`,
+`TRSQRT`) are executed by SFU. `reduce-and-expand`, `layout-and-
+rearrangement`, and `irregular-and-complex` classes are SFU-executed.
+All TLSU and CUBE operations are executed by their own engine class.
+The `BSTART.VEC` / `BSTART.SFU` spellings are canonical aliases of
+the historical `BSTART.TEPL` encoding carrier (ADR 0057); TileOP API
+never emits `TEPL`.
+
+## Removed from earlier versions
+
+Pre-0.58 versions additionally shipped several tile operations
+that the active catalog removed (for example the ACC-style
+post-processing helpers). None of the removed operations are
+emitted by this library; the canonical list of retired names is
+recorded in the contract under `deleted_tile_names`.

@@ -95,12 +95,11 @@ def render() -> str:
             [
                 "## Removed from earlier versions",
                 "",
-                "The following operations existed in pre-0.58 versions and were",
-                "removed (they are not emitted by this library):",
-                "",
-                "```text",
-                ", ".join(sorted(deleted)),
-                "```",
+                "Pre-0.58 versions additionally shipped several tile operations",
+                "that the active catalog removed (for example the ACC-style",
+                "post-processing helpers). None of the removed operations are",
+                "emitted by this library; the canonical list of retired names is",
+                "recorded in the contract under `deleted_tile_names`.",
                 "",
             ]
         )
