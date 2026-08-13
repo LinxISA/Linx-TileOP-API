@@ -224,7 +224,9 @@ template <FixpAttr Attr, typename DType>
 constexpr bool is_fixp_output_type() {
   constexpr int TypeCode = type_traits<DType>::TypeCode;
   if constexpr (Attr.PreQuant == FixpPreQuantMode::None)
-    return TypeCode == __type_fp32 || TypeCode == __type_int32;
+    // PreQuant=None keeps the AccType result; only FP32 is accepted (no S32
+    // alias) per PTO 0.58 (handoff 3327).
+    return TypeCode == __type_fp32;
   if constexpr (Attr.PreQuant == FixpPreQuantMode::F322F16 ||
                 Attr.PreQuant == FixpPreQuantMode::VDEQF16 ||
                 Attr.PreQuant == FixpPreQuantMode::DEQF16 ||
@@ -255,7 +257,9 @@ constexpr bool is_fixp_output_type() {
     return TypeCode == __type_hif8;
   if constexpr (Attr.PreQuant == FixpPreQuantMode::QF322FP8Pre ||
                 Attr.PreQuant == FixpPreQuantMode::VQF322FP8Pre)
-    return TypeCode == __type_fp8_e4m3 || TypeCode == __type_fp8_e5m2;
+    // Generic FP8 output is normalized to E4M3 only (no E5M2 alias) per
+    // PTO 0.58 (handoff 3327).
+    return TypeCode == __type_fp8_e4m3;
   if constexpr (Attr.PreQuant == FixpPreQuantMode::QF322F32Pre ||
                 Attr.PreQuant == FixpPreQuantMode::VQF322F32Pre)
     return TypeCode == __type_fp32;
