@@ -28,17 +28,23 @@ B.IOS S7, mask=1111
 B.IOS mask=0011, ->S9<4>
 ```
 
-Each core owns one Shared register file visible to its four PEs. A Shared destination allocates a
-new physical register through compiler allocation and hardware renaming. A Shared source does not
-modify the descriptor. Shared read-modify-write operations are atomic, but the architecture does
-not impose ordering between PEs. Programs must avoid conflicting offsets. Reading an uninitialized
-Shared register has the same undefined-value behavior as reading an undefined scalar register.
+Operations with several same-shaped operands require callers to construct them
+with matching runtime valid dimensions. Matrix operations derive `M`, `N`, and
+`K` from their Left/Right operands. `SharedTile` preserves these runtime values
+when produced by `TMOV_L2S_INSERT` or `TMOV_L2S_PUBLISH`, so Shared Matmul uses
+the same dynamic `B.DIM` path as Local Matmul.
 
-## Engine classes
+Both Shared-producing TMOV operations support return-value and output-parameter
+forms:
 
-- **VEC**: elementwise operations only.
-- **SFU**: reductions, broadcasts, transforms, sorting, and other complex-hardware operations.
-- **TLSU**: tile movement and memory access.
-- **CUBE**: matrix operations.
+```cpp
+auto shared = TMOV_L2S_PUBLISH(local);
 
-The encoding carrier behind VEC and SFU is unchanged; public assembly uses the semantic aliases.
+SharedTile<LocalTile> shared;
+TMOV_L2S_PUBLISH(shared, local);
+```
+
+The output-parameter form copies the Local Tile's runtime valid dimensions into
+the `SharedTile` metadata. The Shared handle must still remain inside an inlined
+SSA flow; a non-inlined function that writes a caller-owned `SharedTile&` would
+require a separate Shared register ABI.
