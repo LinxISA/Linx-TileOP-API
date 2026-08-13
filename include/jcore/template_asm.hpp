@@ -153,6 +153,33 @@ DEFINE_TMOV_LAYOUT(NZ2ZN)
 DEFINE_TMOV_LAYOUT(ZN2NZ)
 DEFINE_TMOV_LAYOUT(NORM)
 
+// PTO ISA 0.58 generic Local-to-Local TMOV(dst, src). Engine TLSU function 2.
+// Copies the payload and definedness from src to dst; this is not a dtype
+// conversion, reshape, transpose, layout conversion or Local/Shared move.
+// The same exact C++ Tile type is required on both sides, which statically
+// guarantees matching rows/columns/valid-shape/layout/dtype. DATR layout is
+// NORM with zero padding (pad union must be zero).
+template <is_local_tile_v Tile>
+inline void TMOV(Tile &dst, const Tile &src) {
+  static_assert(
+      tile_type_traits<typename Tile::TileDType>::IsValidActiveSize,
+      "TMOV logical Tile size must be 128 B..8 KB");
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
+  asm volatile(
+    "BSTART.TLSU TMOV, %c[DataType]\n"
+    "B.DATR NORM.normal, Zero\n"
+    "B.DIM %[ValidCol], 0, ->lb0\n"
+    "B.DIM %[ValidRow], 0, ->lb1\n"
+    "B.IOT %[Src], mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+    : [Dst] "=&Tr"(dst.data())
+    : [Src] "Tr"(src.data()),
+      [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
+      [TileSize] "i"(
+          tile_type_traits<typename Tile::TileDType>::TilesizeCode),
+      [ValidCol] "r"(valid_col), [ValidRow] "r"(valid_row));
+}
+
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TMOV_DN2NZ_DYN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
