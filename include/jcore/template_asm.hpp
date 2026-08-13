@@ -1993,7 +1993,7 @@ namespace pto_matmul_detail {
 
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
   "BSTART.CUBE " OPCODE ", %c[DataTypeA]\n"                                 \
-  "B.DATR %c[DataTypeB], byte0, Null\n" EXTRA_ATTRS                         \
+  "B.DATR %c[DataTypeB], byte0, Zero\n" EXTRA_ATTRS                         \
   "B.DIM %[M], 0, ->lb0\n"                                                   \
   "B.DIM %[N], 0, ->lb1\n"                                                   \
   "B.DIM %[K], 0, ->lb2\n"
