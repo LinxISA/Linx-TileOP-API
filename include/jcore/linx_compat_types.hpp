@@ -3,7 +3,12 @@
 
 #include <stdint.h>
 
-#ifndef PTO_LINX_COMPAT_TYPES_PROVIDED
+// On the LLVM Linx target (__linx), the scalar storage types (__tf32 etc.)
+// are provided by the compiler's linx_blkc.h builtin header, so this compat
+// fallback must not redefine them.
+#if defined(__linx)
+#define PTO_LINX_COMPAT_TYPES_PROVIDED 1
+#elif !defined(PTO_LINX_COMPAT_TYPES_PROVIDED)
 
 // The public TileOP surface names scalar storage formats that are not C++
 // fundamental types.  Keep those names available to the Linx target while the
