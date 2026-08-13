@@ -1,14 +1,16 @@
 # Matrix post-processing compatibility surface
 
-The active CUBE contract defines twelve named matrix operations and no separate
-post-processing attribute command. The historical fixed-point wrapper names are
-retained only to produce a compile-time diagnostic; they do not emit an
-instruction bundle.
+The active CUBE contract defines the matrix operations and carries all
+post-processing through the `B.FPATR` attribute; there is no separate
+post-processing attribute instruction. The historical `TMATMUL*.FIXP`
+wrappers are retained for compatibility: they configure `B.FPATR` and emit
+the base `BSTART.CUBE TMATMUL` bundle plus the matching auxiliary operand
+stream.
 
 Requirements:
 
-- `dst`、`a` 和所有辅助 Tile 都是普通 Local Tile。
-- `right` 可以是普通 `Tile<Location::Right, ...>`，也可以是 `SharedTile<RightTile>`。
+- `dst`、`a` 和所有辅助 Tile 都是普通 Local Tile；`a` 必须是 `Location::Left`，`b` 必须是 `Location::Right`。
+- `right` 可以是普通 `Tile<Location::Right, ...>`，也可以是 `SharedTile<RightTile>`（或 `SharedTile<LeftTile>` 作为 `a`）。
 - 所有 `B.FPATR` 配置和可选 operand 都封装在唯一的 `options` 参数中。
 - options 的类型在编译期确定模式；scalar descriptor 的值和 Tile 寄存器内容可在运行时确定。
 
@@ -25,6 +27,40 @@ using tile_s8 = Tile<Location::Vec, int8_t, 32, 32>;
 
 A/B/dst 的物理 Tile 必须满足 TileOP 的对齐和 512 B..32 KB active-size 约束。`dst` 的 valid shape 必须为 `M x N`。
 
+## B.FPATR 模式
+
+`FixpPreQuantMode` 的取值及其输出数据类型（PTO-ISA v0.58 `B.FPATR` 表）：
+
+| 模式 | 值 | dst dtype |
+| --- | ---: | --- |
+| `None` | 0 | FP32（AccType 结果；v0.58 不再接受 S32 别名） |
+| `F322F16` | 1 | FP16 |
+| `VREQS8Pre` | 2 | S8 |
+| `REQS8Pre` | 3 | S8 |
+| `VDEQF16` | 4 | FP16 |
+| `DEQF16` | 5 | FP16 |
+| `VSHIFTS322S16` | 12 | S16 |
+| `SHIFTS322S16` | 13 | S16 |
+| `F322BF16` | 16 | BF16 |
+| `QF322S4Pre` | 17 | S4X2 |
+| `VQF322S4Pre` | 18 | S4X2 |
+| `QF322S16Pre` | 19 | S16 |
+| `VQF322S16Pre` | 20 | S16 |
+| `VQF322S8Pre` | 23 | S8 |
+| `QF322S8Pre` | 24 | S8 |
+| `QF322HIF8Pre` | 25 | HiF8 |
+| `QF322FP8Pre` | 26 | E4M3 |
+| `QF322F32Pre` | 27 | FP32 |
+| `VQF322HIF8Pre` | 28 | HiF8 |
+| `QF322F16Pre` | 32 | FP16 |
+| `VQF322F16Pre` | 33 | FP16 |
+| `QF322BF16Pre` | 34 | BF16 |
+| `QS322BF16Pre` | 35 | BF16 |
+| `VQF322BF16Pre` | 36 | BF16 |
+| `VQF322FP8Pre` | 37 | E4M3 |
+| `VQF322F32Pre` | 38 | FP32 |
+| `VQS322BF16Pre` | 39 | BF16 |
+
 ## 无额外参数的转换
 
 ```cpp
@@ -37,7 +73,7 @@ TMATMUL_FIXP(dst_bf16, a, b, fixp::bf16());
 
 | options | PreQuantMode | dst dtype |
 | --- | ---: | --- |
-| `fixp::keep_acc()` | `None` / 0 | FP32 或 S32 AccType |
+| `fixp::keep_acc()` | `None` / 0 | FP32（AccType） |
 | `fixp::f16()` | `F322F16` / 1 | FP16 |
 | `fixp::bf16()` | `F322BF16` / 16 | BF16 |
 
@@ -64,20 +100,8 @@ TMATMUL_FIXP(
     fixp::scalar<FixpPreQuantMode::QF322S8Pre>(quant_desc));
 ```
 
-通用 `fixp::scalar<Mode>(descriptor)` 支持全部 scalar-parameter mode：
-
-- `REQS8Pre`
-- `DEQF16`
-- `SHIFTS322S16`
-- `QF322S4Pre`
-- `QF322S16Pre`
-- `QF322S8Pre`
-- `QF322HIF8Pre`
-- `QF322FP8Pre`
-- `QF322F32Pre`
-- `QF322F16Pre`
-- `QF322BF16Pre`
-- `QS322BF16Pre`
+通用 `fixp::scalar<Mode>(descriptor)` 支持全部 scalar-parameter mode（见上表
+中不带 `V` 前缀且接收 descriptor 的模式）。
 
 scalar quant descriptor 通过 `B.IOR SrcReg0` 传递。64-bit descriptor 布局为：
 
@@ -135,24 +159,16 @@ TMATMUL_FIXP(
 TMATMUL_FIXP(dst_s8, a, b, fixp::s8(quant));
 ```
 
-通用 `fixp::vector<Mode>(tile)` 支持全部 vector-parameter mode：
+通用 `fixp::vector<Mode>(tile)` 支持全部 vector-parameter mode（见上表中带
+`V` 前缀且接收 parameter Tile 的模式）。
 
-- `VREQS8Pre`
-- `VDEQF16`
-- `VSHIFTS322S16`
-- `VQF322S4Pre`
-- `VQF322S16Pre`
-- `VQF322S8Pre`
-- `VQF322HIF8Pre`
-- `VQF322F16Pre`
-- `VQF322BF16Pre`
-- `VQF322FP8Pre`
-- `VQF322F32Pre`
-- `VQS322BF16Pre`
+vector quant Tile 的每个 64-bit element 使用与 scalar descriptor 相同的 bit
+layout。
 
-vector quant Tile 的每个 64-bit element 使用与 scalar descriptor 相同的 bit layout。
-
-参数 Tile 的 valid shape 必须为 `1 x N`。如果 `1 x N` 的逻辑数据不足 512 B，必须扩大物理 Rows/Cols 保证 Tile register 至少 512 B，同时用 `ValidRow=1, ValidCol=N` 保持有效区域。例如上例物理 shape 为 `2 x 32`，valid shape 为 `1 x 32`。
+参数 Tile 的 valid shape 必须为 `1 x N`。如果 `1 x N` 的逻辑数据不足 512 B，
+必须扩大物理 Rows/Cols 保证 Tile register 至少 512 B，同时用
+`ValidRow=1, ValidCol=N` 保持有效区域。例如上例物理 shape 为 `2 x 32`，valid
+shape 为 `1 x 32`。
 
 ## PReLU
 
@@ -172,7 +188,8 @@ TMATMUL_FIXP(
         .prelu(prelu));
 ```
 
-PReLU Tile 的 valid shape 必须为 `1 x N`，每个 element 的低 19 bit 保存 FP19 slope，高位为 0。它在 B.IOT source stream 中位于 quant parameter Tile 之后。
+PReLU Tile 的 valid shape 必须为 `1 x N`，每个 element 的低 19 bit 保存 FP19
+slope，高位为 0。它在 B.IOT source stream 中位于 quant parameter Tile 之后。
 
 也可以配合无 quant 的转换：
 
@@ -182,7 +199,8 @@ TMATMUL_FIXP(dst_fp16, a, b, fixp::f16().prelu(prelu));
 
 ## RowMax
 
-RowMax 在 ReLU/quant/convert 之前基于 FullAcc 计算，dtype 必须是 FP32/S32 AccType。
+RowMax 在 ReLU/quant/convert 之前基于 FullAcc 计算，dtype 必须是 FP32/S32
+AccType。
 
 ### Fresh RowMax
 
@@ -210,9 +228,12 @@ TMATMUL_FIXP(
     fixp::keep_acc().row_max(row_max_in, row_max_out));
 ```
 
-这会设置 `RowMaxEn=1, RowMaxInit=1`。source 顺序为 A、B、RowMaxIn，destination 顺序为 D、RowMaxOut。
+这会设置 `RowMaxEn=1, RowMaxInit=1`。source 顺序为 A、B、RowMaxIn，
+destination 顺序为 D、RowMaxOut。
 
-RowMaxIn/Out 的 valid shape 必须为 `M x 1`，dtype 和 valid shape 必须一致。物理 Tile 仍必须至少 512 B，因此可以像示例一样扩大物理列数，使用 `ValidCol=1`。
+RowMaxIn/Out 的 valid shape 必须为 `M x 1`，dtype 和 valid shape 必须一致。
+物理 Tile 仍必须至少 512 B，因此可以像示例一样扩大物理列数，使用
+`ValidCol=1`。
 
 ## GroupMax
 
@@ -272,7 +293,7 @@ TMATMUL_FIXP(dst_s8, a, shared_b, fixp::s8(quant_desc));
 Shared form 生成：
 
 ```asm
-C.B.IOS S#right
+B.IOS S#right, mask=1111
 B.IOT   A
 ```
 
@@ -313,14 +334,16 @@ fixp::vector<FixpPreQuantMode::VQF322S16Pre>(parameter_tile)
 .max_abs()
 ```
 
-编译器会拒绝不完整或冲突的组合，例如 vector mode 没有 quant Tile、PReLU mode 没有 PReLU Tile、RowMaxInit 没有 RowMaxIn、GroupMax shape 不匹配、dst dtype 与 PreQuantMode 不匹配。
+编译器会拒绝不完整或冲突的组合，例如 vector mode 没有 quant Tile、PReLU
+mode 没有 PReLU Tile、RowMaxInit 没有 RowMaxIn、GroupMax shape 不匹配、dst
+dtype 与 PreQuantMode 不匹配。
 
 ## B.FPATR 与 operand 顺序
 
 TileOP 固定生成：
 
 ```asm
-BSTART.CUBE TMATMUL.FIXP, AType
+BSTART.CUBE TMATMUL, AType
 B.DATR BType, byte0, Null
 B.FPATR PreQuant, Relu, GroupNCode,
          RowMaxEn, GroupMaxEn, RowMaxInit, MaxAbsEn
@@ -357,4 +380,9 @@ TMATMUL_FIXP(dst_fp32, a, b);
 TMATMUL_FIXP<FixpAttr::f16()>(dst_fp16, a, b);
 ```
 
-新代码建议统一使用四参数形式。四参数 options API 才能表达 scalar/vector quant、LReLU/PReLU、RowMax、GroupMax 和 Shared Right 的完整组合。
+新代码建议统一使用四参数形式。四参数 options API 才能表达 scalar/vector
+quant、LReLU/PReLU、RowMax、GroupMax 和 Shared Right 的完整组合。
+
+> 命名注记：`.FIXP` 后缀不是 PTO-ISA mnemonics 的一部分。函数
+> `TMATMUL_FIXP` 与带 options 的 `TMATMUL` 等价，都会发射
+> `B.FPATR`；v0.58 规范用 `B.FPATR` 承载全部 post-process 属性。
