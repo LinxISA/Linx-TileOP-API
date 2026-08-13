@@ -1966,8 +1966,8 @@ void ACCCVT(tile_shape_out &, tile_shape_in &) {
 namespace pto_matmul_detail {
 
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
-  "BSTART." OPCODE " %c[DataTypeA]\n"                                 \
-  "B.DATR NORM.normal, %D[DataTypeB], Null\n" EXTRA_ATTRS                  \
+  "BSTART." OPCODE " %c[DataTypeA]\n"                                      \
+  "B.DATR NORM.normal, %D[DataTypeB], Zero\n" EXTRA_ATTRS                  \
   "B.DIM %[M], 0, ->lb0\n"                                                   \
   "B.DIM %[N], 0, ->lb1\n"                                                   \
   "B.DIM %[K], 0, ->lb2\n"
