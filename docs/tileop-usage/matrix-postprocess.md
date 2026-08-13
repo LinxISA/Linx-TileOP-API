@@ -3,7 +3,8 @@
 The active CUBE contract defines the matrix operations and carries all
 post-processing through the `B.FPATR` attribute; there is no separate
 post-processing attribute instruction. The historical `TMATMUL*.FIXP`
-wrappers are retained for compatibility: they configure `B.FPATR` and emit
+suffix was an implementation-local name; the active API is the options
+overload of each `TMATMUL*`/`TGEMV*` operation, which configures `B.FPATR` and emits
 the base `BSTART.CUBE TMATMUL` bundle plus the matching auxiliary operand
 stream.
 
@@ -64,9 +65,9 @@ A/B/dst 的物理 Tile 必须满足 TileOP 的对齐和 512 B..32 KB active-size
 ## 无额外参数的转换
 
 ```cpp
-TMATMUL_FIXP(dst_fp32, a, b, fixp::keep_acc());
-TMATMUL_FIXP(dst_fp16, a, b, fixp::f16());
-TMATMUL_FIXP(dst_bf16, a, b, fixp::bf16());
+TMATMUL(dst_fp32, a, b, fixp::keep_acc());
+TMATMUL(dst_fp16, a, b, fixp::f16());
+TMATMUL(dst_bf16, a, b, fixp::bf16());
 ```
 
 对应的 `PreQuantMode`：
@@ -80,7 +81,7 @@ TMATMUL_FIXP(dst_bf16, a, b, fixp::bf16());
 普通 ReLU 通过链式调用启用，不需要额外 operand：
 
 ```cpp
-TMATMUL_FIXP(dst_fp16, a, b, fixp::f16().relu());
+TMATMUL(dst_fp16, a, b, fixp::f16().relu());
 ```
 
 ## Scalar quant descriptor
@@ -89,13 +90,13 @@ TMATMUL_FIXP(dst_fp16, a, b, fixp::f16().relu());
 
 ```cpp
 uint64_t quant_desc = make_quant_descriptor(...);
-TMATMUL_FIXP(dst_s8, a, b, fixp::s8(quant_desc));
+TMATMUL(dst_s8, a, b, fixp::s8(quant_desc));
 ```
 
 `fixp::s8(uint64_t)` 是以下通用写法的快捷形式：
 
 ```cpp
-TMATMUL_FIXP(
+TMATMUL(
     dst_s8, a, b,
     fixp::scalar<FixpPreQuantMode::QF322S8Pre>(quant_desc));
 ```
@@ -128,7 +129,7 @@ scalar LReLU 在任意尚未选择 ReLU 的 options 上调用 `.lrelu()`：
 uint64_t quant_desc = make_s8_quant(...);
 uint64_t lrelu_fp19 = encoded_slope & 0x7ffff;
 
-TMATMUL_FIXP(
+TMATMUL(
     dst_s8, a, b,
     fixp::s8(quant_desc).lrelu(lrelu_fp19));
 ```
@@ -148,7 +149,7 @@ using quant_tile =
          BLayout::RowMajor, 1, 32>;
 
 quant_tile quant;
-TMATMUL_FIXP(
+TMATMUL(
     dst_fp16, a, b,
     fixp::vector<FixpPreQuantMode::VQF322F16Pre>(quant));
 ```
@@ -156,7 +157,7 @@ TMATMUL_FIXP(
 `fixp::s8(quant)` 是 `VQF322S8Pre` 的快捷形式：
 
 ```cpp
-TMATMUL_FIXP(dst_s8, a, b, fixp::s8(quant));
+TMATMUL(dst_s8, a, b, fixp::s8(quant));
 ```
 
 通用 `fixp::vector<Mode>(tile)` 支持全部 vector-parameter mode（见上表中带
@@ -182,7 +183,7 @@ using fp19_tile =
 fp19_tile quant;
 fp19_tile prelu;
 
-TMATMUL_FIXP(
+TMATMUL(
     dst_fp16, a, b,
     fixp::vector<FixpPreQuantMode::VQF322F16Pre>(quant)
         .prelu(prelu));
@@ -194,7 +195,7 @@ slope，高位为 0。它在 B.IOT source stream 中位于 quant parameter Tile 
 也可以配合无 quant 的转换：
 
 ```cpp
-TMATMUL_FIXP(dst_fp16, a, b, fixp::f16().prelu(prelu));
+TMATMUL(dst_fp16, a, b, fixp::f16().prelu(prelu));
 ```
 
 ## RowMax
@@ -210,7 +211,7 @@ using row_max_tile =
          BLayout::RowMajor, 32, 1>;
 
 row_max_tile row_max_out;
-TMATMUL_FIXP(
+TMATMUL(
     dst_fp32, a, b,
     fixp::keep_acc().row_max(row_max_out));
 ```
@@ -223,7 +224,7 @@ TMATMUL_FIXP(
 row_max_tile row_max_in;
 row_max_tile row_max_out;
 
-TMATMUL_FIXP(
+TMATMUL(
     dst_fp32, a, b,
     fixp::keep_acc().row_max(row_max_in, row_max_out));
 ```
@@ -245,7 +246,7 @@ using group_max_tile =
          BLayout::RowMajor, 32, 4>;
 
 group_max_tile group_max_out;
-TMATMUL_FIXP(
+TMATMUL(
     dst_fp32, a, b,
     fixp::keep_acc().group_max<8>(group_max_out));
 ```
@@ -265,7 +266,7 @@ GroupMaxOut：
 各功能可链式组合：
 
 ```cpp
-TMATMUL_FIXP(
+TMATMUL(
     dst_fp32, a, b,
     fixp::keep_acc()
         .row_max(row_max_in, row_max_out)
@@ -286,8 +287,8 @@ TMATMUL_FIXP(
 using right_tile = Tile<Location::Right, __half, 32, 32>;
 SharedTile<right_tile> shared_b;
 
-TMATMUL_FIXP(dst_fp32, a, shared_b, fixp::keep_acc());
-TMATMUL_FIXP(dst_s8, a, shared_b, fixp::s8(quant_desc));
+TMATMUL(dst_fp32, a, shared_b, fixp::keep_acc());
+TMATMUL(dst_s8, a, shared_b, fixp::s8(quant_desc));
 ```
 
 Shared form 生成：
@@ -373,16 +374,17 @@ Destination 顺序：
 
 ## 旧三参数接口
 
-基础模式仍兼容旧写法：
+基础模式仍兼容无 options 写法：
 
 ```cpp
-TMATMUL_FIXP(dst_fp32, a, b);
-TMATMUL_FIXP<FixpAttr::f16()>(dst_fp16, a, b);
+TMATMUL(dst_fp32, a, b);
+TMATMUL<FixpAttr::f16()>(dst_fp16, a, b);
 ```
 
 新代码建议统一使用四参数形式。四参数 options API 才能表达 scalar/vector
 quant、LReLU/PReLU、RowMax、GroupMax 和 Shared Right 的完整组合。
 
-> 命名注记：`.FIXP` 后缀不是 PTO-ISA mnemonics 的一部分。函数
-> `TMATMUL_FIXP` 与带 options 的 `TMATMUL` 等价，都会发射
+> 命名注记：`.FIXP` 后缀不是 PTO-ISA mnemonics 的一部分；历史
+> `TMATMUL_FIXP` 函数已删除，统一由带 options 的 `TMATMUL` 承担，
+> 都会发射
 > `B.FPATR`；v0.58 规范用 `B.FPATR` 承载全部 post-process 属性。

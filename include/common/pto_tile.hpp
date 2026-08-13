@@ -955,6 +955,15 @@ concept is_local_or_shared_right =
     (is_tile<T>::value && T::Loc == Location::Right) ||
     (is_shared_tile<T>::value && T::Role == Location::Right);
 
+// MX scale operands may be any tile in either storage class: Local (Vec or
+// Left/Right) matching the plain TMatmulAllOptions usage, or Shared when the
+// paired matrix/vector is Shared (handoff Sec 1.5: MX Shared pair is Shared
+// B/ScaleB, or all four Shared). Storage pairing is resolved by the emitter's
+// A/B dispatch; a mismatched storage fails at the asm constraint (Tr vs Sr),
+// so the concept only accepts "some tile", not a specific role or storage.
+template <typename T>
+concept is_any_tile_data_v = is_tile<T>::value || is_shared_tile<T>::value;
+
 // Matrix role of a tile operand, transparently unwrapping SharedTile. A plain
 // Tile's role IS its Loc; a SharedTile preserves the wrapped Local Tile's
 // role in ::Role. Dispatch via a helper so a plain Tile is never required to

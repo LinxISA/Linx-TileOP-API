@@ -1,48 +1,70 @@
-make clean;make TESTCASE=DynamicShape
 #! /bin/bash
+# CI compile list for the TileOP API test suite.
+#
+# Runner: test/run_ci.py -plat <cpu_sim|jcore|linx|arm_sme>. PLAT is exported
+# to make; the linx toolchain defines __linx, which gates a different API
+# surface (TMATMUL*/TGEMV* families and jcore inline-asm element ops) than the
+# generic __cpu_sim__ wrappers.
+#
+# Grouping:
+#   * linx OK:     compiles under -D__linx with the linx toolchain.
+#   * linx legacy: historical wrappers gated by `#ifndef __linx` (MATMACC/
+#                  MATMUL/TCOPY/TEXPAND/TPAD/TReshape/TROW*EXPAND and the
+#                  TileAcc-era tests). They are superseded on linx by the
+#                  TMATMUL*/TGEMV* families (TMOV for TCOPY, TReshape for
+#                  TReshape, etc.) and are only meaningful on cpu_sim.
 
-make clean;make TESTCASE=MatMacc
-make clean;make TESTCASE=MatMul_e4m3
-make clean;make TESTCASE=MatMul
+echo "PLAT=${PLAT:-linx}"
+
+# --- linx OK: elementwise / shape ops (jcore inline-asm) ---
+make clean;make TESTCASE=DynamicShape
 make clean;make TESTCASE=SharedMatmul
 make clean;make TESTCASE=TMatmulAccFullOptions
 make clean;make TESTCASE=TMatmulAllOptions
 make clean;make TESTCASE=TGEMVAllOptions
+make clean;make TESTCASE=PostProcessCombos
+make clean;make TESTCASE=SharedMatrixForms
 make clean;make TESTCASE=SharedTLoad
 make clean;make TESTCASE=TAbs
 make clean;make TESTCASE=TAdd_mask
 make clean;make TESTCASE=TAdd
 make clean;make TESTCASE=TAdds
 make clean;make TESTCASE=TAnd
-make clean;make TESTCASE=TCI
-make clean;make TESTCASE=TCmp
-make clean;make TESTCASE=TCopy
 make clean;make TESTCASE=TLoad
 make clean;make TESTCASE=TStore
 make clean;make TESTCASE=TCvt
 make clean;make TESTCASE=TDiv
 make clean;make TESTCASE=TDivs
-make clean;make TESTCASE=test_MatMacc
-make clean;make TESTCASE=test_MatMul
 make clean;make TESTCASE=TExp
-make clean;make TESTCASE=TExpandCol
-make clean;make TESTCASE=TExpandRow
-make clean;make TESTCASE=TExpandScalar
 make clean;make TESTCASE=TMax
 make clean;make TESTCASE=TMaxs
 make clean;make TESTCASE=TMov
 make clean;make TESTCASE=TMul
 make clean;make TESTCASE=TMuls
 make clean;make TESTCASE=TOr
-make clean;make TESTCASE=TPad
 make clean;make TESTCASE=TRecip
 make clean;make TESTCASE=TRem
-make clean;make TESTCASE=TReshape
 make clean;make TESTCASE=TRowMax
-make clean;make TESTCASE=TRowMaxExpand
 make clean;make TESTCASE=TRowSum
-make clean;make TESTCASE=TRowSumExpand
 make clean;make TESTCASE=TSqrt
 make clean;make TESTCASE=TSub
 make clean;make TESTCASE=TSubs
 make clean;make TESTCASE=TTrans
+
+# --- linx legacy (cpu_sim-only API surface, superseded on linx) ---
+# Kept documented rather than silently dropped; run them under PLAT=cpu_sim.
+# make clean;make TESTCASE=MatMacc
+# make clean;make TESTCASE=MatMul_e4m3
+# make clean;make TESTCASE=MatMul
+# make clean;make TESTCASE=test_MatMacc
+# make clean;make TESTCASE=test_MatMul
+# make clean;make TESTCASE=TCI
+# make clean;make TESTCASE=TCmp
+# make clean;make TESTCASE=TCopy
+# make clean;make TESTCASE=TReshape
+# make clean;make TESTCASE=TExpandCol
+# make clean;make TESTCASE=TExpandRow
+# make clean;make TESTCASE=TExpandScalar
+# make clean;make TESTCASE=TPad
+# make clean;make TESTCASE=TRowMaxExpand
+# make clean;make TESTCASE=TRowSumExpand

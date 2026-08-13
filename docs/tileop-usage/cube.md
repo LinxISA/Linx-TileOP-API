@@ -65,6 +65,6 @@ Per the v0.58 contract the `B.DIM` roles are reversed relative to TMATMUL:
 PTO-ISA v0.58 canonicalizes the CUBE operations to named block starts
 (`BSTART.TMATMUL`, `BSTART.TMATMUL.BIAS`, `BSTART.TMATMULMX`, `BSTART.TGEMV`,
 ...). The historical DavinciOO `TMATMUL*.FIXP` spelling was an
-implementation-local name; post-processing is carried by `B.FPATR`, so the
-canonical emission is `BSTART.CUBE TMATMUL` + `B.FPATR`. See
-[tmatmul-fixp.md](tmatmul-fixp.md).
+implementation-local name and has been removed; post-processing is
+carried by `B.FPATR`, so the canonical emission is `BSTART.CUBE TMATMUL` +
+`B.FPATR`. See [matrix-postprocess.md](matrix-postprocess.md).

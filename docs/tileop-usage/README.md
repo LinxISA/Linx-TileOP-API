@@ -15,7 +15,7 @@ which mirrors the PTO-ISA v0.58 tile-operation catalog
 | Matrix operations | [cube.md](cube.md) |
 | Tile size, valid region, Shared register, and PE mask rules | [constraints.md](constraints.md) |
 | Layout helpers | [layout.md](layout.md) |
-| Fixed-point matrix wrappers | [tmatmul-fixp.md](tmatmul-fixp.md) |
+| Matrix PostProcess (B.FPATR, quant/PReLU/RowMax/GroupMax) | [matrix-postprocess.md](matrix-postprocess.md) |
 | Comparison operations (`CmpMode`, `TCMP`, `TCMPS`) | [cmp.md](cmp.md) |
 
 The generated engine index and checked-in machine contract are the navigation roots. New public
