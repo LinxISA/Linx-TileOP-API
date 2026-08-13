@@ -5,6 +5,35 @@
 
 using namespace pto;
 
+template <class...>
+inline constexpr bool pto_dependent_false_v = false;
+
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void ACCSCALE_T(tile_shape_out &, tile_shape_in &,
+                typename tile_shape_in::DType) {
+  static_assert(pto_dependent_false_v<tile_shape_out, tile_shape_in>,
+                "ACCSCALE_T used the removed v5 ACCCVT opcode; use the "
+                "active TMATMUL operation with B.FPATR");
+}
+
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void ACCSCALE_NZ2DN(tile_shape_out &, tile_shape_in &,
+                    typename tile_shape_in::DType) {
+  static_assert(pto_dependent_false_v<tile_shape_out, tile_shape_in>,
+                "ACCSCALE_NZ2DN used the removed v5 ACCCVT opcode; use the "
+                "active TMATMUL operation with B.FPATR");
+}
+
+template <is_tile_data_v tile_shape_max, is_tile_data_v tile_shape_out,
+          is_tile_data_v tile_shape_in>
+void ACCCVT_RMAX_SCALE_NZ2DN(tile_shape_max &, tile_shape_out &,
+                            tile_shape_in &,
+                            typename tile_shape_in::DType) {
+  static_assert(
+      pto_dependent_false_v<tile_shape_max, tile_shape_out, tile_shape_in>,
+      "ACCCVT_RMAX_SCALE_NZ2DN used the removed v5 ACCCVT opcode; migrate "
+      "to the active TMATMUL operation with B.FPATR and its RowMax operands");
+}
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_data_v tile_shape_in1>
 void TMAX_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   asm volatile(
