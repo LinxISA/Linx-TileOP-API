@@ -1,0 +1,885 @@
+{
+  "cube_ops": [
+    {
+      "engine": "CUBE",
+      "function": 0,
+      "mnemonic": "BSTART.TMATMUL",
+      "name": "TMATMUL"
+    },
+    {
+      "engine": "CUBE",
+      "function": 1,
+      "mnemonic": "BSTART.TMATMUL.BIAS",
+      "name": "TMATMUL_BIAS"
+    },
+    {
+      "engine": "CUBE",
+      "function": 2,
+      "mnemonic": "BSTART.TMATMUL.ACC",
+      "name": "TMATMUL_ACC"
+    },
+    {
+      "engine": "CUBE",
+      "function": 4,
+      "mnemonic": "BSTART.TMATMULMX",
+      "name": "TMATMUL_MX"
+    },
+    {
+      "engine": "CUBE",
+      "function": 5,
+      "mnemonic": "BSTART.TMATMULMX.BIAS",
+      "name": "TMATMUL_MX_BIAS"
+    },
+    {
+      "engine": "CUBE",
+      "function": 6,
+      "mnemonic": "BSTART.TMATMULMX.ACC",
+      "name": "TMATMUL_MX_ACC"
+    },
+    {
+      "engine": "CUBE",
+      "function": 16,
+      "mnemonic": "BSTART.TGEMV",
+      "name": "TGEMV"
+    },
+    {
+      "engine": "CUBE",
+      "function": 17,
+      "mnemonic": "BSTART.TGEMV.BIAS",
+      "name": "TGEMV_BIAS"
+    },
+    {
+      "engine": "CUBE",
+      "function": 18,
+      "mnemonic": "BSTART.TGEMV.ACC",
+      "name": "TGEMV_ACC"
+    },
+    {
+      "engine": "CUBE",
+      "function": 20,
+      "mnemonic": "BSTART.TGEMVMX",
+      "name": "TGEMV_MX"
+    },
+    {
+      "engine": "CUBE",
+      "function": 21,
+      "mnemonic": "BSTART.TGEMVMX.BIAS",
+      "name": "TGEMV_MX_BIAS"
+    },
+    {
+      "engine": "CUBE",
+      "function": 22,
+      "mnemonic": "BSTART.TGEMVMX.ACC",
+      "name": "TGEMV_MX_ACC"
+    }
+  ],
+  "deleted_tile_names": [
+    "ACCCVT",
+    "TADDC",
+    "TADDSC",
+    "TALLOC",
+    "TAXPY",
+    "TDEINTERLEAVE",
+    "TFMOD",
+    "TFMODS",
+    "TFREE",
+    "TGATHERB",
+    "TINTERLEAVE",
+    "TLRELU",
+    "TPARTARGMAX",
+    "TPARTARGMIN",
+    "TPOP",
+    "TPRELU",
+    "TPUSH",
+    "TRESHAPE",
+    "TSUBC",
+    "TSUBSC",
+    "TRANDOM",
+    "TSORT32"
+  ],
+  "profile": "v0.58",
+  "schema": "linx-tileop-api.engine-ops-projection.v1",
+  "semantic_engine_counts": {
+    "CUBE": 12,
+    "SFU": 52,
+    "TLSU": 10,
+    "VEC": 35
+  },
+  "source": {
+    "commit": "0a12890427edc2179ed75ad26039cdcebc6b4486",
+    "path": "isa/v0.58/linxisa-v0.58.json",
+    "release": "v0.58",
+    "repo": "https://github.com/LinxISA/linx-isa",
+    "sha256": "b38864f4630be258ec62e5690d794463d0574443782c06b9a79d7d0a4362c61b",
+    "tree": "fef6c084b166f3fd85a1b3d1b72fc069e6050800"
+  },
+  "tepl_carrier": {
+    "accepted_selector_count": 87,
+    "canonical_aliases": [
+      "BSTART.VEC",
+      "BSTART.SFU"
+    ],
+    "compatibility_spelling": "BSTART.TEPL",
+    "selector_formula": "(mode << 5) | function"
+  },
+  "tepl_ops": [
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 0,
+      "logical_selector": 0,
+      "mode": 0,
+      "name": "TADD"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 1,
+      "logical_selector": 1,
+      "mode": 0,
+      "name": "TSUB"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 2,
+      "logical_selector": 2,
+      "mode": 0,
+      "name": "TMUL"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 3,
+      "logical_selector": 3,
+      "mode": 0,
+      "name": "TDIV"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 4,
+      "logical_selector": 4,
+      "mode": 0,
+      "name": "TREM"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 6,
+      "logical_selector": 6,
+      "mode": 0,
+      "name": "TAND"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 7,
+      "logical_selector": 7,
+      "mode": 0,
+      "name": "TOR"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 8,
+      "logical_selector": 8,
+      "mode": 0,
+      "name": "TXOR"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 9,
+      "logical_selector": 9,
+      "mode": 0,
+      "name": "TSHL"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 10,
+      "logical_selector": 10,
+      "mode": 0,
+      "name": "TSHR"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 11,
+      "logical_selector": 11,
+      "mode": 0,
+      "name": "TMAX"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 12,
+      "logical_selector": 12,
+      "mode": 0,
+      "name": "TMIN"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 13,
+      "logical_selector": 13,
+      "mode": 0,
+      "name": "TCMP"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 15,
+      "logical_selector": 15,
+      "mode": 0,
+      "name": "TABS"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 16,
+      "logical_selector": 16,
+      "mode": 0,
+      "name": "TNOT"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 17,
+      "logical_selector": 17,
+      "mode": 0,
+      "name": "TNEG"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "SFU",
+      "function": 18,
+      "logical_selector": 18,
+      "mode": 0,
+      "name": "TEXP"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "SFU",
+      "function": 19,
+      "logical_selector": 19,
+      "mode": 0,
+      "name": "TLOG"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "SFU",
+      "function": 20,
+      "logical_selector": 20,
+      "mode": 0,
+      "name": "TRECIP"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "SFU",
+      "function": 21,
+      "logical_selector": 21,
+      "mode": 0,
+      "name": "TSQRT"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "SFU",
+      "function": 22,
+      "logical_selector": 22,
+      "mode": 0,
+      "name": "TRSQRT"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 23,
+      "logical_selector": 23,
+      "mode": 0,
+      "name": "TRELU"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 26,
+      "logical_selector": 26,
+      "mode": 0,
+      "name": "TSEL"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 27,
+      "logical_selector": 27,
+      "mode": 0,
+      "name": "TCVT"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "VEC",
+      "function": 28,
+      "logical_selector": 28,
+      "mode": 0,
+      "name": "TFMA"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 0,
+      "logical_selector": 32,
+      "mode": 1,
+      "name": "TADDS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 1,
+      "logical_selector": 33,
+      "mode": 1,
+      "name": "TSUBS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 2,
+      "logical_selector": 34,
+      "mode": 1,
+      "name": "TMULS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 3,
+      "logical_selector": 35,
+      "mode": 1,
+      "name": "TDIVS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 4,
+      "logical_selector": 36,
+      "mode": 1,
+      "name": "TREMS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 6,
+      "logical_selector": 38,
+      "mode": 1,
+      "name": "TANDS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 7,
+      "logical_selector": 39,
+      "mode": 1,
+      "name": "TORS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 8,
+      "logical_selector": 40,
+      "mode": 1,
+      "name": "TXORS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 9,
+      "logical_selector": 41,
+      "mode": 1,
+      "name": "TSHLS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 10,
+      "logical_selector": 42,
+      "mode": 1,
+      "name": "TSHRS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 11,
+      "logical_selector": 43,
+      "mode": 1,
+      "name": "TMAXS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 12,
+      "logical_selector": 44,
+      "mode": 1,
+      "name": "TMINS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 13,
+      "logical_selector": 45,
+      "mode": 1,
+      "name": "TCMPS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 26,
+      "logical_selector": 58,
+      "mode": 1,
+      "name": "TSELS"
+    },
+    {
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC",
+      "function": 27,
+      "logical_selector": 59,
+      "mode": 1,
+      "name": "TEXPANDS"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 0,
+      "logical_selector": 64,
+      "mode": 2,
+      "name": "TROWSUM"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 1,
+      "logical_selector": 65,
+      "mode": 2,
+      "name": "TROWMAX"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 2,
+      "logical_selector": 66,
+      "mode": 2,
+      "name": "TROWMIN"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 3,
+      "logical_selector": 67,
+      "mode": 2,
+      "name": "TROWPROD"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 4,
+      "logical_selector": 68,
+      "mode": 2,
+      "name": "TROWEXPAND"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 5,
+      "logical_selector": 69,
+      "mode": 2,
+      "name": "TROWEXPANDADD"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 6,
+      "logical_selector": 70,
+      "mode": 2,
+      "name": "TROWEXPANDSUB"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 7,
+      "logical_selector": 71,
+      "mode": 2,
+      "name": "TROWEXPANDMUL"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 8,
+      "logical_selector": 72,
+      "mode": 2,
+      "name": "TROWEXPANDDIV"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 9,
+      "logical_selector": 73,
+      "mode": 2,
+      "name": "TROWEXPANDMAX"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 10,
+      "logical_selector": 74,
+      "mode": 2,
+      "name": "TROWEXPANDMIN"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 11,
+      "logical_selector": 75,
+      "mode": 2,
+      "name": "TROWEXPANDEXPDIF"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 12,
+      "logical_selector": 76,
+      "mode": 2,
+      "name": "TROWARGMAX"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 13,
+      "logical_selector": 77,
+      "mode": 2,
+      "name": "TROWARGMIN"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 16,
+      "logical_selector": 80,
+      "mode": 2,
+      "name": "TCOLSUM"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 17,
+      "logical_selector": 81,
+      "mode": 2,
+      "name": "TCOLMAX"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 18,
+      "logical_selector": 82,
+      "mode": 2,
+      "name": "TCOLMIN"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 19,
+      "logical_selector": 83,
+      "mode": 2,
+      "name": "TCOLPROD"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 20,
+      "logical_selector": 84,
+      "mode": 2,
+      "name": "TCOLEXPAND"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 21,
+      "logical_selector": 85,
+      "mode": 2,
+      "name": "TCOLEXPANDADD"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 22,
+      "logical_selector": 86,
+      "mode": 2,
+      "name": "TCOLEXPANDSUB"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 23,
+      "logical_selector": 87,
+      "mode": 2,
+      "name": "TCOLEXPANDMUL"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 24,
+      "logical_selector": 88,
+      "mode": 2,
+      "name": "TCOLEXPANDDIV"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 25,
+      "logical_selector": 89,
+      "mode": 2,
+      "name": "TCOLEXPANDMAX"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 26,
+      "logical_selector": 90,
+      "mode": 2,
+      "name": "TCOLEXPANDMIN"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 27,
+      "logical_selector": 91,
+      "mode": 2,
+      "name": "TCOLEXPANDEXPDIF"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 28,
+      "logical_selector": 92,
+      "mode": 2,
+      "name": "TCOLARGMAX"
+    },
+    {
+      "classification": "reduce-and-expand",
+      "engine": "SFU",
+      "function": 29,
+      "logical_selector": 93,
+      "mode": 2,
+      "name": "TCOLARGMIN"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 0,
+      "logical_selector": 96,
+      "mode": 3,
+      "name": "TCONCAT"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 2,
+      "logical_selector": 98,
+      "mode": 3,
+      "name": "TEXTRACT"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 3,
+      "logical_selector": 99,
+      "mode": 3,
+      "name": "TINSERT"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 4,
+      "logical_selector": 100,
+      "mode": 3,
+      "name": "TIMG2COL"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 5,
+      "logical_selector": 101,
+      "mode": 3,
+      "name": "TFILLPAD"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 6,
+      "logical_selector": 102,
+      "mode": 3,
+      "name": "TCI"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 7,
+      "logical_selector": 103,
+      "mode": 3,
+      "name": "TTRI"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 8,
+      "logical_selector": 104,
+      "mode": 3,
+      "name": "THISTOGRAM"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 10,
+      "logical_selector": 106,
+      "mode": 3,
+      "name": "TQUANT"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 11,
+      "logical_selector": 107,
+      "mode": 3,
+      "name": "TDEQUANT"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 12,
+      "logical_selector": 108,
+      "mode": 3,
+      "name": "TSORT"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 13,
+      "logical_selector": 109,
+      "mode": 3,
+      "name": "TMRGSORT"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 14,
+      "logical_selector": 110,
+      "mode": 3,
+      "name": "TTRANS"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 15,
+      "logical_selector": 111,
+      "mode": 3,
+      "name": "TGATHER"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 16,
+      "logical_selector": 112,
+      "mode": 3,
+      "name": "TSCATTER"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 17,
+      "logical_selector": 113,
+      "mode": 3,
+      "name": "TPARTADD"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 18,
+      "logical_selector": 114,
+      "mode": 3,
+      "name": "TPARTMUL"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 19,
+      "logical_selector": 115,
+      "mode": 3,
+      "name": "TPARTMAX"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 20,
+      "logical_selector": 116,
+      "mode": 3,
+      "name": "TPARTMIN"
+    }
+  ],
+  "tlsu_ops": [
+    {
+      "engine": "TLSU",
+      "function": 0,
+      "mnemonic": "BSTART.TLOAD",
+      "name": "TLOAD"
+    },
+    {
+      "engine": "TLSU",
+      "function": 1,
+      "mnemonic": "BSTART.TSTORE",
+      "name": "TSTORE"
+    },
+    {
+      "engine": "TLSU",
+      "function": 2,
+      "mnemonic": "BSTART.TMOV",
+      "name": "TMOV"
+    },
+    {
+      "engine": "TLSU",
+      "function": 3,
+      "mnemonic": "BSTART.TPREFETCH",
+      "name": "TPREFETCH"
+    },
+    {
+      "engine": "TLSU",
+      "function": 4,
+      "mnemonic": "BSTART.MGATHER",
+      "name": "MGATHER"
+    },
+    {
+      "engine": "TLSU",
+      "function": 5,
+      "mnemonic": "BSTART.MSCATTER",
+      "name": "MSCATTER"
+    },
+    {
+      "engine": "TLSU",
+      "function": 6,
+      "mnemonic": "BSTART.MGATHER.MASK",
+      "name": "MGATHER_MASK"
+    },
+    {
+      "engine": "TLSU",
+      "function": 7,
+      "mnemonic": "BSTART.MSCATTER.MASK",
+      "name": "MSCATTER_MASK"
+    },
+    {
+      "engine": "TLSU",
+      "function": 8,
+      "mnemonic": "BSTART.MGATHER.CAS",
+      "name": "MGATHER_CAS"
+    },
+    {
+      "engine": "TLSU",
+      "function": 13,
+      "mnemonic": "BSTART.GMOV",
+      "name": "GMOV"
+    }
+  ]
+}
