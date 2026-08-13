@@ -1273,4 +1273,153 @@ void print_tile_info() {
 
 } // namespace pto
 
+//===--- Tile datatype reinterpret view (PTO v0.58) ---===//
+// reinterpret_tile<NewDType>(src): zero-instruction datatype reinterpret.
+// The underlying Tile register/storage bit pattern is unchanged; only the
+// static DType (and downstream ISA datatype encoding) is re-interpreted by
+// the view. First phase: Local Tile -> Local view, equal-bit-width only,
+// layout/shape/valid/Location preserved, no TCVT, no payload copy.
+namespace pto {
+
+// Whether T has a PTO TypeCode (has a type_traits specialization).
+template <typename T, typename = void> struct has_ptotype_traits : std::false_type {};
+template <typename T>
+struct has_ptotype_traits<T, std::void_t<decltype(type_traits<T>::TypeCode)>>
+    : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_supported_dtype_v =
+    has_ptotype_traits<std::remove_cv_t<T>>::value &&
+    (type_traits<std::remove_cv_t<T>>::bits > 0);
+
+// Zero-instruction datatype view over an existing Local Tile. Storage carrier
+// (TileDType) and data() forward to the source; DType and all shape/role
+// statics are re-declared so downstream ops see NewDType while binding the
+// source's exact Tile register.
+template <typename NewDType, typename SourceTile>
+class ReinterpretedTileView {
+public:
+  using DType = NewDType;
+  using Source = SourceTile;
+  // Same storage carrier as the source Tile: on __linx this is the fixed
+  // 4 KB TileDType, so tile_type_traits<...TileDType>::TilesizeCode and the
+  // physical bytes are unchanged by the reinterpret.
+  using TileDType = typename SourceTile::TileDType;
+
+  static constexpr Location Loc = SourceTile::Loc;
+  static constexpr int Rows = SourceTile::Rows;
+  static constexpr int Cols = SourceTile::Cols;
+  static constexpr int RowStride = SourceTile::RowStride;
+  static constexpr int ColStride = SourceTile::ColStride;
+  static constexpr int ValidRow = SourceTile::ValidRow;
+  static constexpr int ValidCol = SourceTile::ValidCol;
+  static constexpr BLayout BFractal = SourceTile::BFractal;
+  static constexpr SLayout SFractal = SourceTile::SFractal;
+  static constexpr int SFractalSize = SourceTile::SFractalSize;
+  static constexpr PadValue PadVal = SourceTile::PadVal;
+  static constexpr CompactMode Compact = SourceTile::Compact;
+  static constexpr bool isRowMajor = SourceTile::isRowMajor;
+  static constexpr bool isBoxedLayout = SourceTile::isBoxedLayout;
+  static constexpr bool isInnerRowMajor = SourceTile::isInnerRowMajor;
+  static constexpr bool isInnerColMajor = SourceTile::isInnerColMajor;
+  static constexpr int InnerRows = SourceTile::InnerRows;
+  static constexpr int InnerCols = SourceTile::InnerCols;
+  static constexpr int InnerNumel = SourceTile::InnerNumel;
+  static constexpr int Numel = SourceTile::Numel;
+  static constexpr int byteSize = SourceTile::byteSize;
+  // Physical storage identity: the view occupies exactly the source bytes.
+  static constexpr int kBytes = SourceTile::kBytes;
+  static constexpr int LogicalTileBytes = SourceTile::LogicalTileBytes;
+  static constexpr int TilesizeCode = SourceTile::TilesizeCode;
+  static constexpr bool IsValidActiveSize = SourceTile::IsValidActiveSize;
+
+  explicit constexpr ReinterpretedTileView(SourceTile &Source)
+      : SourceValue(Source) {}
+
+  // Same register carrier as the source (no copy). Only const access is
+  // exposed for const sources; the non-const path keeps the same carrier.
+  decltype(auto) data() { return SourceValue.data(); }
+  decltype(auto) data() const { return SourceValue.data(); }
+
+  template <int RowMask = ValidRow>
+  static constexpr std::enable_if_t<(RowMask > 0), int> GetValidRow() {
+    return SourceTile::template GetValidRow<RowMask>();
+  }
+  template <int RowMask = ValidRow>
+  std::enable_if_t<RowMask == -1, int> GetValidRow() const {
+    return SourceValue.GetValidRow();
+  }
+  template <int ColMask = ValidCol>
+  static constexpr std::enable_if_t<(ColMask > 0), int> GetValidCol() {
+    return SourceTile::template GetValidCol<ColMask>();
+  }
+  template <int ColMask = ValidCol>
+  std::enable_if_t<ColMask == -1, int> GetValidCol() const {
+    return SourceValue.GetValidCol();
+  }
+
+private:
+  SourceTile &SourceValue;
+};
+
+// A ReinterpretedTileView is a Local tile-shaped operand (not Shared).
+template <typename NewDType, typename SourceTile>
+struct is_tile<ReinterpretedTileView<NewDType, SourceTile>> : std::true_type {
+  static constexpr SLayout layout_enum = SourceTile::SFractal;
+};
+
+// Equal bit-width is required: the reinterpret must not change the number of
+// logical elements, physical bytes or TileSizeCode.
+template <typename SourceTile, typename NewDType>
+constexpr bool reinterpret_tile_equal_width_v =
+    type_traits<typename SourceTile::DType>::bits ==
+    type_traits<NewDType>::bits;
+
+// The source must be an ordinary Local Tile (Shared is out of scope for the
+// first phase; a Shared view would need the Sr binder contract).
+template <typename SourceTile>
+constexpr bool reinterpret_tile_source_is_local_v =
+    is_tile<SourceTile>::value &&
+    SourceTile::Loc != Location::Shared;
+
+// The new dtype must be encodable in the source's layout. We accept any
+// equal-width dtype whose type_traits exists; boxed/fractal layouts are
+// preserved unchanged because rows/cols/inner box are untouched, so the
+// existing Tile layout static_asserts remain valid for the same dimensions.
+// A NewDType with no PTO TypeCode is rejected by is_supported_dtype_v.
+template <typename SourceTile, typename NewDType>
+constexpr bool reinterpret_tile_layout_legal_v =
+    reinterpret_tile_equal_width_v<SourceTile, NewDType> &&
+    is_supported_dtype_v<NewDType>;
+
+// Physical storage preservation: same bytes, same TilesizeCode, same carrier.
+template <typename SourceTile, typename NewDType>
+constexpr bool reinterpret_tile_storage_compatible_v =
+    reinterpret_tile_equal_width_v<SourceTile, NewDType>;
+
+// The view must not dangle: it holds a reference, so it must not be bound to
+// a temporary Tile. reinterpret_tile takes SourceTile& (non-const), which
+// already rejects rvalues; the const overload takes const SourceTile&, which
+// also rejects prvalue temporaries (they bind to const& only via materialized
+// temporaries -- rejected by requiring a named lvalue at the call site).
+
+/// Zero-instruction datatype reinterpret over a Local Tile.
+template <typename NewDType, is_tile_data_v SourceTile>
+inline auto reinterpret_tile(SourceTile &Source) {
+  using OldDType = typename SourceTile::DType;
+  static_assert(is_supported_dtype_v<NewDType>,
+                "reinterpret_tile target dtype has no PTO TypeCode");
+  static_assert(reinterpret_tile_source_is_local_v<SourceTile>,
+                "reinterpret_tile first phase supports Local Tiles only"
+                " (Shared requires a separate Shared view)");
+  static_assert(reinterpret_tile_layout_legal_v<SourceTile, NewDType>,
+                "reinterpret_tile requires equal-bit-width dtypes "
+                "compatible with the source layout");
+  static_assert(reinterpret_tile_storage_compatible_v<SourceTile, NewDType>,
+                "reinterpret_tile must preserve the source Tile storage");
+  return ReinterpretedTileView<NewDType, SourceTile>(Source);
+}
+
+} // namespace pto
+
 #endif
