@@ -28,6 +28,56 @@ using tile_s8 = Tile<Location::Vec, int8_t, 32, 32>;
 
 A/B/dst 的物理 Tile 必须满足 TileOP 的对齐和 512 B..32 KB active-size 约束。`dst` 的 valid shape 必须为 `M x N`。
 
+## C++ 操作族与签名
+
+12 个 active Matrix 操作共用同一个 `B.FPATR` options 机制。每个操作有
+无 options（canonical None）和带 `const fixp::Options &` 两种重载；options
+重载承担全部 PostProcess（scalar/vector quant、LReLU/PReLU、RowMax、
+GroupMax、MaxAbs）与 Shared scale。数学源顺序与 handoff Sec 1.4 一致
+（`C` 为显式累加器，`Dst`/`D` 为独立目标 tile）：
+
+```cpp
+TMATMUL<Attr>(Dst, A, B, options);                    // D = A*B
+TMATMUL_BIAS<Attr>(Dst, A, B, Bias, options);         // D = A*B + Bias
+TMATMUL_ACC<Attr>(Dst, C, A, B, options);             // D = C + A*B
+TMATMUL_MX<Attr>(Dst, A, ScaleA, B, ScaleB, options); // D = (A*ScaleA)*(B*ScaleB)
+TMATMUL_MX_BIAS<Attr>(Dst, A, ScaleA, B, ScaleB, Bias, options);
+TMATMUL_MX_ACC<Attr>(Dst, C, A, ScaleA, B, ScaleB, options);
+TGEMV<Attr>(Dst, Mtx, Vec, options);                  // D = Vec(M=1,K) * Mtx(K,N)
+TGEMV_BIAS<Attr>(Dst, Mtx, Vec, Bias, options);
+TGEMV_ACC<Attr>(Dst, C, Mtx, Vec, options);
+TGEMV_MX<Attr>(Dst, Mtx, ScaleMtx, Vec, ScaleVec, options);
+TGEMV_MX_BIAS<Attr>(Dst, Mtx, ScaleMtx, Vec, ScaleVec, Bias, options);
+TGEMV_MX_ACC<Attr>(Dst, C, Mtx, ScaleMtx, Vec, ScaleVec, options);
+```
+
+无 options 调用（如 `TMATMUL(d, a, b)`）等价于 `TMATMUL(d, a, b,
+fixp::Options<FixpAttr::keep_acc()>{})`，只接受参数-free 的
+keep_acc/f16/bf16/relu 模式。
+
+## TGEMV 家族
+
+`TGEMV` 是 M=1 的矩阵-向量乘（Function 16-18、20-22）：
+
+- `Vec` = 1×K（Left，逻辑 `ValidRow=1`），`Mtx` = K×N（Right），
+  `Dst` = 1×N（逻辑 `ValidRow=1`）。
+- 物理 Tile 仍需满足 512 B..32 KB active-size，因此向量通常用
+  `Tile<Location::Left, T, K, K, BLayout::RowMajor, 1, K>` 这类满物理 +
+  逻辑 1×K 的 shape。
+- 所有 TGEMV 都是 Local-only；任何 `B.IOS` 都 illegal（handoff Sec 1.5），
+  Shared 参数在概念层被拒绝。
+- `B.DIM` 角色相对 TMATMUL 反转：`LB0 = N`、`LB1 = M(=1)`、`LB2 = Col`。
+
+## Shared / Local 存储形态
+
+- plain `TMATMUL`/`TMATMUL_ACC`/`TMATMUL_BIAS`：允许 Local-A + Shared-B
+  或 Shared-A + Shared-B；不支持仅 Shared-A（单 binder 保留给
+  Shared-Right 形式）。
+- `TMATMUL_MX*` options 重载：MX Shared pair 是 Shared-B/ScaleB（两个
+  binder），或 Shared-A/ScaleA/B/ScaleB 全部 Shared（四个 binder）；
+  scale 与配套 matrix 同存储。no-options 重载保持 scale Local-only。
+- 所有 Shared binder 走独立有序 `B.IOS` 流；Local operand 仍走 `B.IOT`。
+
 ## B.FPATR 模式
 
 `FixpPreQuantMode` 的取值及其输出数据类型（PTO-ISA v0.58 `B.FPATR` 表）：
