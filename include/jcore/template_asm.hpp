@@ -1705,15 +1705,26 @@ blkv_bf16x2_max(const BLKV_BF16X2_TYPE &src_l,
 //===----------------------------------------------------------------------===//
 // One-layer inline-asm tileop templates (header-form, no __vec__ kernel).
 //
-// These map 1:1 to the DavinciOO isa/intrinsic definitions and the Linx v0.56
-// block ISA. The interface name IS the tileop name: programmers call TLOAD /
-// TSTORE / MGATHER / ... and get the hand-written block assembly directly.
+// These map 1:1 to the PTO-ISA v0.58 (LinxISA) tile-operation catalog. The
+// interface name IS the tileop name: programmers call TLOAD / TSTORE /
+// MGATHER / ... and get the hand-written block assembly directly.
 //
-// Encoding (all already supported by the LinxV5 backend, no backend change):
-//   BSTART.TLSU  op: TLOAD=0 TSTORE=1 MGATHER=4 MSCATTER=5 MGATHER_MASK=6 MSCATTER_MASK=7
-//   BSTART.CUBE op: TMATMUL=0, TMATMUL.BIAS=1, TMATMUL.ACC=2,
-//                   TMATMULMX=3, TMATMULMX.BIAS=4, TMATMULMX.ACC=5,
-//                   TMATMUL*.FIXP=9..14
+// Block-start function values per the pinned LinxISA v0.58 catalog
+// (contracts/linxisa-v0.58-engine-ops.json):
+//   BSTART.TLSU  op: TLOAD=0 TSTORE=1 TMOV=2 TPREFETCH=3 MGATHER=4 MSCATTER=5
+//                    MGATHER_MASK=6 MSCATTER_MASK=7 MGATHER_CAS=8 GMOV=13
+//   BSTART.CUBE op: TMATMUL=0, TMATMUL.BIAS=1, TMATMUL.ACC=2, TMATMULMX=4,
+//                   TMATMULMX.BIAS=5, TMATMULMX.ACC=6,
+//                   TGEMV=16, TGEMV.BIAS=17, TGEMV.ACC=18,
+//                   TGEMVMX=20, TGEMVMX.BIAS=21, TGEMVMX.ACC=22
+// (The legacy DavinciOO spelling `BSTART.TLSU <op>`/`BSTART.CUBE <op>` is
+// kept in this header's inline assembly because the current LinxV5 backend
+// assembler accepts the numbered/function forms; the PTO-ISA 0.58 reissue
+// canonicalizes these to named block starts such as BSTART.TLOAD /
+// BSTART.TMATMUL and renders VEC/SFU instead of TEPL.)
+// The historical `TMATMUL*.FIXP` suffix was an implementation-local name;
+// PTO-ISA 0.58 carries post-processing through the B.FPATR attribute, so the
+// canonical emission is `BSTART.CUBE TMATMUL` + `B.FPATR`.
 // All variants below are the NORM (no layout conversion) generic form.
 //===----------------------------------------------------------------------===//
 
@@ -1969,8 +1980,8 @@ PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
       : "memory");
 }
 
-// ACCCVT was removed from DavinciOO v5. FIXP matrix operations write an
-// ordinary Tile directly and are the supported replacement.
+// ACCCVT was removed from PTO-ISA v0.58. Post-processed matrix operations
+// write an ordinary Tile directly and are the supported replacement.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void ACCCVT(tile_shape_out &, tile_shape_in &) {
   static_assert(pto_dependent_false_v<tile_shape_out, tile_shape_in>,
@@ -2011,6 +2022,9 @@ inline size_t matrix_valid_col(const Matrix &matrix) {
 // helper templates below take FixpAttr Attr as an NTTP. Defined here (before
 // any helper that uses them) so the plain matmul free function can also use
 // PTO_FIXP_ATTR.
+// PTO-ISA v0.58 B.FPATR fields:
+//   PreQuantMode(6b@26) ReluMode(3b@23) GroupNCode(4b@19, <=9)
+//   RowMaxEn(1b@18) GroupMaxEn(1b@17) RowMaxInit(1b@16) MaxAbsEn(1b@15)
 #define PTO_FIXP_ATTR \
   "B.FPATR %c[PreQuant], %c[ReluMode], %c[GroupNCode], %c[RowMaxEn], " \
   "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn]\n"
