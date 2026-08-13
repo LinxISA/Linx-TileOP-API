@@ -1012,7 +1012,7 @@ template <int GroupN> constexpr uint8_t group_n_code() {
   static_assert(GroupN == 8 || GroupN == 16 || GroupN == 32 || GroupN == 48 ||
                     GroupN == 64 || GroupN == 80 || GroupN == 96 ||
                     GroupN == 112 || GroupN == 128,
-                "TMATMUL_FIXP GroupN must be 8, 16, 32, 48, 64, 80, 96, "
+                "FPATR config GroupN must be 8, 16, 32, 48, 64, 80, 96, "
                 "112 or 128");
   if constexpr (GroupN == 8)
     return 1;
@@ -1064,7 +1064,7 @@ struct Options {
 
   constexpr auto relu() const {
     static_assert(Attr.Relu == FixpReluMode::None,
-                  "TMATMUL_FIXP ReLU mode was already selected");
+                  "FPATR config ReLU mode was already selected");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::Relu);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
                    GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
@@ -1073,7 +1073,7 @@ struct Options {
 
   constexpr auto lrelu(uint64_t Descriptor) const {
     static_assert(Attr.Relu == FixpReluMode::None,
-                  "TMATMUL_FIXP ReLU mode was already selected");
+                  "FPATR config ReLU mode was already selected");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::LRelu);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
                    GroupMaxOut>(QuantDescriptor, Descriptor, Quant, Relu,
@@ -1083,9 +1083,9 @@ struct Options {
   template <is_local_tile_v Tile>
   constexpr auto prelu(Tile &Parameter) const {
     static_assert(Attr.Relu == FixpReluMode::None,
-                  "TMATMUL_FIXP ReLU mode was already selected");
+                  "FPATR config ReLU mode was already selected");
     static_assert(std::is_same_v<ReluTile, NoOperand>,
-                  "TMATMUL_FIXP PReLU Tile was already supplied");
+                  "FPATR config PReLU Tile was already supplied");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::PRelu);
     return Options<NewAttr, QuantTile, Tile, RowMaxIn, RowMaxOut,
                    GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant,
@@ -1095,10 +1095,10 @@ struct Options {
   template <is_local_tile_v Tile>
   constexpr auto row_max(Tile &Output) const {
     static_assert(!Attr.RowMaxEn,
-                  "TMATMUL_FIXP RowMax was already enabled");
+                  "FPATR config RowMax was already enabled");
     static_assert(std::is_same_v<RowMaxIn, NoOperand> &&
                       std::is_same_v<RowMaxOut, NoOperand>,
-                  "TMATMUL_FIXP RowMax operands were already supplied");
+                  "FPATR config RowMax operands were already supplied");
     constexpr FixpAttr NewAttr = with_row_max(Attr, false);
     return Options<NewAttr, QuantTile, ReluTile, NoOperand, Tile,
                    GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
@@ -1108,10 +1108,10 @@ struct Options {
   template <is_local_tile_v InputTile, is_local_tile_v OutputTile>
   constexpr auto row_max(InputTile &Input, OutputTile &Output) const {
     static_assert(!Attr.RowMaxEn,
-                  "TMATMUL_FIXP RowMax was already enabled");
+                  "FPATR config RowMax was already enabled");
     static_assert(std::is_same_v<RowMaxIn, NoOperand> &&
                       std::is_same_v<RowMaxOut, NoOperand>,
-                  "TMATMUL_FIXP RowMax operands were already supplied");
+                  "FPATR config RowMax operands were already supplied");
     constexpr FixpAttr NewAttr = with_row_max(Attr, true);
     return Options<NewAttr, QuantTile, ReluTile, InputTile, OutputTile,
                    GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
@@ -1121,9 +1121,9 @@ struct Options {
   template <int GroupN, is_local_tile_v Tile>
   constexpr auto group_max(Tile &Output) const {
     static_assert(!Attr.GroupMaxEn,
-                  "TMATMUL_FIXP GroupMax was already enabled");
+                  "FPATR config GroupMax was already enabled");
     static_assert(std::is_same_v<GroupMaxOut, NoOperand>,
-                  "TMATMUL_FIXP GroupMax output was already supplied");
+                  "FPATR config GroupMax output was already supplied");
     constexpr FixpAttr NewAttr =
         with_group_max(Attr, group_n_code<GroupN>());
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut, Tile>(
@@ -1132,7 +1132,7 @@ struct Options {
 
   constexpr auto max_abs() const {
     static_assert(Attr.RowMaxEn || Attr.GroupMaxEn,
-                  "TMATMUL_FIXP max_abs requires RowMax or GroupMax");
+                  "FPATR config max_abs requires RowMax or GroupMax");
     constexpr FixpAttr NewAttr = with_max_abs(Attr);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
                    GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,

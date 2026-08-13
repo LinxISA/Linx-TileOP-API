@@ -2761,6 +2761,201 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_7
 
+// TGEMV (Function 16-18, 20-22) math source streams. Local-only per
+// handoff Sec 1.5 (any B.IOS is illegal). A=1xK vector (M=1), B=KxN
+// matrix, C=1xN output. Scales follow their matrix/vector shape.
+#define PTO_FIXP_GV_GV_L_SRC_0 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_0
+
+#define PTO_FIXP_GV_GV_L_SRC_1 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_1
+
+#define PTO_FIXP_GV_GV_L_SRC_2 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_2
+
+#define PTO_FIXP_GV_GV_L_SRC_3 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_3
+
+#define PTO_FIXP_GV_GV_L_SRC_4 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_4
+
+#define PTO_FIXP_GV_GV_L_SRC_5 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_5
+
+#define PTO_FIXP_GV_GV_L_SRC_6 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_6
+
+#define PTO_FIXP_GV_GV_L_SRC_7 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_7
+
+#define PTO_FIXP_GV_GVB_L_SRC_0 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_0
+
+#define PTO_FIXP_GV_GVB_L_SRC_1 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_1
+
+#define PTO_FIXP_GV_GVB_L_SRC_2 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_2
+
+#define PTO_FIXP_GV_GVB_L_SRC_3 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_3
+
+#define PTO_FIXP_GV_GVB_L_SRC_4 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_4
+
+#define PTO_FIXP_GV_GVB_L_SRC_5 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_5
+
+#define PTO_FIXP_GV_GVB_L_SRC_6 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_6
+
+#define PTO_FIXP_GV_GVB_L_SRC_7 \
+  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_7
+
+#define PTO_FIXP_GV_GVA_L_SRC_0 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_0
+
+#define PTO_FIXP_GV_GVA_L_SRC_1 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_1
+
+#define PTO_FIXP_GV_GVA_L_SRC_2 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_2
+
+#define PTO_FIXP_GV_GVA_L_SRC_3 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_3
+
+#define PTO_FIXP_GV_GVA_L_SRC_4 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_4
+
+#define PTO_FIXP_GV_GVA_L_SRC_5 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_5
+
+#define PTO_FIXP_GV_GVA_L_SRC_6 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_6
+
+#define PTO_FIXP_GV_GVA_L_SRC_7 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  PTO_FIXP_PPSRC_7
+
+#define PTO_FIXP_GV_GVMX_L_SRC_0 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_0
+
+#define PTO_FIXP_GV_GVMX_L_SRC_1 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_1
+
+#define PTO_FIXP_GV_GVMX_L_SRC_2 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_2
+
+#define PTO_FIXP_GV_GVMX_L_SRC_3 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_3
+
+#define PTO_FIXP_GV_GVMX_L_SRC_4 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_4
+
+#define PTO_FIXP_GV_GVMX_L_SRC_5 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_5
+
+#define PTO_FIXP_GV_GVMX_L_SRC_6 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_6
+
+#define PTO_FIXP_GV_GVMX_L_SRC_7 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_7
+
+#define PTO_FIXP_GV_GVMXB_L_SRC_0 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_0
+
+#define PTO_FIXP_GV_GVMXB_L_SRC_1 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_1
+
+#define PTO_FIXP_GV_GVMXB_L_SRC_2 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_2
+
+#define PTO_FIXP_GV_GVMXB_L_SRC_3 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_3
+
+#define PTO_FIXP_GV_GVMXB_L_SRC_4 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_4
+
+#define PTO_FIXP_GV_GVMXB_L_SRC_5 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_5
+
+#define PTO_FIXP_GV_GVMXB_L_SRC_6 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_6
+
+#define PTO_FIXP_GV_GVMXB_L_SRC_7 \
+  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  PTO_FIXP_PPSRC_7
+
+#define PTO_FIXP_GV_GVMXA_L_SRC_0 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_0
+
+#define PTO_FIXP_GV_GVMXA_L_SRC_1 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_1
+
+#define PTO_FIXP_GV_GVMXA_L_SRC_2 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_2
+
+#define PTO_FIXP_GV_GVMXA_L_SRC_3 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_3
+
+#define PTO_FIXP_GV_GVMXA_L_SRC_4 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_4
+
+#define PTO_FIXP_GV_GVMXA_L_SRC_5 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_5
+
+#define PTO_FIXP_GV_GVMXA_L_SRC_6 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_6
+
+#define PTO_FIXP_GV_GVMXA_L_SRC_7 \
+  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  PTO_FIXP_PPSRC_7
+
 #define PTO_FIXP_SRC_0 \
   "B.IOT %[A], %[B], mask=15\n"
 #define PTO_FIXP_SRC_1 \
@@ -3327,6 +3522,164 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
   }
 }
 
+// TGEMV/TGEMVMX are Local-only (handoff Sec 1.5: any B.IOS is
+// illegal), so each variant has a single EMIT_LOCAL using the
+// canonical Local math-source stream + shared PP aux/OUT macros.
+#define PTO_FIXP_GV_GV_EMIT_LOCAL(SRC, OUT, IOR) \
+  asm volatile(                                                              \
+      PTO_MATMUL_HEADER("TGEMV", PTO_FIXP_ATTR)                         \
+      PTO_FIXP_GV_GV_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
+      : PTO_FIXP_OUT_DECL_##OUT                                               \
+      : [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()),                                                          \
+        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+
+#define PTO_FIXP_GV_GVB_EMIT_LOCAL(SRC, OUT, IOR) \
+  asm volatile(                                                              \
+      PTO_MATMUL_HEADER("TGEMV.BIAS", PTO_FIXP_ATTR)                         \
+      PTO_FIXP_GV_GVB_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
+      : PTO_FIXP_OUT_DECL_##OUT                                               \
+      : [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()), [Bias] "Tr"(bias.data()),                                                          \
+        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+
+#define PTO_FIXP_GV_GVA_EMIT_LOCAL(SRC, OUT, IOR) \
+  asm volatile(                                                              \
+      PTO_MATMUL_HEADER("TGEMV.ACC", PTO_FIXP_ATTR)                         \
+      PTO_FIXP_GV_GVA_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
+      : PTO_FIXP_OUT_DECL_##OUT                                               \
+      : [C] "Tr"(c.data()), [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()),                                                          \
+        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+
+#define PTO_FIXP_GV_GVMX_EMIT_LOCAL(SRC, OUT, IOR) \
+  asm volatile(                                                              \
+      PTO_MATMUL_HEADER("TGEMVMX", PTO_FIXP_ATTR)                         \
+      PTO_FIXP_GV_GVMX_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
+      : PTO_FIXP_OUT_DECL_##OUT                                               \
+      : [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()),                                                          \
+        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+
+#define PTO_FIXP_GV_GVMXB_EMIT_LOCAL(SRC, OUT, IOR) \
+  asm volatile(                                                              \
+      PTO_MATMUL_HEADER("TGEMVMX.BIAS", PTO_FIXP_ATTR)                         \
+      PTO_FIXP_GV_GVMXB_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
+      : PTO_FIXP_OUT_DECL_##OUT                                               \
+      : [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), [Bias] "Tr"(bias.data()),                                                          \
+        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+
+#define PTO_FIXP_GV_GVMXA_EMIT_LOCAL(SRC, OUT, IOR) \
+  asm volatile(                                                              \
+      PTO_MATMUL_HEADER("TGEMVMX.ACC", PTO_FIXP_ATTR)                         \
+      PTO_FIXP_GV_GVMXA_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
+      : PTO_FIXP_OUT_DECL_##OUT                                               \
+      : [C] "Tr"(c.data()), [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()),                                                          \
+        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+
+// emit_gemv_fixp: mtx / vec -> dst, Local-only.
+template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+          typename Dst, typename Mtx, typename Vec, typename RowIn, typename QuantTile, typename ReluTile,
+          typename RowOut, typename GroupOut>
+PTO_SHARED_INLINE void emit_gemv_fixp(
+    Dst &dst,
+    Mtx &mtx,
+    Vec &vec,
+    RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
+    RowOut &row_out, GroupOut &group_out,
+    uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  PTO_FIXP_DISPATCH(PTO_FIXP_GV_GV_EMIT_LOCAL);
+}
+
+// emit_gemv_bias_fixp: mtx / vec / bias -> dst, Local-only.
+template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+          typename Dst, typename Mtx, typename Vec, typename BiasT, typename RowIn, typename QuantTile, typename ReluTile,
+          typename RowOut, typename GroupOut>
+PTO_SHARED_INLINE void emit_gemv_bias_fixp(
+    Dst &dst,
+    Mtx &mtx,
+    Vec &vec,
+    BiasT &bias,
+    RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
+    RowOut &row_out, GroupOut &group_out,
+    uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVB_EMIT_LOCAL);
+}
+
+// emit_gemv_acc_fixp: c / mtx / vec -> dst, Local-only.
+template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+          typename Dst, typename C, typename Mtx, typename Vec, typename RowIn, typename QuantTile, typename ReluTile,
+          typename RowOut, typename GroupOut>
+PTO_SHARED_INLINE void emit_gemv_acc_fixp(
+    Dst &dst,
+    C &c,
+    Mtx &mtx,
+    Vec &vec,
+    RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
+    RowOut &row_out, GroupOut &group_out,
+    uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVA_EMIT_LOCAL);
+}
+
+// emit_gemv_mx_fixp: mtx / smtx / vec / svec -> dst, Local-only.
+template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+          typename Dst, typename Mtx, typename ScaleMtx, typename Vec, typename ScaleVec, typename RowIn, typename QuantTile, typename ReluTile,
+          typename RowOut, typename GroupOut>
+PTO_SHARED_INLINE void emit_gemv_mx_fixp(
+    Dst &dst,
+    Mtx &mtx,
+    ScaleMtx &smtx,
+    Vec &vec,
+    ScaleVec &svec,
+    RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
+    RowOut &row_out, GroupOut &group_out,
+    uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL);
+}
+
+// emit_gemv_mx_bias_fixp: mtx / smtx / vec / svec / bias -> dst, Local-only.
+template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+          typename Dst, typename Mtx, typename ScaleMtx, typename Vec, typename ScaleVec, typename BiasT, typename RowIn, typename QuantTile, typename ReluTile,
+          typename RowOut, typename GroupOut>
+PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
+    Dst &dst,
+    Mtx &mtx,
+    ScaleMtx &smtx,
+    Vec &vec,
+    ScaleVec &svec,
+    BiasT &bias,
+    RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
+    RowOut &row_out, GroupOut &group_out,
+    uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL);
+}
+
+// emit_gemv_mx_acc_fixp: c / mtx / smtx / vec / svec -> dst, Local-only.
+template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+          typename Dst, typename C, typename Mtx, typename ScaleMtx, typename Vec, typename ScaleVec, typename RowIn, typename QuantTile, typename ReluTile,
+          typename RowOut, typename GroupOut>
+PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
+    Dst &dst,
+    C &c,
+    Mtx &mtx,
+    ScaleMtx &smtx,
+    Vec &vec,
+    ScaleVec &svec,
+    RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
+    RowOut &row_out, GroupOut &group_out,
+    uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL);
+}
+
+
 #undef PTO_FIXP_DISPATCH
 #undef PTO_FIXP_DISPATCH_SRC
 #undef PTO_FIXP_DISPATCH_OUT
@@ -3534,7 +3887,7 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
   static_assert(is_basic_fixp_attr(Attr),
                 "TMATMUL supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
-                "require a .FIXP variant");
+                "require the overload taking fixp::Options");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -3558,7 +3911,7 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
   static_assert(is_basic_fixp_attr(Attr),
                 "TMATMUL_ACC supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
-                "require a .FIXP variant");
+                "require the overload taking fixp::Options");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -3872,7 +4225,7 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   static_assert(is_basic_fixp_attr(Attr),
                 "TMATMUL_BIAS supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
-                "require a .FIXP variant");
+                "require the overload taking fixp::Options");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -3937,7 +4290,7 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
   static_assert(is_basic_fixp_attr(Attr),
                 "TMATMUL_MX supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
-                "require a .FIXP variant");
+                "require the overload taking fixp::Options");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -4003,7 +4356,7 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
   static_assert(is_basic_fixp_attr(Attr),
                 "TMATMUL_MX_ACC supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
-                "require a .FIXP variant");
+                "require the overload taking fixp::Options");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -4069,7 +4422,7 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
   static_assert(is_basic_fixp_attr(Attr),
                 "TMATMUL_MX_BIAS supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
-                "require a .FIXP variant");
+                "require the overload taking fixp::Options");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -4126,6 +4479,433 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
   volatile uint64_t lrelu_gpr = options.LReluDescriptor;
   pto_matmul_detail::emit_matmul_mx_bias_fixp<Attr, SrcMask, OutMask, IorMode>(d, a, scale_a, b, scale_b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
+
+// ---- TGEMV family (Function 16-18, 20-22) ----
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_vec>
+PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx,
+                 tile_shape_vec &vec) {
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TGEMV supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the Options overload");
+  fixp::Options<Attr> canonical;
+  TGEMV(d, mtx, vec, canonical);
+}
+
+
+template <is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_vec, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx,
+                 tile_shape_vec &vec,
+                  const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+
+  constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) | (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) | (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant == !std::is_same_v<typename Options::QuantTile, fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu == !std::is_same_v<typename Options::ReluTile, fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn == !std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut == !std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  // TGEMV is M=1: vec is a 1-row Left tile; mtx is KxN.
+  size_t M = 1;
+  size_t N = pto_matmul_detail::matrix_valid_col(mtx);
+  size_t K = pto_matmul_detail::matrix_valid_row(mtx);
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+
+  volatile uint64_t quant_gpr = options.QuantDescriptor;
+  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  pto_matmul_detail::emit_gemv_fixp<Attr, SrcMask, OutMask, IorMode>(
+      d, mtx, vec,
+      row_in, quant_tile, relu_tile, row_out, group_out,
+      quant_gpr, lrelu_gpr, M, N, K);
+}
+
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_vec,
+          is_tile_data_v tile_shape_bias>
+PTO_SHARED_INLINE void TGEMV_BIAS(tile_shape_d &d, tile_shape_mtx &mtx,
+                 tile_shape_vec &vec,
+                 tile_shape_bias &bias) {
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV_BIAS requires vec=Left (1xK) and mtx=Right (KxN)");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TGEMV_BIAS supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the Options overload");
+  fixp::Options<Attr> canonical;
+  TGEMV_BIAS(d, mtx, vec, bias, canonical);
+}
+
+
+template <is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_vec,
+          is_tile_data_v tile_shape_bias, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TGEMV_BIAS(tile_shape_d &d, tile_shape_mtx &mtx,
+                 tile_shape_vec &vec,
+                 tile_shape_bias &bias,
+                  const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+
+  constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) | (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) | (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant == !std::is_same_v<typename Options::QuantTile, fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu == !std::is_same_v<typename Options::ReluTile, fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn == !std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut == !std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  // TGEMV is M=1: vec is a 1-row Left tile; mtx is KxN.
+  size_t M = 1;
+  size_t N = pto_matmul_detail::matrix_valid_col(mtx);
+  size_t K = pto_matmul_detail::matrix_valid_row(mtx);
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+
+  volatile uint64_t quant_gpr = options.QuantDescriptor;
+  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  pto_matmul_detail::emit_gemv_bias_fixp<Attr, SrcMask, OutMask, IorMode>(
+      d, mtx, vec, bias,
+      row_in, quant_tile, relu_tile, row_out, group_out,
+      quant_gpr, lrelu_gpr, M, N, K);
+}
+
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_vec>
+PTO_SHARED_INLINE void TGEMV_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_mtx &mtx,
+                 tile_shape_vec &vec) {
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV_ACC requires vec=Left (1xK) and mtx=Right (KxN)");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TGEMV_ACC supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the Options overload");
+  fixp::Options<Attr> canonical;
+  TGEMV_ACC(d, c, mtx, vec, canonical);
+}
+
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_vec, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TGEMV_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_mtx &mtx,
+                 tile_shape_vec &vec,
+                  const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+
+  constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) | (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) | (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant == !std::is_same_v<typename Options::QuantTile, fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu == !std::is_same_v<typename Options::ReluTile, fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn == !std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut == !std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  // TGEMV is M=1: vec is a 1-row Left tile; mtx is KxN.
+  size_t M = 1;
+  size_t N = pto_matmul_detail::matrix_valid_col(mtx);
+  size_t K = pto_matmul_detail::matrix_valid_row(mtx);
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+
+  volatile uint64_t quant_gpr = options.QuantDescriptor;
+  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  pto_matmul_detail::emit_gemv_acc_fixp<Attr, SrcMask, OutMask, IorMode>(
+      d, c, mtx, vec,
+      row_in, quant_tile, relu_tile, row_out, group_out,
+      quant_gpr, lrelu_gpr, M, N, K);
+}
+
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_smtx,
+          is_local_tile_v tile_shape_vec,
+          is_local_tile_v tile_shape_svec>
+PTO_SHARED_INLINE void TGEMV_MX(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape_smtx &smtx,
+                 tile_shape_vec &vec, tile_shape_svec &svec) {
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV_MX requires vec=Left (1xK) and mtx=Right (KxN)");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TGEMV_MX supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the Options overload");
+  fixp::Options<Attr> canonical;
+  TGEMV_MX(d, mtx, smtx, vec, svec, canonical);
+}
+
+
+template <is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_smtx,
+          is_local_tile_v tile_shape_vec,
+          is_local_tile_v tile_shape_svec, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TGEMV_MX(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape_smtx &smtx,
+                 tile_shape_vec &vec, tile_shape_svec &svec,
+                  const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+
+  constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) | (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) | (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant == !std::is_same_v<typename Options::QuantTile, fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu == !std::is_same_v<typename Options::ReluTile, fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn == !std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut == !std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  // TGEMV is M=1: vec is a 1-row Left tile; mtx is KxN.
+  size_t M = 1;
+  size_t N = pto_matmul_detail::matrix_valid_col(mtx);
+  size_t K = pto_matmul_detail::matrix_valid_row(mtx);
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+
+  volatile uint64_t quant_gpr = options.QuantDescriptor;
+  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  pto_matmul_detail::emit_gemv_mx_fixp<Attr, SrcMask, OutMask, IorMode>(
+      d, mtx, smtx, vec, svec,
+      row_in, quant_tile, relu_tile, row_out, group_out,
+      quant_gpr, lrelu_gpr, M, N, K);
+}
+
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_smtx,
+          is_local_tile_v tile_shape_vec,
+          is_local_tile_v tile_shape_svec,
+          is_tile_data_v tile_shape_bias>
+PTO_SHARED_INLINE void TGEMV_MX_BIAS(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape_smtx &smtx,
+                 tile_shape_vec &vec, tile_shape_svec &svec,
+                 tile_shape_bias &bias) {
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV_MX_BIAS requires vec=Left (1xK) and mtx=Right (KxN)");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TGEMV_MX_BIAS supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the Options overload");
+  fixp::Options<Attr> canonical;
+  TGEMV_MX_BIAS(d, mtx, smtx, vec, svec, bias, canonical);
+}
+
+
+template <is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_smtx,
+          is_local_tile_v tile_shape_vec,
+          is_local_tile_v tile_shape_svec,
+          is_tile_data_v tile_shape_bias, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TGEMV_MX_BIAS(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape_smtx &smtx,
+                 tile_shape_vec &vec, tile_shape_svec &svec,
+                 tile_shape_bias &bias,
+                  const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+
+  constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) | (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) | (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant == !std::is_same_v<typename Options::QuantTile, fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu == !std::is_same_v<typename Options::ReluTile, fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn == !std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut == !std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  // TGEMV is M=1: vec is a 1-row Left tile; mtx is KxN.
+  size_t M = 1;
+  size_t N = pto_matmul_detail::matrix_valid_col(mtx);
+  size_t K = pto_matmul_detail::matrix_valid_row(mtx);
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+
+  volatile uint64_t quant_gpr = options.QuantDescriptor;
+  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  pto_matmul_detail::emit_gemv_mx_bias_fixp<Attr, SrcMask, OutMask, IorMode>(
+      d, mtx, smtx, vec, svec, bias,
+      row_in, quant_tile, relu_tile, row_out, group_out,
+      quant_gpr, lrelu_gpr, M, N, K);
+}
+
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_smtx,
+          is_local_tile_v tile_shape_vec,
+          is_local_tile_v tile_shape_svec>
+PTO_SHARED_INLINE void TGEMV_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_mtx &mtx, tile_shape_smtx &smtx,
+                 tile_shape_vec &vec, tile_shape_svec &svec) {
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV_MX_ACC requires vec=Left (1xK) and mtx=Right (KxN)");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TGEMV_MX_ACC supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the Options overload");
+  fixp::Options<Attr> canonical;
+  TGEMV_MX_ACC(d, c, mtx, smtx, vec, svec, canonical);
+}
+
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_smtx,
+          is_local_tile_v tile_shape_vec,
+          is_local_tile_v tile_shape_svec, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TGEMV_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_mtx &mtx, tile_shape_smtx &smtx,
+                 tile_shape_vec &vec, tile_shape_svec &svec,
+                  const Options &options) {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
+                    tile_role_v<tile_shape_mtx> == Location::Right,
+                "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+
+  constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) | (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) | (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant == !std::is_same_v<typename Options::QuantTile, fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu == !std::is_same_v<typename Options::ReluTile, fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn == !std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut == !std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  // TGEMV is M=1: vec is a 1-row Left tile; mtx is KxN.
+  size_t M = 1;
+  size_t N = pto_matmul_detail::matrix_valid_col(mtx);
+  size_t K = pto_matmul_detail::matrix_valid_row(mtx);
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+
+  volatile uint64_t quant_gpr = options.QuantDescriptor;
+  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  pto_matmul_detail::emit_gemv_mx_acc_fixp<Attr, SrcMask, OutMask, IorMode>(
+      d, c, mtx, smtx, vec, svec,
+      row_in, quant_tile, relu_tile, row_out, group_out,
+      quant_gpr, lrelu_gpr, M, N, K);
+}
+
 
 #undef PTO_SHARED_INLINE
 
