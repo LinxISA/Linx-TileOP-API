@@ -1773,7 +1773,7 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
-      [GmStride]"r"(gm_shape::RowStride * sizeof(typename gm_shape::DType))
+      [GmStride]"r"(gm_shape::RowStride)
   );
   return result;
 }
@@ -1801,7 +1801,7 @@ void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
-      [GmStride]"r"(gm_shape::RowStride * sizeof(typename gm_shape::DType))
+      [GmStride]"r"(gm_shape::RowStride)
   );
 }
 
