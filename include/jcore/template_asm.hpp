@@ -259,7 +259,7 @@ void TLOAD2_ND2NZ(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()*2), [__pto_VROW]"r"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
       [__pto_GmStride]"r"(gm_shape::RowStride)
-  );
+      : "memory");
 }
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
@@ -282,7 +282,7 @@ void TLOAD2_ND2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()*2), [__pto_VROW]"r"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
       [__pto_GmStride]"r"(gm_shape::RowStride)
-  );
+      : "memory");
 }
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
@@ -305,7 +305,7 @@ void TLOAD2_DN2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()), [__pto_VROW]"r"(dst1.GetValidRow()*2), [__pto_COL]"i"(tile_shape::Cols),
       [__pto_GmStride]"r"(gm_shape::ColStride)
-  );
+      : "memory");
 }
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
@@ -326,7 +326,7 @@ void TSTORE2_DN2DN(gm_shape &dst, tile_shape &src1, tile_shape &src0) {
       [__pto_SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
       [__pto_VCOL]"r"(src0.GetValidRow()*2), [__pto_VROW]"r"(src0.GetValidCol()), [__pto_COL]"i"(tile_shape::Rows*2),
       [__pto_GmStride]"r"(gm_shape::ColStride)
-  );
+      : "memory");
 }
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
@@ -351,7 +351,7 @@ void TLOAD4_ND2NZ(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidCol()*4), [__pto_VROW]"r"(dst3.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*4),
       [__pto_GmStride]"r"(gm_shape::RowStride)
-  );
+      : "memory");
 }
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
@@ -376,7 +376,7 @@ void TLOAD4_ND2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidRow()*4), [__pto_VROW]"r"(dst3.GetValidCol()), [__pto_COL]"i"(tile_shape::Rows*4),
       [__pto_GmStride]"r"(gm_shape::RowStride)
-  );
+      : "memory");
 }
 
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
@@ -401,7 +401,7 @@ void TLOAD4_DN2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidCol()*4), [__pto_VROW]"r"(dst3.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*4),
       [__pto_GmStride]"r"(gm_shape::ColStride)
-  );
+      : "memory");
 }
 
 enum class TlsuPadValue : int {
@@ -1743,7 +1743,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(gm_shape::RowStride)
-  );
+      : "memory");
 }
 
 // TLOAD: GM -> Shared Tile (PTO v0.58 reissue). The destination is one
@@ -1774,7 +1774,7 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(gm_shape::RowStride)
-  );
+      : "memory");
   return result;
 }
 
@@ -1802,7 +1802,7 @@ void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(gm_shape::RowStride)
-  );
+      : "memory");
 }
 
 // TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
@@ -1826,7 +1826,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(gm_shape::RowStride)
-  );
+      : "memory");
 }
 
 // A PE mask is a lexical four-bit field in v0.58 assembly. Split the template
