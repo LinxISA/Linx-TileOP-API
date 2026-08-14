@@ -141,6 +141,18 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             self.header,
             r"(?:RowStride|ColStride)\s*\*\s*sizeof",
         )
+        self.assertNotRegex(
+            self.header,
+            r'\[(?:__pto_)?GmStride\]\s*"r"\(gm_shape::(?:RowStride|ColStride)\)',
+        )
+        self.assertRegex(
+            self.header,
+            r'\[(?:__pto_)?GmStride\]\s*"r"\(src\.GetStride\([34]\)\)',
+        )
+        self.assertRegex(
+            self.header,
+            r'\[(?:__pto_)?GmStride\]\s*"r"\(dst\.GetStride\([34]\)\)',
+        )
         tlsu_doc = (ROOT / "docs" / "tileop-usage" / "tlsu.md").read_text(encoding="utf-8")
         self.assertIn("logical elements", tlsu_doc)
         self.assertNotIn("after multiplying", tlsu_doc)

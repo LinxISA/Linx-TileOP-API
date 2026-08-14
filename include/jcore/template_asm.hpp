@@ -258,7 +258,7 @@ void TLOAD2_ND2NZ(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()*2), [__pto_VROW]"r"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
-      [__pto_GmStride]"r"(gm_shape::RowStride)
+      [__pto_GmStride]"r"(src.GetStride(3))
       : "memory");
 }
 
@@ -281,7 +281,7 @@ void TLOAD2_ND2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()*2), [__pto_VROW]"r"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
-      [__pto_GmStride]"r"(gm_shape::RowStride)
+      [__pto_GmStride]"r"(src.GetStride(3))
       : "memory");
 }
 
@@ -304,7 +304,7 @@ void TLOAD2_DN2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()), [__pto_VROW]"r"(dst1.GetValidRow()*2), [__pto_COL]"i"(tile_shape::Cols),
-      [__pto_GmStride]"r"(gm_shape::ColStride)
+      [__pto_GmStride]"r"(src.GetStride(4))
       : "memory");
 }
 
@@ -325,7 +325,7 @@ void TSTORE2_DN2DN(gm_shape &dst, tile_shape &src1, tile_shape &src0) {
       [__pto_DstType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
       [__pto_VCOL]"r"(src0.GetValidRow()*2), [__pto_VROW]"r"(src0.GetValidCol()), [__pto_COL]"i"(tile_shape::Rows*2),
-      [__pto_GmStride]"r"(gm_shape::ColStride)
+      [__pto_GmStride]"r"(dst.GetStride(4))
       : "memory");
 }
 
@@ -350,7 +350,7 @@ void TLOAD4_ND2NZ(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidCol()*4), [__pto_VROW]"r"(dst3.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*4),
-      [__pto_GmStride]"r"(gm_shape::RowStride)
+      [__pto_GmStride]"r"(src.GetStride(3))
       : "memory");
 }
 
@@ -375,7 +375,7 @@ void TLOAD4_ND2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidRow()*4), [__pto_VROW]"r"(dst3.GetValidCol()), [__pto_COL]"i"(tile_shape::Rows*4),
-      [__pto_GmStride]"r"(gm_shape::RowStride)
+      [__pto_GmStride]"r"(src.GetStride(3))
       : "memory");
 }
 
@@ -400,7 +400,7 @@ void TLOAD4_DN2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_shape::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidCol()*4), [__pto_VROW]"r"(dst3.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*4),
-      [__pto_GmStride]"r"(gm_shape::ColStride)
+      [__pto_GmStride]"r"(src.GetStride(4))
       : "memory");
 }
 
@@ -436,7 +436,7 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(gm_shape::RowStride)
+        [GmStride] "r"(src.GetStride(3))
       : "memory");
 }
 
@@ -461,7 +461,7 @@ inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(gm_shape::RowStride)
+        [GmStride] "r"(dst.GetStride(3))
       : "memory");
 }
 
@@ -494,7 +494,7 @@ inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(gm_shape::RowStride)
+        [GmStride] "r"(src.GetStride(3))
       : "memory");
 }
 
@@ -522,7 +522,7 @@ inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(gm_shape::RowStride)
+        [GmStride] "r"(dst.GetStride(3))
       : "memory");
 }
 
@@ -1742,7 +1742,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       [TileSize]"i"(tile_shape::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(tile_shape::Cols),
-      [GmStride]"r"(gm_shape::RowStride)
+      [GmStride]"r"(src.GetStride(3))
       : "memory");
 }
 
@@ -1773,7 +1773,7 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
-      [GmStride]"r"(gm_shape::RowStride)
+      [GmStride]"r"(src.GetStride(3))
       : "memory");
   return result;
 }
@@ -1801,7 +1801,7 @@ void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
-      [GmStride]"r"(gm_shape::RowStride)
+      [GmStride]"r"(src.GetStride(3))
       : "memory");
 }
 
@@ -1825,7 +1825,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(tile_shape::Cols),
-      [GmStride]"r"(gm_shape::RowStride)
+      [GmStride]"r"(dst.GetStride(3))
       : "memory");
 }
 

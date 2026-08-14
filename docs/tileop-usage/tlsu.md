@@ -20,6 +20,9 @@ PTO-ISA v0.58 canonicalizes them to named block starts (`BSTART.TLOAD`,
 zero stride; it is not the omitted form. The C++ wrapper passes the row stride
 in **logical elements** (not bytes) exactly as required by the v0.58
 architecture contract; address scaling by element size is architectural.
+For dynamic `global_tensor` layouts, the wrapper reads the stride stored in
+the tensor object with `GetStride`; it never passes the layout template's
+`-1` dynamic sentinel to `B.IOR`.
 
 Per the v0.58 contract the TLOAD/TSTORE block layout is:
 
