@@ -2024,10 +2024,11 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   validate_shared_matrix_pair<A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL", "")
+        PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
         "B.IOT %[A], %[B], mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"
         : [Dst] "=&r"(dst.data())
         : [A] "r"(a.data()), [B] "r"(b.data()),
+          PTO_FIXP_ATTR_INPUTS,
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -2075,13 +2076,14 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
   validate_shared_matrix_pair<A, B>();                                            \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                 \
     asm volatile(                                                                \
-        PTO_MATMUL_HEADER(Opcode, "")                                           \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
         "B.IOT %[A], %[B], mask=1111\n"                                         \
         "B.IOT %[Extra], mask=1111\n"                                                    \
         "B.IOT mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"                       \
         : [Dst] "=&r"(dst.data())                                             \
         : [A] "r"(a.data()), [B] "r"(b.data()),                             \
           [Extra] "r"(extra.data()),                                          \
+          PTO_FIXP_ATTR_INPUTS,                                                 \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                          \
         : "memory");                                                           \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {           \
@@ -3720,12 +3722,13 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   validate_shared_matrix_pair<A, B>();                                            \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
-        PTO_MATMUL_HEADER(Opcode, "")                               \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOT %[A], %[ScaleA], mask=1111\n"                                    \
         "B.IOT %[B], %[ScaleB], mask=1111, last, ->%q[Dst]<%c[TileSize]>\n"     \
         : [Dst] "=&r"(dst.data())                                            \
         : [A] "r"(a.data()), [ScaleA] "r"(scale_a.data()),                 \
           [B] "r"(b.data()), [ScaleB] "r"(scale_b.data()),                 \
+          PTO_FIXP_ATTR_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {          \
@@ -3782,7 +3785,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   validate_shared_matrix_pair<A, B>();                                            \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
-        PTO_MATMUL_HEADER(Opcode, "")                               \
+        PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOT %[A], %[ScaleA], mask=1111\n"                                    \
         "B.IOT %[B], %[ScaleB], mask=1111\n"                                   \
         "B.IOT %[Extra], mask=1111\n"                                                   \
@@ -3791,6 +3794,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [A] "r"(a.data()), [ScaleA] "r"(scale_a.data()),                 \
           [B] "r"(b.data()), [ScaleB] "r"(scale_b.data()),                 \
           [Extra] "r"(extra.data()),                                         \
+          PTO_FIXP_ATTR_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {          \
@@ -4409,6 +4413,40 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
   pto_matmul_detail::emit_matmul_mx_bias_fixp<Attr, SrcMask, OutMask, IorMode>(d, a, scale_a, b, scale_b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
+namespace pto_matmul_detail {
+
+template <FixpAttr Attr, typename Dst, typename Matrix, typename Vector>
+constexpr void validate_gemv_contract() {
+  static_assert(is_valid_fixp_attr(Attr),
+                "invalid TGEMV B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename Dst::DType>(),
+                "TGEMV destination dtype does not match PreQuantMode");
+  static_assert(Dst::IsValidActiveSize,
+                "TGEMV destination logical Tile size must be 128 B..8 KB");
+  static_assert(Matrix::IsValidActiveSize,
+                "TGEMV matrix logical Tile size must be 128 B..8 KB");
+  static_assert(Vector::IsValidActiveSize,
+                "TGEMV vector logical Tile size must be 128 B..8 KB");
+  static_assert(Dst::ValidRow == 1 || Dst::ValidRow == -1,
+                "TGEMV destination must have one valid row");
+  static_assert(Vector::ValidRow == 1 || Vector::ValidRow == -1,
+                "TGEMV vector must have one valid row");
+  static_assert(Vector::ValidCol == -1 || Matrix::ValidRow == -1 ||
+                    Vector::ValidCol == Matrix::ValidRow,
+                "TGEMV requires vector K == matrix K");
+  static_assert(Dst::ValidCol == -1 || Matrix::ValidCol == -1 ||
+                    Dst::ValidCol == Matrix::ValidCol,
+                "TGEMV requires destination N == matrix N");
+}
+
+template <typename... Tiles>
+constexpr void validate_gemv_aux_tiles() {
+  static_assert((Tiles::IsValidActiveSize && ...),
+                "TGEMV auxiliary logical Tile size must be 128 B..8 KB");
+}
+
+} // namespace pto_matmul_detail
+
 // ---- TGEMV family (Function 16-18, 20-22) ----
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
           is_local_tile_v tile_shape_vec>
@@ -4417,6 +4455,8 @@ PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx,
   static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
                     tile_role_v<tile_shape_mtx> == Location::Right,
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+  pto_matmul_detail::validate_gemv_contract<
+      Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
   static_assert(is_basic_fixp_attr(Attr),
                 "TGEMV supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
@@ -4435,6 +4475,8 @@ PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx,
   static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
                     tile_role_v<tile_shape_mtx> == Location::Right,
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+  pto_matmul_detail::validate_gemv_contract<
+      Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
 
   constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
   constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
@@ -4506,6 +4548,9 @@ PTO_SHARED_INLINE void TGEMV_BIAS(tile_shape_d &d, tile_shape_mtx &mtx,
   static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
                     tile_role_v<tile_shape_mtx> == Location::Right,
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+  pto_matmul_detail::validate_gemv_contract<
+      Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_aux_tiles<tile_shape_bias>();
 
   constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
   constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
@@ -4575,6 +4620,9 @@ PTO_SHARED_INLINE void TGEMV_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_mt
   static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
                     tile_role_v<tile_shape_mtx> == Location::Right,
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+  pto_matmul_detail::validate_gemv_contract<
+      Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_aux_tiles<tile_shape_c>();
 
   constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
   constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
@@ -4646,6 +4694,10 @@ PTO_SHARED_INLINE void TGEMV_MX(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape
   static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
                     tile_role_v<tile_shape_mtx> == Location::Right,
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+  pto_matmul_detail::validate_gemv_contract<
+      Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_aux_tiles<tile_shape_smtx,
+                                              tile_shape_svec>();
 
   constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
   constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
@@ -4721,6 +4773,11 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(tile_shape_d &d, tile_shape_mtx &mtx, tile_
   static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
                     tile_role_v<tile_shape_mtx> == Location::Right,
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+  pto_matmul_detail::validate_gemv_contract<
+      Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_aux_tiles<tile_shape_smtx,
+                                              tile_shape_svec,
+                                              tile_shape_bias>();
 
   constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
   constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
@@ -4794,6 +4851,11 @@ PTO_SHARED_INLINE void TGEMV_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape
   static_assert(tile_role_v<tile_shape_vec> == Location::Left &&
                     tile_role_v<tile_shape_mtx> == Location::Right,
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
+  pto_matmul_detail::validate_gemv_contract<
+      Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_aux_tiles<tile_shape_c,
+                                              tile_shape_smtx,
+                                              tile_shape_svec>();
 
   constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
   constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);

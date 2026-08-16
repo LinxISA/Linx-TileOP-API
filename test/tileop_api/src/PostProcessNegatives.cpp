@@ -11,8 +11,12 @@ using A = TileLeft<float, 32, 64>;
 using B = TileRight<float, 64, 32>;
 using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 2>;  // bad ValidCol
 using G = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 8>;  // bad for N=32/GroupN=16
+using GVD = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 1, 32>;
+using GVVBad = Tile<Location::Left, float, 64, 64, BLayout::RowMajor, 1, 64>;
+using GVM = TileRight<float, 64, 32>;
 
-void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
+void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g, GVD &gd,
+                GVVBad &gv, GVM &gm) {
 #if defined(SHOULD_FAIL_dtype)
   // QF322S8Pre requires an S8 destination, not FP32.
   TMATMUL(d, a, b, fixp::s8(0x7));
@@ -34,6 +38,14 @@ void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
   auto sa = TMOV_L2S_INSERT(a);
   TMATMUL(d, sa, b);
 #endif
+#if defined(SHOULD_FAIL_tgemv_oversize)
+  // A 64x64 FP32 physical vector is 16 KiB and cannot be encoded by TSize.
+  TGEMV(gd, gm, gv, fixp::keep_acc());
+#endif
+#if defined(SHOULD_FAIL_tgemv_dtype)
+  // S8 pre-quant cannot write an FP32 TGEMV destination.
+  TGEMV(gd, gm, gv, fixp::s8(0x7));
+#endif
 }
 
 void use(void *) {}
@@ -45,7 +57,10 @@ int main() {
   static B b;
   static R r;
   static G g;
-  fail_cases(d, d8, a, b, r, g);
+  static GVD gd;
+  static GVVBad gv;
+  static GVM gm;
+  fail_cases(d, d8, a, b, r, g, gd, gv, gm);
   use(&d);
   return 0;
 }
