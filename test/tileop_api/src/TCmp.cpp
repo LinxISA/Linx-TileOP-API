@@ -150,7 +150,7 @@ int main() {
   const uint16_t gm_row = 64;
   const uint16_t gm_col = 32;
   const uint16_t tile_row = 64;
-  const uint16_t tile_col = 32;
+  const uint16_t tile_col = 16;
 
   size_t gm_size = gm_row * gm_col;
   size_t tile_size = tile_row * tile_col;

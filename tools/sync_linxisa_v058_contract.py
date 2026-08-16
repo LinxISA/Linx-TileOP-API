@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Project the released LinxISA v0.58 engine catalog into this API repo."""
+"""Project the released PTO ISA v0.58.1 Tile engine catalog into this API repo."""
 
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import subprocess
@@ -12,10 +13,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "contracts" / "linxisa-v0.58-engine-ops.json"
-EXPECTED_COUNTS = {"CUBE": 12, "SFU": 52, "TLSU": 10, "VEC": 35}
-EXPECTED_COMMIT = "0a12890427edc2179ed75ad26039cdcebc6b4486"
-EXPECTED_TREE = "fef6c084b166f3fd85a1b3d1b72fc069e6050800"
-EXPECTED_CATALOG_SHA256 = "b38864f4630be258ec62e5690d794463d0574443782c06b9a79d7d0a4362c61b"
+EXPECTED_COUNTS = {"CUBE": 12, "SFU": 56, "TLSU": 10, "VEC": 31}
+EXPECTED_COMMIT = "c381465b2b8e457e162a4246ee58bb9a2c5b49fd"
+EXPECTED_TREE = "463a19db3d6ba70022f18bdbca0d4b2c6ed586e4"
+EXPECTED_CATALOG_SHA256 = "f163dea8be281fd67173713d373b60f95a9c3c4e558adcdf8034cc213507a1a3"
+EXPECTED_RELEASE = "v0.58.1"
 
 
 def git(repo: Path, *args: str) -> str:
@@ -32,71 +34,80 @@ def build_projection(source: Path) -> dict[str, object]:
     source = source.resolve()
     repo = Path(git(source.parent, "rev-parse", "--show-toplevel"))
     if git(repo, "status", "--porcelain=v1", "--untracked-files=all"):
-        raise SystemExit(f"refusing dirty LinxISA source tree: {repo}")
-    if git(repo, "describe", "--exact-match", "--tags", "HEAD") != "v0.58":
-        raise SystemExit("LinxISA source HEAD is not the exact v0.58 tag")
+        raise SystemExit(f"refusing dirty PTO ISA source tree: {repo}")
+    if git(repo, "describe", "--exact-match", "--tags", "HEAD") != EXPECTED_RELEASE:
+        raise SystemExit(f"PTO ISA source HEAD is not the exact {EXPECTED_RELEASE} tag")
     commit = git(repo, "rev-parse", "HEAD")
     tree = git(repo, "rev-parse", "HEAD^{tree}")
     source_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
     if (commit, tree, source_sha256) != (EXPECTED_COMMIT, EXPECTED_TREE, EXPECTED_CATALOG_SHA256):
-        raise SystemExit("LinxISA v0.58 source identity does not match the reviewed release")
+        raise SystemExit("PTO ISA v0.58.1 source identity does not match the reviewed release")
 
     data = json.loads(source.read_text(encoding="utf-8"))
-    if data.get("isa") != "LinxISA" or data.get("version") != "0.58.0":
-        raise SystemExit("source is not the LinxISA 0.58.0 canonical catalog")
-    engine_ops = data["state"]["engine_ops"]
-    if engine_ops["semantic_engine_counts"] != EXPECTED_COUNTS:
-        raise SystemExit("unexpected LinxISA v0.58 engine counts")
+    if data.get("isa") != "PTO Instruction Set Architecture" or data.get("operation_count") != 109:
+        raise SystemExit("source is not the PTO ISA 0.58.1 Tile operation catalog")
+    operations = data.get("operations")
+    if not isinstance(operations, list):
+        raise SystemExit("PTO ISA Tile operation catalog has no operations list")
+    engine_counts = dict(sorted(Counter(row["engine"] for row in operations).items()))
+    if engine_counts != EXPECTED_COUNTS:
+        raise SystemExit("unexpected PTO ISA v0.58.1 engine counts")
+
+    tepl_ops = [row for row in operations if row["family"] == "TEPL"]
+    tlsu_ops = [row for row in operations if row["family"] == "TLSU"]
+    cube_ops = [row for row in operations if row["family"] == "CUBE"]
+    if (len(tepl_ops), len(tlsu_ops), len(cube_ops)) != (87, 10, 12):
+        raise SystemExit("unexpected PTO ISA Tile carrier counts")
 
     relative = source.relative_to(repo).as_posix()
     return {
         "schema": "linx-tileop-api.engine-ops-projection.v1",
         "profile": "v0.58",
         "source": {
-            "repo": "https://github.com/LinxISA/linx-isa",
-            "release": "v0.58",
+            "repo": "https://github.com/PTO-ISA/pto-spec",
+            "release": EXPECTED_RELEASE,
             "commit": commit,
             "tree": tree,
             "path": relative,
             "sha256": source_sha256,
         },
-        "semantic_engine_counts": engine_ops["semantic_engine_counts"],
+        "semantic_engine_counts": engine_counts,
         "tepl_carrier": {
-            "selector_formula": engine_ops["tepl"]["selector_formula"],
-            "accepted_selector_count": engine_ops["tepl"]["accepted_selector_count"],
+            "selector_formula": "(mode << 5) | function",
+            "accepted_selector_count": len(tepl_ops),
             "canonical_aliases": ["BSTART.VEC", "BSTART.SFU"],
             "compatibility_spelling": "BSTART.TEPL",
         },
         "tepl_ops": [
             {
                 "name": row["name"],
-                "logical_selector": row["logical_selector"],
+                "logical_selector": int(row["selector"], 0),
                 "mode": row["mode"],
                 "function": row["function"],
                 "engine": row["engine"],
                 "classification": row["classification"],
             }
-            for row in engine_ops["tepl"]["ops"]
+            for row in tepl_ops
         ],
         "tlsu_ops": [
             {
                 "name": row["name"],
                 "function": row["function"],
-                "mnemonic": row["mnemonic"],
+                "mnemonic": row["command_mnemonic"],
                 "engine": row["engine"],
             }
-            for row in engine_ops["tlsu"]["legal_aliases"]
+            for row in tlsu_ops
         ],
         "cube_ops": [
             {
                 "name": row["name"],
                 "function": row["function"],
-                "mnemonic": row["mnemonic"],
+                "mnemonic": row["command_mnemonic"],
                 "engine": row["engine"],
             }
-            for row in engine_ops["cube"]["legal_aliases"]
+            for row in cube_ops
         ],
-        "deleted_tile_names": data["retired_encodings"]["deleted_tile_names"],
+        "deleted_tile_names": data["deleted_names"],
     }
 
 
@@ -106,7 +117,11 @@ def render(projection: dict[str, object]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("source", type=Path, help="released isa/v0.58/linxisa-v0.58.json")
+    parser.add_argument(
+        "source",
+        type=Path,
+        help="released PTO ISA spec/catalog/tile-operations.json",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
