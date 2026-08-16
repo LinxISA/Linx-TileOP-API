@@ -14,6 +14,15 @@ echo "== Matrix ops present =="
 echo "== FPATR lines (must carry the RowMax/GroupMax config) =="
 "$OBJDUMP" -d "$OBJ" | grep "B.FPATR" | head -6
 
+basic_relu_count=$(
+  "$OBJDUMP" -d "$OBJ" |
+    grep -cE 'B\.FPATR[[:space:]]+0, 1, 0, 0, 0, 0, 0' || true
+)
+if [[ "$basic_relu_count" -lt 4 ]]; then
+  echo "FAIL: expected at least 4 parameter-free ReLU B.FPATR descriptors, got $basic_relu_count"
+  exit 1
+fi
+
 echo "== no .FIXP mnemonic anywhere =="
 if "$OBJDUMP" -d "$OBJ" | grep -qE "TMATMUL[A-Z.]*\.FIXP|TGEMV[A-Z.]*\.FIXP|\.FIXP"; then
   echo "FAIL: .FIXP mnemonic found"; exit 1

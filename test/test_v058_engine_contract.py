@@ -79,6 +79,24 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         missing = [fragment for fragment in fragments if "mask=" not in fragment]
         self.assertEqual(missing, [])
 
+    def test_every_cube_storage_path_emits_fpatr(self) -> None:
+        self.assertNotRegex(
+            self.header,
+            r'PTO_MATMUL_HEADER\([^\n]+,\s*""\)',
+        )
+
+    def test_gemv_uses_shared_fail_closed_validation(self) -> None:
+        self.assertGreaterEqual(self.header.count("validate_gemv_contract<"), 7)
+        for diagnostic in (
+            "invalid TGEMV B.FPATR configuration",
+            "TGEMV destination dtype does not match PreQuantMode",
+            "TGEMV matrix logical Tile size must be 128 B..8 KB",
+            "TGEMV vector logical Tile size must be 128 B..8 KB",
+            "TGEMV destination must have one valid row",
+            "TGEMV requires vector K == matrix K",
+        ):
+            self.assertIn(diagnostic, self.header)
+
     def test_retired_tile_operations_are_not_exposed(self) -> None:
         retired = set(self.contract["deleted_tile_names"])
         active_text = "\n".join(
@@ -204,6 +222,9 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertNotIn("linx64v5", negatives)
         self.assertNotIn("-mlxbc", negatives)
         self.assertIn("CC_OPTS", negatives)
+        self.assertIn("positive baseline did not compile", negatives)
+        self.assertIn('grep -Fq "$expected"', negatives)
+        self.assertIn('if [[ "$FAIL" -ne 0 ]]', negatives)
 
     def test_linx_compile_uses_repo_owned_freestanding_cxx_headers(self) -> None:
         makefile = (ROOT / "test" / "common" / "Makefile.common").read_text(
