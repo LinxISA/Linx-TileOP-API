@@ -2918,7 +2918,7 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.VEC TDIV, %c1\n"
+    "BSTART.SFU TDIV, %c1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -2939,7 +2939,7 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.VEC TREM, %c1\n"
+    "BSTART.SFU TREM, %c1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -3426,7 +3426,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.VEC TDIVS, %c1\n"
+    "BSTART.SFU TDIVS, %c1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -3451,7 +3451,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.VEC TREMS, %c1\n"
+    "BSTART.SFU TREMS, %c1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
