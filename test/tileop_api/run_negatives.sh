@@ -9,7 +9,7 @@ cd "$SCRIPT_DIR"
 ROOT_DIR=$(git rev-parse --show-toplevel)
 CXX="$TC_DIR/clang++"
 read -r -a EXTRA_FLAGS <<< "${CC_OPTS:-}"
-CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a tgemv_oversize tgemv_dtype"
+CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a basic_f16_dtype tgemv_oversize tgemv_dtype tgemv_pp_oversize"
 PASS=0; FAIL=0
 
 TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/tileop-negatives.XXXXXX")
@@ -37,8 +37,10 @@ for c in $CASES; do
     rowmax_shape) expected="TMATMUL RowMaxOut must have ValidCol=1" ;;
     groupmax_shape) expected="TMATMUL GroupMaxOut must have ValidCol=ceil(N/GroupN)" ;;
     lone_shared_a) expected="Shared matmul A requires B to be Shared as well" ;;
+    basic_f16_dtype) expected="TMATMUL destination dtype does not match PreQuantMode" ;;
     tgemv_oversize) expected="TGEMV vector logical Tile size must be 128 B..8 KB" ;;
     tgemv_dtype) expected="TGEMV destination dtype does not match PreQuantMode" ;;
+    tgemv_pp_oversize) expected="TGEMV postprocess auxiliary logical Tile size must be 128 B..8 KB" ;;
   esac
   log="$TMP_ROOT/$c.log"
   if compile_case "$TMP_ROOT/$c.o" "-DSHOULD_FAIL_$c" >"$log" 2>&1; then
