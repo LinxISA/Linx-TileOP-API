@@ -11,9 +11,9 @@ CONTRACT = ROOT / "contracts" / "linxisa-v0.58-engine-ops.json"
 HEADER = ROOT / "include" / "jcore" / "template_asm.hpp"
 ACTIVE_TEXT_ROOTS = (ROOT / "include", ROOT / "docs")
 ACTIVE_IMPLEMENTATION_ROOTS = (ROOT / "include", ROOT / "test" / "tileop_api" / "src")
-LINXISA_V058_COMMIT = "0a12890427edc2179ed75ad26039cdcebc6b4486"
-LINXISA_V058_TREE = "fef6c084b166f3fd85a1b3d1b72fc069e6050800"
-LINXISA_V058_CATALOG_SHA256 = "b38864f4630be258ec62e5690d794463d0574443782c06b9a79d7d0a4362c61b"
+PTO_SPEC_V0581_COMMIT = "c381465b2b8e457e162a4246ee58bb9a2c5b49fd"
+PTO_SPEC_V0581_TREE = "463a19db3d6ba70022f18bdbca0d4b2c6ed586e4"
+PTO_SPEC_V0581_CATALOG_SHA256 = "f163dea8be281fd67173713d373b60f95a9c3c4e558adcdf8034cc213507a1a3"
 
 
 class LinxISAV058EngineContractTest(unittest.TestCase):
@@ -22,15 +22,16 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         cls.contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         cls.header = HEADER.read_text(encoding="utf-8")
 
-    def test_projection_is_exact_linxisa_v058_release(self) -> None:
+    def test_projection_is_exact_pto_v0581_release(self) -> None:
         self.assertEqual(self.contract["profile"], "v0.58")
-        self.assertEqual(self.contract["source"]["release"], "v0.58")
-        self.assertEqual(self.contract["source"]["commit"], LINXISA_V058_COMMIT)
-        self.assertEqual(self.contract["source"]["tree"], LINXISA_V058_TREE)
-        self.assertEqual(self.contract["source"]["sha256"], LINXISA_V058_CATALOG_SHA256)
+        self.assertEqual(self.contract["source"]["repo"], "https://github.com/PTO-ISA/pto-spec")
+        self.assertEqual(self.contract["source"]["release"], "v0.58.1")
+        self.assertEqual(self.contract["source"]["commit"], PTO_SPEC_V0581_COMMIT)
+        self.assertEqual(self.contract["source"]["tree"], PTO_SPEC_V0581_TREE)
+        self.assertEqual(self.contract["source"]["sha256"], PTO_SPEC_V0581_CATALOG_SHA256)
         self.assertEqual(
             self.contract["semantic_engine_counts"],
-            {"CUBE": 12, "SFU": 52, "TLSU": 10, "VEC": 35},
+            {"CUBE": 12, "SFU": 56, "TLSU": 10, "VEC": 31},
         )
 
     def test_jcore_emits_only_canonical_vec_sfu_aliases(self) -> None:
@@ -40,6 +41,16 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertEqual({name for _, name in emitted}, set(operations))
         for engine, name in emitted:
             self.assertEqual(engine, operations[name], name)
+
+    def test_division_and_remainder_use_the_sfu_engine(self) -> None:
+        emitted = {
+            name: engine
+            for engine, name in re.findall(
+                r'BSTART\.(VEC|SFU)\s+([A-Z][A-Z0-9_.]+),', self.header
+            )
+        }
+        for name in ("TDIV", "TDIVS", "TREM", "TREMS"):
+            self.assertEqual(emitted.get(name), "SFU", name)
 
     def test_jcore_uses_named_tlsu_and_cube_block_starts(self) -> None:
         self.assertNotIn("BSTART.TLSU", self.header)
