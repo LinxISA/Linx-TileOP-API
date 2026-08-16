@@ -3871,6 +3871,8 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
                 "TMATMUL supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
+  static_assert(is_basic_fixp_output_type<Attr, typename tile_shape_c::DType>(),
+                "TMATMUL destination dtype does not match PreQuantMode");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -3891,6 +3893,8 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                 "TMATMUL_ACC supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
+  static_assert(is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_ACC destination dtype does not match PreQuantMode");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -4159,6 +4163,8 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
                 "TMATMUL_BIAS supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
+  static_assert(is_basic_fixp_output_type<Attr, typename tile_shape_c::DType>(),
+                "TMATMUL_BIAS destination dtype does not match PreQuantMode");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -4224,6 +4230,8 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
                 "TMATMUL_MX supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
+  static_assert(is_basic_fixp_output_type<Attr, typename tile_shape_c::DType>(),
+                "TMATMUL_MX destination dtype does not match PreQuantMode");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -4290,6 +4298,8 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
                 "TMATMUL_MX_ACC supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
+  static_assert(is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_MX_ACC destination dtype does not match PreQuantMode");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -4356,6 +4366,8 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
                 "TMATMUL_MX_BIAS supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
+  static_assert(is_basic_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_MX_BIAS destination dtype does not match PreQuantMode");
   size_t M = pto_matmul_detail::matrix_valid_row(a);
   size_t N = pto_matmul_detail::matrix_valid_col(b);
   size_t K = pto_matmul_detail::matrix_valid_col(a);
@@ -4445,6 +4457,28 @@ constexpr void validate_gemv_aux_tiles() {
                 "TGEMV auxiliary logical Tile size must be 128 B..8 KB");
 }
 
+template <bool Enabled, typename Tile>
+constexpr void validate_gemv_optional_tile() {
+  if constexpr (Enabled) {
+    static_assert(Tile::IsValidActiveSize,
+                  "TGEMV postprocess auxiliary logical Tile size must be 128 B..8 KB");
+  }
+}
+
+template <FixpAttr Attr, typename Options>
+constexpr void validate_gemv_option_tiles() {
+  validate_gemv_optional_tile<is_vector_fixp_pre_quant(Attr.PreQuant),
+                              typename Options::QuantTile>();
+  validate_gemv_optional_tile<Attr.Relu == FixpReluMode::PRelu,
+                              typename Options::ReluTile>();
+  validate_gemv_optional_tile<Attr.RowMaxInit,
+                              typename Options::RowMaxIn>();
+  validate_gemv_optional_tile<Attr.RowMaxEn,
+                              typename Options::RowMaxOut>();
+  validate_gemv_optional_tile<Attr.GroupMaxEn,
+                              typename Options::GroupMaxOut>();
+}
+
 } // namespace pto_matmul_detail
 
 // ---- TGEMV family (Function 16-18, 20-22) ----
@@ -4477,6 +4511,7 @@ PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx,
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
   pto_matmul_detail::validate_gemv_contract<
       Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_option_tiles<Attr, Options>();
 
   constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
   constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
@@ -4550,6 +4585,7 @@ PTO_SHARED_INLINE void TGEMV_BIAS(tile_shape_d &d, tile_shape_mtx &mtx,
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
   pto_matmul_detail::validate_gemv_contract<
       Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_option_tiles<Attr, Options>();
   pto_matmul_detail::validate_gemv_aux_tiles<tile_shape_bias>();
 
   constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
@@ -4622,6 +4658,7 @@ PTO_SHARED_INLINE void TGEMV_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_mt
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
   pto_matmul_detail::validate_gemv_contract<
       Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_option_tiles<Attr, Options>();
   pto_matmul_detail::validate_gemv_aux_tiles<tile_shape_c>();
 
   constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
@@ -4696,6 +4733,7 @@ PTO_SHARED_INLINE void TGEMV_MX(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
   pto_matmul_detail::validate_gemv_contract<
       Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_option_tiles<Attr, Options>();
   pto_matmul_detail::validate_gemv_aux_tiles<tile_shape_smtx,
                                               tile_shape_svec>();
 
@@ -4775,6 +4813,7 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(tile_shape_d &d, tile_shape_mtx &mtx, tile_
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
   pto_matmul_detail::validate_gemv_contract<
       Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_option_tiles<Attr, Options>();
   pto_matmul_detail::validate_gemv_aux_tiles<tile_shape_smtx,
                                               tile_shape_svec,
                                               tile_shape_bias>();
@@ -4853,6 +4892,7 @@ PTO_SHARED_INLINE void TGEMV_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape
                 "TGEMV requires vec=Left (1xK) and mtx=Right (KxN)");
   pto_matmul_detail::validate_gemv_contract<
       Attr, tile_shape_d, tile_shape_mtx, tile_shape_vec>();
+  pto_matmul_detail::validate_gemv_option_tiles<Attr, Options>();
   pto_matmul_detail::validate_gemv_aux_tiles<tile_shape_c,
                                               tile_shape_smtx,
                                               tile_shape_svec>();
