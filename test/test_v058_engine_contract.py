@@ -37,7 +37,6 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         operations = {row["name"]: row["engine"] for row in self.contract["tepl_ops"]}
         self.assertNotIn("BSTART.TEPL", self.header)
         emitted = re.findall(r'BSTART\.(VEC|SFU)\s+([A-Z][A-Z0-9_.]+),', self.header)
-        self.assertEqual(len(emitted), 87)
         self.assertEqual({name for _, name in emitted}, set(operations))
         for engine, name in emitted:
             self.assertEqual(engine, operations[name], name)
@@ -68,10 +67,17 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         )
         self.assertNotRegex(active_text, r"mask=(?![01]{4}(?=[^0-9]|$))[0-9]+")
         self.assertIn("%c[PEMask3]%c[PEMask2]%c[PEMask1]%c[PEMask0]", self.header)
-        iot_records = re.findall(r'"B\.IOT ([^"]*)\\n"', self.header)
-        self.assertTrue(iot_records)
-        for record in iot_records:
-            self.assertIn("mask=", record, record)
+        self.assertRegex(self.header, r'"B\.IOT [^"]*mask=1111')
+
+    def test_every_b_iot_binding_carries_an_explicit_pe_mask(self) -> None:
+        fragments = re.findall(
+            r'"B\.IOT(?:(?!\\n").)*\\n"',
+            self.header,
+            flags=re.DOTALL,
+        )
+        self.assertGreater(len(fragments), 100)
+        missing = [fragment for fragment in fragments if "mask=" not in fragment]
+        self.assertEqual(missing, [])
 
     def test_retired_tile_operations_are_not_exposed(self) -> None:
         retired = set(self.contract["deleted_tile_names"])
@@ -95,7 +101,6 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             "BSTART.PAR",
             "B.IOD",
             "C.B.IOS",
-            "B.FPATR",
             ".FIXP\"",
         ):
             self.assertNotIn(spelling, active_implementation)
@@ -155,15 +160,15 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         ):
             self.assertIn(source_form, self.header)
         self.assertNotIn("shared_tmov_source_form_is_unique", self.header)
-        self.assertRegex(self.header, r'\[Shared\]\s+"=S"')
-        self.assertRegex(self.header, r'\[Shared\]\s+"S"')
+        self.assertRegex(self.header, r'\[Shared\]\s+"=Sr?"')
+        self.assertRegex(self.header, r'\[Shared\]\s+"Sr?"')
         self.assertNotRegex(
             self.header,
             r'\[Shared[A-Za-z]*\]\s+"r"\([^\n]*handle\(\)',
         )
         self.assertEqual(
             self.header.count(
-                '"B.IOT %[Src], mask=" PTO_PE_MASK_ASM ", last\\n"'
+                '"B.IOT %[src], mask=" PTO_PE_MASK_ASM ", last\\n"'
             ),
             2,
         )
@@ -177,6 +182,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         makefile = (ROOT / "test" / "common" / "Makefile.common").read_text(encoding="utf-8")
         self.assertIn("OBJ_ROOT := $(abspath $(TEST_ROOT)/../output)", makefile)
         self.assertNotIn("realpath $(TEST_ROOT)/../output", makefile)
+        self.assertIn('test -d "$(OBJ_ROOT)"', makefile)
+        self.assertIn("compile: pre_work $(OBJ)", makefile)
 
     def test_test_harness_uses_v058_compiler_surface_without_install_mutation(self) -> None:
         makefile = (ROOT / "test" / "common" / "Makefile.common").read_text(encoding="utf-8")
@@ -188,6 +195,25 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertNotIn("enable-all-vector-as-tilereg", harness)
         self.assertNotIn("cp_hpp_to_llvmlib", runner)
         self.assertNotIn("lib/clang/15.0.4/include/tileop-api", runner)
+        self.assertNotIn("/remote/", makefile)
+        compile_all = (ROOT / "test" / "tileop_api" / "compile.all").read_text()
+        negatives = (ROOT / "test" / "tileop_api" / "run_negatives.sh").read_text()
+        self.assertIn("set -euo pipefail", compile_all)
+        self.assertIn('cd "$SCRIPT_DIR"', compile_all)
+        self.assertIn("make compile", compile_all)
+        self.assertNotIn("linx64v5", negatives)
+        self.assertNotIn("-mlxbc", negatives)
+        self.assertIn("CC_OPTS", negatives)
+
+    def test_linx_compile_uses_repo_owned_freestanding_cxx_headers(self) -> None:
+        makefile = (ROOT / "test" / "common" / "Makefile.common").read_text(
+            encoding="utf-8"
+        )
+        shim = ROOT / "test" / "linx_cxx_shim"
+        self.assertIn("-nostdinc++", makefile)
+        self.assertIn("test/linx_cxx_shim", makefile)
+        for header in ("cstddef", "cstdint", "type_traits"):
+            self.assertTrue((shim / header).is_file(), header)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,12 @@
+#ifndef PTO_TEST_LINX_CXX_SHIM_CSTDDEF
+#define PTO_TEST_LINX_CXX_SHIM_CSTDDEF
+
+#include <stddef.h>
+
+namespace std {
+using ::max_align_t;
+using ::ptrdiff_t;
+using ::size_t;
+} // namespace std
+
+#endif
