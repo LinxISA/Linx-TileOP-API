@@ -66,9 +66,9 @@ not reduce the Core4 collective. The peer TID is carried by `B.IOR`.
 GMOV<15>(dst, peer_tid, src);
 ```
 
-## Shared naming note
+## Shared / TMA naming note
 
-The v0.58 reissue renamed the old DCU/matrix-transfer gather/scatter family to the
-`MGATHER*` / `MSCATTER*` / `GMOV` surface above; no retired prefix remains in
-the active catalog. `MatrixPadValue` appears only as a host-side C++ enum in this
+The v0.58 reissue renamed the old DCU/TMA gather/scatter family to the
+`MGATHER*` / `MSCATTER*` / `GMOV` surface above; no `TMA*` prefix remains in
+the active catalog. `TmaPadValue` appears only as a host-side C++ enum in this
 header and is not emitted as assembly.

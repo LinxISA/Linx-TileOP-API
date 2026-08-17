@@ -14,23 +14,44 @@
 #                  TMATMUL*/TGEMV* families (TMOV for TCOPY, TReshape for
 #                  TReshape, etc.) and are only meaningful on cpu_sim.
 
-set -euo pipefail
-: "${COMPILER_DIR:?set COMPILER_DIR to the exact Linx LLVM bin directory}"
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-cd "$SCRIPT_DIR"
-
 echo "PLAT=${PLAT:-linx}"
 
 # --- linx OK: elementwise / shape ops (jcore inline-asm) ---
-for testcase in \
-  DynamicShape DynamicTlsuStride SharedMatmul TMatmulAccFullOptions \
-  TMatmulAllOptions TGEMVAllOptions PostProcessCombos SharedMatrixForms \
-  TCmpMode SharedTLoad TAbs TAdd_mask TAdd TAdds TAnd TLoad TStore TCvt \
-  TDiv TDivs TExp TMax TMaxs TMov TMul TMuls TOr TRecip TRem TRowMax \
-  TRowSum TSqrt TSub TSubs TTrans; do
-  make clean
-  make compile TESTCASE="$testcase"
-done
+make clean;make TESTCASE=DynamicShape
+make clean;make TESTCASE=DynamicTlsuStride
+make clean;make TESTCASE=SharedMatmul
+make clean;make TESTCASE=TMatmulAccFullOptions
+make clean;make TESTCASE=TMatmulAllOptions
+make clean;make TESTCASE=TGEMVAllOptions
+make clean;make TESTCASE=PostProcessCombos
+make clean;make TESTCASE=SharedMatrixForms
+make clean;make TESTCASE=TCmpMode
+make clean;make TESTCASE=SharedTLoad
+make clean;make TESTCASE=TAbs
+make clean;make TESTCASE=TAdd_mask
+make clean;make TESTCASE=TAdd
+make clean;make TESTCASE=TAdds
+make clean;make TESTCASE=TAnd
+make clean;make TESTCASE=TLoad
+make clean;make TESTCASE=TStore
+make clean;make TESTCASE=TCvt
+make clean;make TESTCASE=TDiv
+make clean;make TESTCASE=TDivs
+make clean;make TESTCASE=TExp
+make clean;make TESTCASE=TMax
+make clean;make TESTCASE=TMaxs
+make clean;make TESTCASE=TMov
+make clean;make TESTCASE=TMul
+make clean;make TESTCASE=TMuls
+make clean;make TESTCASE=TOr
+make clean;make TESTCASE=TRecip
+make clean;make TESTCASE=TRem
+make clean;make TESTCASE=TRowMax
+make clean;make TESTCASE=TRowSum
+make clean;make TESTCASE=TSqrt
+make clean;make TESTCASE=TSub
+make clean;make TESTCASE=TSubs
+make clean;make TESTCASE=TTrans
 
 # --- linx legacy (cpu_sim-only API surface, superseded on linx) ---
 # Kept documented rather than silently dropped; run them under PLAT=cpu_sim.

@@ -5,7 +5,7 @@ post-processing through the `B.FPATR` attribute; there is no separate
 post-processing attribute instruction. The historical `TMATMUL*.FIXP`
 suffix was an implementation-local name; the active API is the options
 overload of each `TMATMUL*`/`TGEMV*` operation, which configures `B.FPATR` and emits
-the canonical `BSTART.TMATMUL` bundle plus the matching auxiliary operand
+the base `BSTART.CUBE TMATMUL` bundle plus the matching auxiliary operand
 stream.
 
 Requirements:
@@ -26,7 +26,7 @@ using tile_bf16 = Tile<Location::Vec, __bf16, 32, 32>;
 using tile_s8 = Tile<Location::Vec, int8_t, 32, 32>;
 ```
 
-A/B/dst 的物理 Tile 必须满足 TileOP 的对齐和 128 B..8 KB active-size 约束。`dst` 的 valid shape 必须为 `M x N`。
+A/B/dst 的物理 Tile 必须满足 TileOP 的对齐和 512 B..32 KB active-size 约束。`dst` 的 valid shape 必须为 `M x N`。
 
 ## C++ 操作族与签名
 
@@ -61,10 +61,9 @@ keep_acc/f16/bf16/relu 模式。
 
 - `Vec` = 1×K（Left，逻辑 `ValidRow=1`），`Mtx` = K×N（Right），
   `Dst` = 1×N（逻辑 `ValidRow=1`）。
-- 物理 Tile 只需覆盖逻辑 shape、满足布局对齐，并落在 128 B..8 KB；
-  不要求 K×K。比如 FP32、K=64 时应使用
-  `Tile<Location::Left, float, 32, 64, BLayout::RowMajor, 1, 64>`（8 KiB），
-  而不是 64×64（16 KiB）。
+- 物理 Tile 仍需满足 512 B..32 KB active-size，因此向量通常用
+  `Tile<Location::Left, T, K, K, BLayout::RowMajor, 1, K>` 这类满物理 +
+  逻辑 1×K 的 shape。
 - 所有 TGEMV 都是 Local-only；任何 `B.IOS` 都 illegal（handoff Sec 1.5），
   Shared 参数在概念层被拒绝。
 - `B.DIM` 角色相对 TMATMUL 反转：`LB0 = N`、`LB1 = M(=1)`、`LB2 = Col`。
@@ -308,7 +307,7 @@ GroupMaxOut：
 
 - valid shape 必须为 `M x ceil(N / GroupN)`；
 - dtype 必须是 FP32/S32 AccType；
-- 物理 Tile 必须满足 128 B..8 KB active-size 约束。
+- 物理 Tile 必须满足 512 B..32 KB active-size 约束。
 
 例如 N=32、GroupN=8 时，valid columns 是 4。
 
@@ -395,7 +394,7 @@ dtype 与 PreQuantMode 不匹配。
 TileOP 固定生成：
 
 ```asm
-BSTART.TMATMUL AType
+BSTART.CUBE TMATMUL, AType
 B.DATR BType, byte0, Null
 B.FPATR PreQuant, Relu, GroupNCode,
          RowMaxEn, GroupMaxEn, RowMaxInit, MaxAbsEn

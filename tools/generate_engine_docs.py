@@ -36,7 +36,7 @@ def render() -> str:
         "is only the unchanged encoding carrier; TileOP API emits the canonical `BSTART.VEC` and",
         "`BSTART.SFU` assembly aliases.",
         "",
-        "The table is projected from the pinned PTO ISA release recorded in",
+        "The table is projected from the pinned LinxISA release recorded in",
         "[`contracts/linxisa-v0.58-engine-ops.json`](../../contracts/linxisa-v0.58-engine-ops.json).",
         "",
     ]

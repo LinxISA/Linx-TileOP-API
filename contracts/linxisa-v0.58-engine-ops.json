@@ -101,17 +101,17 @@
   "schema": "linx-tileop-api.engine-ops-projection.v1",
   "semantic_engine_counts": {
     "CUBE": 12,
-    "SFU": 56,
+    "SFU": 52,
     "TLSU": 10,
-    "VEC": 31
+    "VEC": 35
   },
   "source": {
-    "commit": "c381465b2b8e457e162a4246ee58bb9a2c5b49fd",
-    "path": "spec/catalog/tile-operations.json",
-    "release": "v0.58.1",
-    "repo": "https://github.com/PTO-ISA/pto-spec",
-    "sha256": "f163dea8be281fd67173713d373b60f95a9c3c4e558adcdf8034cc213507a1a3",
-    "tree": "463a19db3d6ba70022f18bdbca0d4b2c6ed586e4"
+    "commit": "0a12890427edc2179ed75ad26039cdcebc6b4486",
+    "path": "isa/v0.58/linxisa-v0.58.json",
+    "release": "v0.58",
+    "repo": "https://github.com/LinxISA/linx-isa",
+    "sha256": "b38864f4630be258ec62e5690d794463d0574443782c06b9a79d7d0a4362c61b",
+    "tree": "fef6c084b166f3fd85a1b3d1b72fc069e6050800"
   },
   "tepl_carrier": {
     "accepted_selector_count": 87,
@@ -149,7 +149,7 @@
     },
     {
       "classification": "elementwise-tile-tile",
-      "engine": "SFU",
+      "engine": "VEC",
       "function": 3,
       "logical_selector": 3,
       "mode": 0,
@@ -157,7 +157,7 @@
     },
     {
       "classification": "elementwise-tile-tile",
-      "engine": "SFU",
+      "engine": "VEC",
       "function": 4,
       "logical_selector": 4,
       "mode": 0,
@@ -349,7 +349,7 @@
     },
     {
       "classification": "tile-scalar-and-immediate",
-      "engine": "SFU",
+      "engine": "VEC",
       "function": 3,
       "logical_selector": 35,
       "mode": 1,
@@ -357,7 +357,7 @@
     },
     {
       "classification": "tile-scalar-and-immediate",
-      "engine": "SFU",
+      "engine": "VEC",
       "function": 4,
       "logical_selector": 36,
       "mode": 1,

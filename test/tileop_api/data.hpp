@@ -1,14 +1,8 @@
 #ifndef DATA_H
 #define DATA_H
 
-#ifdef __linx
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#else
-#include <cmath>
 #include <iostream>
-#endif
+#include <cmath>
 #include "common/type.hpp"
 
 float s_fp32 = 0.1;
@@ -42,7 +36,7 @@ void init_src_int8(int8_t *aar, uint16_t size) {
 
 template <typename T> void init_src_fp(T *aar, uint16_t size) {
   for (uint16_t i = 0; i < size; i++) {
-    aar[i] = __builtin_sinf((i + 1) / 100.0f);
+    aar[i] = sin((i + 1) / 100.0f);
   }
 }
 
@@ -86,26 +80,6 @@ template <typename T> void init_rows_fp(T *aar, uint16_t row, uint16_t col) {
   }
 }
 
-#ifdef __linx
-template <typename T> void OutArray(const T *aar, size_t size) {
-  for (uint16_t i = 0; i < size; i++) {
-    printf("%g ", static_cast<double>(aar[i]));
-  }
-  printf("\n");
-}
-void OutArray(const int8_t *aar, size_t size) {
-  for (uint16_t i = 0; i < size; i++) {
-    printf("%d ", static_cast<int32_t>(aar[i]));
-  }
-  printf("\n");
-}
-void OutArray(const __half *aar, size_t size) {
-  for (uint16_t i = 0; i < size; i++) {
-    printf("%g ", static_cast<double>(aar[i]));
-  }
-  printf("\n");
-}
-#else
 template <typename T> void OutArray(const T *aar, size_t size) {
   for (uint16_t i = 0; i < size; i++) {
     std::cout << aar[i] << " ";
@@ -124,7 +98,6 @@ void OutArray(const __half *aar, size_t size) {
   }
   std::cout << std::endl;
 }
-#endif
 
 // check memory allocation
 template <typename T> void check_mem_alloc(const T *p) {

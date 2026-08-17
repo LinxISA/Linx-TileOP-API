@@ -22,20 +22,12 @@ using G = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 2>;
 using GV_D = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 1, 32>;
 using GV_Ds8 = Tile<Location::Vec, int8_t, 32, 32, BLayout::RowMajor, 1, 32>;
 using GV_Df16 = Tile<Location::Vec, __half, 32, 32, BLayout::RowMajor, 1, 32>;
-using GV_V = Tile<Location::Left, float, 32, 64, BLayout::RowMajor, 1, 64>;
+using GV_V = Tile<Location::Left, float, 64, 64, BLayout::RowMajor, 1, 64>;
 using GV_M = TileRight<float, 64, 32>;
 
 static constexpr uint64_t s8_desc =
     (static_cast<uint64_t>(0x7) << 13) |  // fp19 scale = 7
     (static_cast<uint64_t>(0x1) << 37);   // s8 offset = 1
-
-void basic_attr_overloads(D &d, D &bias, A &a, B &b, P &scale) {
-  constexpr auto relu = FixpAttr::keep_acc(FixpReluMode::Relu);
-  TMATMUL<relu>(d, a, b);
-  TMATMUL_BIAS<relu>(d, a, b, bias);
-  TMATMUL_MX<relu>(d, a, scale, b, scale);
-  TMATMUL_MX_BIAS<relu>(d, a, scale, b, scale, bias);
-}
 
 // --- TMATMUL family ---
 void tmatmul_combos(D &d, Ds8 &d8, Df16 &df16, D &c, A &a, B &b, P &q, P &p,
@@ -89,7 +81,6 @@ int main() {
   static GV_V gv;
   static GV_M gm;
   tmatmul_combos(d, d8, df16, c, a, b, q, p, rout, rin, gout);
-  basic_attr_overloads(d, c, a, b, q);
   tgemv_combos(gd, gd8, gdf16, gc, gv, gm, q, p, rout, rin, gout);
   use(&d);
   return 0;

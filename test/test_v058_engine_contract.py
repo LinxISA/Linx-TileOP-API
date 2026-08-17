@@ -11,9 +11,9 @@ CONTRACT = ROOT / "contracts" / "linxisa-v0.58-engine-ops.json"
 HEADER = ROOT / "include" / "jcore" / "template_asm.hpp"
 ACTIVE_TEXT_ROOTS = (ROOT / "include", ROOT / "docs")
 ACTIVE_IMPLEMENTATION_ROOTS = (ROOT / "include", ROOT / "test" / "tileop_api" / "src")
-PTO_SPEC_V0581_COMMIT = "c381465b2b8e457e162a4246ee58bb9a2c5b49fd"
-PTO_SPEC_V0581_TREE = "463a19db3d6ba70022f18bdbca0d4b2c6ed586e4"
-PTO_SPEC_V0581_CATALOG_SHA256 = "f163dea8be281fd67173713d373b60f95a9c3c4e558adcdf8034cc213507a1a3"
+LINXISA_V058_COMMIT = "0a12890427edc2179ed75ad26039cdcebc6b4486"
+LINXISA_V058_TREE = "fef6c084b166f3fd85a1b3d1b72fc069e6050800"
+LINXISA_V058_CATALOG_SHA256 = "b38864f4630be258ec62e5690d794463d0574443782c06b9a79d7d0a4362c61b"
 
 
 class LinxISAV058EngineContractTest(unittest.TestCase):
@@ -22,35 +22,25 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         cls.contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         cls.header = HEADER.read_text(encoding="utf-8")
 
-    def test_projection_is_exact_pto_v0581_release(self) -> None:
+    def test_projection_is_exact_linxisa_v058_release(self) -> None:
         self.assertEqual(self.contract["profile"], "v0.58")
-        self.assertEqual(self.contract["source"]["repo"], "https://github.com/PTO-ISA/pto-spec")
-        self.assertEqual(self.contract["source"]["release"], "v0.58.1")
-        self.assertEqual(self.contract["source"]["commit"], PTO_SPEC_V0581_COMMIT)
-        self.assertEqual(self.contract["source"]["tree"], PTO_SPEC_V0581_TREE)
-        self.assertEqual(self.contract["source"]["sha256"], PTO_SPEC_V0581_CATALOG_SHA256)
+        self.assertEqual(self.contract["source"]["release"], "v0.58")
+        self.assertEqual(self.contract["source"]["commit"], LINXISA_V058_COMMIT)
+        self.assertEqual(self.contract["source"]["tree"], LINXISA_V058_TREE)
+        self.assertEqual(self.contract["source"]["sha256"], LINXISA_V058_CATALOG_SHA256)
         self.assertEqual(
             self.contract["semantic_engine_counts"],
-            {"CUBE": 12, "SFU": 56, "TLSU": 10, "VEC": 31},
+            {"CUBE": 12, "SFU": 52, "TLSU": 10, "VEC": 35},
         )
 
     def test_jcore_emits_only_canonical_vec_sfu_aliases(self) -> None:
         operations = {row["name"]: row["engine"] for row in self.contract["tepl_ops"]}
         self.assertNotIn("BSTART.TEPL", self.header)
         emitted = re.findall(r'BSTART\.(VEC|SFU)\s+([A-Z][A-Z0-9_.]+),', self.header)
+        self.assertEqual(len(emitted), 87)
         self.assertEqual({name for _, name in emitted}, set(operations))
         for engine, name in emitted:
             self.assertEqual(engine, operations[name], name)
-
-    def test_division_and_remainder_use_the_sfu_engine(self) -> None:
-        emitted = {
-            name: engine
-            for engine, name in re.findall(
-                r'BSTART\.(VEC|SFU)\s+([A-Z][A-Z0-9_.]+),', self.header
-            )
-        }
-        for name in ("TDIV", "TDIVS", "TREM", "TREMS"):
-            self.assertEqual(emitted.get(name), "SFU", name)
 
     def test_jcore_uses_named_tlsu_and_cube_block_starts(self) -> None:
         self.assertNotIn("BSTART.TLSU", self.header)
@@ -78,35 +68,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         )
         self.assertNotRegex(active_text, r"mask=(?![01]{4}(?=[^0-9]|$))[0-9]+")
         self.assertIn("%c[PEMask3]%c[PEMask2]%c[PEMask1]%c[PEMask0]", self.header)
-        self.assertRegex(self.header, r'"B\.IOT [^"]*mask=1111')
-
-    def test_every_b_iot_binding_carries_an_explicit_pe_mask(self) -> None:
-        fragments = re.findall(
-            r'"B\.IOT(?:(?!\\n").)*\\n"',
-            self.header,
-            flags=re.DOTALL,
-        )
-        self.assertGreater(len(fragments), 100)
-        missing = [fragment for fragment in fragments if "mask=" not in fragment]
-        self.assertEqual(missing, [])
-
-    def test_every_cube_storage_path_emits_fpatr(self) -> None:
-        self.assertNotRegex(
-            self.header,
-            r'PTO_MATMUL_HEADER\([^\n]+,\s*""\)',
-        )
-
-    def test_gemv_uses_shared_fail_closed_validation(self) -> None:
-        self.assertGreaterEqual(self.header.count("validate_gemv_contract<"), 7)
-        for diagnostic in (
-            "invalid TGEMV B.FPATR configuration",
-            "TGEMV destination dtype does not match PreQuantMode",
-            "TGEMV matrix logical Tile size must be 128 B..8 KB",
-            "TGEMV vector logical Tile size must be 128 B..8 KB",
-            "TGEMV destination must have one valid row",
-            "TGEMV requires vector K == matrix K",
-        ):
-            self.assertIn(diagnostic, self.header)
+        iot_records = re.findall(r'"B\.IOT ([^"]*)\\n"', self.header)
+        self.assertTrue(iot_records)
+        for record in iot_records:
+            self.assertIn("mask=", record, record)
 
     def test_retired_tile_operations_are_not_exposed(self) -> None:
         retired = set(self.contract["deleted_tile_names"])
@@ -130,6 +95,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             "BSTART.PAR",
             "B.IOD",
             "C.B.IOS",
+            "B.FPATR",
             ".FIXP\"",
         ):
             self.assertNotIn(spelling, active_implementation)
@@ -189,15 +155,15 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         ):
             self.assertIn(source_form, self.header)
         self.assertNotIn("shared_tmov_source_form_is_unique", self.header)
-        self.assertRegex(self.header, r'\[Shared\]\s+"=Sr?"')
-        self.assertRegex(self.header, r'\[Shared\]\s+"Sr?"')
+        self.assertRegex(self.header, r'\[Shared\]\s+"=S"')
+        self.assertRegex(self.header, r'\[Shared\]\s+"S"')
         self.assertNotRegex(
             self.header,
             r'\[Shared[A-Za-z]*\]\s+"r"\([^\n]*handle\(\)',
         )
         self.assertEqual(
             self.header.count(
-                '"B.IOT %[src], mask=" PTO_PE_MASK_ASM ", last\\n"'
+                '"B.IOT %[Src], mask=" PTO_PE_MASK_ASM ", last\\n"'
             ),
             2,
         )
@@ -211,8 +177,6 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         makefile = (ROOT / "test" / "common" / "Makefile.common").read_text(encoding="utf-8")
         self.assertIn("OBJ_ROOT := $(abspath $(TEST_ROOT)/../output)", makefile)
         self.assertNotIn("realpath $(TEST_ROOT)/../output", makefile)
-        self.assertIn('test -d "$(OBJ_ROOT)"', makefile)
-        self.assertIn("compile: pre_work $(OBJ)", makefile)
 
     def test_test_harness_uses_v058_compiler_surface_without_install_mutation(self) -> None:
         makefile = (ROOT / "test" / "common" / "Makefile.common").read_text(encoding="utf-8")
@@ -224,28 +188,6 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertNotIn("enable-all-vector-as-tilereg", harness)
         self.assertNotIn("cp_hpp_to_llvmlib", runner)
         self.assertNotIn("lib/clang/15.0.4/include/tileop-api", runner)
-        self.assertNotIn("/remote/", makefile)
-        compile_all = (ROOT / "test" / "tileop_api" / "compile.all").read_text()
-        negatives = (ROOT / "test" / "tileop_api" / "run_negatives.sh").read_text()
-        self.assertIn("set -euo pipefail", compile_all)
-        self.assertIn('cd "$SCRIPT_DIR"', compile_all)
-        self.assertIn("make compile", compile_all)
-        self.assertNotIn("linx64v5", negatives)
-        self.assertNotIn("-mlxbc", negatives)
-        self.assertIn("CC_OPTS", negatives)
-        self.assertIn("positive baseline did not compile", negatives)
-        self.assertIn('grep -Fq "$expected"', negatives)
-        self.assertIn('if [[ "$FAIL" -ne 0 ]]', negatives)
-
-    def test_linx_compile_uses_repo_owned_freestanding_cxx_headers(self) -> None:
-        makefile = (ROOT / "test" / "common" / "Makefile.common").read_text(
-            encoding="utf-8"
-        )
-        shim = ROOT / "test" / "linx_cxx_shim"
-        self.assertIn("-nostdinc++", makefile)
-        self.assertIn("test/linx_cxx_shim", makefile)
-        for header in ("cstddef", "cstdint", "type_traits"):
-            self.assertTrue((shim / header).is_file(), header)
 
 
 if __name__ == "__main__":

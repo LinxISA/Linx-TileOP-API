@@ -6,9 +6,9 @@
 using namespace pto;
 
 using D = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 1, 32>;  // 1xN
-using V = Tile<Location::Left, float, 32, 64, BLayout::RowMajor, 1, 64>; // 1xK
+using V = Tile<Location::Left, float, 64, 64, BLayout::RowMajor, 1, 64>; // 1xK
 using Mtx = TileRight<float, 64, 32>;                                    // KxN
-using S1 = Tile<Location::Left, float, 32, 64, BLayout::RowMajor, 1, 64>;
+using S1 = Tile<Location::Left, float, 64, 64, BLayout::RowMajor, 1, 64>;
 using SM = TileRight<float, 64, 32>;
 using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
 

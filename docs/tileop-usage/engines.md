@@ -8,7 +8,7 @@ sorting, and other operations that require more complex hardware. The historical
 is only the unchanged encoding carrier; TileOP API emits the canonical `BSTART.VEC` and
 `BSTART.SFU` assembly aliases.
 
-The table is projected from the pinned PTO ISA release recorded in
+The table is projected from the pinned LinxISA release recorded in
 [`contracts/linxisa-v0.58-engine-ops.json`](../../contracts/linxisa-v0.58-engine-ops.json).
 
 ## VEC
@@ -18,6 +18,8 @@ The table is projected from the pinned PTO ISA release recorded in
 | `TADD` | `BSTART.VEC TADD` | 0 | elementwise-tile-tile |
 | `TSUB` | `BSTART.VEC TSUB` | 1 | elementwise-tile-tile |
 | `TMUL` | `BSTART.VEC TMUL` | 2 | elementwise-tile-tile |
+| `TDIV` | `BSTART.VEC TDIV` | 3 | elementwise-tile-tile |
+| `TREM` | `BSTART.VEC TREM` | 4 | elementwise-tile-tile |
 | `TAND` | `BSTART.VEC TAND` | 6 | elementwise-tile-tile |
 | `TOR` | `BSTART.VEC TOR` | 7 | elementwise-tile-tile |
 | `TXOR` | `BSTART.VEC TXOR` | 8 | elementwise-tile-tile |
@@ -36,6 +38,8 @@ The table is projected from the pinned PTO ISA release recorded in
 | `TADDS` | `BSTART.VEC TADDS` | 32 | tile-scalar-and-immediate |
 | `TSUBS` | `BSTART.VEC TSUBS` | 33 | tile-scalar-and-immediate |
 | `TMULS` | `BSTART.VEC TMULS` | 34 | tile-scalar-and-immediate |
+| `TDIVS` | `BSTART.VEC TDIVS` | 35 | tile-scalar-and-immediate |
+| `TREMS` | `BSTART.VEC TREMS` | 36 | tile-scalar-and-immediate |
 | `TANDS` | `BSTART.VEC TANDS` | 38 | tile-scalar-and-immediate |
 | `TORS` | `BSTART.VEC TORS` | 39 | tile-scalar-and-immediate |
 | `TXORS` | `BSTART.VEC TXORS` | 40 | tile-scalar-and-immediate |
@@ -51,15 +55,11 @@ The table is projected from the pinned PTO ISA release recorded in
 
 | API / operation | Canonical assembly | Logical selector | Classification |
 | --- | --- | ---: | --- |
-| `TDIV` | `BSTART.SFU TDIV` | 3 | elementwise-tile-tile |
-| `TREM` | `BSTART.SFU TREM` | 4 | elementwise-tile-tile |
 | `TEXP` | `BSTART.SFU TEXP` | 18 | elementwise-tile-tile |
 | `TLOG` | `BSTART.SFU TLOG` | 19 | elementwise-tile-tile |
 | `TRECIP` | `BSTART.SFU TRECIP` | 20 | elementwise-tile-tile |
 | `TSQRT` | `BSTART.SFU TSQRT` | 21 | elementwise-tile-tile |
 | `TRSQRT` | `BSTART.SFU TRSQRT` | 22 | elementwise-tile-tile |
-| `TDIVS` | `BSTART.SFU TDIVS` | 35 | tile-scalar-and-immediate |
-| `TREMS` | `BSTART.SFU TREMS` | 36 | tile-scalar-and-immediate |
 | `TROWSUM` | `BSTART.SFU TROWSUM` | 64 | reduce-and-expand |
 | `TROWMAX` | `BSTART.SFU TROWMAX` | 65 | reduce-and-expand |
 | `TROWMIN` | `BSTART.SFU TROWMIN` | 66 | reduce-and-expand |

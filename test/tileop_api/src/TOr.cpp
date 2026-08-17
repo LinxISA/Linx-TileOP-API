@@ -60,7 +60,7 @@ void test_ColMajor(T *dst, T *src0, T *src1) {
 int main() {
   const uint16_t gm_row = 64;
   const uint16_t gm_col = 32;
-  const uint16_t tile_row = 32;
+  const uint16_t tile_row = 64;
   const uint16_t tile_col = 32;
 
   size_t gm_size = gm_row * gm_col;

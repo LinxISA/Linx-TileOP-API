@@ -46,10 +46,9 @@ CXX = $(COMPILER_DIR)/clang++
 LINK = $(COMPILER_DIR)/clang++
 DUMP = $(COMPILER_DIR)/llvm-objdump
 COPY = $(COMPILER_DIR)/llvm-objcopy
-CC_O = --target=linx64 -c -fenable-matrix -O2 -nostdinc++
+CC_O = --target=linx64 -c -fenable-matrix -O2
 CC_VER ?= -std=c++20
 CC_LINK += --target=linx64
-INCLUDE += -isystem $(ROOT)/test/linx_cxx_shim
 # COMM_SRC_FILE += $(ROOT)/test/common/_start.s
 # COMM_SRC_DIR = $(shell dirname $(COMM_SRC_FILE))
 # COMM_OBJ += $(patsubst %.s, %.o, $(subst $(COMM_SRC_DIR), $(OBJ_DIR), $(COMM_SRC_FILE)))
@@ -69,7 +68,7 @@ CC_LINK += -shared
 endif
 
 INCLUDE += -I$(ROOT)/include -I$(ROOT)/test/common -I$(ROOT)/test/kernels/src
-QEMU ?= qemu-system-linx64
+QEMU = /remote/lms60/c00622284/qemu/LinxBlockModel/build/qemu-linx
 
 CC_O_ALL = $(CC_O) $(CC_VER) $(CC_OPTS)
 # $(info "TEST_ROOT is $(TEST_ROOT)")
@@ -83,8 +82,6 @@ CC_O_ALL = $(CC_O) $(CC_VER) $(CC_OPTS)
 # $(info "TARGET is $(TARGET)")
 
 all: pre_work $(TARGET)
-
-compile: pre_work $(OBJ)
 
 diss: pre_work $(TARGET)
 	$(DUMP) -dl $(TARGET) > $(TARGET).diss
@@ -121,11 +118,9 @@ pre_work:
 
 clean:
 #	rm -rf $(OBJ_ROOT)/*/*.o
-	@if test -d "$(OBJ_ROOT)"; then \
-	  find "$(OBJ_ROOT)" -type f -name "*.o" -exec rm -f {} \; ; \
-	fi
+	@find $(OBJ_ROOT) -type f -name "*.o" -exec rm -rf {} \;
 
 clean_all:
 	@rm -rf $(OBJ_ROOT)
 
-.PHONY: all compile diss sim clean clean_all pre_work
+.PHONY: all diss sim clean clean_all pre_work
