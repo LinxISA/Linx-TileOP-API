@@ -11,9 +11,7 @@
 // Aligned with website manual get_thread_idx(). Lowered to SSR_GET reading
 // the read-only PEID SSR (0x0802).
 inline uint32_t get_thread_idx() {
-  uint32_t thread_id;
-  asm volatile("SSRGET 0x802, ->%0" : "=r"(thread_id));
-  return thread_id;
+  return __builtin_linx_get_thread_idx();
 }
 
 // API convenience alias; this is not a separate architectural operation.
