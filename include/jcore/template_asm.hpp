@@ -115,13 +115,15 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
     "B.IOT %3, mask=15, last, ->%0<%Z4>\n"
     "B.DIM %5, 0, ->lb0\n"
     "B.DIM %6, 0, ->lb1\n"
+    "B.DIM zero, %c7, ->lb2\n"
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       "r"(valid_col),
-      "r"(valid_row)
+      "r"(valid_row),
+      "i"(tile_shape_out::Cols)
   );
 }
 
