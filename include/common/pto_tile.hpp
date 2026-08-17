@@ -606,6 +606,25 @@ public:
   static constexpr int SFractalSize = SFractalSize_;
   static constexpr PadValue PadVal = PadVal_;
 
+  // Backfilled from PTO v0.58 so reinterpret_tile's view can forward these.
+  // LogicalTileBytes matches this baseline's existing kBytes formula; there are
+  // no compact tiles here so Compact is fixed at Null. Downstream ops read
+  // tile_type_traits<TileDType>::IsValidActiveSize, not these members, so the
+  // backfill is inert outside the reinterpret view.
+  static constexpr CompactMode Compact = CompactMode::Null;
+  static constexpr int LogicalTileBytes =
+      (Rows * Cols * type_traits<DType>::bits + 7) / 8;
+  static constexpr int TilesizeCode =
+      LogicalTileBytes == 128  ? __tilesize_128B :
+      LogicalTileBytes == 256  ? __tilesize_256B :
+      LogicalTileBytes == 512  ? __tilesize_512B :
+      LogicalTileBytes == 1024 ? __tilesize_1KB :
+      LogicalTileBytes == 2048 ? __tilesize_2KB :
+      LogicalTileBytes == 4096 ? __tilesize_4KB :
+      LogicalTileBytes == 8192 ? __tilesize_8KB : __tilesize_unknown;
+  static constexpr bool IsValidActiveSize =
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_8KB;
+
   // constructor for static shape
   Tile() { };
   template <int RowMask = ValidRow, int ColMask = ValidCol>

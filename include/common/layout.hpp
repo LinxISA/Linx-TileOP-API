@@ -40,6 +40,15 @@ enum class LayoutEnum {
   kColMajor = 2,
 };
 
+// Backfilled from PTO v0.58 (layout.hpp) so the datatype-reinterpret view can
+// forward SourceTile::Compact. This baseline has no compact tiles: Tile
+// defaults to CompactMode::Null (see pto_tile.hpp).
+enum class CompactMode {
+  Null,
+  Normal,
+  RowPlusOne,
+};
+
 enum LayoutCvtEnum : uint64_t {
   NORM = 0,
   ND2DN, ND2ZZ, ND2ZN, ND2NZ, ND2NN,
