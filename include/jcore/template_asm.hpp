@@ -1878,6 +1878,53 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
     : "memory");
 }
 
+// MGATHER_CAS: atomic compare-and-swap at byte displacements (PTO 0.58.1
+// TLSU function 8; canonical BSTART.MGATHER.CAS). Exactly two Local B.IOT
+// bindings: IndexTile+ExpectedTile (TwoSrc_NoDst, no destination, L=0) then
+// ReplacementTile+last ->DstTile (L=1); B.IOR carries only the byte-address
+// base. Each lane atomically reads BaseGPR+displacement, compares with
+// Expected, stores Replacement on match, and publishes the observed old value
+// to the destination. The destination must be an early-clobbered output so
+// the allocator keeps it distinct from the replacement source.
+template <is_tile_data_v DstTile, is_tile_data_v IndexTile,
+          is_tile_data_v ExpectedTile, is_tile_data_v ReplacementTile>
+void MGATHER_CAS(DstTile &observedOld, uint64_t base,
+                 IndexTile &byteDisplacements, ExpectedTile &expected,
+                 ReplacementTile &replacement, uint32_t validCol,
+                 uint32_t validRow = 1) {
+  static_assert(std::is_same_v<typename ExpectedTile::DType,
+                               typename ReplacementTile::DType> &&
+                    std::is_same_v<typename ExpectedTile::DType,
+                                   typename DstTile::DType>,
+                "MGATHER_CAS expected/replacement/dst must share one transfer "
+                "DataType");
+  static_assert(std::is_integral_v<typename IndexTile::DType>,
+                "MGATHER_CAS index tile must be an integer byte-displacement "
+                "type (S/U 8..64)");
+  static_assert(IndexTile::Rows == ExpectedTile::Rows &&
+                    IndexTile::Cols == ExpectedTile::Cols &&
+                    DstTile::Rows == ExpectedTile::Rows &&
+                    DstTile::Cols == ExpectedTile::Cols,
+                "MGATHER_CAS tiles must match the resolved ValidRow x ValidCol");
+  asm volatile(
+    "BSTART.TLSU MGATHER.CAS, %c[DataType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[Col], ->lb2\n"
+    "B.IOT %[Idx], %[Exp], mask=1111\n"
+    "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    "B.IOR [%[Base]], []\n"
+    : [Dst] "=&Tr"(observedOld.data())
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
+      [Rep] "Tr"(replacement.data()),
+      [Base] "r"(base),
+      [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
+      [VCOL] "r"(validCol), [VROW] "r"(validRow),
+      [Col] "i"(DstTile::Cols),
+      [DstSize] "i"(DstTile::TilesizeCode)
+    : "memory");
+}
+
 // Low-level v5 GMOV. All four PEs must reach the same dynamic instance;
 // PEMask only selects requesters and does not reduce the Core4 collective.
 template <int PEMask = 15, is_tile_data_v tile_shape_dst,
