@@ -5070,23 +5070,10 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 // TFMOD: dst = fmod(src0, src1)
 template <is_tile_data_v tile_shape>
 void TFMOD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  asm volatile(
-    "BSTART.TEPL 5, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
-  );
+  static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
+                "TFMOD is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 // TAND: dst = src0 & src1
 template <is_tile_data_v tile_shape>
@@ -5365,23 +5352,10 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
 // TPRELU: parametric ReLU with per-element slope
 template <is_tile_data_v tile_shape>
 void TPRELU(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
-  asm volatile(
-    "BSTART.TEPL 14, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
-  );
+  static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
+                "TPRELU is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 // TSEL: select between two tiles using mask
 template <is_tile_data_v tile_shape>
@@ -5589,48 +5563,18 @@ void TRELU(tile_shape &dst, tile_shape &src) {
 // TADDC: dst = src0 + src1 + src2
 template <is_tile_data_v tile_shape>
 void TADDC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2) {
-  asm volatile(
-    "BSTART.TEPL 24, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15\n"
-    "B.IOT %7, mask=15, last, ->%0<%Z8>\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "Tr"(src2.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
-  );
+  static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
+                "TADDC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 // TSUBC: dst = src0 - src1 + src2
 template <is_tile_data_v tile_shape>
 void TSUBC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2) {
-  asm volatile(
-    "BSTART.TEPL 25, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15\n"
-    "B.IOT %7, mask=15, last, ->%0<%Z8>\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "Tr"(src2.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
-  );
+  static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
+                "TSUBC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 // TCVT: elementwise type conversion (opcode 27, already has TCVT_T)
 // Use TCVT_T(dst, src) for this; TCVT is aliased below for convenience.
@@ -5773,27 +5717,10 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
 // TFMODS: dst = fmod(src, scalar)
 template <is_tile_data_v tile_shape>
 void TFMODS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
-  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
-  // register so B.IOR [zero],[] still matches an instruction.
-  volatile typename tile_shape::DType sv = s;
-  asm volatile(
-    "BSTART.TEPL 37, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
-    "B.IOR [%7],[]\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
-  );
+  static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
+                "TFMODS is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 // TANDS: dst = src & scalar
 template <is_tile_data_v tile_shape>
@@ -6111,104 +6038,34 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
 // TLRELU: leaky ReLU with scalar slope
 template <is_tile_data_v tile_shape>
 void TLRELU(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
-  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
-  // register so B.IOR [zero],[] still matches an instruction.
-  volatile typename tile_shape::DType sv = s;
-  asm volatile(
-    "BSTART.TEPL 46, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
-    "B.IOR [%7],[]\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
-  );
+  static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
+                "TLRELU is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 // TAXPY: AXPY-style fused update (DavinciOO ext)
 template <is_tile_data_v tile_shape>
 void TAXPY(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
-  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
-  // register so B.IOR [zero],[] still matches an instruction.
-  volatile typename tile_shape::DType sv = s;
-  asm volatile(
-    "BSTART.TEPL 47, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
-    "B.IOR [%7],[]\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
-  );
+  static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
+                "TAXPY is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 // TADDSC: dst = src0 + scalar + src1
 template <is_tile_data_v tile_shape>
 void TADDSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile_shape &src1) {
-  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
-  // register so B.IOR [zero],[] still matches an instruction.
-  volatile typename tile_shape::DType sv = s;
-  asm volatile(
-    "BSTART.TEPL 56, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
-    "B.IOR [%8],[]\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
-  );
+  static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
+                "TADDSC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 // TSUBSC: dst = src0 - scalar + src1
 template <is_tile_data_v tile_shape>
 void TSUBSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile_shape &src1) {
-  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
-  // register so B.IOR [zero],[] still matches an instruction.
-  volatile typename tile_shape::DType sv = s;
-  asm volatile(
-    "BSTART.TEPL 57, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
-    "B.IOR [%8],[]\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
-  );
+  static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
+                "TSUBSC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 // TSELS: select between src tile and scalar using mask
 template <is_tile_data_v tile_shape>
@@ -6428,26 +6285,10 @@ void TTRI(tile_shape &dst) {
 // TRANDOM: counter-based random tile generation
 template <is_tile_data_v tile_shape>
 void TRANDOM(tile_shape &dst, typename tile_shape::DType s) {
-  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
-  // register so B.IOR [zero],[] still matches an instruction.
-  volatile typename tile_shape::DType sv = s;
-  asm volatile(
-    "BSTART.TEPL 105, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT mask=15, last, ->%0<%Z5>\n"
-    "B.IOR [%6],[]\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
-  );
+  static_assert(pto_dependent_false_v<tile_shape>,
+                "TRANDOM is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 // TQUANT: FP32 -> S8/U8 quantization with B.DATR RMode/Sat and B.IOR
 // multiplier/zero-point (PTO 0.58.1 TEPL Mode3 Fn10 / selector 0x06A).
@@ -7579,23 +7420,9 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
 // TGATHERB: byte-offset tile gather (opcode 97)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_offset, is_global_data_v gm_shape>
 void TGATHERB(tile_shape_out &dst, gm_shape &src, tile_shape_offset &offset) {
-  asm volatile(
-    "BSTART.TEPL 97, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
-    "B.IOR [%7], []\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
-      "r"(offset.GetValidCol()),
-      "r"(offset.GetValidRow()),
-      "i"(tile_shape_offset::Cols),
-      "Tr"(offset.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "r"(src.data())
-  );
+  static_assert(pto_dependent_false_v<tile_shape_out, gm_shape>,
+                "TGATHERB is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
 }
+
 
 #endif // TEMPLATE_ASM_HPP
