@@ -119,7 +119,7 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      "i"(tile_shape_out::TilesizeCode),
       "r"(valid_col),
       "r"(valid_row)
   );

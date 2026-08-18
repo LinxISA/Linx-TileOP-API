@@ -5,6 +5,19 @@
 #include "../linxStartEnd.hpp"
 #endif
 
+using tcvt_fp16_2x1024 =
+    Tile<Location::Vec, __half, 2, 1024, BLayout::RowMajor>;
+using tcvt_fp32_2x1024 =
+    Tile<Location::Vec, float, 2, 1024, BLayout::RowMajor>;
+
+static_assert(tcvt_fp16_2x1024::TilesizeCode == __tilesize_4KB);
+static_assert(tcvt_fp32_2x1024::TilesizeCode == __tilesize_8KB);
+#ifdef __linx
+static_assert(
+    tile_type_traits<typename tcvt_fp32_2x1024::TileDType>::TilesizeCode ==
+    __tilesize_4KB);
+#endif
+
 template <uint16_t row, uint16_t col> void testRow2Nz(float *dst, float *src) {
   using gm_shape = global_tensor<float, RowMajor<row, col>>;
 
