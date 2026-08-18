@@ -12,6 +12,19 @@ This header emits the block forms using the current assembler spelling;
 PTO-ISA v0.58 canonicalizes them to named block starts (`BSTART.TLOAD`,
 `BSTART.TSTORE`, `BSTART.TMOV`, `BSTART.MGATHER.*`, `BSTART.GMOV`).
 
+## Prefetch
+
+`TPREFETCH(src, valid_col, valid_row)` emits TLSU function 3 without a Tile or
+Shared binding. `LB0` and `LB1` carry the requested valid shape, `LB2` carries
+the physical row width, and `B.IOR` carries the global base plus logical row
+stride. The current assembler accepts the numeric `BSTART.TLSU 3` spelling
+and disassembles it as `BSTART.TLSU TPREFETCH`.
+
+For a static RowMajor `global_tensor`, the physical row width comes from its
+compile-time column count. For `RowMajor<Rows, DYNAMIC>`, the constructor's
+runtime stride supplies both the physical row width and row stride, so no
+`DYNAMIC` sentinel is emitted into `B.DIM` or `B.IOR`.
+
 ## Load and store stride
 
 `TLOAD` and `TSTORE` carry the global-memory base and row stride through

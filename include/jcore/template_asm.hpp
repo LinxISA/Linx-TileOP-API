@@ -1854,25 +1854,27 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
 }
 
 // TPREFETCH: request GM lines into cache without a Tile destination (PTO
-// 0.58.1 TLSU function 3; canonical BSTART.TPREFETCH). Implicit PE
+// 0.58.1 TLSU function 3). Implicit PE
 // participation 1111, no B.IOT/B.IOS members. Omitted LB0/LB1 default to one
 // and omitted LB2 to the resolved ValidCol; we pass the caller's valid shape
 // and the GM row length (logical elements) through B.DIM, and the GM base +
 // logical row stride through B.IOR.
 template <is_global_data_v gm_shape>
 void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
-  size_t row_stride = gm_shape::RowStride;
+  const size_t rowStride = src.GetStride(3);
+  const size_t physicalCol =
+      gm_shape::Cols == DYNAMIC ? rowStride : gm_shape::Cols;
   asm volatile(
-    "BSTART.TLSU TPREFETCH, %c[DataType]\n"
+    "BSTART.TLSU 3, %c[DataType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
-    "B.DIM zero, %c[Col], ->lb2\n"
+    "B.DIM %[Col], 0, ->lb2\n"
     "B.IOR [%[Base], %[Stride]], []\n"
     :
-    : [Base] "r"(src.data()), [Stride] "r"(row_stride),
+    : [Base] "r"(src.data()), [Stride] "r"(rowStride),
       [DataType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
       [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
-      [Col] "i"(gm_shape::Cols)
+      [Col] "r"(physicalCol)
     : "memory");
 }
 
@@ -6471,9 +6473,21 @@ void TSORT(ValueDstTile &valueDst, IndexDstTile &indexDst,
   static_assert(ValueDstTile::Rows == SourceTile::Rows &&
                     ValueDstTile::Cols == SourceTile::Cols &&
                     IndexDstTile::Rows == SourceTile::Rows &&
-                    IndexDstTile::Cols == SourceTile::Cols,
+                    IndexDstTile::Cols == SourceTile::Cols &&
+                    (ValueDstTile::ValidRow == DYNAMIC ||
+                     SourceTile::ValidRow == DYNAMIC ||
+                     ValueDstTile::ValidRow == SourceTile::ValidRow) &&
+                    (ValueDstTile::ValidCol == DYNAMIC ||
+                     SourceTile::ValidCol == DYNAMIC ||
+                     ValueDstTile::ValidCol == SourceTile::ValidCol) &&
+                    (IndexDstTile::ValidRow == DYNAMIC ||
+                     SourceTile::ValidRow == DYNAMIC ||
+                     IndexDstTile::ValidRow == SourceTile::ValidRow) &&
+                    (IndexDstTile::ValidCol == DYNAMIC ||
+                     SourceTile::ValidCol == DYNAMIC ||
+                     IndexDstTile::ValidCol == SourceTile::ValidCol),
                 "TSORT value/index destinations must match source logical "
-                "Rows/Cols");
+                "and valid shapes");
   static_assert(ValueDstTile::Loc == Location::Vec &&
                     IndexDstTile::Loc == Location::Vec &&
                     SourceTile::Loc == Location::Vec &&
@@ -6491,7 +6505,7 @@ void TSORT(ValueDstTile &valueDst, IndexDstTile &indexDst,
     "BSTART.TEPL 108, %c[DataType]\n"
     "B.DIM %[SortWidth], 0, ->lb0\n"
     "B.IOR [%[Descending]], []\n"
-    "B.IOT %[Source], mask=1111, last, ->%[ValueDst]<%Z[ValueTileSize]>\n"
+    "B.IOT %[Source], mask=1111, ->%[ValueDst]<%Z[ValueTileSize]>\n"
     "B.IOT mask=1111, last, ->%[IndexDst]<%Z[IndexTileSize]>\n"
     : [ValueDst] "=&Tr"(valueDst.data()),
       [IndexDst] "=&Tr"(indexDst.data())

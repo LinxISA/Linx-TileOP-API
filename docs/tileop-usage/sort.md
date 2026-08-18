@@ -17,7 +17,8 @@ void TSORT(ValueDstTile &valueDst, IndexDstTile &indexDst,
 - `source` and `valueDst` must have the same FP16 or FP32 dtype.
 - `indexDst` must have U32 elements.
 - All operands must be ordinary Local VEC Tiles using RowMajor layout.
-- Both destinations must have the same `Rows` and `Cols` as `source`.
+- Both destinations must have the same physical `Rows`/`Cols` and compatible
+  valid-row/valid-column shape as `source`.
 - `sortWidth=0` and `sortWidth=32` select groups of 32 elements; values from
   1 through 64 select that exact group width. Values above 64 are illegal.
 - `descending=false` selects ascending order; `true` selects descending order.
