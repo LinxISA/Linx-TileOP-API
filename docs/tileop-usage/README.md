@@ -17,6 +17,7 @@ which mirrors the PTO-ISA v0.58 tile-operation catalog
 | Layout helpers | [layout.md](layout.md) |
 | Matrix PostProcess (B.FPATR, quant/PReLU/RowMax/GroupMax) | [matrix-postprocess.md](matrix-postprocess.md) |
 | Comparison operations (`CmpMode`, `TCMP`, `TCMPS`) | [cmp.md](cmp.md) |
+| Sorting operations (`TSORT`) | [sort.md](sort.md) |
 | Tile datatype reinterpret view | [reinterpret-tile.md](reinterpret-tile.md) |
 
 The generated engine index and checked-in machine contract are the navigation roots. New public

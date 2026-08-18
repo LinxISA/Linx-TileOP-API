@@ -17,6 +17,7 @@ library.
 - [Tile and Shared-register constraints](docs/tileop-usage/constraints.md)
 - [Layout helpers](docs/tileop-usage/layout.md)
 - [Comparison operations](docs/tileop-usage/cmp.md)
+- [Sorting operations](docs/tileop-usage/sort.md)
 - [Fixed-point matrix wrappers](docs/tileop-usage/tmatmul-fixp.md)
 
 ## Validation

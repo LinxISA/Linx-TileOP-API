@@ -6451,7 +6451,7 @@ void TSORT(ValueDstTile &valueDst, IndexDstTile &indexDst,
     "BSTART.TEPL 108, %c[DataType]\n"
     "B.DIM %[SortWidth], 0, ->lb0\n"
     "B.IOR [%[Descending]], []\n"
-    "B.IOT %[Source], mask=1111, last, ->%[ValueDst]<%Z[ValueTileSize]>\n"
+    "B.IOT %[Source], mask=1111, ->%[ValueDst]<%Z[ValueTileSize]>\n"
     "B.IOT mask=1111, last, ->%[IndexDst]<%Z[IndexTileSize]>\n"
     : [ValueDst] "=&Tr"(valueDst.data()),
       [IndexDst] "=&Tr"(indexDst.data())
