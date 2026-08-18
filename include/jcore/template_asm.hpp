@@ -6449,44 +6449,114 @@ void TRANDOM(tile_shape &dst, typename tile_shape::DType s) {
   );
 }
 
-// TQUANT: profile-defined quantization
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TQUANT(tile_shape_out &dst, tile_shape_in &src) {
+// TQUANT: FP32 -> S8/U8 quantization with B.DATR RMode/Sat and B.IOR
+// multiplier/zero-point (PTO 0.58.1 TEPL Mode3 Fn10 / selector 0x06A).
+// RMode and Sat are B.DATR fields: RMode accepts a numeric immediate (the
+// parser maps mnemonic or numeric), Sat only the NOSAT/SAT token, so Sat is
+// selected with if constexpr. The multiplier travels as its raw FP32 bits in
+// a GPR and zeroPoint in another.
+template <RoundMode Mode = RoundMode::RNE, bool Saturate = false,
+          is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
+            int32_t zeroPoint = 0) {
+  static_assert(is_valid_round_mode(Mode), "TQUANT invalid rounding mode");
+  static_assert(type_traits<typename tile_shape_in::DType>::TypeCode ==
+                        __type_fp32,
+                "TQUANT source must be FP32");
+  static_assert(type_traits<typename tile_shape_out::DType>::TypeCode ==
+                            __type_int8 ||
+                    type_traits<typename tile_shape_out::DType>::TypeCode ==
+                        __type_uint8,
+                "TQUANT destination must be S8 or U8");
+  uint32_t multiplierBits;
+  __builtin_memcpy(&multiplierBits, &multiplier, sizeof(multiplier));
+  volatile uint32_t mult = multiplierBits;
+  volatile int32_t zp = zeroPoint;
+  if constexpr (Saturate) {
+    asm volatile(
+      "BSTART.TEPL 106, %c[SType]\n"
+      "B.DATR %c[DType], %c[RMode], SAT\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Col], ->lb2\n"
+      "B.IOR [%[Mult], %[ZP]], []\n"
+      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [Src] "Tr"(src.data()),
+        [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [DType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [RMode] "i"(static_cast<unsigned>(Mode)),
+        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [Col] "i"(tile_shape_in::Cols),
+        [Mult] "r"(mult), [ZP] "r"(zp),
+        [DstSize] "i"(tile_shape_out::TilesizeCode)
+    );
+  } else {
+    asm volatile(
+      "BSTART.TEPL 106, %c[SType]\n"
+      "B.DATR %c[DType], %c[RMode], NOSAT\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Col], ->lb2\n"
+      "B.IOR [%[Mult], %[ZP]], []\n"
+      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [Src] "Tr"(src.data()),
+        [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [DType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [RMode] "i"(static_cast<unsigned>(Mode)),
+        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [Col] "i"(tile_shape_in::Cols),
+        [Mult] "r"(mult), [ZP] "r"(zp),
+        [DstSize] "i"(tile_shape_out::TilesizeCode)
+    );
+  }
+}
+
+// TDEQUANT: S8/U8 -> FP32 dequantization (TEPL Mode3 Fn11 / 0x06B).
+// B.DATR carries only FP32 + RMode (Sat is always false per spec).
+template <RoundMode Mode = RoundMode::RNE, is_tile_data_v tile_shape_out,
+          is_tile_data_v tile_shape_in>
+void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
+              int32_t zeroPoint = 0) {
+  static_assert(is_valid_round_mode(Mode), "TDEQUANT invalid rounding mode");
+  static_assert(type_traits<typename tile_shape_out::DType>::TypeCode ==
+                        __type_fp32,
+                "TDEQUANT destination must be FP32");
+  static_assert(type_traits<typename tile_shape_in::DType>::TypeCode ==
+                            __type_int8 ||
+                    type_traits<typename tile_shape_in::DType>::TypeCode ==
+                        __type_uint8,
+                "TDEQUANT source must be S8 or U8");
+  uint32_t multiplierBits;
+  __builtin_memcpy(&multiplierBits, &multiplier, sizeof(multiplier));
+  volatile uint32_t mult = multiplierBits;
+  volatile int32_t zp = zeroPoint;
   asm volatile(
-    "BSTART.TEPL 106, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
-      "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+    "BSTART.TEPL 107, %c[SType]\n"
+    "B.DATR FP32, %c[RMode]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[Col], ->lb2\n"
+    "B.IOR [%[Mult], %[ZP]], []\n"
+    "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    : [Dst] "=&Tr"(dst.data())
+    : [Src] "Tr"(src.data()),
+      [SType] "i"(
+          type_traits<typename tile_shape_in::DType>::TypeCode == __type_int8
+              ? __type_int8 : __type_uint8),
+      [RMode] "i"(static_cast<unsigned>(Mode)),
+      [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+      [Col] "i"(tile_shape_in::Cols),
+      [Mult] "r"(mult), [ZP] "r"(zp),
+      [DstSize] "i"(tile_shape_out::TilesizeCode)
   );
 }
 
 // TDEQUANT: profile-defined dequantization
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TDEQUANT(tile_shape_out &dst, tile_shape_in &src) {
-  asm volatile(
-    "BSTART.TEPL 107, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
-      "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
-  );
+  TDEQUANT<RoundMode::RNE>(dst, src);
 }
 
 // TSORT: stable per-row group sort producing sorted values (FP16/FP32) and

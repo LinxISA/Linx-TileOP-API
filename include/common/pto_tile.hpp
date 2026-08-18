@@ -48,6 +48,32 @@ constexpr unsigned cmp_mode_code(CmpMode Mode) {
   return static_cast<unsigned>(Mode);
 }
 
+// Rounding modes for TQUANT/TDEQUANT, matching the B.DATR RMode field
+// (LinxV5TileRMode.def): RNONE=0 RNE=1 RTZ=2 RDN=3 RUP=4 RNA=5 RHB=7.
+enum class RoundMode : uint8_t {
+  RNONE = 0,  ///< no rounding (pass-through)
+  RNE = 1,    ///< round to nearest even
+  RTZ = 2,    ///< round toward zero
+  RDN = 3,    ///< round down (toward -inf)
+  RUP = 4,    ///< round up (toward +inf)
+  RNA = 5,    ///< round to nearest, ties away
+  RHB = 7,    ///< reciprocal-half bias
+};
+
+constexpr bool is_valid_round_mode(RoundMode Mode) {
+  switch (Mode) {
+  case RoundMode::RNONE:
+  case RoundMode::RNE:
+  case RoundMode::RTZ:
+  case RoundMode::RDN:
+  case RoundMode::RUP:
+  case RoundMode::RNA:
+  case RoundMode::RHB:
+    return true;
+  }
+  return false;
+}
+
 /// Padding Value : keep SAME with asm encoding
 enum class PadValue {
   Zero = 0,
