@@ -107,6 +107,21 @@ void TADD_MUL_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
+  // PTO 0.58.1 TileOperandsLegal_TCVT requires the source and destination to
+  // match on physical rows, physical columns, valid rows and valid columns.
+  // A destination declared with fewer physical rows/columns than the source
+  // (e.g. Tile<1,1024> with valid 2x512) would violate TileLogicalShapeMatch
+  // at runtime; reject it at compile time.
+  static_assert(tile_shape_out::Rows == tile_shape_in::Rows &&
+                    tile_shape_out::Cols == tile_shape_in::Cols,
+                "TCVT source and destination must have identical physical "
+                "Rows/Cols (PTO 0.58.1 TileLogicalShapeMatch)");
+  static_assert((tile_shape_out::ValidRow == DYNAMIC ||
+                 tile_shape_out::Rows >= tile_shape_out::ValidRow) &&
+                    (tile_shape_out::ValidCol == DYNAMIC ||
+                     tile_shape_out::Cols >= tile_shape_out::ValidCol),
+                "TCVT destination physical shape must contain its valid "
+                "region (valid_rows <= rows, valid_columns <= columns)");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
@@ -115,13 +130,15 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
     "B.IOT %3, mask=15, last, ->%0<%Z4>\n"
     "B.DIM %5, 0, ->lb0\n"
     "B.DIM %6, 0, ->lb1\n"
+    "B.DIM zero, %c7, ->lb2\n"
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "Tr"(src.data()),
       "i"(tile_shape_out::TilesizeCode),
       "r"(valid_col),
-      "r"(valid_row)
+      "r"(valid_row),
+      "i"(tile_shape_out::Cols)
   );
 }
 
@@ -6474,7 +6491,7 @@ void TSORT(ValueDstTile &valueDst, IndexDstTile &indexDst,
     "BSTART.TEPL 108, %c[DataType]\n"
     "B.DIM %[SortWidth], 0, ->lb0\n"
     "B.IOR [%[Descending]], []\n"
-    "B.IOT %[Source], mask=1111, ->%[ValueDst]<%Z[ValueTileSize]>\n"
+    "B.IOT %[Source], mask=1111, last, ->%[ValueDst]<%Z[ValueTileSize]>\n"
     "B.IOT mask=1111, last, ->%[IndexDst]<%Z[IndexTileSize]>\n"
     : [ValueDst] "=&Tr"(valueDst.data()),
       [IndexDst] "=&Tr"(indexDst.data())
