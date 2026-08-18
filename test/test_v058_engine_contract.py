@@ -110,7 +110,11 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         tile_header = (ROOT / "include" / "common" / "pto_tile.hpp").read_text(
             encoding="utf-8"
         )
-        self.assertIn("ext_vector_type(1024)", tile_header)
+        self.assertNotIn("ext_vector_type(1024)", tile_header)
+        self.assertRegex(
+            tile_header,
+            r"DType\s+tile_size\(Rows\s*\*\s*Cols\s*/",
+        )
         self.assertIn("LogicalTileBytes", tile_header)
         self.assertIn("TilesizeCode", tile_header)
 

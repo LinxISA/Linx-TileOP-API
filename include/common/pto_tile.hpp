@@ -700,7 +700,9 @@ public:
                 "SFractalSize_ illegal");
 
 #ifdef __linx
-  using TileDType = int32_t __attribute__((ext_vector_type(1024)));
+  using TileDType =
+      DType tile_size(Rows * Cols /
+                      (sizeof(DType) * 8 / type_traits<DType>::bits));
 #else
   using TileDType = DType[Rows * Cols];
 #endif
@@ -1324,9 +1326,9 @@ class ReinterpretedTileView {
 public:
   using DType = NewDType;
   using Source = SourceTile;
-  // Same storage carrier as the source Tile: on __linx this is the fixed
-  // 4 KB TileDType, so tile_type_traits<...TileDType>::TilesizeCode and the
-  // physical bytes are unchanged by the reinterpret.
+  // Same storage carrier as the source Tile, so its physical bytes and
+  // tile_type_traits<...TileDType>::TilesizeCode are unchanged by the
+  // reinterpret.
   using TileDType = typename SourceTile::TileDType;
 
   static constexpr Location Loc = SourceTile::Loc;
