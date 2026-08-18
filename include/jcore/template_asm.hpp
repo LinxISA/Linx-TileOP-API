@@ -6579,24 +6579,36 @@ void TSORT32(tile_shape_out &dst, tile_shape_in &src) {
                 "value+index dual-output bundle");
 }
 
-// TMRGSORT: merge sorted list tiles
-template <is_tile_data_v tile_shape>
-void TMRGSORT(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+// TMRGSORT: merge two sorted single-row sources into one destination
+// (PTO 0.58.1 TEPL Mode 3 Function 13 / selector 0x06D; canonical
+// BSTART.SFU TMRGSORT). No B.DIM: the block carries only B.IOR RegSrc0
+// (0/1 ascending/descending) and one TwoSrc_Dst B.IOT with <last>.
+template <is_tile_data_v DstTile, is_tile_data_v LeftTile,
+          is_tile_data_v RightTile>
+void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right,
+              bool descending = false) {
+  static_assert(std::is_same_v<typename DstTile::DType,
+                               typename LeftTile::DType> &&
+                    std::is_same_v<typename DstTile::DType,
+                                   typename RightTile::DType>,
+                "TMRGSORT dst/left/right must share one dtype");
+  static_assert(type_traits<typename DstTile::DType>::TypeCode ==
+                            __type_fp16 ||
+                    type_traits<typename DstTile::DType>::TypeCode ==
+                        __type_fp32,
+                "TMRGSORT dtype must be FP16 or FP32");
+  // Anti-fold: keep the 0/1 flag off the zero register (B.IOR [zero],[] does
+  // not match).
+  volatile uint32_t descendingValue = descending ? 1u : 0u;
   asm volatile(
-    "BSTART.TEPL 109, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+    "BSTART.TEPL 109, %c[DataType]\n"
+    "B.IOR [%[Descending]], []\n"
+    "B.IOT %[Left], %[Right], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    : [Dst] "=&Tr"(dst.data())
+    : [Left] "Tr"(left.data()), [Right] "Tr"(right.data()),
+      [Descending] "r"(descendingValue),
+      [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
+      [DstSize] "i"(DstTile::TilesizeCode)
   );
 }
 

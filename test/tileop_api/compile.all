@@ -29,6 +29,7 @@ make clean;make TESTCASE=TCmpMode
 make clean;make TESTCASE=TSort
 make clean;make TESTCASE=TPrefetch
 make clean;make TESTCASE=MGatherCas
+make clean;make TESTCASE=TMrgSort
 make clean;make TESTCASE=SharedTLoad
 make clean;make TESTCASE=TAbs
 make clean;make TESTCASE=TAdd_mask
