@@ -6400,24 +6400,82 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src) {
   );
 }
 
-// TSORT32: sort each 32-element block
+// TSORT: stable per-row group sort producing sorted values (FP16/FP32) and
+// group-local original indices (U32). PTO 0.58.1: TEPL Mode 3 Function 12
+// (selector 0x06c). Each row sorts its columns in `sortWidth`-width groups
+// from column 0; the last group may be short. ascending when descending is
+// false, descending otherwise. sortWidth must be 1..64 (0/LB0 omitted -> 32).
+//
+// Encoding-carrier note: the LinxV5 backend has no canonical BSTART.SFU
+// TSORT mnemonic yet, so the TEPL 108 (TSORT32) carrier is used here. The
+// bundle shape below matches the normative contract: only LB0, a single
+// B.IOR with the descending flag, a source+value-dest B.IOT, then a
+// destination-only index B.IOT. The two destinations use their own
+// TileSizeCode (value FP16/FP32 vs index U32 differ in bytes).
+template <is_tile_data_v ValueDstTile, is_tile_data_v IndexDstTile,
+          is_tile_data_v SourceTile>
+void TSORT(ValueDstTile &valueDst, IndexDstTile &indexDst,
+           SourceTile &source, uint32_t sortWidth = 32,
+           bool descending = false) {
+  static_assert(std::is_same_v<typename ValueDstTile::DType,
+                               typename SourceTile::DType>,
+                "TSORT value destination dtype must match source dtype");
+  static_assert(type_traits<typename SourceTile::DType>::TypeCode ==
+                        __type_fp16 ||
+                    type_traits<typename SourceTile::DType>::TypeCode ==
+                        __type_fp32,
+                "TSORT value source/destination must be FP16 or FP32");
+  static_assert(type_traits<typename IndexDstTile::DType>::TypeCode ==
+                    __type_uint32,
+                "TSORT index destination must be U32");
+  static_assert(ValueDstTile::Rows == SourceTile::Rows &&
+                    ValueDstTile::Cols == SourceTile::Cols &&
+                    IndexDstTile::Rows == SourceTile::Rows &&
+                    IndexDstTile::Cols == SourceTile::Cols,
+                "TSORT value/index destinations must match source logical "
+                "Rows/Cols");
+  static_assert(ValueDstTile::Loc == Location::Vec &&
+                    IndexDstTile::Loc == Location::Vec &&
+                    SourceTile::Loc == Location::Vec &&
+                    ValueDstTile::isRowMajor && IndexDstTile::isRowMajor &&
+                    SourceTile::isRowMajor &&
+                    !ValueDstTile::isBoxedLayout &&
+                    !IndexDstTile::isBoxedLayout &&
+                    !SourceTile::isBoxedLayout,
+                "TSORT operands must be Local RowMajor VEC Tiles");
+
+  // Anti-fold: keep the 0/1 descending flag off the zero register so the
+  // B.IOR binder still carries a real GPR (B.IOR [zero],[] does not match).
+  volatile uint32_t descendingValue = descending ? 1u : 0u;
+  asm volatile(
+    "BSTART.TEPL 108, %c[DataType]\n"
+    "B.DIM %[SortWidth], 0, ->lb0\n"
+    "B.IOR [%[Descending]], []\n"
+    "B.IOT %[Source], mask=1111, last, ->%[ValueDst]<%Z[ValueTileSize]>\n"
+    "B.IOT mask=1111, last, ->%[IndexDst]<%Z[IndexTileSize]>\n"
+    : [ValueDst] "=&Tr"(valueDst.data()),
+      [IndexDst] "=&Tr"(indexDst.data())
+    : [Source] "Tr"(source.data()),
+      [DataType] "i"(type_traits<typename SourceTile::DType>::TypeCode),
+      [SortWidth] "r"(sortWidth),
+      [Descending] "r"(descendingValue),
+      // Use each destination's logical TilesizeCode: FP16 value (e.g. 2 KB
+      // for 32x32) and U32 index (4 KB) differ, and B.IOT must carry the
+      // per-PE logical size, not the uniform 4 KB storage carrier.
+      [ValueTileSize] "i"(ValueDstTile::TilesizeCode),
+      [IndexTileSize] "i"(IndexDstTile::TilesizeCode)
+  );
+}
+
+// Deprecated single-output sort: does not match the PTO 0.58.1 TSORT
+// contract (no U32 index destination, legacy LB1/LB2 shape bundle). Kept as
+// a migration diagnostic that fails at instantiation.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TSORT32(tile_shape_out &dst, tile_shape_in &src) {
-  asm volatile(
-    "BSTART.TEPL 108, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
-      "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
-  );
+  static_assert(pto_dependent_false_v<tile_shape_out, tile_shape_in>,
+                "TSORT32 is removed; use TSORT(valueDst, indexDst, source, "
+                "sortWidth, descending), which emits the PTO 0.58.1 "
+                "value+index dual-output bundle");
 }
 
 // TMRGSORT: merge sorted list tiles
