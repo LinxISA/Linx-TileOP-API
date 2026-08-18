@@ -1836,6 +1836,29 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       : "memory");
 }
 
+// TPREFETCH: request GM lines into cache without a Tile destination (PTO
+// 0.58.1 TLSU function 3; canonical BSTART.TPREFETCH). Implicit PE
+// participation 1111, no B.IOT/B.IOS members. Omitted LB0/LB1 default to one
+// and omitted LB2 to the resolved ValidCol; we pass the caller's valid shape
+// and the GM row length (logical elements) through B.DIM, and the GM base +
+// logical row stride through B.IOR.
+template <is_global_data_v gm_shape>
+void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
+  size_t row_stride = gm_shape::RowStride;
+  asm volatile(
+    "BSTART.TLSU TPREFETCH, %c[DataType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[Col], ->lb2\n"
+    "B.IOR [%[Base], %[Stride]], []\n"
+    :
+    : [Base] "r"(src.data()), [Stride] "r"(row_stride),
+      [DataType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+      [Col] "i"(gm_shape::Cols)
+    : "memory");
+}
+
 // Low-level v5 GMOV. All four PEs must reach the same dynamic instance;
 // PEMask only selects requesters and does not reduce the Core4 collective.
 template <int PEMask = 15, is_tile_data_v tile_shape_dst,
