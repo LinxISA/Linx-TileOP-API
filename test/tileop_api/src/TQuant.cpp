@@ -17,6 +17,9 @@ __attribute__((noinline)) void q_u8_default(U8 &d, F32 &s) {
 __attribute__((noinline)) void dq_rtz(F32 &d, S8 &s) {
   TDEQUANT<RoundMode::RTZ>(d, s, 2.0f, 0);
 }
+__attribute__((noinline)) void q_s8_rto(S8 &d, F32 &s) {
+  TQUANT<RoundMode::RTO>(d, s, 1.0f, 0);
+}
 
 void use(void *) {}
 
@@ -27,6 +30,7 @@ int main() {
   q_s8_sat(s8, s);
   q_u8_default(u8, s);
   dq_rtz(d, s8);
+  q_s8_rto(s8, s);
   use(&d);
   return 0;
 }

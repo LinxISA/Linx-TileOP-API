@@ -1898,9 +1898,22 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
                                    typename DstTile::DType>,
                 "MGATHER_CAS expected/replacement/dst must share one transfer "
                 "DataType");
-  static_assert(std::is_integral_v<typename IndexTile::DType>,
-                "MGATHER_CAS index tile must be an integer byte-displacement "
-                "type (S/U 8..64)");
+  constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode;
+  constexpr int TransferType = type_traits<typename DstTile::DType>::TypeCode;
+  static_assert(
+      IndexType == __type_int4x2 || IndexType == __type_uint4x2 ||
+          IndexType == __type_int8 || IndexType == __type_uint8 ||
+          IndexType == __type_int16 || IndexType == __type_uint16 ||
+          IndexType == __type_int32 || IndexType == __type_uint32 ||
+          IndexType == __type_int64 || IndexType == __type_uint64,
+      "MGATHER_CAS index tile must use an S/U 4X2, 8, 16, 32, or 64-bit "
+      "integer byte-displacement type");
+  static_assert(
+      TransferType != __type_fp4_e2m1x2 &&
+          TransferType != __type_fp4_e1m2x2 &&
+          TransferType != __type_fp4_hif4x2 &&
+          TransferType != __type_int4x2 && TransferType != __type_uint4x2,
+      "MGATHER_CAS transfer DataType must not be a packed four-bit type");
   static_assert(IndexTile::Rows == ExpectedTile::Rows &&
                     IndexTile::Cols == ExpectedTile::Cols &&
                     DstTile::Rows == ExpectedTile::Rows &&
@@ -6309,11 +6322,66 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
                     type_traits<typename tile_shape_out::DType>::TypeCode ==
                         __type_uint8,
                 "TQUANT destination must be S8 or U8");
+  static_assert(tile_shape_out::Loc == Location::Vec &&
+                    tile_shape_in::Loc == Location::Vec &&
+                    tile_shape_out::isRowMajor &&
+                    tile_shape_in::isRowMajor &&
+                    !tile_shape_out::isBoxedLayout &&
+                    !tile_shape_in::isBoxedLayout,
+                "TQUANT operands must be Local RowMajor numeric Tiles");
+  static_assert(
+      tile_shape_out::Rows == tile_shape_in::Rows &&
+          tile_shape_out::Cols == tile_shape_in::Cols &&
+          (tile_shape_out::ValidRow == DYNAMIC ||
+           tile_shape_in::ValidRow == DYNAMIC ||
+           tile_shape_out::ValidRow == tile_shape_in::ValidRow) &&
+          (tile_shape_out::ValidCol == DYNAMIC ||
+           tile_shape_in::ValidCol == DYNAMIC ||
+           tile_shape_out::ValidCol == tile_shape_in::ValidCol),
+      "TQUANT source and destination logical shapes must match");
   uint32_t multiplierBits;
   __builtin_memcpy(&multiplierBits, &multiplier, sizeof(multiplier));
   volatile uint32_t mult = multiplierBits;
   volatile int32_t zp = zeroPoint;
-  if constexpr (Saturate) {
+  if constexpr (Mode == RoundMode::RNE && Saturate) {
+    asm volatile(
+      "BSTART.TEPL 106, %c[SType]\n"
+      // LLVM currently names encoded RMode zero RNONE. PTO 0.58.1 defines
+      // that encoding as the operation default, which is RNE for TQUANT.
+      "B.DATR %c[DType], RNONE, SAT\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Col], ->lb2\n"
+      "B.IOR [%[Mult], %[ZP]], []\n"
+      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [Src] "Tr"(src.data()),
+        [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [DType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [Col] "i"(tile_shape_in::Cols),
+        [Mult] "r"(mult), [ZP] "r"(zp),
+        [DstSize] "i"(tile_shape_out::TilesizeCode)
+    );
+  } else if constexpr (Mode == RoundMode::RNE) {
+    asm volatile(
+      "BSTART.TEPL 106, %c[SType]\n"
+      "B.DATR %c[DType], RNONE, NOSAT\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Col], ->lb2\n"
+      "B.IOR [%[Mult], %[ZP]], []\n"
+      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [Src] "Tr"(src.data()),
+        [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [DType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [Col] "i"(tile_shape_in::Cols),
+        [Mult] "r"(mult), [ZP] "r"(zp),
+        [DstSize] "i"(tile_shape_out::TilesizeCode)
+    );
+  } else if constexpr (Saturate) {
     asm volatile(
       "BSTART.TEPL 106, %c[SType]\n"
       "B.DATR %c[DType], %c[RMode], SAT\n"
@@ -6369,29 +6437,67 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
                     type_traits<typename tile_shape_in::DType>::TypeCode ==
                         __type_uint8,
                 "TDEQUANT source must be S8 or U8");
+  static_assert(tile_shape_out::Loc == Location::Vec &&
+                    tile_shape_in::Loc == Location::Vec &&
+                    tile_shape_out::isRowMajor &&
+                    tile_shape_in::isRowMajor &&
+                    !tile_shape_out::isBoxedLayout &&
+                    !tile_shape_in::isBoxedLayout,
+                "TDEQUANT operands must be Local RowMajor numeric Tiles");
+  static_assert(
+      tile_shape_out::Rows == tile_shape_in::Rows &&
+          tile_shape_out::Cols == tile_shape_in::Cols &&
+          (tile_shape_out::ValidRow == DYNAMIC ||
+           tile_shape_in::ValidRow == DYNAMIC ||
+           tile_shape_out::ValidRow == tile_shape_in::ValidRow) &&
+          (tile_shape_out::ValidCol == DYNAMIC ||
+           tile_shape_in::ValidCol == DYNAMIC ||
+           tile_shape_out::ValidCol == tile_shape_in::ValidCol),
+      "TDEQUANT source and destination logical shapes must match");
   uint32_t multiplierBits;
   __builtin_memcpy(&multiplierBits, &multiplier, sizeof(multiplier));
   volatile uint32_t mult = multiplierBits;
   volatile int32_t zp = zeroPoint;
-  asm volatile(
-    "BSTART.TEPL 107, %c[SType]\n"
-    "B.DATR FP32, %c[RMode]\n"
-    "B.DIM %[VCOL], 0, ->lb0\n"
-    "B.DIM %[VROW], 0, ->lb1\n"
-    "B.DIM zero, %c[Col], ->lb2\n"
-    "B.IOR [%[Mult], %[ZP]], []\n"
-    "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    : [Dst] "=&Tr"(dst.data())
-    : [Src] "Tr"(src.data()),
-      [SType] "i"(
-          type_traits<typename tile_shape_in::DType>::TypeCode == __type_int8
-              ? __type_int8 : __type_uint8),
-      [RMode] "i"(static_cast<unsigned>(Mode)),
-      [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
-      [Col] "i"(tile_shape_in::Cols),
-      [Mult] "r"(mult), [ZP] "r"(zp),
-      [DstSize] "i"(tile_shape_out::TilesizeCode)
-  );
+  if constexpr (Mode == RoundMode::RNE) {
+    asm volatile(
+      "BSTART.TEPL 107, %c[SType]\n"
+      "B.DATR FP32, RNONE\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Col], ->lb2\n"
+      "B.IOR [%[Mult], %[ZP]], []\n"
+      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [Src] "Tr"(src.data()),
+        [SType] "i"(
+            type_traits<typename tile_shape_in::DType>::TypeCode == __type_int8
+                ? __type_int8 : __type_uint8),
+        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [Col] "i"(tile_shape_in::Cols),
+        [Mult] "r"(mult), [ZP] "r"(zp),
+        [DstSize] "i"(tile_shape_out::TilesizeCode)
+    );
+  } else {
+    asm volatile(
+      "BSTART.TEPL 107, %c[SType]\n"
+      "B.DATR FP32, %c[RMode]\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[Col], ->lb2\n"
+      "B.IOR [%[Mult], %[ZP]], []\n"
+      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [Src] "Tr"(src.data()),
+        [SType] "i"(
+            type_traits<typename tile_shape_in::DType>::TypeCode == __type_int8
+                ? __type_int8 : __type_uint8),
+        [RMode] "i"(static_cast<unsigned>(Mode)),
+        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [Col] "i"(tile_shape_in::Cols),
+        [Mult] "r"(mult), [ZP] "r"(zp),
+        [DstSize] "i"(tile_shape_out::TilesizeCode)
+    );
+  }
 }
 
 // TDEQUANT: profile-defined dequantization
@@ -6508,6 +6614,28 @@ void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right,
                     type_traits<typename DstTile::DType>::TypeCode ==
                         __type_fp32,
                 "TMRGSORT dtype must be FP16 or FP32");
+  static_assert(DstTile::Loc == Location::Vec &&
+                    LeftTile::Loc == Location::Vec &&
+                    RightTile::Loc == Location::Vec &&
+                    DstTile::isRowMajor && LeftTile::isRowMajor &&
+                    RightTile::isRowMajor && !DstTile::isBoxedLayout &&
+                    !LeftTile::isBoxedLayout && !RightTile::isBoxedLayout,
+                "TMRGSORT operands must be Local RowMajor numeric Tiles");
+  static_assert(DstTile::Rows == 1 && LeftTile::Rows == 1 &&
+                    RightTile::Rows == 1,
+                "TMRGSORT operands must be single-row Tiles");
+  static_assert((LeftTile::ValidCol == DYNAMIC || LeftTile::ValidCol > 0) &&
+                    (RightTile::ValidCol == DYNAMIC ||
+                     RightTile::ValidCol > 0),
+                "TMRGSORT sources must be non-empty");
+  static_assert(
+      (DstTile::ValidCol == DYNAMIC || LeftTile::ValidCol == DYNAMIC ||
+       RightTile::ValidCol == DYNAMIC ||
+       (DstTile::ValidCol == LeftTile::ValidCol + RightTile::ValidCol &&
+        DstTile::Cols >= LeftTile::ValidCol + RightTile::ValidCol &&
+        (DstTile::Cols & (DstTile::Cols - 1)) == 0 &&
+        DstTile::Cols / 2 < LeftTile::ValidCol + RightTile::ValidCol)),
+      "TMRGSORT destination must contain the combined source columns");
   // Anti-fold: keep the 0/1 flag off the zero register (B.IOR [zero],[] does
   // not match).
   volatile uint32_t descendingValue = descending ? 1u : 0u;
