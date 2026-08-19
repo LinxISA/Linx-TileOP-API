@@ -11,6 +11,15 @@ using A = TileLeft<float, 32, 64>;
 using B = TileRight<float, 64, 32>;
 using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 2>;  // bad ValidCol
 using G = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 8>;  // bad for N=32/GroupN=16
+using GroupA = TileLeft<float, 64, 16>;
+using GroupB = TileRight<float, 16, 16>;
+using BadGroupC = Tile<Location::Vec, float, 8, 16, BLayout::RowMajor>;
+using BadGroupK = TileRight<float, 32, 16>;
+using BadGroupN = TileRight<float, 16, 32>;
+using DynamicGroupA = TileLeft<float, 64, 16, DYNAMIC, DYNAMIC>;
+using DynamicGroupB = TileRight<float, 16, 16, DYNAMIC, DYNAMIC>;
+using DynamicGroupC = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor,
+                           DYNAMIC, DYNAMIC>;
 
 void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
 #if defined(SHOULD_FAIL_dtype)
@@ -33,6 +42,38 @@ void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
   // Shared A without Shared B is rejected (single binder = Shared-Right).
   auto sa = TMOV_L2S_INSERT(a);
   TMATMUL(d, sa, b);
+#endif
+#if defined(SHOULD_FAIL_group_shape)
+  GroupA group_a;
+  GroupB group_b;
+  BadGroupC bad_c;
+  auto sa = TMOV_L2S_INSERT(group_a);
+  auto sb = TMOV_L2S_INSERT(group_b);
+  TMATMUL(bad_c, sa, sb);
+#endif
+#if defined(SHOULD_FAIL_group_k)
+  GroupA group_a;
+  BadGroupK group_b;
+  C group_c;
+  auto sa = TMOV_L2S_INSERT(group_a);
+  auto sb = TMOV_L2S_INSERT(group_b);
+  TMATMUL(group_c, sa, sb);
+#endif
+#if defined(SHOULD_FAIL_group_n)
+  GroupA group_a;
+  BadGroupN group_b;
+  C group_c;
+  auto sa = TMOV_L2S_INSERT(group_a);
+  auto sb = TMOV_L2S_INSERT(group_b);
+  TMATMUL(group_c, sa, sb);
+#endif
+#if defined(SHOULD_FAIL_group_dynamic)
+  DynamicGroupA group_a(64, 16);
+  DynamicGroupB group_b(16, 16);
+  DynamicGroupC group_c(16, 16);
+  auto sa = TMOV_L2S_INSERT(group_a);
+  auto sb = TMOV_L2S_INSERT(group_b);
+  TMATMUL(group_c, sa, sb);
 #endif
 }
 

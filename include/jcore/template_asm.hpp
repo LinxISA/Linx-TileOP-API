@@ -2157,8 +2157,7 @@ struct MatmulShape {
   bool group;
 };
 
-// Fixed 4-PE Group contract (mask=1111) used across the inline-asm surface.
-inline constexpr unsigned kGroupPeMask = 0b1111;
+// Fixed 4-PE Group contract matching the current mask=1111 inline-asm surface.
 inline constexpr size_t kGroupPeCount = 4;
 
 // Resolve M/N/K (per-PE compute window) for a matmul-style operation.
@@ -2174,8 +2173,20 @@ constexpr MatmulShape resolve_matmul_shape() {
                   "Group TMATMUL requires A.Cols == B.Rows");
     static_assert(B::Cols == C::Cols,
                   "Group TMATMUL requires SharedB.Cols == local C.Cols");
-    return MatmulShape{C::ValidRow == DYNAMIC ? 0 : C::ValidRow,
-                       C::ValidCol == DYNAMIC ? 0 : C::ValidCol, A::Cols, true};
+    static_assert(A::ValidRow != DYNAMIC && A::ValidCol != DYNAMIC &&
+                      B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC &&
+                      C::ValidRow != DYNAMIC && C::ValidCol != DYNAMIC,
+                  "Group TMATMUL dynamic valid shapes are not supported; use "
+                  "static valid shapes satisfying the 4-PE contract");
+    static_assert(A::ValidRow == kGroupPeCount * C::ValidRow,
+                  "Group TMATMUL requires SharedA.ValidRow == 4 * local "
+                  "C.ValidRow");
+    static_assert(A::ValidCol == B::ValidRow,
+                  "Group TMATMUL requires A.ValidCol == B.ValidRow");
+    static_assert(B::ValidCol == C::ValidCol,
+                  "Group TMATMUL requires SharedB.ValidCol == local "
+                  "C.ValidCol");
+    return MatmulShape{C::ValidRow, C::ValidCol, A::ValidCol, true};
   } else {
     static_assert(A::Rows == C::Rows && B::Cols == C::Cols,
                   "TMATMUL output shape must be A.Rows x B.Cols");
@@ -2188,9 +2199,15 @@ constexpr MatmulShape resolve_matmul_shape() {
 template <typename C, typename A, typename B>
 inline MatmulShape resolve_matmul_shape_runtime(const C &c, const A &a,
                                                 const B &b) {
+  // Instantiate the compile-time contract for every public entry point.
+  // Dynamic valid-shape Group operands are rejected there: introducing a
+  // control-flow check while Shared registers are live is not supported by
+  // the current Linx backend and must not silently emit an unchecked bundle.
+  [[maybe_unused]] constexpr MatmulShape StaticShape =
+      resolve_matmul_shape<C, A, B>();
+
   if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
-    return MatmulShape{matrix_valid_row(c), matrix_valid_col(c),
-                       matrix_valid_col(a), true};
+    return StaticShape;
   } else {
     return MatmulShape{matrix_valid_row(a), matrix_valid_col(b),
                        matrix_valid_col(a), false};
@@ -4178,11 +4195,8 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                 "TMATMUL input A must be Location::Left");
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
                 "TMATMUL input B must be a Right tile");
-  static_assert(tile_shape_a::Cols == tile_shape_b::Rows,
-                "TMATMUL requires A.Cols == B.Rows");
-  static_assert(tile_shape_d::Rows == tile_shape_a::Rows &&
-                    tile_shape_d::Cols == tile_shape_b::Cols,
-                "TMATMUL output shape must be M x N");
+  // Physical and valid M/N/K contracts, including the 4-PE Group case,
+  // are centralized in resolve_matmul_shape_runtime below.
   static_assert(tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
                 "TMATMUL output logical Tile size must be 512 B..32 KB");
 
