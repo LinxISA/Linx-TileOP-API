@@ -2145,6 +2145,58 @@ constexpr void validate_shared_matrix_pair() {
                 "B.IOS binder denotes the existing Shared-Right form");
 }
 
+// Issue #18: for a Group TMATMUL (Shared A + Shared B, local C per PE) the
+// B.DIM window must describe each PE's compute slice, not the full Shared A
+// rows. LB0 = local C rows = SharedA.Rows / PECount. These helpers centralize
+// the shape decision so basic/ACC/BIAS/MX and options overloads cannot
+// diverge.
+struct MatmulShape {
+  size_t M;
+  size_t N;
+  size_t K;
+  bool group;
+};
+
+// Fixed 4-PE Group contract (mask=1111) used across the inline-asm surface.
+inline constexpr unsigned kGroupPeMask = 0b1111;
+inline constexpr size_t kGroupPeCount = 4;
+
+// Resolve M/N/K (per-PE compute window) for a matmul-style operation.
+// Non-group: M = A rows, N = B cols, K = A cols (unchanged). Group: M and N
+// come from the local destination C; K from Shared A cols; static asserts
+// enforce SharedA.Rows == PECount * C.Rows and the matching Cols.
+template <typename C, typename A, typename B>
+constexpr MatmulShape resolve_matmul_shape() {
+  if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
+    static_assert(A::Rows == kGroupPeCount * C::Rows,
+                  "Group TMATMUL requires SharedA.Rows == 4 * local C.Rows");
+    static_assert(A::Cols == B::Rows,
+                  "Group TMATMUL requires A.Cols == B.Rows");
+    static_assert(B::Cols == C::Cols,
+                  "Group TMATMUL requires SharedB.Cols == local C.Cols");
+    return MatmulShape{C::ValidRow == DYNAMIC ? 0 : C::ValidRow,
+                       C::ValidCol == DYNAMIC ? 0 : C::ValidCol, A::Cols, true};
+  } else {
+    static_assert(A::Rows == C::Rows && B::Cols == C::Cols,
+                  "TMATMUL output shape must be A.Rows x B.Cols");
+    return MatmulShape{0, 0, A::Cols, false};
+  }
+}
+
+// Runtime valid-shape resolver: Group M/N come from the destination C's
+// runtime valid shape; non-group from A rows / B cols / A cols.
+template <typename C, typename A, typename B>
+inline MatmulShape resolve_matmul_shape_runtime(const C &c, const A &a,
+                                                const B &b) {
+  if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
+    return MatmulShape{matrix_valid_row(c), matrix_valid_col(c),
+                       matrix_valid_col(a), true};
+  } else {
+    return MatmulShape{matrix_valid_row(a), matrix_valid_col(b),
+                       matrix_valid_col(a), false};
+  }
+}
+
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B>
 PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
                               size_t K) {
@@ -3998,9 +4050,11 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
                 "TMATMUL supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(c, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
   pto_matmul_detail::matmul<Attr>(c, a, b, M, N, K);
 }
 
@@ -4018,9 +4072,11 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                 "TMATMUL_ACC supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
   pto_matmul_detail::matmul_acc<Attr>(d, c, a, b, M, N, K);
 }
 
@@ -4072,9 +4128,11 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                                     fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
 
   auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
   auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
@@ -4253,9 +4311,11 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
         "TMATMUL GroupMaxOut physical Tile must occupy 512 B..32 KB");
   }
 
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
 
   auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(
       options.RowIn, d);
@@ -4286,9 +4346,11 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
                 "TMATMUL_BIAS supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(c, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
   pto_matmul_detail::matmul_bias<Attr>(c, a, b, bias, M, N, K);
 }
 
@@ -4324,9 +4386,11 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(c, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
 
   auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, c);
   auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, c);
@@ -4351,9 +4415,11 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
                 "TMATMUL_MX supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(c, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
   pto_matmul_detail::matmul_mx<Attr>(c, a, ascale, b, bscale, M, N, K);
 }
 
@@ -4391,9 +4457,11 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(c, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
 
   auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, c);
   auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, c);
@@ -4417,9 +4485,11 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
                 "TMATMUL_MX_ACC supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
   pto_matmul_detail::matmul_mx_acc<Attr>(d, a, scale_a, b, scale_b, c, M, N, K);
 }
 
@@ -4456,9 +4526,11 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
 
   auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
   auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
@@ -4483,9 +4555,11 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
                 "TMATMUL_MX_BIAS supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
   pto_matmul_detail::matmul_mx_bias<Attr>(d, a, scale_a, b, scale_b, bias, M, N, K);
 }
 
@@ -4525,9 +4599,11 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  size_t M = pto_matmul_detail::matrix_valid_row(a);
-  size_t N = pto_matmul_detail::matrix_valid_col(b);
-  size_t K = pto_matmul_detail::matrix_valid_col(a);
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
 
   auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
   auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
