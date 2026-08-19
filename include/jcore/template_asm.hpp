@@ -6212,21 +6212,32 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
   );
 }
 
-// TIMG2COL: feature-map to im2col transform
+// TIMG2COL: image-to-column with feature-map posM/posK (PTO 0.58.1 TEPL
+// Mode3 Fn4 / selector 0x064). B.IOR carries PosMGPR, PosKGPR (low 16 bits
+// each per B4; the spec's optional B.IOR defaults to posM=posK=0). The
+// source's feature-map descriptor (NC1HWC0 / NDC1HWC0 layout, filter,
+// stride, dilation, padding) is a property of the persistent Matrix-location
+// source tile; TileOP exposes the position selectors via B.IOR.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TIMG2COL(tile_shape_out &dst, tile_shape_in &src) {
+void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0,
+              uint32_t posK = 0) {
+  // low 16 bits of each position selector (B4: only low 16 bits encoded).
+  volatile uint32_t posM_v = posM & 0xffffu;
+  volatile uint32_t posK_v = posK & 0xffffu;
   asm volatile(
     "BSTART.TEPL 100, %c1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOR [%5, %6], []\n"
+    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "r"(src.GetValidCol()),
       "r"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
+      "r"(posM_v), "r"(posK_v),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
