@@ -118,6 +118,14 @@ public:
   static constexpr int Regsize = PETileBytes;
   static constexpr bool IsValidActiveSize =
       TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_8KB;
+  // Shared tiles are core-granular and use B.IOS's own TSize map
+  // (1=512B, 2=1KB, ..., 7=32KB), so accept exactly the seven legal powers
+  // of two in 512 B..32 KiB per Shared register. Non-power-of-two sizes
+  // cannot be encoded in the 3-bit B.IOS TSize field.
+  static constexpr bool IsValidSharedActiveSize =
+      PETileBytes == 512 || PETileBytes == 1024 || PETileBytes == 2048 ||
+      PETileBytes == 4096 || PETileBytes == 8192 || PETileBytes == 16384 ||
+      PETileBytes == 32768;
 };
 
 #endif
