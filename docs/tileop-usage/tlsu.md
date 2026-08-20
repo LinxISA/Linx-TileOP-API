@@ -48,6 +48,23 @@ B.IOT mask=1111, last, ->t0<3>
 B.IOR [a3,a4], []       ; [base, logical-row-stride]
 ```
 
+### Shared store (TSTORE / TSTORE.SPART)
+
+Storing a **Shared** Tile to GM uses TLSU Function 1 (full, `PE_MASK=1111`)
+or Function 14 `TSTORE.SPART` (explicit nonzero PE subset); both use exactly
+one source `B.IOS` binder and no `B.IOT`.
+
+```cpp
+TSTORE(gm, SharedTile);                 // full: B.IOS mask=1111
+TSTORE_PART<PEMask>(gm, SharedTile);    // TSTORE.SPART: any nonzero subset
+```
+
+- The GM element type must equal the Shared tile's dtype
+  (`static_assert`), and the Local source must be RowMajor / non-boxed
+  (NORM; no `B.DATR` Layout is emitted).
+- Both wrappers are `always_inline` so the opaque Shared handle never
+  crosses the ordinary C++ ABI.
+
 ## Local and Shared moves
 
 Local operands use `B.IOT`. Shared operands use `B.IOS`; the PE mask on

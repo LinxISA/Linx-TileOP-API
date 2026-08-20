@@ -5,6 +5,11 @@
 
 using namespace pto;
 
+// Must be defined before any wrapper that carries an opaque Shared value or
+// tile register through inline asm; always_inline keeps such values inside
+// the caller (they must never cross the ordinary C++ ABI as integer/stack).
+#define PTO_SHARED_INLINE __attribute__((always_inline)) inline
+
 template <class...>
 inline constexpr bool pto_dependent_false_v = false;
 
@@ -1857,8 +1862,14 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
 // Exactly one source B.IOS (PE_MASK=1111), no B.IOT, at most one B.IOR
 // (GM base + logical row stride). Symmetric to Shared TLOAD.
 template <is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
-void TSTORE(gm_shape &dst, const SharedTileT &src) {
+PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src) {
   using LocalType = typename SharedTileT::LocalTileType;
+  static_assert(std::is_same_v<typename LocalType::DType,
+                               typename gm_shape::DType>,
+                "Shared TSTORE requires matching GM and Shared dtypes");
+  static_assert(LocalType::isRowMajor && !LocalType::isBoxedLayout,
+                "Shared TSTORE supports NORM/RowMajor Local sources only "
+                "(no B.DATR Layout is emitted)");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
@@ -1881,9 +1892,15 @@ void TSTORE(gm_shape &dst, const SharedTileT &src) {
 // (PTO 0.58.1 TLSU Function 14). Exactly one source B.IOS with the caller's
 // PE mask (any nonzero subset), no B.IOT; B.IOR carries base + stride.
 template <int PEMask = 15, is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
-void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
+PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
   static_assert(PEMask > 0 && PEMask < 16, "TSTORE.SPART PEMask must be 1..15");
   using LocalType = typename SharedTileT::LocalTileType;
+  static_assert(std::is_same_v<typename LocalType::DType,
+                               typename gm_shape::DType>,
+                "Shared TSTORE.SPART requires matching GM and Shared dtypes");
+  static_assert(LocalType::isRowMajor && !LocalType::isBoxedLayout,
+                "Shared TSTORE.SPART supports NORM/RowMajor Local sources only "
+                "(no B.DATR Layout is emitted)");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
@@ -2031,8 +2048,7 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
 // handle to an absolute S#0..S#255 register through the "Sr" constraint.
 // These wrappers must inline so the opaque Shared value never crosses the
 // ordinary C++ ABI as an integer or memory-resident object.
-#define PTO_SHARED_INLINE __attribute__((always_inline)) inline
-
+// (PTO_SHARED_INLINE is defined at the top of this header once.)
 template <int PEMask = 15, is_tile_data_v tile_shape_src>
 PTO_SHARED_INLINE void
 TMOV_L2S_INSERT(SharedTile<tile_shape_src> &dst,
