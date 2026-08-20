@@ -1853,6 +1853,56 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       : "memory");
 }
 
+// TSTORE: Shared Tile -> GM (PTO 0.58.1 TLSU Function 1 Shared form).
+// Exactly one source B.IOS (PE_MASK=1111), no B.IOT, at most one B.IOR
+// (GM base + logical row stride). Symmetric to Shared TLOAD.
+template <is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
+void TSTORE(gm_shape &dst, const SharedTileT &src) {
+  using LocalType = typename SharedTileT::LocalTileType;
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
+  asm volatile(
+    "BSTART.TLSU TSTORE, %c[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOS %S[Shared], mask=1111\n"
+    "B.IOR [%[d0],%[GmStride]], []\n"
+    :
+    : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
+      [SrcType] "i"(type_traits<typename LocalType::DType>::TypeCode),
+      [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+      [COL] "i"(LocalType::Cols),
+      [GmStride] "r"(dst.GetStride(3))
+    : "memory");
+}
+
+// TSTORE.SPART: Shared Tile -> GM on an explicit nonzero PE subset
+// (PTO 0.58.1 TLSU Function 14). Exactly one source B.IOS with the caller's
+// PE mask (any nonzero subset), no B.IOT; B.IOR carries base + stride.
+template <int PEMask = 15, is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
+void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
+  static_assert(PEMask > 0 && PEMask < 16, "TSTORE.SPART PEMask must be 1..15");
+  using LocalType = typename SharedTileT::LocalTileType;
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
+  asm volatile(
+    "BSTART.TLSU TSTORE.SPART, %c[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOS %S[Shared], mask=%c[PEMask]\n"
+    "B.IOR [%[d0],%[GmStride]], []\n"
+    :
+    : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
+      [PEMask] "i"(PEMask),
+      [SrcType] "i"(type_traits<typename LocalType::DType>::TypeCode),
+      [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+      [COL] "i"(LocalType::Cols),
+      [GmStride] "r"(dst.GetStride(3))
+    : "memory");
+}
+
 // TPREFETCH: request GM lines into cache without a Tile destination (PTO
 // 0.58.1 TLSU function 3). Implicit PE
 // participation 1111, no B.IOT/B.IOS members. Omitted LB0/LB1 default to one
@@ -1865,7 +1915,7 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
   const size_t physicalCol =
       gm_shape::Cols == DYNAMIC ? rowStride : gm_shape::Cols;
   asm volatile(
-    "BSTART.TLSU 3, %c[DataType]\n"
+    "BSTART.TLSU TPREFETCH, %c[DataType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM %[Col], 0, ->lb2\n"
