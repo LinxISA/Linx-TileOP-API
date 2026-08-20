@@ -1870,6 +1870,8 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src) {
   static_assert(LocalType::isRowMajor && !LocalType::isBoxedLayout,
                 "Shared TSTORE supports NORM/RowMajor Local sources only "
                 "(no B.DATR Layout is emitted)");
+  static_assert(tile_type_traits<typename LocalType::TileDType>::IsValidActiveSize,
+                "Shared TSTORE source size must be 128 B..8 KB (TSize=1..7)");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
@@ -1901,6 +1903,8 @@ PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
   static_assert(LocalType::isRowMajor && !LocalType::isBoxedLayout,
                 "Shared TSTORE.SPART supports NORM/RowMajor Local sources only "
                 "(no B.DATR Layout is emitted)");
+  static_assert(tile_type_traits<typename LocalType::TileDType>::IsValidActiveSize,
+                "Shared TSTORE.SPART source size must be 128 B..8 KB (TSize=1..7)");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
