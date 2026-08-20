@@ -5,126 +5,53 @@
 #include "../linxStartEnd.hpp"
 #endif
 
-template <uint64_t gm_row, uint64_t gm_col, uint64_t tile_row,
-          uint64_t tile_col,typename T>
-void test_rm(T *dst, T s) {
-  using gm_shape = global_tensor<T, RowMajor<gm_row, gm_col>>;
-  using tile_shape = Tile<Location::Vec, T, tile_row, tile_col, BLayout::RowMajor, 1, tile_col>;
+template <typename T, int descending>
+void test_tci(T *dst, T start) {
+  constexpr uint64_t cols = 256 / sizeof(T);
+  using gm_shape = global_tensor<T, RowMajor<1, cols>>;
+  using tile_shape =
+      Tile<Location::Vec, T, 1, cols, BLayout::RowMajor, 1, cols>;
 
-  uint16_t block_row = gm_row / tile_row;
-  uint16_t block_col = gm_col / tile_col;
-  for (int i = 0; i < block_row; ++i) {
-    for (int j = 0; j < block_col; ++j) {
-      int offset = i * (tile_row * gm_col) + j * tile_col;
-      gm_shape res(dst + offset);
-
-      tile_shape d1;
-      TCI<tile_shape, T, 0>(d1, s);
-      TSTORE(res, d1);
-    }
-  }
-}
-
-template <uint64_t gm_row, uint64_t gm_col, uint64_t tile_row,
-          uint64_t tile_col,typename T>
-void test_cm(T *dst, T s) {
-  using gm_shape = global_tensor<T, ColMajor<gm_row, gm_col>>;
-  using tile_shape = Tile<Location::Vec, T, tile_row, tile_col, BLayout::ColMajor, tile_row, 1>;
-
-  uint16_t block_row = gm_row / tile_row;
-  uint16_t block_col = gm_col / tile_col;
-  for (int i = 0; i < block_row; ++i) {
-    for (int j = 0; j < block_col; ++j) {
-      int offset = i * (tile_row * gm_col) + j * tile_col;
-      gm_shape res(dst + offset);
-
-      tile_shape d1;
-      TCI<tile_shape, T, 0>(d1, s);
-      TSTORE(res, d1);
-    }
-  }
+  gm_shape result(dst);
+  tile_shape sequence;
+  TCI<tile_shape, T, descending>(sequence, start);
+  TSTORE(result, sequence);
 }
 
 int main() {
-  const uint16_t gm_row = 64;
-  const uint16_t gm_col = 32;
-  const uint16_t tile_row = 64;
-  const uint16_t tile_col = 32;
+  constexpr uint64_t count16 = 256 / sizeof(uint16_t);
+  constexpr uint64_t count32 = 256 / sizeof(uint32_t);
 
-  size_t gm_size = gm_row * gm_col;
-  size_t tile_size = tile_row * tile_col;
-  // float32
-  float *dst = (float *)malloc(gm_size * sizeof(float));
-  check_mem_alloc(dst);
-  init_dst(dst, gm_size);
-
-  // float16
-  __half *dst1 = (__half *)malloc(gm_size * sizeof(__half));
-  check_mem_alloc(dst1);
-  init_dst(dst1, gm_size);
-
-  // int8
-  int8_t *dst2 = (int8_t *)malloc(gm_size * sizeof(int8_t));
-  check_mem_alloc(dst2);
-  init_dst(dst2, gm_size);
-
-  // int16
-  int16_t *dst3 = (int16_t *)malloc(gm_size * sizeof(int16_t));
-  check_mem_alloc(dst3);
-  init_dst(dst3, gm_size);
-  int16_t *dst3_col = (int16_t *)malloc(gm_size * sizeof(int16_t));
-  check_mem_alloc(dst3_col);
-  init_dst(dst3_col, gm_size);
-
-  // int32
-  int32_t *dst4 = (int32_t *)malloc(gm_size * sizeof(int32_t));
-  check_mem_alloc(dst4);
-  init_dst(dst4, gm_size);
-  int32_t *dst4_col = (int32_t *)malloc(gm_size * sizeof(int32_t));
-  check_mem_alloc(dst4_col);
-  init_dst(dst4_col, gm_size);
-
-  // int64
-  int64_t *dst5 = (int64_t *)malloc(gm_size * sizeof(int64_t));
-  check_mem_alloc(dst5);
-  init_dst(dst5, gm_size);
-
+  int16_t *s16 = static_cast<int16_t *>(malloc(count16 * sizeof(int16_t)));
+  uint16_t *u16 = static_cast<uint16_t *>(malloc(count16 * sizeof(uint16_t)));
+  int32_t *s32 = static_cast<int32_t *>(malloc(count32 * sizeof(int32_t)));
+  uint32_t *u32 = static_cast<uint32_t *>(malloc(count32 * sizeof(uint32_t)));
+  check_mem_alloc(s16);
+  check_mem_alloc(u16);
+  check_mem_alloc(s32);
+  check_mem_alloc(u32);
 
 #ifdef LINX_PMC
   PMC_START();
 #endif
 
-  // test_rm<gm_row, gm_col, tile_row, tile_col, float>(dst, s_fp32);
-  // test_rm<gm_row, gm_col, tile_row, tile_col, __half>(dst1, s_fp16);
-  // test_rm<gm_row, gm_col, tile_row, tile_col, int8_t>(dst2, s_i8);
-  test_rm<gm_row, gm_col, tile_row, tile_col, int16_t>(dst3, s_i16);
-  test_cm<gm_row, gm_col, tile_row, tile_col, int16_t>(dst3_col, s_i16);
-  test_rm<gm_row, gm_col, tile_row, tile_col, int32_t>(dst4, s_i32);
-  test_cm<gm_row, gm_col, tile_row, tile_col, int32_t>(dst4_col, s_i32);
-  // test_rm<gm_row, gm_col, tile_row, tile_col, int64_t>(dst5, s_i64);
+  test_tci<int16_t, 0>(s16, static_cast<int16_t>(64));
+  test_tci<uint16_t, 1>(u16, static_cast<uint16_t>(64));
+  test_tci<int32_t, 0>(s32, static_cast<int32_t>(64));
+  test_tci<uint32_t, 1>(u32, static_cast<uint32_t>(64));
 
 #ifdef LINX_PMC
   PMC_END();
 #endif
 
-  printf("Result:\n");
-  // OutArray(dst, gm_size);
-  // OutArray(dst1, gm_size);
-  // OutArray(dst2, gm_size);
-  OutArray(dst3, gm_size);
-  OutArray(dst3_col, gm_size);
-  OutArray(dst4, gm_size);
-  OutArray(dst4_col, gm_size);
-  // OutArray(dst5, gm_size);
+  OutArray(s16, count16);
+  OutArray(u16, count16);
+  OutArray(s32, count32);
+  OutArray(u32, count32);
 
-  free(dst);
-  free(dst1);
-  free(dst2);
-  free(dst3);
-  free(dst3_col);
-  free(dst4);
-  free(dst4_col);
-  free(dst5);
-
+  free(s16);
+  free(u16);
+  free(s32);
+  free(u32);
   return 0;
 }

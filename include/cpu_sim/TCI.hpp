@@ -11,11 +11,12 @@ void TCI_RowMajor_Imp(typename tile_shape::TileDType dst,
   for (size_t i = 0; i < tile_shape::ValidRow; ++i)
     for (size_t j = 0; j < tile_shape::ValidCol; ++j) {
       size_t idx = i * tile_shape::RowStride + j;
-      if constexpr (desc) {
-        dst[idx] = s - static_cast<typename tile_shape::DType>(idx);
-      } else {
-        dst[idx] = s + static_cast<typename tile_shape::DType>(idx);
-      }
+      using UnsignedDType =
+          typename std::make_unsigned<typename tile_shape::DType>::type;
+      const UnsignedDType start = static_cast<UnsignedDType>(s);
+      const UnsignedDType offset = static_cast<UnsignedDType>(idx);
+      const UnsignedDType value = desc ? start - offset : start + offset;
+      dst[idx] = static_cast<typename tile_shape::DType>(value);
     }
 }
 template <typename tile_shape, int desc>
@@ -42,16 +43,16 @@ void TCI_Impl(tile_shape &dst, T s) {
   static_assert(row != DYNAMIC && col != DYNAMIC,
               "TODO: Support tile dynamic shape!");
   static_assert(tile_shape::Loc == Location::Vec, "Only VEC tile type are supported");
+  static_assert(tile_shape::isRowMajor, "TCI requires RowMajor layout");
+  static_assert(row == 1, "TCI requires ValidRow == 1");
+  static_assert(col > 0 && tile_shape::Cols >= col,
+                "TCI requires 0 < ValidCol <= Cols");
   static_assert(!tile_shape::isBoxedLayout, "TCI not support Boxed Layout!");
 if constexpr (std::is_same<typename tile_shape::DType, int32_t>::value ||
               std::is_same<typename tile_shape::DType, uint32_t>::value ||
               std::is_same<typename tile_shape::DType, int16_t>::value ||
               std::is_same<typename tile_shape::DType, uint16_t>::value) {
-    if constexpr (tile_shape::isRowMajor) {
-      TCI_RowMajor_Imp<tile_shape, descending>(dst.data(), s);
-    } else {
-      TCI_ColMajor_Imp<tile_shape, descending>(dst.data(), s);
-    }
+    TCI_RowMajor_Imp<tile_shape, descending>(dst.data(), s);
   } else {
     static_assert(std::is_same<typename tile_shape::DType, int32_t>::value ||
                   std::is_same<typename tile_shape::DType, uint32_t>::value ||

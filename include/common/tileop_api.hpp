@@ -52,7 +52,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TReshape(tile_shape_out &dst, tile_shape_in &src) {
   TReshapeImpl(dst, src);
 }
-template <is_tile_data_v tile_shape, typename T, int descending>
+template <is_tile_data_v tile_shape, typename T, int descending = 0>
 void TCI(tile_shape &dst, T s) {
   TCI_Impl<tile_shape, T, descending>(dst, s);
 }

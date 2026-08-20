@@ -18,6 +18,7 @@ which mirrors the PTO-ISA v0.58 tile-operation catalog
 | Matrix PostProcess (B.FPATR, quant/PReLU/RowMax/GroupMax) | [matrix-postprocess.md](matrix-postprocess.md) |
 | Comparison operations (`CmpMode`, `TCMP`, `TCMPS`) | [cmp.md](cmp.md) |
 | Sorting operations (`TSORT`, `TMRGSORT`) | [sort.md](sort.md) |
+| Contiguous integer sequence generation (`TCI`) | [tci.md](tci.md) |
 | Quantization and image-to-column (`TQUANT`, `TDEQUANT`, `TIMG2COL`) | [quant-and-im2col.md](quant-and-im2col.md) |
 | Tile datatype reinterpret view | [reinterpret-tile.md](reinterpret-tile.md) |
 

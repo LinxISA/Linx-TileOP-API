@@ -6354,26 +6354,43 @@ void TFILLPAD(tile_shape_out &dst, tile_shape_in &src) {
 }
 
 // TCI: contiguous integer sequence generation
-template <is_tile_data_v tile_shape>
-void TCI(tile_shape &dst, typename tile_shape::DType s) {
+template <is_tile_data_v tile_shape, typename T, int descending = 0>
+void TCI(tile_shape &dst, T s) {
+  static_assert(std::is_same<typename tile_shape::DType, T>::value,
+                "TCI destination and start must have the same type");
+  static_assert(descending == 0 || descending == 1,
+                "TCI direction must be ascending (0) or descending (1)");
+  static_assert(tile_shape::Loc == Location::Vec,
+                "TCI requires a Local vector tile");
+  static_assert(tile_shape::isRowMajor && !tile_shape::isBoxedLayout,
+                "TCI requires an unboxed RowMajor tile");
+  static_assert(tile_shape::ValidRow == 1,
+                "TCI requires ValidRow == 1");
+  static_assert(tile_shape::ValidCol > 0 &&
+                    tile_shape::Cols >= tile_shape::ValidCol,
+                "TCI requires 0 < ValidCol <= Cols");
+  static_assert(std::is_same<T, int32_t>::value ||
+                    std::is_same<T, int16_t>::value ||
+                    std::is_same<T, uint32_t>::value ||
+                    std::is_same<T, uint16_t>::value,
+                "TCI supports only S32, S16, U32, and U16");
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
-  volatile typename tile_shape::DType sv = s;
+  volatile typename tile_shape::DType startValue = s;
+  volatile uint32_t directionValue = descending;
   asm volatile(
-    "BSTART.TEPL 102, %c1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT mask=15, last, ->%0<%Z5>\n"
-    "B.IOR [%6],[]\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+    "BSTART.TEPL 102, %c[DataType]\n"
+    "B.DIM %[ValidCol], 0, ->lb0\n"
+    "B.DIM zero, %c[PhysicalCol], ->lb2\n"
+    "B.IOR [%[Start],%[Direction]],[]\n"
+    "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+    : [Dst] "=Tr"(dst.data())
+    : [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [ValidCol] "r"(dst.GetValidCol()),
+      [PhysicalCol] "i"(tile_shape::Cols),
+      [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [Start] "r"(startValue),
+      [Direction] "r"(directionValue)
   );
 }
 
