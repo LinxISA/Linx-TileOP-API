@@ -69,6 +69,38 @@ index destination needs 4KB.
 LB1, LB2, B.IOS, nonzero B.DATR fields, mixed PE masks, unsupported dtypes,
 and any additional Local Tile binding are illegal for TSORT.
 
+## TMRGSORT
+
+`TMRGSORT` merges two sorted single-row sources into one destination
+(PTO 0.58.1 TEPL Mode 3 Function 13 / selector 0x06D; canonical
+`BSTART.SFU TMRGSORT`).
+
+```cpp
+template <is_tile_data_v DstTile, is_tile_data_v LeftTile,
+          is_tile_data_v RightTile>
+void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right,
+              bool descending = false);
+```
+
+- `dst`, `left` and `right` must share one FP16 or FP32 dtype.
+- The two sources are persistent sorted single-row Local tiles; the
+  destination is a new Local tile.
+- The bundle carries **no B.DIM**: only `B.IOR` RegSrc0 (0 ascending / 1
+  descending, `descending` default `false`) and one TwoSrc_Dst `B.IOT` with
+  `<last>` and the shared nonzero PE mask.
+- `descending` uses the same volatile anti-fold as the other flag-carrying
+  operations so the flag never lands on the zero register.
+
+Example:
+
+```cpp
+using Row = Tile<Location::Vec, float, 1, 256, BLayout::RowMajor>;
+
+Row a, b, out;
+TMRGSORT(out, a, b);          // ascending merge
+TMRGSORT(out, a, b, true);    // descending merge
+```
+
 ## Deprecated interface
 
 The historical single-output `TSORT32(dst, src)` interface does not represent

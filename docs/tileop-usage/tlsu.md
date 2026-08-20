@@ -69,6 +69,43 @@ Gather/scatter offset and mask tiles are Local operands. The global base and
 row stride are scalar inputs. Destination/source tile size remains the per-PE
 128 B..8 KB `TSize` domain.
 
+### MGATHER_CAS (atomic compare-and-swap)
+
+`MGATHER_CAS` atomically compares-and-swaps GM elements at byte displacements
+(TLSU function 8; canonical `BSTART.MGATHER.CAS`). Each lane reads
+`base + displacement`, compares with `expected`, stores `replacement` on
+match, and publishes the observed old value to `observedOld`.
+
+```cpp
+template <is_tile_data_v DstTile, is_tile_data_v IndexTile,
+          is_tile_data_v ExpectedTile, is_tile_data_v ReplacementTile>
+void MGATHER_CAS(DstTile &observedOld, uint64_t base,
+                 IndexTile &byteDisplacements, ExpectedTile &expected,
+                 ReplacementTile &replacement,
+                 uint32_t validCol, uint32_t validRow = 1);
+```
+
+- `expected` / `replacement` / `observedOld` share one transfer DataType;
+  `byteDisplacements` is an integer byte-displacement tile (S/U 8..64).
+- All four tiles must match the resolved `ValidRow x ValidCol`.
+- The bundle is exactly two `B.IOT`: IndexTile+ExpectedTile (TwoSrc_NoDst,
+  no `last`) then ReplacementTile+`last` -> DstTile, with one common nonzero
+  PE mask; `B.IOR` carries only the byte-address base; the destination is an
+  early-clobbered output so it never aliases the replacement source.
+- Duplicate-address lanes serialize in an implementation-defined order; all
+  lane addresses are preflighted before the first atomic event.
+
+Example:
+
+```cpp
+using D = Tile<Location::Vec, float, 8, 256, BLayout::RowMajor>;
+using Idx = Tile<Location::Vec, uint32_t, 8, 256, BLayout::RowMajor>;
+
+D old, expected, replacement;
+Idx offsets;
+MGATHER_CAS(old, /*base=*/0x1000, offsets, expected, replacement, 256, 2);
+```
+
 ## Peer movement
 
 `GMOV` moves a Tile payload between PEs of the same core. All four PEs must
