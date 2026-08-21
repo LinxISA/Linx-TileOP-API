@@ -93,6 +93,21 @@ enum __tilesize_code {
   __tilesize_unknown = -1
 };
 
+// Shared tiles use B.IOS's own 3-bit TSize map, distinct from the Local
+// (B.IOT) map: 1=512B, 2=1KB, 3=2KB, 4=4KB, 5=8KB, 6=16KB, 7=32KB. The
+// same 3-bit field value therefore means a different capacity for B.IOS
+// than for B.IOT (e.g. value 7 is 8KB for B.IOT but 32KB for B.IOS).
+enum __shared_tilesize_code {
+  __shared_tilesize_512B = 1,
+  __shared_tilesize_1KB = 2,
+  __shared_tilesize_2KB = 3,
+  __shared_tilesize_4KB = 4,
+  __shared_tilesize_8KB = 5,
+  __shared_tilesize_16KB = 6,
+  __shared_tilesize_32KB = 7,
+  __shared_tilesize_unknown = -1
+};
+
 template <typename T>
 struct tile_type_traits {
 private:
@@ -113,19 +128,32 @@ private:
       __tilesize_unknown;
   }
 
+  // B.IOS Shared map (512 B..32 KB -> 1..7).
+  static constexpr int mapBytesToSharedEnum(std::size_t b) {
+    return
+      b == 512    ? __shared_tilesize_512B :
+      b == 1024   ? __shared_tilesize_1KB  :
+      b == 2048   ? __shared_tilesize_2KB  :
+      b == 4096   ? __shared_tilesize_4KB  :
+      b == 8192   ? __shared_tilesize_8KB  :
+      b == 16384  ? __shared_tilesize_16KB :
+      b == 32768  ? __shared_tilesize_32KB :
+      __shared_tilesize_unknown;
+  }
+
 public:
   static constexpr int TilesizeCode = mapBytesToEnum(PETileBytes);
+  static constexpr int SharedTilesizeCode = mapBytesToSharedEnum(PETileBytes);
   static constexpr int Regsize = PETileBytes;
   static constexpr bool IsValidActiveSize =
       TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_8KB;
   // Shared tiles are core-granular and use B.IOS's own TSize map
-  // (1=512B, 2=1KB, ..., 7=32KB), so accept exactly the seven legal powers
-  // of two in 512 B..32 KiB per Shared register. Non-power-of-two sizes
-  // cannot be encoded in the 3-bit B.IOS TSize field.
+  // (512 B..32 KiB -> 1..7). SharedTilesizeCode is -1 for sizes outside the
+  // B.IOS map, so the range check also rejects non-power-of-two sizes that
+  // cannot be encoded in the 3-bit field.
   static constexpr bool IsValidSharedActiveSize =
-      PETileBytes == 512 || PETileBytes == 1024 || PETileBytes == 2048 ||
-      PETileBytes == 4096 || PETileBytes == 8192 || PETileBytes == 16384 ||
-      PETileBytes == 32768;
+      SharedTilesizeCode >= __shared_tilesize_512B &&
+      SharedTilesizeCode <= __shared_tilesize_32KB;
 };
 
 #endif

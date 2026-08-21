@@ -1793,13 +1793,13 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
+    "B.IOS mask=%c[PEMask], ->%S[Shared]<%c[TileSize]>\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
     : [Shared] "=Sr"(result.handle_ref())
     : [s0]"r"(src.data()),
       [PEMask]"i"(PEMask),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
-      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::SharedTilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(src.GetStride(3))
@@ -1821,13 +1821,13 @@ void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
+    "B.IOS mask=%c[PEMask], ->%S[Shared]<%c[TileSize]>\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
     : [Shared] "=Sr"(dst.handle_ref())
     : [s0]"r"(src.data()),
       [PEMask]"i"(PEMask),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
-      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::SharedTilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(src.GetStride(3))
@@ -2064,14 +2064,14 @@ TMOV_L2S_INSERT(SharedTile<tile_shape_src> &dst,
   dst.SetValidShape(src);
   asm volatile(
       "BSTART.TLSU TMOV.L2S.INSERT, %c[DataType]\n"
-      "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
+      "B.IOS mask=%c[PEMask], ->%S[Shared]<%c[TileSize]>\n"
       "B.IOT %[src], mask=%c[PEMask], last\n"
       : [Shared] "=Sr"(dst.handle_ref())
       : [src] "Tr"(src.data()),
         [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_src::DType>::TypeCode),
         [TileSize] "i"(
-            tile_type_traits<typename tile_shape_src::TileDType>::TilesizeCode)
+            tile_type_traits<typename tile_shape_src::TileDType>::SharedTilesizeCode)
       : "memory");
 }
 
@@ -2094,14 +2094,14 @@ TMOV_L2S_PUBLISH(SharedTile<tile_shape_src> &dst,
   dst.SetValidShape(src);
   asm volatile(
       "BSTART.TLSU TMOV.L2S.PUBLISH, %c[DataType]\n"
-      "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
+      "B.IOS mask=%c[PEMask], ->%S[Shared]<%c[TileSize]>\n"
       "B.IOT %[src], mask=%c[PEMask], last\n"
       : [Shared] "=Sr"(dst.handle_ref())
       : [src] "Tr"(src.data()),
         [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_src::DType>::TypeCode),
         [TileSize] "i"(
-            tile_type_traits<typename tile_shape_src::TileDType>::TilesizeCode)
+            tile_type_traits<typename tile_shape_src::TileDType>::SharedTilesizeCode)
       : "memory");
 }
 
