@@ -33,8 +33,9 @@ B.IOS S7, mask=1111
 B.IOS mask=0011, ->S9<4>
 ```
 
-For `B.IOS`, `TSize=0` denotes a Shared **source** and `TSize=1..7` denotes a
-Shared **destination** (per-PE capacity). The core allocation is
+For `B.IOS`, `SizeCode=0` denotes a Shared **source** and `SizeCode=1..12`
+denotes a Shared **destination** (per-PE capacity, 128 B..256 KB per PE;
+B.IOT Local destinations use 1..10 = 128 B..64 KB per PE). The core allocation is
 `popcount(PE_MASK) * per_pe_size`. The first non-zero allocation write records
 an immutable allocation mask; reading an uninitialized lane returns an
 undefined value without trapping.

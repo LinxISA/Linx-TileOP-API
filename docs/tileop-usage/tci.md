@@ -81,7 +81,7 @@ BSTART.TEPL 102, S32|S16|U32|U16
 B.DIM ValidCol, 0, ->lb0
 B.DIM zero, Col, ->lb2
 B.IOR [Start,Direction],[]
-B.IOT mask=1111, last, ->DstTile<TSize>
+B.IOT mask=1111, last, ->DstTile<SizeCode>
 ```
 
 `LB1` is omitted and therefore defaults to one. `LB2` explicitly preserves the

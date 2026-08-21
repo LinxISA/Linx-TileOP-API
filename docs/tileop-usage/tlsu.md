@@ -83,8 +83,8 @@ issue 166 and LLVM issue 37.
 ## Gather and scatter
 
 Gather/scatter offset and mask tiles are Local operands. The global base and
-row stride are scalar inputs. Destination/source tile size remains the per-PE
-128 B..8 KB `TSize` domain.
+row stride are scalar inputs. Destination/source tile size uses the per-PE `SizeCode` domain
+(B.IOT Local: 1..10 = 128 B..64 KB; B.IOS Shared: 1..12 = 128 B..256 KB).
 
 ### MGATHER_CAS (atomic compare-and-swap)
 

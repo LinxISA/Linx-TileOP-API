@@ -78,9 +78,12 @@ template<> struct type_traits<__uint4x2>      : public type_traits_base<__type_u
 // clang-format on
 
 
-// TSize is a 3-bit code encoding the per-PE tile size. There is no 4-PE
-// (whole-core) multiplier: the developer's byte count is the size that flows
-// directly into the encoded TSize. Legal explicit sizes are 128 B..8 KB.
+// SizeCode is a 4-bit code encoding the per-PE tile size (PTO-ISA ADR 0069,
+// commit 1e91bf9). There is no 4-PE (whole-core) multiplier: the developer's
+// byte count is the size that flows directly into the encoded SizeCode.
+//   B.IOT (Local) destination: 1..10 = 128 B..64 KB per PE
+//   B.IOS (Shared) destination: 1..12 = 128 B..256 KB per PE
+//   0 is the source-only encoding; 13..15 reserved.
 enum __tilesize_code {
   __tilesize_implicit = 0,
   __tilesize_128B = 1,
@@ -90,6 +93,11 @@ enum __tilesize_code {
   __tilesize_2KB = 5,
   __tilesize_4KB = 6,
   __tilesize_8KB = 7,
+  __tilesize_16KB = 8,
+  __tilesize_32KB = 9,
+  __tilesize_64KB = 10,
+  __tilesize_128KB = 11,
+  __tilesize_256KB = 12,
   __tilesize_unknown = -1
 };
 
@@ -103,21 +111,30 @@ private:
 
   static constexpr int mapBytesToEnum(std::size_t b) {
     return
-      b == 128   ? __tilesize_128B :
-      b == 256   ? __tilesize_256B :
-      b == 512   ? __tilesize_512B :
-      b == 1024  ? __tilesize_1KB  :
-      b == 2048  ? __tilesize_2KB  :
-      b == 4096  ? __tilesize_4KB  :
-      b == 8192  ? __tilesize_8KB  :
+      b == 128    ? __tilesize_128B :
+      b == 256    ? __tilesize_256B :
+      b == 512    ? __tilesize_512B :
+      b == 1024   ? __tilesize_1KB  :
+      b == 2048   ? __tilesize_2KB  :
+      b == 4096   ? __tilesize_4KB  :
+      b == 8192   ? __tilesize_8KB  :
+      b == 16384  ? __tilesize_16KB :
+      b == 32768  ? __tilesize_32KB :
+      b == 65536  ? __tilesize_64KB :
+      b == 131072 ? __tilesize_128KB:
+      b == 262144 ? __tilesize_256KB:
       __tilesize_unknown;
   }
 
 public:
   static constexpr int TilesizeCode = mapBytesToEnum(PETileBytes);
   static constexpr int Regsize = PETileBytes;
+  // B.IOT (Local) destination capacity: 1..10 (128 B..64 KB per PE).
   static constexpr bool IsValidActiveSize =
-      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_8KB;
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_64KB;
+  // B.IOS (Shared) destination capacity: 1..12 (128 B..256 KB per PE).
+  static constexpr bool IsValidSharedActiveSize =
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_256KB;
 };
 
 #endif

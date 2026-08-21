@@ -1783,8 +1783,8 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
   using shp_dtype = typename shp::TileDType;
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
-      tile_type_traits<shp_dtype>::IsValidActiveSize,
-      "TLOAD Shared dst logical Tile size must be 128 B..8 KB (TSize=1..7)");
+      tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
+      "TLOAD Shared dst logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   SharedTile<shp> result;
   const size_t valid_col = result.GetValidCol();
   const size_t valid_row = result.GetValidRow();
@@ -1812,8 +1812,8 @@ void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
   using shp_dtype = typename shp::TileDType;
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
-      tile_type_traits<shp_dtype>::IsValidActiveSize,
-      "TLOAD Shared dst logical Tile size must be 128 B..8 KB (TSize=1..7)");
+      tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
+      "TLOAD Shared dst logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
@@ -1870,8 +1870,8 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src) {
   static_assert(LocalType::isRowMajor && !LocalType::isBoxedLayout,
                 "Shared TSTORE supports NORM/RowMajor Local sources only "
                 "(no B.DATR Layout is emitted)");
-  static_assert(tile_type_traits<typename LocalType::TileDType>::IsValidActiveSize,
-                "Shared TSTORE source size must be 128 B..8 KB (TSize=1..7)");
+  static_assert(tile_type_traits<typename LocalType::TileDType>::IsValidSharedActiveSize,
+                "Shared TSTORE source size must be 128 B..256 KB (SizeCode=1..12)");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
@@ -1903,8 +1903,8 @@ PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
   static_assert(LocalType::isRowMajor && !LocalType::isBoxedLayout,
                 "Shared TSTORE.SPART supports NORM/RowMajor Local sources only "
                 "(no B.DATR Layout is emitted)");
-  static_assert(tile_type_traits<typename LocalType::TileDType>::IsValidActiveSize,
-                "Shared TSTORE.SPART source size must be 128 B..8 KB (TSize=1..7)");
+  static_assert(tile_type_traits<typename LocalType::TileDType>::IsValidSharedActiveSize,
+                "Shared TSTORE.SPART source size must be 128 B..256 KB (SizeCode=1..12)");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
@@ -2059,8 +2059,8 @@ TMOV_L2S_INSERT(SharedTile<tile_shape_src> &dst,
                 const tile_shape_src &src) {
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
-      tile_type_traits<typename tile_shape_src::TileDType>::IsValidActiveSize,
-      "TMOV.L2S.INSERT logical Tile size must be 512 B..32 KB");
+      tile_type_traits<typename tile_shape_src::TileDType>::IsValidSharedActiveSize,
+      "TMOV.L2S.INSERT logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   dst.SetValidShape(src);
   asm volatile(
       "BSTART.TLSU TMOV.L2S.INSERT, %c[DataType]\n"
@@ -2089,8 +2089,8 @@ TMOV_L2S_PUBLISH(SharedTile<tile_shape_src> &dst,
                  const tile_shape_src &src) {
   static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
   static_assert(
-      tile_type_traits<typename tile_shape_src::TileDType>::IsValidActiveSize,
-      "TMOV.L2S.PUBLISH logical Tile size must be 512 B..32 KB");
+      tile_type_traits<typename tile_shape_src::TileDType>::IsValidSharedActiveSize,
+      "TMOV.L2S.PUBLISH logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   dst.SetValidShape(src);
   asm volatile(
       "BSTART.TLSU TMOV.L2S.PUBLISH, %c[DataType]\n"
