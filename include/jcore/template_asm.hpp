@@ -112,7 +112,7 @@ void TADD_MUL_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
-  // PTO 0.58.1 TileOperandsLegal_TCVT requires the source and destination to
+  // PTO ISA 0.58.3 TileOperandsLegal_TCVT requires the source and destination to
   // match on physical rows, physical columns, valid rows and valid columns.
   // A destination declared with fewer physical rows/columns than the source
   // (e.g. Tile<1,1024> with valid 2x512) would violate TileLogicalShapeMatch
@@ -120,7 +120,7 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
   static_assert(tile_shape_out::Rows == tile_shape_in::Rows &&
                     tile_shape_out::Cols == tile_shape_in::Cols,
                 "TCVT source and destination must have identical physical "
-                "Rows/Cols (PTO 0.58.1 TileLogicalShapeMatch)");
+                "Rows/Cols (PTO ISA 0.58.3 TileLogicalShapeMatch)");
   static_assert((tile_shape_out::ValidRow == DYNAMIC ||
                  tile_shape_out::Rows >= tile_shape_out::ValidRow) &&
                     (tile_shape_out::ValidCol == DYNAMIC ||
@@ -281,7 +281,7 @@ void TLOAD2_ND2NZ(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()*2), [__pto_VROW]"r"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
-      [__pto_GmStride]"r"(src.GetStride(3))
+      [__pto_GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -304,7 +304,7 @@ void TLOAD2_ND2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()*2), [__pto_VROW]"r"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
-      [__pto_GmStride]"r"(src.GetStride(3))
+      [__pto_GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -327,7 +327,7 @@ void TLOAD2_DN2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()), [__pto_VROW]"r"(dst1.GetValidRow()*2), [__pto_COL]"i"(tile_shape::Cols),
-      [__pto_GmStride]"r"(src.GetStride(4))
+      [__pto_GmStride]"r"(src.GetStrideBytes(4))
       : "memory");
 }
 
@@ -348,7 +348,7 @@ void TSTORE2_DN2DN(gm_shape &dst, tile_shape &src1, tile_shape &src0) {
       [__pto_DstType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
       [__pto_VCOL]"r"(src0.GetValidRow()*2), [__pto_VROW]"r"(src0.GetValidCol()), [__pto_COL]"i"(tile_shape::Rows*2),
-      [__pto_GmStride]"r"(dst.GetStride(4))
+      [__pto_GmStride]"r"(dst.GetStrideBytes(4))
       : "memory");
 }
 
@@ -373,7 +373,7 @@ void TLOAD4_ND2NZ(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidCol()*4), [__pto_VROW]"r"(dst3.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*4),
-      [__pto_GmStride]"r"(src.GetStride(3))
+      [__pto_GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -398,7 +398,7 @@ void TLOAD4_ND2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidRow()*4), [__pto_VROW]"r"(dst3.GetValidCol()), [__pto_COL]"i"(tile_shape::Rows*4),
-      [__pto_GmStride]"r"(src.GetStride(3))
+      [__pto_GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -423,7 +423,7 @@ void TLOAD4_DN2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidCol()*4), [__pto_VROW]"r"(dst3.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*4),
-      [__pto_GmStride]"r"(src.GetStride(4))
+      [__pto_GmStride]"r"(src.GetStrideBytes(4))
       : "memory");
 }
 
@@ -1771,7 +1771,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(tile_shape::Cols),
-      [GmStride]"r"(src.GetStride(3))
+      [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -1781,7 +1781,8 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
 template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
 SharedTile<shp> TLOAD(const gm_shape &src) {
   using shp_dtype = typename shp::TileDType;
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
       "TLOAD Shared dst logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
@@ -1802,7 +1803,7 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
-      [GmStride]"r"(src.GetStride(3))
+      [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
   return result;
 }
@@ -1810,7 +1811,8 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
 template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
 void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
   using shp_dtype = typename shp::TileDType;
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
       "TLOAD Shared dst logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
@@ -1830,7 +1832,7 @@ void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
-      [GmStride]"r"(src.GetStride(3))
+      [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -1854,11 +1856,72 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(tile_shape::Cols),
-      [GmStride]"r"(dst.GetStride(3))
+      [GmStride]"r"(dst.GetStrideBytes(3))
       : "memory");
 }
 
-// TSTORE: Shared Tile -> GM (PTO 0.58.1 TLSU Function 1 Shared form).
+// PTO ISA 0.58.3 GM -> persistent Local CUBE CELL transport.  The layout
+// conversion is explicit, LB0/LB1 carry logical valid columns/rows, LB2 is
+// absent, and SizeCode describes capacity rather than logical M/N/K.
+template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
+  requires(cube_shape::IsCubeLayout)
+void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
+  static_assert(std::is_same_v<typename cube_shape::DType,
+                               typename gm_shape::DType>,
+                "TLOAD_CUBE requires matching GM and CUBE dtypes");
+  static_assert(cube_shape::CubeRequiredBytes <= cube_shape::LogicalTileBytes,
+                "TLOAD_CUBE CUBE CELL storage exceeds Local SizeCode capacity");
+  static_assert(cube_shape::IsValidActiveSize,
+                "TLOAD_CUBE Local CUBE capacity must be 128 B..64 KiB");
+  const size_t valid_col = dst.GetValidCol();
+  const size_t valid_row = dst.GetValidRow();
+  asm volatile(
+      "BSTART.TLSU TLOAD, %c[DataType]\n"
+      "B.DATR layout%c[Layout], Null\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
+      "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Base] "r"(src.data()),
+        [RowStrideBytes] "r"(src.GetStrideBytes(3)),
+        [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
+        [Layout] "i"(cube_shape::CubeLoadLayout),
+        [SizeCode] "i"(cube_shape::TilesizeCode),
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+      : "memory");
+}
+
+// PTO ISA 0.58.3 persistent Local CUBE CELL -> GM transport.  The source
+// descriptor survives the operation and only its logical valid rectangle is
+// exported.
+template <is_global_data_v gm_shape, is_local_tile_v cube_shape>
+  requires(cube_shape::IsCubeLayout)
+void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
+  static_assert(std::is_same_v<typename cube_shape::DType,
+                               typename gm_shape::DType>,
+                "TSTORE_CUBE requires matching GM and CUBE dtypes");
+  static_assert(cube_shape::IsValidActiveSize,
+                "TSTORE_CUBE Local CUBE capacity must be 128 B..64 KiB");
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
+  asm volatile(
+      "BSTART.TLSU TSTORE, %c[DataType]\n"
+      "B.DATR layout%c[Layout], Null\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+      :
+      : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
+        [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
+        [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
+        [Layout] "i"(cube_shape::CubeStoreLayout),
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+      : "memory");
+}
+
+// TSTORE: Shared Tile -> GM (PTO ISA 0.58.3 TLSU Function 1 Shared form).
 // Exactly one source B.IOS (PE_MASK=1111), no B.IOT, at most one B.IOR
 // (GM base + logical row stride). Symmetric to Shared TLOAD.
 template <is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
@@ -1886,16 +1949,17 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src) {
       [SrcType] "i"(type_traits<typename LocalType::DType>::TypeCode),
       [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
       [COL] "i"(LocalType::Cols),
-      [GmStride] "r"(dst.GetStride(3))
+      [GmStride] "r"(dst.GetStrideBytes(3))
     : "memory");
 }
 
 // TSTORE.SPART: Shared Tile -> GM on an explicit nonzero PE subset
-// (PTO 0.58.1 TLSU Function 14). Exactly one source B.IOS with the caller's
+// (PTO ISA 0.58.3 TLSU Function 14). Exactly one source B.IOS with the caller's
 // PE mask (any nonzero subset), no B.IOT; B.IOR carries base + stride.
 template <int PEMask = 15, is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
 PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
-  static_assert(PEMask > 0 && PEMask < 16, "TSTORE.SPART PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "TSTORE.SPART PEMask must be one of 1,2,4,8,12,14,15");
   using LocalType = typename SharedTileT::LocalTileType;
   static_assert(std::is_same_v<typename LocalType::DType,
                                typename gm_shape::DType>,
@@ -1920,7 +1984,7 @@ PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
       [SrcType] "i"(type_traits<typename LocalType::DType>::TypeCode),
       [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
       [COL] "i"(LocalType::Cols),
-      [GmStride] "r"(dst.GetStride(3))
+      [GmStride] "r"(dst.GetStrideBytes(3))
     : "memory");
 }
 
@@ -1949,7 +2013,7 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
     : "memory");
 }
 
-// MGATHER_CAS: atomic compare-and-swap at byte displacements (PTO 0.58.1
+// MGATHER_CAS: atomic compare-and-swap at byte displacements (PTO ISA 0.58.3
 // TLSU function 8; canonical BSTART.MGATHER.CAS). Exactly two Local B.IOT
 // bindings: IndexTile+ExpectedTile (TwoSrc_NoDst, no destination, L=0) then
 // ReplacementTile+last ->DstTile (L=1); B.IOR carries only the byte-address
@@ -2014,7 +2078,8 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
 template <int PEMask = 15, is_tile_data_v tile_shape_dst,
           is_tile_data_v tile_shape_src>
 void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
-  static_assert(PEMask > 0 && PEMask < 16, "GMOV PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "GMOV PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(std::is_same_v<typename tile_shape_dst::DType,
                                typename tile_shape_src::DType>,
                 "GMOV source and destination dtypes must match");
@@ -2057,7 +2122,8 @@ template <int PEMask = 15, is_tile_data_v tile_shape_src>
 PTO_SHARED_INLINE void
 TMOV_L2S_INSERT(SharedTile<tile_shape_src> &dst,
                 const tile_shape_src &src) {
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<typename tile_shape_src::TileDType>::IsValidSharedActiveSize,
       "TMOV.L2S.INSERT logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
@@ -2087,7 +2153,8 @@ template <int PEMask = 15, is_tile_data_v tile_shape_src>
 PTO_SHARED_INLINE void
 TMOV_L2S_PUBLISH(SharedTile<tile_shape_src> &dst,
                  const tile_shape_src &src) {
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<typename tile_shape_src::TileDType>::IsValidSharedActiveSize,
       "TMOV.L2S.PUBLISH logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
@@ -2117,7 +2184,8 @@ template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
 PTO_SHARED_INLINE void
 TMOV_S2L_BROADCAST(tile_shape_dst &dst,
                    const SharedTile<LocalTile> &shared) {
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "TMOV.S2L.BROADCAST logical Tile size must be 512 B..32 KB");
@@ -2136,7 +2204,8 @@ TMOV_S2L_BROADCAST(tile_shape_dst &dst,
 template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
 PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
     tile_shape_dst &dst, const SharedTile<LocalTile> &shared) {
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "TMOV.S2L.EXTRACT logical Tile size must be 512 B..32 KB");
@@ -2187,7 +2256,7 @@ inline size_t matrix_valid_col(const Matrix &matrix) {
   return matrix.GetValidCol();
 }
 
-// PTO_FIXP_ATTR / PTO_FIXP_ATTR_INPUTS emit the B.FPATR line and its seven
+// PTO_FIXP_ATTR / PTO_FIXP_ATTR_INPUTS emit the B.FPATR line and its nine
 // immediate operands. Every TMATMUL/TMATMULMX CUBE bundle carries exactly one
 // B.FPATR after B.DATR, so these are shared by the whole family, not just the
 // .FIXP variants. The macros reference the template parameter Attr, so the
@@ -2197,22 +2266,29 @@ inline size_t matrix_valid_col(const Matrix &matrix) {
 // PTO-ISA v0.58 B.FPATR fields:
 //   PreQuantMode(6b@26) ReluMode(3b@23) GroupNCode(4b@19, <=9)
 //   RowMaxEn(1b@18) GroupMaxEn(1b@17) RowMaxInit(1b@16) MaxAbsEn(1b@15)
+//   TransB(1b@8) TransA(1b@7).  Transpose applies only when the corresponding
+//   primary matrix operand is cooperative Shared storage.
 #define PTO_FIXP_ATTR \
   "B.FPATR %c[PreQuant], %c[ReluMode], %c[GroupNCode], %c[RowMaxEn], " \
-  "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn]\n"
+  "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn], %c[TransA], %c[TransB]\n"
 
 #define PTO_FIXP_ATTR_INPUTS \
   [PreQuant] "i"(static_cast<uint8_t>(Attr.PreQuant)), \
   [ReluMode] "i"(static_cast<uint8_t>(Attr.Relu)), \
   [GroupNCode] "i"(Attr.GroupNCode), [RowMaxEn] "i"(Attr.RowMaxEn), \
   [GroupMaxEn] "i"(Attr.GroupMaxEn), \
-  [RowMaxInit] "i"(Attr.RowMaxInit), [MaxAbsEn] "i"(Attr.MaxAbsEn)
+  [RowMaxInit] "i"(Attr.RowMaxInit), [MaxAbsEn] "i"(Attr.MaxAbsEn), \
+  [TransA] "i"(Attr.TransA), [TransB] "i"(Attr.TransB)
 
-template <typename A, typename B>
+template <FixpAttr Attr, typename A, typename B>
 constexpr void validate_shared_matrix_pair() {
   static_assert(!is_shared_tile_v<A> || is_shared_tile_v<B>,
                 "Shared matmul A requires B to be Shared as well; a lone "
                 "B.IOS binder denotes the existing Shared-Right form");
+  static_assert(!Attr.TransA || is_shared_tile_v<A>,
+                "B.FPATR TransA requires a cooperative Shared A primary");
+  static_assert(!Attr.TransB || is_shared_tile_v<B>,
+                "B.FPATR TransB requires a cooperative Shared B primary");
 }
 
 // Issue #18: for a Group TMATMUL (Shared A + Shared B, local C per PE) the
@@ -2287,7 +2363,7 @@ inline MatmulShape resolve_matmul_shape_runtime(const C &c, const A &a,
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B>
 PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
                               size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_shared_matrix_pair<Attr, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
@@ -2338,7 +2414,7 @@ template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B,     
           typename Extra>                                                        \
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 \
                             size_t M, size_t N, size_t K) {                      \
-  validate_shared_matrix_pair<A, B>();                                            \
+  validate_shared_matrix_pair<Attr, A, B>();                                            \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                 \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
@@ -2399,7 +2475,7 @@ template <FixpAttr Attr = FixpAttr{}, typename Dst, typename C, typename A,
           typename B>
 PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
                                   size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_shared_matrix_pair<Attr, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
@@ -3642,7 +3718,7 @@ PTO_SHARED_INLINE void emit_fixp(
     Dst &dst, A &a, B &b, RowIn &row_in, QuantTile &quant_tile,
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_shared_matrix_pair<Attr, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3671,7 +3747,7 @@ PTO_SHARED_INLINE void emit_matmul_acc_fixp(
     Dst &dst, C_ &c, A &a, B &b, RowIn &row_in, QuantTile &quant_tile,
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_shared_matrix_pair<Attr, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_ACC_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3692,7 +3768,7 @@ PTO_SHARED_INLINE void emit_matmul_bias_fixp(
     Dst &dst, A &a, B &b, BiasT &bias, RowIn &row_in, QuantTile &quant_tile,
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_shared_matrix_pair<Attr, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_BIAS_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3714,7 +3790,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_shared_matrix_pair<Attr, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3736,7 +3812,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_shared_matrix_pair<Attr, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3759,7 +3835,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_shared_matrix_pair<Attr, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3986,7 +4062,7 @@ template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename ScaleA,
           typename B, typename ScaleB>                                           \
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
                             ScaleB &scale_b, size_t M, size_t N, size_t K) {     \
-  validate_shared_matrix_pair<A, B>();                                            \
+  validate_shared_matrix_pair<Attr, A, B>();                                            \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
@@ -4048,7 +4124,7 @@ template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename ScaleA,
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
                             ScaleB &scale_b, Extra &extra, size_t M, size_t N,   \
                             size_t K) {                                          \
-  validate_shared_matrix_pair<A, B>();                                            \
+  validate_shared_matrix_pair<Attr, A, B>();                                            \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
@@ -5244,7 +5320,7 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TFMOD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TFMOD is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TFMOD is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -5526,7 +5602,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
 template <is_tile_data_v tile_shape>
 void TPRELU(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TPRELU is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TPRELU is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -5737,7 +5813,7 @@ void TRELU(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TADDC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TADDC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TADDC is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -5745,7 +5821,7 @@ void TADDC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2
 template <is_tile_data_v tile_shape>
 void TSUBC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TSUBC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TSUBC is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -5891,7 +5967,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
 template <is_tile_data_v tile_shape>
 void TFMODS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TFMODS is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TFMODS is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -6212,7 +6288,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
 template <is_tile_data_v tile_shape>
 void TLRELU(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TLRELU is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TLRELU is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -6220,7 +6296,7 @@ void TLRELU(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
 template <is_tile_data_v tile_shape>
 void TAXPY(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TAXPY is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TAXPY is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -6228,7 +6304,7 @@ void TAXPY(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
 template <is_tile_data_v tile_shape>
 void TADDSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile_shape &src1) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TADDSC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TADDSC is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -6236,7 +6312,7 @@ void TADDSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, til
 template <is_tile_data_v tile_shape>
 void TSUBSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile_shape &src1) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TSUBSC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TSUBSC is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -6372,7 +6448,7 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
   );
 }
 
-// TIMG2COL: image-to-column with feature-map posM/posK (PTO 0.58.1 TEPL
+// TIMG2COL: image-to-column with feature-map posM/posK (PTO ISA 0.58.3 TEPL
 // Mode3 Fn4 / selector 0x064). B.IOR carries PosMGPR, PosKGPR (low 16 bits
 // each per B4; the spec's optional B.IOR defaults to posM=posK=0). The
 // source's feature-map descriptor (NC1HWC0 / NDC1HWC0 layout, filter,
@@ -6487,12 +6563,12 @@ void TTRI(tile_shape &dst) {
 template <is_tile_data_v tile_shape>
 void TRANDOM(tile_shape &dst, typename tile_shape::DType s) {
   static_assert(pto_dependent_false_v<tile_shape>,
-                "TRANDOM is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TRANDOM is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
 // TQUANT: FP32 -> S8/U8 quantization with B.DATR RMode/Sat and B.IOR
-// multiplier/zero-point (PTO 0.58.1 TEPL Mode3 Fn10 / selector 0x06A).
+// multiplier/zero-point (PTO ISA 0.58.3 TEPL Mode3 Fn10 / selector 0x06A).
 // RMode and Sat are B.DATR fields: RMode accepts a numeric immediate (the
 // parser maps mnemonic or numeric), Sat only the NOSAT/SAT token, so Sat is
 // selected with if constexpr. The multiplier travels as its raw FP32 bits in
@@ -6534,7 +6610,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
   if constexpr (Mode == RoundMode::RNE && Saturate) {
     asm volatile(
       "BSTART.TEPL 106, %c[SType]\n"
-      // LLVM currently names encoded RMode zero RNONE. PTO 0.58.1 defines
+      // LLVM currently names encoded RMode zero RNONE. PTO ISA 0.58.3 defines
       // that encoding as the operation default, which is RNE for TQUANT.
       "B.DATR %c[DType], RNONE, SAT\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
@@ -6695,7 +6771,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src) {
 }
 
 // TSORT: stable per-row group sort producing sorted values (FP16/FP32) and
-// group-local original indices (U32). PTO 0.58.1: TEPL Mode 3 Function 12
+// group-local original indices (U32). PTO ISA 0.58.3: TEPL Mode 3 Function 12
 // (selector 0x06c). Each row sorts its columns in `sortWidth`-width groups
 // from column 0; the last group may be short. ascending when descending is
 // false, descending otherwise. sortWidth must be 1..64 (0/LB0 omitted -> 32).
@@ -6773,19 +6849,19 @@ void TSORT(ValueDstTile &valueDst, IndexDstTile &indexDst,
   );
 }
 
-// Deprecated single-output sort: does not match the PTO 0.58.1 TSORT
+// Deprecated single-output sort: does not match the PTO ISA 0.58.3 TSORT
 // contract (no U32 index destination, legacy LB1/LB2 shape bundle). Kept as
 // a migration diagnostic that fails at instantiation.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TSORT32(tile_shape_out &dst, tile_shape_in &src) {
   static_assert(pto_dependent_false_v<tile_shape_out, tile_shape_in>,
                 "TSORT32 is removed; use TSORT(valueDst, indexDst, source, "
-                "sortWidth, descending), which emits the PTO 0.58.1 "
+                "sortWidth, descending), which emits the PTO ISA 0.58.3 "
                 "value+index dual-output bundle");
 }
 
 // TMRGSORT: merge two sorted single-row sources into one destination
-// (PTO 0.58.1 TEPL Mode 3 Function 13 / selector 0x06D; canonical
+// (PTO ISA 0.58.3 TEPL Mode 3 Function 13 / selector 0x06D; canonical
 // BSTART.SFU TMRGSORT). No B.DIM: the block carries only B.IOR RegSrc0
 // (0/1 ascending/descending) and one TwoSrc_Dst B.IOT with <last>.
 template <is_tile_data_v DstTile, is_tile_data_v LeftTile,
@@ -7737,7 +7813,7 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_offset, is_global_data_v gm_shape>
 void TGATHERB(tile_shape_out &dst, gm_shape &src, tile_shape_offset &offset) {
   static_assert(pto_dependent_false_v<tile_shape_out, gm_shape>,
-                "TGATHERB is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TGATHERB is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 

@@ -1,5 +1,5 @@
 // MGATHER_CAS: atomic compare-and-swap at byte displacements
-// (PTO 0.58.1 TLSU function 8; canonical BSTART.MGATHER.CAS).
+// (PTO ISA 0.58.3 TLSU function 8; canonical BSTART.MGATHER.CAS).
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

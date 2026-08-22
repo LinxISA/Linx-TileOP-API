@@ -5,8 +5,8 @@
 set -u
 TC_DIR=${TC_DIR:-/home/zhuwei/linx-toolchain-build-online-main/output/linx_blockisa_llvm_musl/bin}
 CXX="$TC_DIR/clang++"
-CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a group_shape group_k group_n group_dynamic"
-TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 size_small size_large"
+CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose group_shape group_k group_n group_dynamic"
+TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_small size_large"
 PASS=0; FAIL=0
 for c in $CASES; do
   if "$CXX" --target=linx64v5-unknown-linux-musl -c -mlxbc -fenable-matrix -O2 \

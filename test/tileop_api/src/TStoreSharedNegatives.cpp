@@ -18,13 +18,13 @@ using GM16K = global_tensor<float, RowMajor<64, 64>>;
 void n(GM16 &g, T &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE(g, sh); }
 #endif
 #if defined(SHOULD_FAIL_dtype_part)
-void n(GM16 &g, T &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<3>(g, sh); }
+void n(GM16 &g, T &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<12>(g, sh); }
 #endif
 #if defined(SHOULD_FAIL_layout_full)
 void n(GM &g, TCol &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE(g, sh); }
 #endif
 #if defined(SHOULD_FAIL_layout_part)
-void n(GM &g, TCol &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<3>(g, sh); }
+void n(GM &g, TCol &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<12>(g, sh); }
 #endif
 #if defined(SHOULD_FAIL_mask0)
 void n(GM &g, T &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<0>(g, sh); }
@@ -32,11 +32,14 @@ void n(GM &g, T &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<0>(g, sh); }
 #if defined(SHOULD_FAIL_mask16)
 void n(GM &g, T &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<16>(g, sh); }
 #endif
+#if defined(SHOULD_FAIL_mask3)
+void n(GM &g, T &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<3>(g, sh); }
+#endif
 #if defined(SHOULD_FAIL_size_small)
 void n(GM &g, T32 &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE(g, sh); }
 #endif
 #if defined(SHOULD_FAIL_size_large)
-void n(GM16K &g, T16K &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<3>(g, sh); }
+void n(GM16K &g, T16K &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<12>(g, sh); }
 #endif
 
 void use(void *) {}

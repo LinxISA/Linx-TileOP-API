@@ -1,5 +1,5 @@
 // TQUANT/TDEQUANT: FP32<->S8/U8 with B.DATR RMode/Sat and B.IOR
-// multiplier/zero-point (PTO 0.58.1 TEPL Mode3 Fn10/Fn11).
+// multiplier/zero-point (PTO ISA 0.58.3 TEPL Mode3 Fn10/Fn11).
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

@@ -35,6 +35,9 @@ using TileType = Location;
 enum class BLayout {
   RowMajor,
   ColMajor,
+  CubeM16,
+  CubeM32,
+  CubeN8,
 };
 
 enum class SLayout {
@@ -60,12 +63,24 @@ enum class LayoutEnum {
 
 enum LayoutCvtEnum : uint64_t {
   NORM = 0,
-  ND2DN, ND2ZZ, ND2ZN, ND2NZ, ND2NN,
-  DN2ND, DN2ZZ, DN2ZN, DN2NZ, DN2NN,
-  ZZ2ND, ZZ2DN, ZZ2ZN, ZZ2NZ, ZZ2NN = 15,
-  ZN2ND = 17,  ZN2DN, ZN2ZZ, ZN2NZ, ZN2NN,
-  NN2ND, NN2DN, NN2ZZ, NN2ZN, NN2NZ,
-  NZ2ND, NZ2DN, NZ2ZZ, NZ2ZN, NZ2NN = 31
+  ND2DN = 1,
+  ND2ZN = 2,
+  ND2NZ = 3,
+  DN2ND = 4,
+  DN2ZN = 5,
+  DN2NZ = 6,
+  ZN2ND = 7,
+  ZN2DN = 8,
+  ZN2NZ = 9,
+  NZ2ND = 10,
+  NZ2DN = 11,
+  NZ2ZN = 12,
+  ND2M32 = 21,
+  ND2M16 = 22,
+  ND2N8 = 23,
+  M322ND = 24,
+  M162ND = 25,
+  N82ND = 26,
 };
 
 enum PadValueEnum : uint64_t {

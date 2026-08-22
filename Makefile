@@ -1,5 +1,5 @@
 LIBNAME = tileop-api
-VERSION = 0.58
+VERSION = 0.58.3
 HEADERS = $(wildcard include/*.h) $(wildcard include/*.hpp) include/jcore include/cpu_sim include/aarch64 include/common
 
 
@@ -14,6 +14,8 @@ check:
 	python3 test/test_v058_engine_contract.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
 		-fsyntax-only -Iinclude test/ptoas_linx_type_compat.cpp
+	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
+		-fsyntax-only -Iinclude test/pto0583_contract.cpp
 	git diff --check
 
 install:

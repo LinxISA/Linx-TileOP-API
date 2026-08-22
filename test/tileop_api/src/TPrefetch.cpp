@@ -1,5 +1,5 @@
 // TPREFETCH: cache-line prefetch from GM without a Tile destination
-// (PTO 0.58.1 TLSU function 3; implicit PE 1111, no B.IOT/B.IOS members).
+// (PTO ISA 0.58.3 TLSU function 3; implicit PE 1111, no B.IOT/B.IOS members).
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

@@ -1,4 +1,4 @@
-// TMRGSORT: merge two sorted single-row sources (PTO 0.58.1 TEPL Mode3 Fn13).
+// TMRGSORT: merge two sorted single-row sources (PTO ISA 0.58.3 TEPL Mode3 Fn13).
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

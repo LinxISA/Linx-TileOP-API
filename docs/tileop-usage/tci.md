@@ -70,7 +70,7 @@ sequence; the remaining physical columns are Null padding.
 
 ## ISA bundle
 
-TCI is PTO v0.58.1 TEPL Mode 3, Function 6, selector `0x066`. Canonical PTO
+TCI is PTO ISA 0.58.3 TEPL Mode 3, Function 6, selector `0x066`. Canonical PTO
 assembly describes it as `BSTART.SFU TCI`; the current LinxV5 backend uses the
 equivalent selector carrier `BSTART.TEPL 102`.
 

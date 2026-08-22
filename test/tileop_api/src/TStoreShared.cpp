@@ -13,7 +13,7 @@ __attribute__((noinline)) void full(GM &g, T &t) {
 }
 __attribute__((noinline)) void partial(GM &g, T &t) {
   auto sh = TMOV_L2S_INSERT(t);
-  TSTORE_PART<3>(g, sh);   // PE mask 0011
+  TSTORE_PART<12>(g, sh);  // fixed PEMode mask 1100
 }
 // DYNAMIC runtime valid shape (reduced valid rectangle 4x128 of 8x256):
 // the bundle's B.DIM must come from the Shared tile's runtime valid shape.

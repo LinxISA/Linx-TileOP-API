@@ -1,4 +1,5 @@
 #! /bin/bash
+set -euo pipefail
 # CI compile list for the TileOP API test suite.
 #
 # Runner: test/run_ci.py -plat <cpu_sim|jcore|linx|arm_sme>. PLAT is exported
@@ -19,6 +20,8 @@ echo "PLAT=${PLAT:-linx}"
 # --- linx OK: elementwise / shape ops (jcore inline-asm) ---
 make clean;make TESTCASE=DynamicShape
 make clean;make TESTCASE=DynamicTlsuStride
+make clean;make TESTCASE=CubeCellTransport
+make clean;make TESTCASE=SharedTranspose
 make clean;make TESTCASE=SharedMatmul
 make clean;make TESTCASE=TMatmulAccFullOptions
 make clean;make TESTCASE=TMatmulAllOptions

@@ -80,7 +80,7 @@ keep_acc/f16/bf16/relu 模式。
 
 ## B.FPATR 模式
 
-`FixpPreQuantMode` 的取值及其输出数据类型（PTO-ISA v0.58 `B.FPATR` 表）：
+`FixpPreQuantMode` 的取值及其输出数据类型（PTO ISA 0.58.3 `B.FPATR` 表）：
 
 | 模式 | 值 | dst dtype |
 | --- | ---: | --- |
@@ -390,6 +390,10 @@ mode 没有 PReLU Tile、RowMaxInit 没有 RowMaxIn、GroupMax shape 不匹配�
 dtype 与 PreQuantMode 不匹配。
 
 ## B.FPATR 与 operand 顺序
+
+PTO ISA 0.58.3 在 `B.FPATR` 低位增加 `TransA` 与 `TransB`。TileOP 通过
+`options.transpose_a()` / `options.transpose_b()` 设置；它们只作用于对应
+的 cooperative Shared 主矩阵，Local 主矩阵使用 transpose 位属于非法组合。
 
 TileOP 固定生成：
 

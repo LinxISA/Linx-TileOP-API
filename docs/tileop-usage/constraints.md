@@ -30,7 +30,7 @@ bit and the destination `TSize`/`DstTile` metadata. `B.IOS` (the v0.58 reissue
 
 ```asm
 B.IOS S7, mask=1111
-B.IOS mask=0011, ->S9<4>
+B.IOS mask=1100, ->S9<4>
 ```
 
 For `B.IOS`, `SizeCode=0` denotes a Shared **source** and `SizeCode=1..12`
@@ -39,6 +39,11 @@ B.IOT Local destinations use 1..10 = 128 B..64 KB per PE). The core allocation i
 `popcount(PE_MASK) * per_pe_size`. The first non-zero allocation write records
 an immutable allocation mask; reading an uninitialized lane returns an
 undefined value without trapping.
+
+PTO ISA 0.58.3 replaces arbitrary masks with a fixed three-bit PEMode decoder.
+Only `0000`, `1000`, `0100`, `0010`, `0001`, `1100`, `1110`, and `1111` are
+representable. TileOP keeps the readable mask spelling but rejects all other
+template values at compile time.
 
 ## Matrix operands
 

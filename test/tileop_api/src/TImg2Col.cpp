@@ -1,5 +1,5 @@
 // TIMG2COL: image-to-column with feature-map posM/posK
-// (PTO 0.58.1 TEPL Mode3 Fn4 / selector 0x064; B.IOR PosMGPR, PosKGPR).
+// (PTO ISA 0.58.3 TEPL Mode3 Fn4 / selector 0x064; B.IOR PosMGPR, PosKGPR).
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

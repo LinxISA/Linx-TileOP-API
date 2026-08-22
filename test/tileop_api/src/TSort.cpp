@@ -1,5 +1,5 @@
 // TSORT: stable per-row group sort producing sorted values (FP16/FP32) and
-// group-local original U32 indices (PTO 0.58.1 TEPL Mode3 Fn12 / 0x06C).
+// group-local original U32 indices (PTO ISA 0.58.3 TEPL Mode3 Fn12 / 0x06C).
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
