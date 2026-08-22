@@ -4,9 +4,6 @@ using namespace pto;
 
 using TileF = Tile<Location::Vec, float, 16, 32, BLayout::RowMajor, -1, -1>;
 using RowF = Tile<Location::Vec, float, 16, 32, BLayout::RowMajor, -1, 1>;
-using LeftF = SharedMatrixLeft<float, 16, 32, -1, -1>;
-using RightF = SharedMatrixRight<float, 32, 16, -1, -1>;
-using MatOutF = CubeAccumulatorM16<float, 16, 16, -1, -1>;
 using GlobalF = global_tensor<float, RowMajor<-1, -1>>;
 
 __attribute__((noinline)) void dynamic_elementwise(TileF &dst, TileF &src0,
@@ -40,12 +37,6 @@ __attribute__((noinline)) void dynamic_tlsu(float *input, float *output,
   TileF tile(rows, cols);
   TLOAD(tile, src);
   TSTORE(dst, tile);
-}
-
-__attribute__((noinline)) void dynamic_matmul(MatOutF &c, LeftF &a, RightF &b) {
-  auto shared_a = TMOV_L2S_PUBLISH(a);
-  auto shared_b = TMOV_L2S_PUBLISH(b);
-  TMATMUL(c, shared_a, shared_b);
 }
 
 int main() { return 0; }

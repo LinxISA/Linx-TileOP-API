@@ -12,11 +12,26 @@ trap 'rm -rf "$OUT"' EXIT
   "$ROOT/test/tileop_api/pto0583_asm_contract.s" -o "$OUT/contract.o"
 "$OBJDUMP" -d "$OUT/contract.o" >"$OUT/contract.diss"
 
-grep -Eq 'B\.FPATR[[:space:]]+0, 0, 0, 0, 0, 0, 0, 1, 1' "$OUT/contract.diss"
-grep -Eq 'B\.IOT[[:space:]]+t#1, mask=1100, last,.*->m<64KB>' "$OUT/contract.diss"
-grep -Eq 'B\.IOS[[:space:]]+mask=1111, ->S255<256KB>' "$OUT/contract.diss"
-grep -Eiq 'B\.DATR.*layout21, DTYPE_NONE, Null' "$OUT/contract.diss"
-grep -Eiq 'B\.DATR.*layout26, DTYPE_NONE, Null' "$OUT/contract.diss"
+require_disassembly() {
+  local pattern=$1
+  local description=$2
+  if ! grep -Eq "$pattern" "$OUT/contract.diss"; then
+    echo "FAIL: missing canonical $description in PTO 0.58.3 disassembly" >&2
+    sed -n '1,120p' "$OUT/contract.diss" >&2
+    exit 1
+  fi
+}
+
+require_disassembly 'B\.FPATR[[:space:]]+0, 0, 0, 0, 0, 0, 0, 1, 1' \
+  'nine-field B.FPATR'
+require_disassembly 'B\.IOT[[:space:]]+t#1, mask=1100, last,.*->m<64KB>' \
+  'Local SizeCode=10 form'
+require_disassembly 'B\.IOS[[:space:]]+mask=1111, ->S255<256KB>' \
+  'Shared SizeCode=12 form'
+require_disassembly 'B\.DATR[[:space:]]+ND2M32, DTYPE_NONE, Null' \
+  'ND2M32 CUBE load layout'
+require_disassembly 'B\.DATR[[:space:]]+N82ND, DTYPE_NONE, Null' \
+  'N82ND CUBE store layout'
 
 for invalid in \
   'B.IOT t#1, mask=0011, last, ->m<128B>' \

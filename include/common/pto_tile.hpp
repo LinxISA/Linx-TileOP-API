@@ -290,13 +290,150 @@ constexpr bool is_vector_fixp_pre_quant(FixpPreQuantMode Mode) {
   }
 }
 
+enum class MatrixNumericClass : uint8_t {
+  Unsupported,
+  Floating,
+  Signed,
+  Unsigned,
+};
+
+constexpr MatrixNumericClass matrix_numeric_class(int TypeCode) {
+  switch (TypeCode) {
+  case __type_fp32:
+  case __type_tf32:
+  case __type_hf32:
+  case __type_fp16:
+  case __type_bf16:
+  case __type_hif8:
+  case __type_fp8_e4m3:
+  case __type_fp8_e5m2:
+  case __type_fp6_e3m2:
+  case __type_fp5_e2m3:
+  case __type_fp4_e2m1x2:
+  case __type_fp4_e1m2x2:
+    return MatrixNumericClass::Floating;
+  case __type_int16:
+  case __type_int8:
+  case __type_int4x2:
+    return MatrixNumericClass::Signed;
+  case __type_uint16:
+  case __type_uint8:
+  case __type_uint4x2:
+    return MatrixNumericClass::Unsigned;
+  default:
+    return MatrixNumericClass::Unsupported;
+  }
+}
+
+constexpr bool matrix_mx_input_supported(int TypeCode) {
+  return TypeCode == __type_fp16 || TypeCode == __type_bf16 ||
+         TypeCode == __type_fp8_e4m3 || TypeCode == __type_fp8_e5m2 ||
+         TypeCode == __type_fp4_e2m1x2 || TypeCode == __type_fp4_e1m2x2;
+}
+
+constexpr bool matrix_mx_input_needs_scale(int TypeCode) {
+  return matrix_mx_input_supported(TypeCode) &&
+         TypeCode != __type_fp16 && TypeCode != __type_bf16;
+}
+
+constexpr int matrix_accumulator_type_code(int InputTypeCode) {
+  switch (matrix_numeric_class(InputTypeCode)) {
+  case MatrixNumericClass::Floating:
+    return __type_fp32;
+  case MatrixNumericClass::Signed:
+    return __type_int32;
+  case MatrixNumericClass::Unsigned:
+    return __type_uint32;
+  default:
+    return -1;
+  }
+}
+
+constexpr bool matrix_mode_uses_s32_accumulator(FixpPreQuantMode Mode) {
+  switch (Mode) {
+  case FixpPreQuantMode::VREQS8Pre:
+  case FixpPreQuantMode::REQS8Pre:
+  case FixpPreQuantMode::VDEQF16:
+  case FixpPreQuantMode::DEQF16:
+  case FixpPreQuantMode::VSHIFTS322S16:
+  case FixpPreQuantMode::SHIFTS322S16:
+  case FixpPreQuantMode::QF322S4Pre:
+  case FixpPreQuantMode::VQF322S4Pre:
+  case FixpPreQuantMode::QF322S16Pre:
+  case FixpPreQuantMode::VQF322S16Pre:
+  case FixpPreQuantMode::QS322BF16Pre:
+  case FixpPreQuantMode::VQS322BF16Pre:
+    return true;
+  default:
+    return false;
+  }
+}
+
+template <typename Left, typename Right, bool MX = false>
+constexpr bool matrix_input_pair_legal() {
+  constexpr int LeftCode = type_traits<typename Left::DType>::TypeCode;
+  constexpr int RightCode = type_traits<typename Right::DType>::TypeCode;
+  if constexpr (MX)
+    return matrix_mx_input_supported(LeftCode) &&
+           matrix_mx_input_supported(RightCode);
+  constexpr MatrixNumericClass LeftClass = matrix_numeric_class(LeftCode);
+  return LeftClass != MatrixNumericClass::Unsupported &&
+         LeftClass == matrix_numeric_class(RightCode);
+}
+
+template <FixpAttr Attr, typename Left, typename Right, bool MX = false>
+constexpr bool matrix_accumulator_mode_legal() {
+  if constexpr (!matrix_input_pair_legal<Left, Right, MX>())
+    return false;
+  constexpr int AccCode = MX
+      ? __type_fp32
+      : matrix_accumulator_type_code(
+            type_traits<typename Left::DType>::TypeCode);
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::None)
+    return AccCode == __type_fp32 || AccCode == __type_int32 ||
+           AccCode == __type_uint32;
+  if constexpr (matrix_mode_uses_s32_accumulator(Attr.PreQuant))
+    return AccCode == __type_int32;
+  return AccCode == __type_fp32;
+}
+
+template <FixpAttr Attr, typename DType>
+constexpr bool is_fixp_output_type();
+
+template <FixpAttr Attr, typename Left, typename Right, typename Output,
+          bool MX = false>
+constexpr bool matrix_output_type_legal() {
+  if constexpr (!matrix_accumulator_mode_legal<Attr, Left, Right, MX>())
+    return false;
+  constexpr int OutputCode = type_traits<typename Output::DType>::TypeCode;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::None) {
+    constexpr int AccCode = MX
+        ? __type_fp32
+        : matrix_accumulator_type_code(
+              type_traits<typename Left::DType>::TypeCode);
+    return OutputCode == AccCode;
+  }
+  return is_fixp_output_type<Attr, typename Output::DType>();
+}
+
+template <typename Left, typename Right, typename Accumulator, bool MX = false>
+constexpr bool matrix_accumulator_type_legal() {
+  if constexpr (!matrix_input_pair_legal<Left, Right, MX>())
+    return false;
+  constexpr int Expected = MX
+      ? __type_fp32
+      : matrix_accumulator_type_code(
+            type_traits<typename Left::DType>::TypeCode);
+  return type_traits<typename Accumulator::DType>::TypeCode == Expected;
+}
+
 template <FixpAttr Attr, typename DType>
 constexpr bool is_fixp_output_type() {
   constexpr int TypeCode = type_traits<DType>::TypeCode;
   if constexpr (Attr.PreQuant == FixpPreQuantMode::None)
-    // PreQuant=None keeps the AccType result; only FP32 is accepted (no S32
-    // alias) per PTO 0.58 (handoff 3327).
-    return TypeCode == __type_fp32;
+    // PreQuant=None preserves the derived FP32/S32/U32 AccType.
+    return TypeCode == __type_fp32 || TypeCode == __type_int32 ||
+           TypeCode == __type_uint32;
   if constexpr (Attr.PreQuant == FixpPreQuantMode::F322F16 ||
                 Attr.PreQuant == FixpPreQuantMode::VDEQF16 ||
                 Attr.PreQuant == FixpPreQuantMode::DEQF16 ||
@@ -748,7 +885,6 @@ public:
   static constexpr int kBytes = (Rows_ * Cols_ * type_traits<DType>::bits + 7) / 8;
   // static_assert(kBytes % 512 == 0, "Tile size must be 512 bytes aligned");
   // static_assert(((kBytes / 512 - 1) & (kBytes / 512)) == 0, "Tile size must by (512 * 2 ^ n) Bytes");
-  // static_assert(kBytes >= 512 && kBytes <= 64 * 1024, "Tile size must be in [512B, 32kB]");
 
   static constexpr int ValidRow = RowValid_;
   static constexpr int ValidCol = ColValid_;
@@ -837,12 +973,9 @@ public:
 
   static_assert(
       IsCubeLayout ||
-      (BFractal_ == BLayout::RowMajor && SFractal_ == SLayout::NoneBox && Cols * type_traits<DType>::bits % (32 * 8) == 0) ||
-      (BFractal_ == BLayout::ColMajor && SFractal_ == SLayout::NoneBox && Rows * type_traits<DType>::bits % (32 * 8) == 0) ||
+      SFractal_ == SLayout::NoneBox ||
       (SFractal_ != SLayout::NoneBox) && (Rows % InnerRows == 0 && Cols % InnerCols == 0),
-      "BFractal_ is RowMajor and SFractal_ is NoneBox: Rows must be 32 bytes align, \
-        BFractal_ is ColMajor and SFractal_ is NoneBox: Cols must be 32 bytes align, \
-        SFractal_ in not NoneBox: Rows/Cols must be integer multiple of InnerRows/InnerCols."
+      "Boxed layouts require Rows/Cols to be integer multiples of their inner box."
         );
 
   static_assert(SFractalSize_ == 512 || SFractalSize_ == 1024,

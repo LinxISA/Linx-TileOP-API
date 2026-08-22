@@ -53,6 +53,12 @@ The inline-asm destination is early-clobbered so the compiler must allocate a
 different Local Tile index for D while C remains live. D, optional reductions,
 and numeric status publish as one completed bundle.
 
+Ordinary Matrix inputs must be from one numeric class. Floating inputs derive
+FP32 accumulation, signed inputs derive S32, and unsigned inputs derive U32.
+With `PreQuant=None`, D preserves that exact AccType; C and Bias must use the
+same derived type. MX inputs use the assigned floating MX formats, E8M0 scale
+tiles, and FP32 accumulation.
+
 ## Persistent CELL layouts
 
 Local matrix primaries use the 128-byte width-parametric CELL layouts exposed

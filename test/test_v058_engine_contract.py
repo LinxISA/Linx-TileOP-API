@@ -208,6 +208,40 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             text = (ROOT / "test" / "tileop_api" / "src" / fixture).read_text()
             self.assertRegex(text, r"Cube(Tile|Accumulator)(M16|M32|N8)")
 
+    def test_matrix_dtype_and_effective_shape_contract_is_centralized(self) -> None:
+        tile = PTO_TILE.read_text(encoding="utf-8")
+        self.assertIn("matrix_accumulator_type_code", tile)
+        self.assertIn("MatrixNumericClass::Unsigned", tile)
+        self.assertIn("OutputCode == AccCode", tile)
+        self.assertIn("FP32/S32/U32 AccType", tile)
+        self.assertIn("Matrix D valid shape must match effective M x N", self.header)
+        self.assertIn("Attr.TransA", self.header)
+        self.assertIn("? A::ValidCol : A::ValidRow", self.header)
+        self.assertIn("Attr.TransB", self.header)
+        self.assertIn("? B::ValidRow : B::ValidCol", self.header)
+        integer_fixture = (
+            ROOT / "test" / "tileop_api" / "src" / "MatrixIntegerDtypes.cpp"
+        ).read_text()
+        self.assertIn("CubeAccumulatorM16<int32_t", integer_fixture)
+        self.assertIn("CubeAccumulatorM16<uint32_t", integer_fixture)
+        transpose_fixture = (
+            ROOT / "test" / "tileop_api" / "src" /
+            "SharedTransposeNonSquare.cpp"
+        ).read_text()
+        self.assertIn("transpose_a().transpose_b()", transpose_fixture)
+        for fixture in ("TMatmulAllOptions.cpp", "TGEMVAllOptions.cpp",
+                        "SharedMatrixForms.cpp"):
+            text = (ROOT / "test" / "tileop_api" / "src" / fixture).read_text()
+            self.assertIn("__fp8_e4m3", text)
+            self.assertIn("__fp8_e8m0", text)
+
+    def test_mc_gate_requires_canonical_cube_layout_names(self) -> None:
+        gate = (ROOT / "test" / "tileop_api" /
+                "verify_pto0583_asm.sh").read_text()
+        self.assertIn("ND2M32, DTYPE_NONE, Null", gate)
+        self.assertIn("N82ND, DTYPE_NONE, Null", gate)
+        self.assertIn("missing canonical $description", gate)
+
     def test_pe_mode_rejects_unassigned_masks(self) -> None:
         type_header = (ROOT / "include" / "jcore" / "type.hpp").read_text(
             encoding="utf-8"

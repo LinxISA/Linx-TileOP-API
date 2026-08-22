@@ -79,13 +79,18 @@ keep_acc/f16/bf16/relu 模式。
   scale 与配套 matrix 同存储。no-options 重载保持 scale Local-only。
 - 所有 Shared binder 走独立有序 `B.IOS` 流；Local operand 仍走 `B.IOT`。
 
+MX overloads in this API represent the scale-bearing MX schema. A/B must be
+`E4M3`、`E5M2`、`E2M1X2` 或 `E1M2X2`，ScaleA/ScaleB 必须是普通
+RowMajor `E8M0` Tile。ScaleA valid shape 是 `M x ceil(K/32)`，ScaleB
+valid shape 是 `ceil(K/32) x N`；MX 的 C/Bias/FullAcc 类型固定为 FP32。
+
 ## B.FPATR 模式
 
 `FixpPreQuantMode` 的取值及其输出数据类型（PTO ISA 0.58.3 `B.FPATR` 表）：
 
 | 模式 | 值 | dst dtype |
 | --- | ---: | --- |
-| `None` | 0 | FP32（AccType 结果；v0.58 不再接受 S32 别名） |
+| `None` | 0 | 保留派生 AccType：浮点→FP32，有符号整数→S32，无符号整数→U32 |
 | `F322F16` | 1 | FP16 |
 | `VREQS8Pre` | 2 | S8 |
 | `REQS8Pre` | 3 | S8 |
@@ -125,7 +130,7 @@ TMATMUL(dst_bf16, a, b, fixp::bf16());
 
 | options | PreQuantMode | dst dtype |
 | --- | ---: | --- |
-| `fixp::keep_acc()` | `None` / 0 | FP32（AccType） |
+| `fixp::keep_acc()` | `None` / 0 | 派生 AccType（FP32/S32/U32） |
 | `fixp::f16()` | `F322F16` / 1 | FP16 |
 | `fixp::bf16()` | `F322BF16` / 16 | BF16 |
 
@@ -217,8 +222,8 @@ TMATMUL(dst_s8, a, b, fixp::s8(quant));
 vector quant Tile 的每个 64-bit element 使用与 scalar descriptor 相同的 bit
 layout。
 
-参数 Tile 的 valid shape 必须为 `1 x N`。如果 `1 x N` 的逻辑数据不足 512 B，
-必须扩大物理 Rows/Cols 保证 Tile register 至少 512 B，同时用
+参数 Tile 的 valid shape 必须为 `1 x N`。如果 `1 x N` 的逻辑数据不足 128 B，
+必须扩大物理 Rows/Cols 保证 Tile register 至少 128 B，同时用
 `ValidRow=1, ValidCol=N` 保持有效区域。例如上例物理 shape 为 `2 x 32`，valid
 shape 为 `1 x 32`。
 
@@ -251,8 +256,8 @@ TMATMUL(dst_fp16, a, b, fixp::f16().prelu(prelu));
 
 ## RowMax
 
-RowMax 在 ReLU/quant/convert 之前基于 FullAcc 计算，dtype 必须是 FP32/S32
-AccType。
+RowMax 在 ReLU/quant/convert 之前基于 FullAcc 计算，dtype 必须精确匹配
+FP32/S32/U32 派生 AccType。
 
 ### Fresh RowMax
 
@@ -284,7 +289,7 @@ TMATMUL(
 destination 顺序为 D、RowMaxOut。
 
 RowMaxIn/Out 的 valid shape 必须为 `M x 1`，dtype 和 valid shape 必须一致。
-物理 Tile 仍必须至少 512 B，因此可以像示例一样扩大物理列数，使用
+物理 Tile 仍必须至少 128 B，因此可以像示例一样扩大物理列数，使用
 `ValidCol=1`。
 
 ## GroupMax
@@ -307,8 +312,8 @@ TMATMUL(
 GroupMaxOut：
 
 - valid shape 必须为 `M x ceil(N / GroupN)`；
-- dtype 必须是 FP32/S32 AccType；
-- 物理 Tile 必须满足 512 B..32 KB active-size 约束。
+- dtype 必须精确匹配派生 AccType（FP32/S32/U32）；
+- 物理 Tile 必须满足 Local SizeCode 1..10（128 B..64 KiB）。
 
 例如 N=32、GroupN=8 时，valid columns 是 4。
 

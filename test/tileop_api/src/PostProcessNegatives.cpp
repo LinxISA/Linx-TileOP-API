@@ -27,6 +27,25 @@ using BadK = CubeTileN8<float, 32, 32>;
 using BadGemvVec = CubeTileM16<float, 2, 64>;
 using GemvMtx = CubeTileN8<float, 64, 32>;
 using GemvDst = CubeAccumulatorM16<float, 1, 32>;
+using MixedA = CubeTileM16<int8_t, 16, 32>;
+using MixedB = CubeTileN8<uint16_t, 32, 16>;
+using MixedD = CubeAccumulatorM16<int32_t, 16, 16>;
+using UnsignedA = CubeTileM16<uint8_t, 16, 32>;
+using UnsignedB = CubeTileN8<uint16_t, 32, 16>;
+using UnsignedQ = CubeAccumulatorM16<int8_t, 16, 16>;
+using BadDValid = CubeAccumulatorM32<float, 32, 32, 32, 16>;
+using BadAcc = CubeAccumulatorM32<int32_t, 32, 32>;
+using BadBias = Tile<Location::Bias, int32_t, 8, 32,
+                     BLayout::RowMajor, 1, 32>;
+using NegMXA = CubeTileM32<__fp8_e4m3, 32, 64>;
+using NegMXB = CubeTileN8<__fp8_e4m3, 64, 32>;
+using BadScaleType = Tile<Location::Scaling, float, 1, 32,
+                          BLayout::RowMajor, 1, 2>;
+using BadScaleShape = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
+                           BLayout::RowMajor, 1, 32>;
+using TransStoredA = SharedMatrixLeft<float, 32, 16>;
+using TransStoredB = SharedMatrixRight<float, 32, 32, 24, 32>;
+using BadTransD = CubeAccumulatorM16<float, 16, 24, 16, 16>;
 
 void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
 #if defined(SHOULD_FAIL_dtype)
@@ -78,6 +97,53 @@ void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
   GemvMtx matrix;
   GemvDst out;
   TGEMV(out, matrix, bad_vec);
+#endif
+#if defined(SHOULD_FAIL_mixed_numeric_class)
+  MixedA mixed_a;
+  MixedB mixed_b;
+  MixedD mixed_d;
+  TMATMUL(mixed_d, mixed_a, mixed_b);
+#endif
+#if defined(SHOULD_FAIL_unsigned_prequant)
+  UnsignedA unsigned_a;
+  UnsignedB unsigned_b;
+  UnsignedQ quantized;
+  TMATMUL(quantized, unsigned_a, unsigned_b, fixp::s8(0));
+#endif
+#if defined(SHOULD_FAIL_bad_d_valid_shape)
+  BadDValid bad_d;
+  TMATMUL(bad_d, a, b);
+#endif
+#if defined(SHOULD_FAIL_bad_acc_dtype)
+  BadAcc bad_acc;
+  TMATMUL_ACC(d, bad_acc, a, b);
+#endif
+#if defined(SHOULD_FAIL_bad_bias_dtype)
+  BadBias bad_bias;
+  TMATMUL_BIAS(d, a, b, bad_bias);
+#endif
+#if defined(SHOULD_FAIL_bad_mx_scale_dtype)
+  NegMXA mxa;
+  NegMXB mxb;
+  BadScaleType bad_sa;
+  BadScaleShape sb;
+  TMATMUL_MX(d, mxa, bad_sa, mxb, sb);
+#endif
+#if defined(SHOULD_FAIL_bad_mx_scale_shape)
+  NegMXA mxa;
+  NegMXB mxb;
+  BadScaleShape bad_sa;
+  BadScaleShape bad_sb;
+  TMATMUL_MX(d, mxa, bad_sa, mxb, bad_sb);
+#endif
+#if defined(SHOULD_FAIL_bad_transpose_d)
+  TransStoredA stored_a;
+  TransStoredB stored_b;
+  BadTransD bad_d;
+  auto shared_a = TMOV_L2S_INSERT(stored_a);
+  auto shared_b = TMOV_L2S_INSERT(stored_b);
+  TMATMUL(bad_d, shared_a, shared_b,
+          fixp::keep_acc().transpose_a().transpose_b());
 #endif
 #if defined(SHOULD_FAIL_group_shape)
   GroupA group_a;

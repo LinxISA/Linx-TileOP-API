@@ -19,6 +19,11 @@ content hashes.
   constructors still accept element strides.
 - `B.FPATR` has nine fields. `transpose_a()` and `transpose_b()` are legal
   only for the corresponding cooperative Shared matrix primary.
+- Ordinary Matrix inputs must share one supported numeric class. Their
+  accumulator is FP32, S32, or U32 for floating, signed, or unsigned inputs;
+  `PreQuant=None` preserves that exact type. C, Bias, D, RowMax, and GroupMax
+  are checked against the same central type contract. Scale-bearing MX
+  overloads require assigned MX inputs and E8M0 scale shapes.
 - `CubeTileM16`, `CubeTileM32`, `CubeTileN8`, and the accumulator aliases
   model persistent 128-byte CELL storage. `TLOAD_CUBE` and `TSTORE_CUBE`
   provide the assigned GM conversion boundary.
