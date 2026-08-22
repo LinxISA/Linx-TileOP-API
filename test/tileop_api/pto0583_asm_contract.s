@@ -13,3 +13,13 @@ B.IOR [a0, a1], []
 B.IOT t#1, mask=1100, last, ->m<64KB>
 B.IOS S1, mask=1111
 B.IOS mask=1111, ->S255<256KB>
+
+# Optional MX scale binders use constant assembler conditions after inline-asm
+# substitution.  Prove the matching MC accepts the form and fully elides the
+# absent source while retaining the present source.
+.if 0
+B.IOT t#2, mask=1111
+.endif
+.if 1
+B.IOT t#3, mask=1111
+.endif

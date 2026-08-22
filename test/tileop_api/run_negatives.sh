@@ -9,7 +9,7 @@ OUT=$(mktemp -d "${TMPDIR:-/tmp}/tileop-negatives.XXXXXX")
 trap 'rm -rf "$OUT"' EXIT
 FLAGS=(--target=linx64 -c -fenable-matrix -O2 -std=c++20 -D__linx
        -DENABLE_TENSOR_INSTR -I../../include)
-CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose old_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape bad_transpose_d group_shape group_k group_n group_dynamic"
+CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose old_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b bad_transpose_d group_shape group_k group_n group_dynamic"
 TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_small size_large"
 PASS=0; FAIL=0
 

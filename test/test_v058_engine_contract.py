@@ -191,12 +191,45 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn('"B.IOT %[Vec], %[Mtx], mask=15\\n"', self.header)
         self.assertNotIn('"B.IOT %[Mtx], %[Vec], mask=15\\n"', self.header)
         self.assertIn(
-            '"B.IOT %[Vec], %[ScaleVec], mask=15\\n" '
-            '"B.IOT %[Mtx], %[ScaleMtx], mask=15\\n"',
+            '"B.IOT %[Vec], mask=15\\n" ".if %c[HasScaleA]\\n" '
+            '"B.IOT %[ScaleVec], mask=15\\n" ".endif\\n" '
+            '"B.IOT %[Mtx], mask=15\\n" ".if %c[HasScaleB]\\n" '
+            '"B.IOT %[ScaleMtx], mask=15\\n"',
             self.header,
         )
         self.assertIn("PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx", self.header)
         self.assertNotIn("PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec", self.header)
+
+    def test_mx_scale_presence_is_validated_per_input_side(self) -> None:
+        self.assertIn("ScaleA presence must match the PTO MX type contract",
+                      self.header)
+        self.assertIn("ScaleB presence must match the PTO MX type contract",
+                      self.header)
+        self.assertIn("constexpr bool HasScaleA = (ScaleMask & 1) != 0;",
+                      self.header)
+        self.assertIn("constexpr bool HasScaleB = (ScaleMask & 2) != 0;",
+                      self.header)
+        self.assertIn("PTO_MX_SCALE_INPUTS", self.header)
+        a_source = ('"B.IOT %[A], mask=15\\n" ".if %c[HasScaleA]\\n" '
+                    '"B.IOT %[ScaleA], mask=15\\n"')
+        b_source = ('"B.IOT %[B], mask=15\\n" ".if %c[HasScaleB]\\n" '
+                    '"B.IOT %[ScaleB], mask=15\\n"')
+        a_pos = self.header.find(a_source)
+        b_pos = self.header.find(b_source, a_pos)
+        self.assertGreaterEqual(a_pos, 0)
+        self.assertGreater(b_pos, a_pos)
+        fixture = (ROOT / "test" / "tileop_api" / "src" /
+                   "MXScaleVariants.cpp").read_text(encoding="utf-8")
+        for spelling in ("__half", "__bf16", "__fp8_e4m3", "__fp8_e5m2",
+                         "__fp4_e2m1x2", "__fp4_e1m2x2"):
+            self.assertIn(spelling, fixture)
+        negatives = (ROOT / "test" / "tileop_api" / "run_negatives.sh").read_text(
+            encoding="utf-8"
+        )
+        for case in ("missing_mx_scale_a", "missing_mx_scale_b",
+                     "extra_mx_scale_a", "extra_mx_scale_b",
+                     "bad_mx_scale_dtype", "bad_mx_scale_shape"):
+            self.assertIn(case, negatives)
 
     def test_local_cube_descriptor_contract_is_compile_time_guarded(self) -> None:
         self.assertIn("Local matrix A must use CUBE_M16 or CUBE_M32", self.header)

@@ -41,15 +41,21 @@ GroupMax、MaxAbs）与 Shared scale。数学源顺序与 handoff Sec 1.4 一致
 TMATMUL<Attr>(Dst, A, B, options);                    // D = A*B
 TMATMUL_BIAS<Attr>(Dst, A, B, Bias, options);         // D = A*B + Bias
 TMATMUL_ACC<Attr>(Dst, C, A, B, options);             // D = C + A*B
-TMATMUL_MX<Attr>(Dst, A, ScaleA, B, ScaleB, options); // D = (A*ScaleA)*(B*ScaleB)
-TMATMUL_MX_BIAS<Attr>(Dst, A, ScaleA, B, ScaleB, Bias, options);
-TMATMUL_MX_ACC<Attr>(Dst, C, A, ScaleA, B, ScaleB, options);
+TMATMUL_MX(Dst, A, ScaleA, B, ScaleB, options); // D = (A*ScaleA)*(B*ScaleB)
+TMATMUL_MX(Dst, A, B, options);                  // FP16/BF16 pair: no scales
+TMATMUL_MX(Dst, A, ScaleA, B, options);          // only A needs a scale
+TMATMUL_MX(Dst, A, B, ScaleB, options);          // only B needs a scale
+TMATMUL_MX_BIAS(Dst, A, ScaleA, B, ScaleB, Bias, options);
+TMATMUL_MX_ACC(Dst, C, A, ScaleA, B, ScaleB, options);
 TGEMV<Attr>(Dst, Mtx, Vec, options);                  // D = Vec(M=1,K) * Mtx(K,N)
 TGEMV_BIAS<Attr>(Dst, Mtx, Vec, Bias, options);
 TGEMV_ACC<Attr>(Dst, C, Mtx, Vec, options);
-TGEMV_MX<Attr>(Dst, Mtx, ScaleMtx, Vec, ScaleVec, options);
-TGEMV_MX_BIAS<Attr>(Dst, Mtx, ScaleMtx, Vec, ScaleVec, Bias, options);
-TGEMV_MX_ACC<Attr>(Dst, C, Mtx, ScaleMtx, Vec, ScaleVec, options);
+TGEMV_MX(Dst, Mtx, ScaleMtx, Vec, ScaleVec, options);
+TGEMV_MX(Dst, Mtx, Vec, options);                // neither side needs a scale
+TGEMV_MX(Dst, Mtx, Vec, ScaleVec, options);      // only Vec/A needs a scale
+TGEMV_MX(Dst, Mtx, ScaleMtx, Vec, options);      // only Mtx/B needs a scale
+TGEMV_MX_BIAS(Dst, Mtx, ScaleMtx, Vec, ScaleVec, Bias, options);
+TGEMV_MX_ACC(Dst, C, Mtx, ScaleMtx, Vec, ScaleVec, options);
 ```
 
 无 options 调用（如 `TMATMUL(d, a, b)`）等价于 `TMATMUL(d, a, b,
@@ -74,15 +80,21 @@ keep_acc/f16/bf16/relu 模式。
 - plain `TMATMUL`/`TMATMUL_ACC`/`TMATMUL_BIAS`：允许 Local-A + Shared-B
   或 Shared-A + Shared-B；不支持仅 Shared-A（单 binder 保留给
   Shared-Right 形式）。
-- `TMATMUL_MX*` options 重载：MX Shared pair 是 Shared-B/ScaleB（两个
-  binder），或 Shared-A/ScaleA/B/ScaleB 全部 Shared（四个 binder）；
-  scale 与配套 matrix 同存储。no-options 重载保持 scale Local-only。
+- `TMATMUL_MX*` options 重载：可使用 Shared-B 以及该侧需要时的
+  Shared-ScaleB，或同时使用 Shared-A/Shared-B 以及各侧类型所要求的
+  Shared scale；因此数学源实际占用一至四个 Shared binder。scale 与配套
+  matrix 同存储。带 options 和零/单 scale 的便捷重载均保留这一存储配对
+  规则；旧的双 scale no-options 入口仍要求两个 scale 为 Local。
 - 所有 Shared binder 走独立有序 `B.IOS` 流；Local operand 仍走 `B.IOT`。
 
-MX overloads in this API represent the scale-bearing MX schema. A/B must be
-`E4M3`、`E5M2`、`E2M1X2` 或 `E1M2X2`，ScaleA/ScaleB 必须是普通
-RowMajor `E8M0` Tile。ScaleA valid shape 是 `M x ceil(K/32)`，ScaleB
-valid shape 是 `ceil(K/32) x N`；MX 的 C/Bias/FullAcc 类型固定为 FP32。
+MX 的 A、B 两侧独立接受六种输入类型：`FP16`、`BF16`、`E4M3`、
+`E5M2`、`E2M1X2`、`E1M2X2`。`FP16/BF16` 侧不得提供 scale；其余四种
+类型的每一侧都必须提供普通 RowMajor `E8M0` scale。因此一次操作可以有
+零个、仅 A/Vec 侧一个、仅 B/Mtx 侧一个或两侧共两个 scale。数学源始终按
+`A[, ScaleA], B[, ScaleB]` 排列；TGEMV 对应 `Vec[, ScaleVec],
+Mtx[, ScaleMtx]`。ScaleA valid shape 是 `M x ceil(K/32)`，ScaleB valid
+shape 是 `ceil(K/32) x N`；scale 与配套 primary 同存储，MX 的
+C/Bias/FullAcc 类型固定为 FP32。缺失、额外或非 E8M0 scale 均在编译期拒绝。
 
 ## B.FPATR 模式
 

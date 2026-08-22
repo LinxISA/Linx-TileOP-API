@@ -56,8 +56,10 @@ and numeric status publish as one completed bundle.
 Ordinary Matrix inputs must be from one numeric class. Floating inputs derive
 FP32 accumulation, signed inputs derive S32, and unsigned inputs derive U32.
 With `PreQuant=None`, D preserves that exact AccType; C and Bias must use the
-same derived type. MX inputs use the assigned floating MX formats, E8M0 scale
-tiles, and FP32 accumulation.
+same derived type. Each MX input side independently accepts FP16/BF16 without
+a scale, or E4M3/E5M2/E2M1X2/E1M2X2 with one RowMajor E8M0 scale tile. Thus an
+MX operation has zero, one, or two scale operands according to its A/B types;
+MX accumulation, C, and Bias remain FP32.
 
 ## Persistent CELL layouts
 

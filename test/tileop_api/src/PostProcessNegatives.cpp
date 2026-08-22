@@ -39,6 +39,12 @@ using BadBias = Tile<Location::Bias, int32_t, 8, 32,
                      BLayout::RowMajor, 1, 32>;
 using NegMXA = CubeTileM32<__fp8_e4m3, 32, 64>;
 using NegMXB = CubeTileN8<__fp8_e4m3, 64, 32>;
+using PlainMXA = CubeTileM32<__half, 32, 64>;
+using PlainMXB = CubeTileN8<__bf16, 64, 32>;
+using GoodScaleA = Tile<Location::Scaling, __fp8_e8m0, 32, 2,
+                        BLayout::RowMajor, 32, 2>;
+using GoodScaleB = Tile<Location::Scaling, __fp8_e8m0, 2, 32,
+                        BLayout::RowMajor, 2, 32>;
 using BadScaleType = Tile<Location::Scaling, float, 1, 32,
                           BLayout::RowMajor, 1, 2>;
 using BadScaleShape = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
@@ -135,6 +141,28 @@ void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
   BadScaleShape bad_sa;
   BadScaleShape bad_sb;
   TMATMUL_MX(d, mxa, bad_sa, mxb, bad_sb);
+#endif
+#if defined(SHOULD_FAIL_missing_mx_scale_a)
+  NegMXA mxa;
+  PlainMXB mxb;
+  TMATMUL_MX(d, mxa, mxb);
+#endif
+#if defined(SHOULD_FAIL_missing_mx_scale_b)
+  PlainMXA mxa;
+  NegMXB mxb;
+  TMATMUL_MX(d, mxa, mxb);
+#endif
+#if defined(SHOULD_FAIL_extra_mx_scale_a)
+  PlainMXA mxa;
+  PlainMXB mxb;
+  GoodScaleA scale_a;
+  TMATMUL_MX(d, mxa, scale_a, mxb);
+#endif
+#if defined(SHOULD_FAIL_extra_mx_scale_b)
+  PlainMXA mxa;
+  PlainMXB mxb;
+  GoodScaleB scale_b;
+  TMATMUL_MX(d, mxa, mxb, scale_b);
 #endif
 #if defined(SHOULD_FAIL_bad_transpose_d)
   TransStoredA stored_a;

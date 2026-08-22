@@ -78,4 +78,17 @@ static_assert(matrix_output_type_legal<FixpAttr::keep_acc(), UnsignedA,
 static_assert(matrix_output_type_legal<FixpAttr::keep_acc(), FloatA, FloatB,
                                        FloatD>());
 
+static_assert(matrix_mx_input_supported(__type_fp16));
+static_assert(matrix_mx_input_supported(__type_bf16));
+static_assert(matrix_mx_input_supported(__type_fp8_e4m3));
+static_assert(matrix_mx_input_supported(__type_fp8_e5m2));
+static_assert(matrix_mx_input_supported(__type_fp4_e2m1x2));
+static_assert(matrix_mx_input_supported(__type_fp4_e1m2x2));
+static_assert(!matrix_mx_input_needs_scale(__type_fp16));
+static_assert(!matrix_mx_input_needs_scale(__type_bf16));
+static_assert(matrix_mx_input_needs_scale(__type_fp8_e4m3));
+static_assert(matrix_mx_input_needs_scale(__type_fp8_e5m2));
+static_assert(matrix_mx_input_needs_scale(__type_fp4_e2m1x2));
+static_assert(matrix_mx_input_needs_scale(__type_fp4_e1m2x2));
+
 int main() { return 0; }

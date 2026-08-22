@@ -32,6 +32,13 @@ require_disassembly 'B\.DATR[[:space:]]+ND2M32, DTYPE_NONE, Null' \
   'ND2M32 CUBE load layout'
 require_disassembly 'B\.DATR[[:space:]]+N82ND, DTYPE_NONE, Null' \
   'N82ND CUBE store layout'
+require_disassembly 'B\.IOT[[:space:]]+t#3, mask=1111' \
+  'present conditional MX scale binder'
+if grep -Eq 'B\.IOT[[:space:]]+t#2, mask=1111' "$OUT/contract.diss"; then
+  echo "FAIL: absent conditional MX scale binder survived assembly" >&2
+  sed -n '1,120p' "$OUT/contract.diss" >&2
+  exit 1
+fi
 
 for invalid in \
   'B.IOT t#1, mask=0011, last, ->m<128B>' \
