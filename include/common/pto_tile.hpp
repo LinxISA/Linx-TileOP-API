@@ -982,15 +982,19 @@ public:
                 "SFractalSize_ illegal");
 
 #ifdef __linx
-  using TileDType =
-      DType tile_size((StorageBytes * 8 / type_traits<DType>::bits) /
-                      (sizeof(DType) * 8 / type_traits<DType>::bits));
+  using TileDType = linx_tile_carrier<LogicalTileBytes>;
+  using TileRegisterType = typename TileDType::RegisterType;
 #else
   using TileDType = DType[StorageBytes * 8 / type_traits<DType>::bits];
 #endif
 
+#ifdef __linx
+  TileRegisterType &data() { return data_.Register; }
+  const TileRegisterType &data() const { return data_.Register; }
+#else
   TileDType &data() { return data_; }
   const TileDType &data() const { return data_; }
+#endif
 
   // record dynamic shape info
   int RowMaskInternal;

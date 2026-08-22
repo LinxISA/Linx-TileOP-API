@@ -100,24 +100,23 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         for row in self.contract.get("cube_ops", []):
             if row["name"].startswith("TGEMV"):
                 continue
-            # TMATMUL/TMATMULMX carriers appear as BSTART.CUBE <op>
-            self.assertIn("BSTART.CUBE", self.header, row["name"])
+            self.assertIn('"BSTART." OPCODE', self.header, row["name"])
             break
         for row in self.contract.get("tlsu_ops", []):
             if row["name"] in {"TPREFETCH", "MGATHER_CAS"}:
                 continue
-            self.assertIn("BSTART.TLSU", self.header, row["name"])
+            spelling = row["name"].replace("_", ".")
+            self.assertIn(f"BSTART.{spelling}", self.header, row["name"])
 
-    # --- inline-asm ABI: Tr + %Z, no %q/%D ---
+    # --- inline-asm ABI: Tr + %Z + %D ---
 
     def test_inline_asm_uses_current_compiler_abi(self) -> None:
         # Current ABI: Tile operands use "Tr" register constraints and tile
-        # size uses the %Z printer modifier. The retired %q/%D ABI must not
-        # reappear.
+        # size uses %Z and DataType immediates use the target %D printer.
         self.assertRegex(self.header, r'"[^"]*Tr"')
         self.assertRegex(self.header, r"%Z\[")
         self.assertNotIn("%q", self.header)
-        self.assertNotRegex(self.header, r"%D\b")
+        self.assertRegex(self.header, r"%D(?:\[|\d)")
 
     def test_tile_carrier_preserves_logical_size(self) -> None:
         tile_header = PTO_TILE.read_text(encoding="utf-8")
@@ -127,12 +126,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     # --- block carriers: TEPL / TLSU / CUBE (current LLVM spelling) ---
 
     def test_jcore_uses_current_block_carriers(self) -> None:
-        # The implementation targets the LLVM carriers currently accepted:
-        # BSTART.TEPL (VEC/SFU engine), BSTART.TLSU, BSTART.CUBE. Canonical
-        # BSTART.VEC/SFU/<operation> aliases are a future LLVM work item and
-        # must NOT be asserted here yet.
+        # TEPL remains the raw VEC/SFU carrier; TLSU/CUBE use exact named starts.
         self.assertIn("BSTART.TEPL", self.header)
-        self.assertIn("BSTART.TLSU", self.header)
+        self.assertIn("BSTART.TLOAD", self.header)
+        self.assertIn('"BSTART." OPCODE', self.header)
         # TGEMV enters through the TLSU/CUBE surface too.
         self.assertIn("TGEMV", self.header)
 
@@ -188,13 +185,13 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn('[Dst] "=&Tr"(dst.data())', self.header)
 
     def test_tgemv_uses_a_then_b_source_and_type_order(self) -> None:
-        self.assertIn('"B.IOT %[Vec], %[Mtx], mask=15\\n"', self.header)
-        self.assertNotIn('"B.IOT %[Mtx], %[Vec], mask=15\\n"', self.header)
+        self.assertIn('"B.IOT %[Vec], %[Mtx], mask=1111\\n"', self.header)
+        self.assertNotIn('"B.IOT %[Mtx], %[Vec], mask=1111\\n"', self.header)
         self.assertIn(
-            '"B.IOT %[Vec], mask=15\\n" ".if %c[HasScaleA]\\n" '
-            '"B.IOT %[ScaleVec], mask=15\\n" ".endif\\n" '
-            '"B.IOT %[Mtx], mask=15\\n" ".if %c[HasScaleB]\\n" '
-            '"B.IOT %[ScaleMtx], mask=15\\n"',
+            '"B.IOT %[Vec], mask=1111\\n" ".if %c[HasScaleA]\\n" '
+            '"B.IOT %[ScaleVec], mask=1111\\n" ".endif\\n" '
+            '"B.IOT %[Mtx], mask=1111\\n" ".if %c[HasScaleB]\\n" '
+            '"B.IOT %[ScaleMtx], mask=1111\\n"',
             self.header,
         )
         self.assertIn("PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx", self.header)
@@ -210,10 +207,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("constexpr bool HasScaleB = (ScaleMask & 2) != 0;",
                       self.header)
         self.assertIn("PTO_MX_SCALE_INPUTS", self.header)
-        a_source = ('"B.IOT %[A], mask=15\\n" ".if %c[HasScaleA]\\n" '
-                    '"B.IOT %[ScaleA], mask=15\\n"')
-        b_source = ('"B.IOT %[B], mask=15\\n" ".if %c[HasScaleB]\\n" '
-                    '"B.IOT %[ScaleB], mask=15\\n"')
+        a_source = ('"B.IOT %[A], mask=1111\\n" ".if %c[HasScaleA]\\n" '
+                    '"B.IOT %[ScaleA], mask=1111\\n"')
+        b_source = ('"B.IOT %[B], mask=1111\\n" ".if %c[HasScaleB]\\n" '
+                    '"B.IOT %[ScaleB], mask=1111\\n"')
         a_pos = self.header.find(a_source)
         b_pos = self.header.find(b_source, a_pos)
         self.assertGreaterEqual(a_pos, 0)
@@ -279,6 +276,19 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("N82ND, DTYPE_NONE, Null", gate)
         self.assertIn("missing canonical $description", gate)
 
+    def test_active_inline_asm_uses_exact_pto0583_surface(self) -> None:
+        self.assertNotRegex(self.header, r'"[^"\n]*BSTART\.(?:TLSU|CUBE)')
+        self.assertNotRegex(self.header, r'"[^"\n]*mask=15(?:\D|$)')
+        self.assertNotIn("mask=%c[PEMask]", self.header)
+        self.assertNotRegex(
+            self.header, r'"BSTART\.TEPL\s+\d+,\s*%[cD]'
+        )
+        self.assertNotRegex(self.header, r'"B\.DATR[^"\n]*\.normal')
+        self.assertNotIn(
+            '"B.DATR %c[DataTypeB], byte0, Zero\\n"', self.header
+        )
+        self.assertIn('"BSTART." OPCODE " %D[DataTypeA]\\n"', self.header)
+
     def test_pe_mode_rejects_unassigned_masks(self) -> None:
         type_header = (ROOT / "include" / "jcore" / "type.hpp").read_text(
             encoding="utf-8"
@@ -311,10 +321,10 @@ int main() { return sizeof(Bad); }
 
     def test_shared_tmov_uses_unique_source_forms_and_shared_registers(self) -> None:
         for source_form in (
-            "BSTART.TLSU TMOV.L2S.INSERT",
-            "BSTART.TLSU TMOV.L2S.PUBLISH",
-            "BSTART.TLSU TMOV.S2L.BROADCAST",
-            "BSTART.TLSU TMOV.S2L.EXTRACT",
+            "BSTART.TMOV.L2S.INSERT",
+            "BSTART.TMOV.L2S.PUBLISH",
+            "BSTART.TMOV.S2L.BROADCAST",
+            "BSTART.TMOV.S2L.EXTRACT",
         ):
             self.assertIn(source_form, self.header, source_form)
         self.assertRegex(self.header, r'\[Shared\]\s+"=Sr"')
@@ -365,9 +375,9 @@ int main() { return sizeof(Bad); }
         self.assertRegex(self.header, r"B\.IOT %7, mask=1111, last")
 
     def test_tquant_tdequant_use_datr_and_ior(self) -> None:
-        # TQUANT/TDEQUANT: B.DATR carries RMode (numeric %c) and SAT/NOSAT,
+        # TQUANT/TDEQUANT: B.DATR carries named dtype/RMode and optional sat,
         # and B.IOR carries multiplier+zero-point.
-        self.assertRegex(self.header, r"B\.DATR %c\[DType\], (%c\[RMode\]|RNONE)")
+        self.assertRegex(self.header, r"B\.DATR %D\[DType\], rmode[0-7]")
         self.assertRegex(self.header, r"B\.IOR \[%\[Mult\], %\[ZP\]\]")
 
     # --- docs and harness sanity ---
