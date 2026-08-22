@@ -1,5 +1,5 @@
 // Shared/Local storage-form test: Local-A/Shared-B keeps ordinary M, while
-// Shared-A/Shared-B uses the fixed 4-PE Group contract and a per-PE local C.
+// Shared-A/Shared-B preserves the same logical M/K and K/N rectangles.
 // MX scale tiles follow their matrix's storage.
 #include <common/pto_tileop.hpp>
 
@@ -11,9 +11,9 @@ using SA = Tile<Location::Scaling, float, 16, 16, BLayout::RowMajor>;
 using SB = SharedMatrixRight<float, 16, 16>;
 using C = CubeAccumulatorM16<float, 16, 16>;
 
-using GroupA = SharedMatrixLeft<float, 64, 16>;
+using GroupA = SharedMatrixLeft<float, 16, 16>;
 using GroupB = SharedMatrixRight<float, 16, 16>;
-using GroupAScale = SharedMatrixLeft<float, 64, 16>;
+using GroupAScale = SharedMatrixLeft<float, 16, 16>;
 using GroupBScale = SharedMatrixRight<float, 16, 16>;
 
 void shared_b_forms(C &d, C &c, A &a, B &b, SA &sa, SB &sb) {

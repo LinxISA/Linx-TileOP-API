@@ -36,8 +36,10 @@ the negative corpus, and disassembly checks.
 At the reviewed LLVM integration point, the MC/CodeGen compiler implements the
 0.58.3 instruction encodings but does not ship the C++ Tile register frontend
 used by this header (`linx_blkc.h`, `tile_size`, or the `Tr` constraint).
-`verify_pto0583_asm.sh` therefore proves the integrated assembler,
-disassembler, SizeCode/PEMode, layout, and FPATR contracts directly. The full
+`verify_pto0583_asm.sh` therefore gates the integrated assembler,
+disassembler, SizeCode/PEMode, layout, DTYPE_NONE, and FPATR contracts
+directly. It must fail on a compiler that silently renders the required CUBE
+conversion dtype as FP64. The full
 C++ target corpus remains a compiler packaging/frontend blocker until those
 Tile ABI definitions are supplied; `make check` still covers all public C++
 types and builders with a host syntax gate.

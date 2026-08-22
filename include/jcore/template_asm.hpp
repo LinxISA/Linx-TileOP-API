@@ -2296,15 +2296,44 @@ constexpr void validate_matrix_contract() {
                   "Local matrix A must use CUBE_M16 or CUBE_M32 CELL layout");
     static_assert(A::BFractal == Dst::BFractal,
                   "Local matrix A and destination D must use the same CUBE_M layout");
+  } else {
+    static_assert(A::BFractal == BLayout::RowMajor &&
+                      A::SFractal == SLayout::NoneBox,
+                  "Shared matrix A must be an ordinary RowMajor rectangle");
   }
   if constexpr (!is_shared_tile_v<B>) {
     static_assert(B::IsCubeLayout && B::BFractal == BLayout::CubeN8,
                   "Local matrix B must use CUBE_N8 CELL layout");
+  } else {
+    static_assert(B::BFractal == BLayout::RowMajor &&
+                      B::SFractal == SLayout::NoneBox,
+                  "Shared matrix B must be an ordinary RowMajor rectangle");
   }
   static_assert(!Attr.TransA || is_shared_tile_v<A>,
                 "B.FPATR TransA requires a cooperative Shared A primary");
   static_assert(!Attr.TransB || is_shared_tile_v<B>,
                 "B.FPATR TransB requires a cooperative Shared B primary");
+  constexpr int ARows = is_shared_tile_v<A> && Attr.TransA ? A::Cols : A::Rows;
+  constexpr int ACols = is_shared_tile_v<A> && Attr.TransA ? A::Rows : A::Cols;
+  constexpr int BRows = is_shared_tile_v<B> && Attr.TransB ? B::Cols : B::Rows;
+  constexpr int BCols = is_shared_tile_v<B> && Attr.TransB ? B::Rows : B::Cols;
+  static_assert(ACols == BRows,
+                "Matrix K mismatch: A logical columns must equal B logical rows");
+  static_assert(Dst::Cols == BCols,
+                "Matrix destination columns must equal B logical columns");
+  if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
+    static_assert(ARows == Dst::Rows,
+                  "Cooperative Shared A logical rows must equal D rows");
+  } else {
+    static_assert(Dst::Rows == ARows,
+                  "Matrix destination rows must equal A logical rows");
+  }
+  if constexpr (A::ValidCol != DYNAMIC && B::ValidRow != DYNAMIC &&
+                !(is_shared_tile_v<A> && Attr.TransA) &&
+                !(is_shared_tile_v<B> && Attr.TransB)) {
+    static_assert(A::ValidCol == B::ValidRow,
+                  "Matrix valid K mismatch: A.ValidCol must equal B.ValidRow");
+  }
 }
 
 template <typename Dst, typename Acc>
@@ -2313,13 +2342,36 @@ constexpr void validate_matrix_accumulator_contract() {
                 "Matrix accumulator C must use CUBE_M16 or CUBE_M32 CELL layout");
   static_assert(Acc::BFractal == Dst::BFractal,
                 "Matrix accumulator C and destination D must use the same CUBE_M layout");
+  static_assert(Acc::Rows == Dst::Rows && Acc::Cols == Dst::Cols,
+                "Matrix accumulator C and destination D must have identical shapes");
+  if constexpr (Acc::ValidRow != DYNAMIC && Dst::ValidRow != DYNAMIC)
+    static_assert(Acc::ValidRow == Dst::ValidRow,
+                  "Matrix accumulator C and destination D valid rows must match");
+  if constexpr (Acc::ValidCol != DYNAMIC && Dst::ValidCol != DYNAMIC)
+    static_assert(Acc::ValidCol == Dst::ValidCol,
+                  "Matrix accumulator C and destination D valid columns must match");
 }
 
-// Issue #18: for a Group TMATMUL (Shared A + Shared B, local C per PE) the
-// B.DIM window must describe each PE's compute slice, not the full Shared A
-// rows. LB0 = local C rows = SharedA.Rows / PECount. These helpers centralize
-// the shape decision so basic/ACC/BIAS/MX and options overloads cannot
-// diverge.
+template <FixpAttr Attr, typename Dst, typename Vec, typename Mtx>
+constexpr void validate_gemv_contract() {
+  validate_matrix_contract<Attr, Dst, Vec, Mtx>();
+  static_assert(Vec::Rows == 1 && Dst::Rows == 1,
+                "TGEMV requires A vector and D destination to have one logical row");
+  static_assert(Vec::ValidRow != DYNAMIC && Vec::ValidCol != DYNAMIC &&
+                    Mtx::ValidRow != DYNAMIC && Mtx::ValidCol != DYNAMIC &&
+                    Dst::ValidRow != DYNAMIC && Dst::ValidCol != DYNAMIC,
+                "TGEMV dynamic valid shapes are not supported");
+  static_assert(Vec::ValidRow == 1 && Dst::ValidRow == 1,
+                "TGEMV requires Vec.ValidRow and D.ValidRow to equal one");
+  static_assert(Vec::ValidCol == Mtx::ValidRow,
+                "TGEMV valid K mismatch: Vec.ValidCol must equal Mtx.ValidRow");
+  static_assert(Dst::ValidCol == Mtx::ValidCol,
+                "TGEMV D.ValidCol must equal Mtx.ValidCol");
+}
+
+// Shared A/B publication quarters do not multiply logical M/N/K. These
+// helpers centralize the shape decision so basic/ACC/BIAS/MX and options
+// overloads cannot diverge.
 struct MatmulShape {
   size_t M;
   size_t N;
@@ -2327,34 +2379,28 @@ struct MatmulShape {
   bool group;
 };
 
-// Fixed 4-PE Group contract matching the current mask=1111 inline-asm surface.
-inline constexpr size_t kGroupPeCount = 4;
-
-// Resolve M/N/K (per-PE compute window) for a matmul-style operation.
-// Non-group: M = A rows, N = B cols, K = A cols (unchanged). Group: M and N
-// come from the local destination C; K from Shared A cols; static asserts
-// enforce SharedA.Rows == PECount * C.Rows and the matching Cols.
+// Resolve M/N/K for a matmul-style operation. Cooperative Shared primaries
+// carry the same logical M/K and K/N rectangles as Local primaries; the four
+// fixed quarters are publication/readiness state, not a 4x logical-row ABI.
 template <typename C, typename A, typename B>
 constexpr MatmulShape resolve_matmul_shape() {
   if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
-    static_assert(A::Rows == kGroupPeCount * C::Rows,
-                  "Group TMATMUL requires SharedA.Rows == 4 * local C.Rows");
+    static_assert(A::Rows == C::Rows,
+                  "Shared TMATMUL requires SharedA.Rows == local C.Rows");
     static_assert(A::Cols == B::Rows,
-                  "Group TMATMUL requires A.Cols == B.Rows");
+                  "Shared TMATMUL requires A.Cols == B.Rows");
     static_assert(B::Cols == C::Cols,
-                  "Group TMATMUL requires SharedB.Cols == local C.Cols");
+                  "Shared TMATMUL requires SharedB.Cols == local C.Cols");
     static_assert(A::ValidRow != DYNAMIC && A::ValidCol != DYNAMIC &&
                       B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC &&
                       C::ValidRow != DYNAMIC && C::ValidCol != DYNAMIC,
-                  "Group TMATMUL dynamic valid shapes are not supported; use "
-                  "static valid shapes satisfying the 4-PE contract");
-    static_assert(A::ValidRow == kGroupPeCount * C::ValidRow,
-                  "Group TMATMUL requires SharedA.ValidRow == 4 * local "
-                  "C.ValidRow");
+                  "Shared TMATMUL dynamic valid shapes are not supported");
+    static_assert(A::ValidRow == C::ValidRow,
+                  "Shared TMATMUL requires SharedA.ValidRow == C.ValidRow");
     static_assert(A::ValidCol == B::ValidRow,
-                  "Group TMATMUL requires A.ValidCol == B.ValidRow");
+                  "Shared TMATMUL requires A.ValidCol == B.ValidRow");
     static_assert(B::ValidCol == C::ValidCol,
-                  "Group TMATMUL requires SharedB.ValidCol == local "
+                  "Shared TMATMUL requires SharedB.ValidCol == local "
                   "C.ValidCol");
     return MatmulShape{C::ValidRow, C::ValidCol, A::ValidCol, true};
   } else {
@@ -3948,7 +3994,7 @@ PTO_SHARED_INLINE void emit_gemv_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_matrix_contract<Attr, Dst, Vec, Mtx>();
+  validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GV_EMIT_LOCAL);
 }
 
@@ -3964,7 +4010,7 @@ PTO_SHARED_INLINE void emit_gemv_bias_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_matrix_contract<Attr, Dst, Vec, Mtx>();
+  validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVB_EMIT_LOCAL);
 }
 
@@ -3980,8 +4026,8 @@ PTO_SHARED_INLINE void emit_gemv_acc_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_matrix_contract<Attr, Dst, Vec, Mtx>();
-  validate_matrix_accumulator_contract<Dst, C_>();
+  validate_gemv_contract<Attr, Dst, Vec, Mtx>();
+  validate_matrix_accumulator_contract<Dst, C>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVA_EMIT_LOCAL);
 }
 
@@ -3998,7 +4044,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_matrix_contract<Attr, Dst, Vec, Mtx>();
+  validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL);
 }
 
@@ -4016,7 +4062,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_matrix_contract<Attr, Dst, Vec, Mtx>();
+  validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL);
 }
 
@@ -4034,8 +4080,8 @@ PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_matrix_contract<Attr, Dst, Vec, Mtx>();
-  validate_matrix_accumulator_contract<Dst, C_>();
+  validate_gemv_contract<Attr, Dst, Vec, Mtx>();
+  validate_matrix_accumulator_contract<Dst, C>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL);
 }
 
@@ -4376,7 +4422,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                 "TMATMUL input A must be Location::Left");
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
                 "TMATMUL input B must be a Right tile");
-  // Physical and valid M/N/K contracts, including the 4-PE Group case,
+  // Physical and valid M/N/K contracts, including cooperative Shared inputs,
   // are centralized in resolve_matmul_shape_runtime below.
   static_assert(tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
                 "TMATMUL output logical Tile size must be 512 B..32 KB");

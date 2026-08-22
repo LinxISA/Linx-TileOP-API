@@ -11,19 +11,22 @@ using A = CubeTileM32<float, 32, 64>;
 using B = CubeTileN8<float, 64, 32>;
 using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 2>;  // bad ValidCol
 using G = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 8>;  // bad for N=32/GroupN=16
-using GroupA = SharedMatrixLeft<float, 64, 16>;
+using GroupA = SharedMatrixLeft<float, 16, 16>;
 using GroupB = SharedMatrixRight<float, 16, 16>;
 using C = CubeAccumulatorM16<float, 16, 16>;
 using BadGroupC = CubeAccumulatorM16<float, 8, 16>;
 using BadGroupK = SharedMatrixRight<float, 32, 16>;
 using BadGroupN = SharedMatrixRight<float, 16, 32>;
-using DynamicGroupA = SharedMatrixLeft<float, 64, 16, DYNAMIC, DYNAMIC>;
+using DynamicGroupA = SharedMatrixLeft<float, 16, 16, DYNAMIC, DYNAMIC>;
 using DynamicGroupB = SharedMatrixRight<float, 16, 16, DYNAMIC, DYNAMIC>;
 using DynamicGroupC = CubeAccumulatorM16<float, 16, 16, DYNAMIC, DYNAMIC>;
 using OldA = TileLeft<float, 32, 64>;
 using BadLayoutD = CubeAccumulatorM16<float, 16, 32>;
 using BadLayoutA = CubeTileM32<float, 16, 64>;
 using BadK = CubeTileN8<float, 32, 32>;
+using BadGemvVec = CubeTileM16<float, 2, 64>;
+using GemvMtx = CubeTileN8<float, 64, 32>;
+using GemvDst = CubeAccumulatorM16<float, 1, 32>;
 
 void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
 #if defined(SHOULD_FAIL_dtype)
@@ -64,6 +67,18 @@ void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
   BadK bad_b;
   TMATMUL(d, a, bad_b);
 #endif
+#if defined(SHOULD_FAIL_shared_cube_layout)
+  auto bad_shared_a = TMOV_L2S_INSERT(a);
+  SharedMatrixRight<float, 64, 32> ordinary_b;
+  auto shared_b = TMOV_L2S_INSERT(ordinary_b);
+  TMATMUL(d, bad_shared_a, shared_b);
+#endif
+#if defined(SHOULD_FAIL_gemv_rows)
+  BadGemvVec bad_vec;
+  GemvMtx matrix;
+  GemvDst out;
+  TGEMV(out, matrix, bad_vec);
+#endif
 #if defined(SHOULD_FAIL_group_shape)
   GroupA group_a;
   GroupB group_b;
@@ -89,7 +104,7 @@ void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
   TMATMUL(group_c, sa, sb);
 #endif
 #if defined(SHOULD_FAIL_group_dynamic)
-  DynamicGroupA group_a(64, 16);
+  DynamicGroupA group_a(16, 16);
   DynamicGroupB group_b(16, 16);
   DynamicGroupC group_c(16, 16);
   auto sa = TMOV_L2S_INSERT(group_a);
