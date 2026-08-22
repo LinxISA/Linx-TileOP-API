@@ -262,6 +262,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             "SharedTransposeNonSquare.cpp"
         ).read_text()
         self.assertIn("transpose_a().transpose_b()", transpose_fixture)
+        self.assertIn("RowMax", transpose_fixture)
+        self.assertIn("GroupMax", transpose_fixture)
+        self.assertGreaterEqual(self.header.count("constexpr int EffectiveM"), 2)
+        self.assertGreaterEqual(self.header.count("constexpr int EffectiveN"), 2)
         for fixture in ("TMatmulAllOptions.cpp", "TGEMVAllOptions.cpp",
                         "SharedMatrixForms.cpp"):
             text = (ROOT / "test" / "tileop_api" / "src" / fixture).read_text()

@@ -4611,6 +4611,10 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
   constexpr int IorMode = (HasScalarQuant ? 1 : 0) |
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+  constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
+      ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
+      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
 
   static_assert(HasVectorQuant ==
                     !std::is_same_v<typename Options::QuantTile,
