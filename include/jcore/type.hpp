@@ -101,6 +101,26 @@ enum __tilesize_code {
   __tilesize_unknown = -1
 };
 
+// PTO ISA 0.58.3 encodes a three-bit PEMode, not an arbitrary four-bit
+// participation mask.  Keep masks at the C++ API boundary because they are
+// easier to read in call sites, but reject every mask which the fixed decoder
+// cannot produce.
+constexpr bool is_valid_pe_mask(unsigned mask) {
+  return mask == 0 || mask == 8 || mask == 4 || mask == 2 || mask == 1 ||
+         mask == 12 || mask == 14 || mask == 15;
+}
+
+constexpr unsigned pe_mode_from_mask(unsigned mask) {
+  return mask == 0  ? 0 :
+         mask == 8  ? 1 :
+         mask == 4  ? 2 :
+         mask == 2  ? 3 :
+         mask == 1  ? 4 :
+         mask == 12 ? 5 :
+         mask == 14 ? 6 :
+         mask == 15 ? 7 : 8; // 8 is an invalid sentinel, never encodable.
+}
+
 template <typename T>
 struct tile_type_traits {
 private:

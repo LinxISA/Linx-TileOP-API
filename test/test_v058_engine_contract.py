@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# PTO ISA 0.58.1 engine-contract tests for the jcore inline-asm surface.
+# PTO ISA 0.58.3 engine-contract tests for the jcore inline-asm surface.
 #
 # Rebuilt per handoff Work Package B6: the assertions reflect the current
 # real toolchain ABI (Tr Tile constraints + %Z TileSize printer; the %q/%D
@@ -11,7 +11,11 @@
 # directly from the header text.
 
 import json
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -49,10 +53,46 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     # --- catalog/release provenance ---
 
     def test_contract_carries_release_provenance(self) -> None:
-        self.assertIn("profile", self.contract)
+        self.assertEqual(self.contract["profile"], "v0.58")
+        self.assertEqual(
+            self.contract["semantic_engine_counts"],
+            {"CUBE": 12, "SFU": 56, "TLSU": 10, "VEC": 31},
+        )
         src = self.contract.get("source", {})
-        self.assertIn("release", src)
-        self.assertTrue(src.get("commit") and src.get("sha256"))
+        self.assertEqual(src.get("release"), "0.58.3")
+        self.assertEqual(
+            src.get("commit"), "dd52a2e579d8058c0d8e33043e705122b340e73f"
+        )
+        self.assertEqual(
+            src.get("tree"), "1cfc7343e714489f95f67592475e8b9f079241ee"
+        )
+        self.assertEqual(
+            src.get("sha256"),
+            "34ecbcfa075166490b622647eb53c13a9c360848d6c7acb2e034d3e47f8c9a8a",
+        )
+        pto = self.contract.get("pto_source", {})
+        self.assertEqual(pto.get("release"), "0.58.3")
+        self.assertEqual(
+            pto.get("commit"), "e599a3d36ebfad43362ff591ea5e128816c684c7"
+        )
+        self.assertEqual(
+            pto.get("tree"), "abb6899d2e664e378ac9c1b77062670daa4d31b4"
+        )
+        self.assertEqual(
+            pto.get("encoding_projection_sha256"),
+            "8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172",
+        )
+
+    def test_0583_vec_sfu_reclassification_is_exact(self) -> None:
+        engines = {row["name"]: row["engine"] for row in self.contract["tepl_ops"]}
+        for operation in ("TDIV", "TREM", "TEXP", "TLOG"):
+            self.assertEqual(engines[operation], "SFU")
+        self.assertEqual(
+            sum(row["engine"] == "VEC" for row in self.contract["tepl_ops"]), 31
+        )
+        self.assertEqual(
+            sum(row["engine"] == "SFU" for row in self.contract["tepl_ops"]), 56
+        )
 
     # 12 CUBE + 6 TGEMV functions are in the catalog; our surface should
     # reference each active operation's carrier somewhere in the header.
@@ -109,15 +149,159 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertNotIn("C.B.IOS", self.header)
         self.assertRegex(self.header, r"B\.IOS %S\[Shared[AB]\], mask=1111")
 
-    # --- TLSU stride in logical elements ---
+    # --- TLSU TLOAD/TSTORE stride in bytes ---
 
-    def test_tlsu_stride_is_expressed_in_logical_elements(self) -> None:
-        self.assertNotRegex(
-            self.header,
-            r"(?:RowStride|ColStride)\s*\*\s*sizeof",
-        )
+    def test_tlsu_load_store_stride_is_expressed_in_bytes(self) -> None:
+        self.assertIn("GetStrideBytes", self.header)
         tlsu_doc = (ROOT / "docs" / "tileop-usage" / "tlsu.md").read_text(encoding="utf-8")
-        self.assertIn("logical elements", tlsu_doc)
+        self.assertIn("row stride in **bytes**", tlsu_doc)
+
+    def test_fpatr_carries_shared_transpose_controls(self) -> None:
+        tile = PTO_TILE.read_text(encoding="utf-8")
+        self.assertIn("bool TransA = false", tile)
+        self.assertIn("bool TransB = false", tile)
+        self.assertIn("%c[TransA], %c[TransB]", self.header)
+        self.assertIn("[TransA]", self.header)
+        self.assertIn("[TransB]", self.header)
+
+    def test_cube_cell_and_transport_contract_is_exposed(self) -> None:
+        tile = PTO_TILE.read_text(encoding="utf-8")
+        layout = (ROOT / "include" / "common" / "layout.hpp").read_text(
+            encoding="utf-8"
+        )
+        for spelling in ("CubeM16", "CubeM32", "CubeN8"):
+            self.assertIn(spelling, layout)
+        for spelling in ("ND2M32 = 21", "ND2M16 = 22", "ND2N8 = 23",
+                         "M322ND = 24", "M162ND = 25", "N82ND = 26"):
+            self.assertIn(spelling, layout)
+        self.assertIn("CubeCellBytes = 128", tile)
+        self.assertIn("CubeRequiredBytes", tile)
+        self.assertIn("TLOAD_CUBE", self.header)
+        self.assertIn("TSTORE_CUBE", self.header)
+
+    def test_cube_shared_operands_use_common_nonzero_mask(self) -> None:
+        self.assertRegex(self.header, r"B\.IOS %S\[Shared[AB]\], mask=1111")
+        self.assertNotRegex(self.header, r"B\.IOS %S\[Shared[AB]\], mask=0000")
+
+    def test_cube_accumulator_is_explicit_and_destination_is_distinct(self) -> None:
+        self.assertIn('"B.IOT %[C]\\n"', self.header)
+        self.assertIn('[Dst] "=&Tr"(dst.data())', self.header)
+
+    def test_tgemv_uses_a_then_b_source_and_type_order(self) -> None:
+        self.assertIn('"B.IOT %[Vec], %[Mtx], mask=15\\n"', self.header)
+        self.assertNotIn('"B.IOT %[Mtx], %[Vec], mask=15\\n"', self.header)
+        self.assertIn(
+            '"B.IOT %[Vec], mask=15\\n" ".if %c[HasScaleA]\\n" '
+            '"B.IOT %[ScaleVec], mask=15\\n" ".endif\\n" '
+            '"B.IOT %[Mtx], mask=15\\n" ".if %c[HasScaleB]\\n" '
+            '"B.IOT %[ScaleMtx], mask=15\\n"',
+            self.header,
+        )
+        self.assertIn("PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx", self.header)
+        self.assertNotIn("PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec", self.header)
+
+    def test_mx_scale_presence_is_validated_per_input_side(self) -> None:
+        self.assertIn("ScaleA presence must match the PTO MX type contract",
+                      self.header)
+        self.assertIn("ScaleB presence must match the PTO MX type contract",
+                      self.header)
+        self.assertIn("constexpr bool HasScaleA = (ScaleMask & 1) != 0;",
+                      self.header)
+        self.assertIn("constexpr bool HasScaleB = (ScaleMask & 2) != 0;",
+                      self.header)
+        self.assertIn("PTO_MX_SCALE_INPUTS", self.header)
+        a_source = ('"B.IOT %[A], mask=15\\n" ".if %c[HasScaleA]\\n" '
+                    '"B.IOT %[ScaleA], mask=15\\n"')
+        b_source = ('"B.IOT %[B], mask=15\\n" ".if %c[HasScaleB]\\n" '
+                    '"B.IOT %[ScaleB], mask=15\\n"')
+        a_pos = self.header.find(a_source)
+        b_pos = self.header.find(b_source, a_pos)
+        self.assertGreaterEqual(a_pos, 0)
+        self.assertGreater(b_pos, a_pos)
+        fixture = (ROOT / "test" / "tileop_api" / "src" /
+                   "MXScaleVariants.cpp").read_text(encoding="utf-8")
+        for spelling in ("__half", "__bf16", "__fp8_e4m3", "__fp8_e5m2",
+                         "__fp4_e2m1x2", "__fp4_e1m2x2"):
+            self.assertIn(spelling, fixture)
+        negatives = (ROOT / "test" / "tileop_api" / "run_negatives.sh").read_text(
+            encoding="utf-8"
+        )
+        for case in ("missing_mx_scale_a", "missing_mx_scale_b",
+                     "extra_mx_scale_a", "extra_mx_scale_b",
+                     "bad_mx_scale_dtype", "bad_mx_scale_shape"):
+            self.assertIn(case, negatives)
+
+    def test_local_cube_descriptor_contract_is_compile_time_guarded(self) -> None:
+        self.assertIn("Local matrix A must use CUBE_M16 or CUBE_M32", self.header)
+        self.assertIn("Local matrix B must use CUBE_N8", self.header)
+        self.assertIn("destination D must use CUBE_M16 or CUBE_M32", self.header)
+        self.assertIn("Matrix accumulator C and destination D must use the same", self.header)
+        for fixture in ("TMatmulAllOptions.cpp", "TGEMVAllOptions.cpp",
+                        "GroupMatmul.cpp", "CubeCellTransport.cpp"):
+            text = (ROOT / "test" / "tileop_api" / "src" / fixture).read_text()
+            self.assertRegex(text, r"Cube(Tile|Accumulator)(M16|M32|N8)")
+
+    def test_matrix_dtype_and_effective_shape_contract_is_centralized(self) -> None:
+        tile = PTO_TILE.read_text(encoding="utf-8")
+        self.assertIn("matrix_accumulator_type_code", tile)
+        self.assertIn("MatrixNumericClass::Unsigned", tile)
+        self.assertIn("OutputCode == AccCode", tile)
+        self.assertIn("FP32/S32/U32 AccType", tile)
+        self.assertIn("Matrix D valid shape must match effective M x N", self.header)
+        self.assertIn("Attr.TransA", self.header)
+        self.assertIn("? A::ValidCol : A::ValidRow", self.header)
+        self.assertIn("Attr.TransB", self.header)
+        self.assertIn("? B::ValidRow : B::ValidCol", self.header)
+        integer_fixture = (
+            ROOT / "test" / "tileop_api" / "src" / "MatrixIntegerDtypes.cpp"
+        ).read_text()
+        self.assertIn("CubeAccumulatorM16<int32_t", integer_fixture)
+        self.assertIn("CubeAccumulatorM16<uint32_t", integer_fixture)
+        transpose_fixture = (
+            ROOT / "test" / "tileop_api" / "src" /
+            "SharedTransposeNonSquare.cpp"
+        ).read_text()
+        self.assertIn("transpose_a().transpose_b()", transpose_fixture)
+        for fixture in ("TMatmulAllOptions.cpp", "TGEMVAllOptions.cpp",
+                        "SharedMatrixForms.cpp"):
+            text = (ROOT / "test" / "tileop_api" / "src" / fixture).read_text()
+            self.assertIn("__fp8_e4m3", text)
+            self.assertIn("__fp8_e8m0", text)
+
+    def test_mc_gate_requires_canonical_cube_layout_names(self) -> None:
+        gate = (ROOT / "test" / "tileop_api" /
+                "verify_pto0583_asm.sh").read_text()
+        self.assertIn("ND2M32, DTYPE_NONE, Null", gate)
+        self.assertIn("N82ND, DTYPE_NONE, Null", gate)
+        self.assertIn("missing canonical $description", gate)
+
+    def test_pe_mode_rejects_unassigned_masks(self) -> None:
+        type_header = (ROOT / "include" / "jcore" / "type.hpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("is_valid_pe_mask", type_header)
+        self.assertIn("pe_mode_from_mask", type_header)
+        self.assertNotIn("PEMask > 0 && PEMask < 16", self.header)
+
+    def test_fp6_cube_cell_instantiation_is_rejected(self) -> None:
+        compiler = os.environ.get("CXX") or shutil.which("c++")
+        self.assertIsNotNone(compiler)
+        source = """
+#include \"common/pto_tile.hpp\"
+using Bad = pto::CubeTileM16<__fp6_e3m2, 16, 32>;
+int main() { return sizeof(Bad); }
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bad_fp6_cube.cpp"
+            path.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [compiler, "-std=c++20", "-D__linx",
+                 "-include", str(ROOT / "test" / "linx_host_type_shim.hpp"),
+                 "-fsyntax-only", "-I", str(ROOT / "include"), str(path)],
+                text=True, capture_output=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CUBE CELL layouts support only", result.stderr)
 
     # --- TMOV shared source forms ---
 

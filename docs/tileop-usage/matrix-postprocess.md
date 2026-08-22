@@ -10,7 +10,7 @@ stream.
 
 Requirements:
 
-- `dst`、`a` 和所有辅助 Tile 都是普通 Local Tile；`a` 必须是 `Location::Left`，`b` 必须是 `Location::Right`。
+- Local `a`/`c`/`dst` 必须使用 CUBE_M16/M32 CELL layout，Local `b` 必须使用 CUBE_N8；辅助参数仍是普通 Local Tile。
 - `right` 可以是普通 `Tile<Location::Right, ...>`，也可以是 `SharedTile<RightTile>`（或 `SharedTile<LeftTile>` 作为 `a`）。
 - 所有 `B.FPATR` 配置和可选 operand 都封装在唯一的 `options` 参数中。
 - options 的类型在编译期确定模式；scalar descriptor 的值和 Tile 寄存器内容可在运行时确定。
@@ -18,15 +18,16 @@ Requirements:
 ## 基础类型
 
 ```cpp
-using tile_a = Tile<Location::Left, __half, 32, 32>;
-using tile_b = Tile<Location::Right, __half, 32, 32>;
-using tile_fp32 = Tile<Location::Vec, __fp32, 32, 32>;
-using tile_fp16 = Tile<Location::Vec, __half, 32, 32>;
-using tile_bf16 = Tile<Location::Vec, __bf16, 32, 32>;
-using tile_s8 = Tile<Location::Vec, int8_t, 32, 32>;
+using tile_a = CubeTileM32<__half, 32, 32>;
+using tile_b = CubeTileN8<__half, 32, 32>;
+using tile_fp32 = CubeAccumulatorM32<__fp32, 32, 32>;
+using tile_fp16 = CubeAccumulatorM32<__half, 32, 32>;
+using tile_bf16 = CubeAccumulatorM32<__bf16, 32, 32>;
+using tile_s8 = CubeAccumulatorM32<int8_t, 32, 32>;
 ```
 
-A/B/dst 的物理 Tile 必须满足 TileOP 的对齐和 512 B..32 KB active-size 约束。`dst` 的 valid shape 必须为 `M x N`。
+A/B/dst 的 Local SizeCode 容量必须在 128 B..64 KiB；CELL 所需容量按
+128 B 单元推导并向合法 SizeCode 取整。`dst` 的 valid shape 必须为 `M x N`。
 
 ## C++ 操作族与签名
 
@@ -40,15 +41,21 @@ GroupMax、MaxAbs）与 Shared scale。数学源顺序与 handoff Sec 1.4 一致
 TMATMUL<Attr>(Dst, A, B, options);                    // D = A*B
 TMATMUL_BIAS<Attr>(Dst, A, B, Bias, options);         // D = A*B + Bias
 TMATMUL_ACC<Attr>(Dst, C, A, B, options);             // D = C + A*B
-TMATMUL_MX<Attr>(Dst, A, ScaleA, B, ScaleB, options); // D = (A*ScaleA)*(B*ScaleB)
-TMATMUL_MX_BIAS<Attr>(Dst, A, ScaleA, B, ScaleB, Bias, options);
-TMATMUL_MX_ACC<Attr>(Dst, C, A, ScaleA, B, ScaleB, options);
+TMATMUL_MX(Dst, A, ScaleA, B, ScaleB, options); // D = (A*ScaleA)*(B*ScaleB)
+TMATMUL_MX(Dst, A, B, options);                  // FP16/BF16 pair: no scales
+TMATMUL_MX(Dst, A, ScaleA, B, options);          // only A needs a scale
+TMATMUL_MX(Dst, A, B, ScaleB, options);          // only B needs a scale
+TMATMUL_MX_BIAS(Dst, A, ScaleA, B, ScaleB, Bias, options);
+TMATMUL_MX_ACC(Dst, C, A, ScaleA, B, ScaleB, options);
 TGEMV<Attr>(Dst, Mtx, Vec, options);                  // D = Vec(M=1,K) * Mtx(K,N)
 TGEMV_BIAS<Attr>(Dst, Mtx, Vec, Bias, options);
 TGEMV_ACC<Attr>(Dst, C, Mtx, Vec, options);
-TGEMV_MX<Attr>(Dst, Mtx, ScaleMtx, Vec, ScaleVec, options);
-TGEMV_MX_BIAS<Attr>(Dst, Mtx, ScaleMtx, Vec, ScaleVec, Bias, options);
-TGEMV_MX_ACC<Attr>(Dst, C, Mtx, ScaleMtx, Vec, ScaleVec, options);
+TGEMV_MX(Dst, Mtx, ScaleMtx, Vec, ScaleVec, options);
+TGEMV_MX(Dst, Mtx, Vec, options);                // neither side needs a scale
+TGEMV_MX(Dst, Mtx, Vec, ScaleVec, options);      // only Vec/A needs a scale
+TGEMV_MX(Dst, Mtx, ScaleMtx, Vec, options);      // only Mtx/B needs a scale
+TGEMV_MX_BIAS(Dst, Mtx, ScaleMtx, Vec, ScaleVec, Bias, options);
+TGEMV_MX_ACC(Dst, C, Mtx, ScaleMtx, Vec, ScaleVec, options);
 ```
 
 无 options 调用（如 `TMATMUL(d, a, b)`）等价于 `TMATMUL(d, a, b,
@@ -61,30 +68,41 @@ keep_acc/f16/bf16/relu 模式。
 
 - `Vec` = 1×K（Left，逻辑 `ValidRow=1`），`Mtx` = K×N（Right），
   `Dst` = 1×N（逻辑 `ValidRow=1`）。
-- 物理 Tile 仍需满足 512 B..32 KB active-size，因此向量通常用
-  `Tile<Location::Left, T, K, K, BLayout::RowMajor, 1, K>` 这类满物理 +
-  逻辑 1×K 的 shape。
+- `Vec` 使用 `CubeTileM16<T, 1, K>`，`Mtx` 使用
+  `CubeTileN8<T, K, N>`，`Dst` 使用 `CubeAccumulatorM16<AccT, 1, N>`。
 - 所有 TGEMV 都是 Local-only；任何 `B.IOS` 都 illegal（handoff Sec 1.5），
   Shared 参数在概念层被拒绝。
-- `B.DIM` 角色相对 TMATMUL 反转：`LB0 = N`、`LB1 = M(=1)`、`LB2 = Col`。
+- `B.DIM` 与 TMATMUL 一致：`LB0 = M(=1)`、`LB1 = N`、`LB2 = K`；
+  B.IOT 数学源顺序为 A=`Vec`、B=`Mtx`。
 
 ## Shared / Local 存储形态
 
 - plain `TMATMUL`/`TMATMUL_ACC`/`TMATMUL_BIAS`：允许 Local-A + Shared-B
   或 Shared-A + Shared-B；不支持仅 Shared-A（单 binder 保留给
   Shared-Right 形式）。
-- `TMATMUL_MX*` options 重载：MX Shared pair 是 Shared-B/ScaleB（两个
-  binder），或 Shared-A/ScaleA/B/ScaleB 全部 Shared（四个 binder）；
-  scale 与配套 matrix 同存储。no-options 重载保持 scale Local-only。
+- `TMATMUL_MX*` options 重载：可使用 Shared-B 以及该侧需要时的
+  Shared-ScaleB，或同时使用 Shared-A/Shared-B 以及各侧类型所要求的
+  Shared scale；因此数学源实际占用一至四个 Shared binder。scale 与配套
+  matrix 同存储。带 options 和零/单 scale 的便捷重载均保留这一存储配对
+  规则；旧的双 scale no-options 入口仍要求两个 scale 为 Local。
 - 所有 Shared binder 走独立有序 `B.IOS` 流；Local operand 仍走 `B.IOT`。
+
+MX 的 A、B 两侧独立接受六种输入类型：`FP16`、`BF16`、`E4M3`、
+`E5M2`、`E2M1X2`、`E1M2X2`。`FP16/BF16` 侧不得提供 scale；其余四种
+类型的每一侧都必须提供普通 RowMajor `E8M0` scale。因此一次操作可以有
+零个、仅 A/Vec 侧一个、仅 B/Mtx 侧一个或两侧共两个 scale。数学源始终按
+`A[, ScaleA], B[, ScaleB]` 排列；TGEMV 对应 `Vec[, ScaleVec],
+Mtx[, ScaleMtx]`。ScaleA valid shape 是 `M x ceil(K/32)`，ScaleB valid
+shape 是 `ceil(K/32) x N`；scale 与配套 primary 同存储，MX 的
+C/Bias/FullAcc 类型固定为 FP32。缺失、额外或非 E8M0 scale 均在编译期拒绝。
 
 ## B.FPATR 模式
 
-`FixpPreQuantMode` 的取值及其输出数据类型（PTO-ISA v0.58 `B.FPATR` 表）：
+`FixpPreQuantMode` 的取值及其输出数据类型（PTO ISA 0.58.3 `B.FPATR` 表）：
 
 | 模式 | 值 | dst dtype |
 | --- | ---: | --- |
-| `None` | 0 | FP32（AccType 结果；v0.58 不再接受 S32 别名） |
+| `None` | 0 | 保留派生 AccType：浮点→FP32，有符号整数→S32，无符号整数→U32 |
 | `F322F16` | 1 | FP16 |
 | `VREQS8Pre` | 2 | S8 |
 | `REQS8Pre` | 3 | S8 |
@@ -124,7 +142,7 @@ TMATMUL(dst_bf16, a, b, fixp::bf16());
 
 | options | PreQuantMode | dst dtype |
 | --- | ---: | --- |
-| `fixp::keep_acc()` | `None` / 0 | FP32（AccType） |
+| `fixp::keep_acc()` | `None` / 0 | 派生 AccType（FP32/S32/U32） |
 | `fixp::f16()` | `F322F16` / 1 | FP16 |
 | `fixp::bf16()` | `F322BF16` / 16 | BF16 |
 
@@ -216,8 +234,8 @@ TMATMUL(dst_s8, a, b, fixp::s8(quant));
 vector quant Tile 的每个 64-bit element 使用与 scalar descriptor 相同的 bit
 layout。
 
-参数 Tile 的 valid shape 必须为 `1 x N`。如果 `1 x N` 的逻辑数据不足 512 B，
-必须扩大物理 Rows/Cols 保证 Tile register 至少 512 B，同时用
+参数 Tile 的 valid shape 必须为 `1 x N`。如果 `1 x N` 的逻辑数据不足 128 B，
+必须扩大物理 Rows/Cols 保证 Tile register 至少 128 B，同时用
 `ValidRow=1, ValidCol=N` 保持有效区域。例如上例物理 shape 为 `2 x 32`，valid
 shape 为 `1 x 32`。
 
@@ -250,8 +268,8 @@ TMATMUL(dst_fp16, a, b, fixp::f16().prelu(prelu));
 
 ## RowMax
 
-RowMax 在 ReLU/quant/convert 之前基于 FullAcc 计算，dtype 必须是 FP32/S32
-AccType。
+RowMax 在 ReLU/quant/convert 之前基于 FullAcc 计算，dtype 必须精确匹配
+FP32/S32/U32 派生 AccType。
 
 ### Fresh RowMax
 
@@ -283,7 +301,7 @@ TMATMUL(
 destination 顺序为 D、RowMaxOut。
 
 RowMaxIn/Out 的 valid shape 必须为 `M x 1`，dtype 和 valid shape 必须一致。
-物理 Tile 仍必须至少 512 B，因此可以像示例一样扩大物理列数，使用
+物理 Tile 仍必须至少 128 B，因此可以像示例一样扩大物理列数，使用
 `ValidCol=1`。
 
 ## GroupMax
@@ -306,8 +324,8 @@ TMATMUL(
 GroupMaxOut：
 
 - valid shape 必须为 `M x ceil(N / GroupN)`；
-- dtype 必须是 FP32/S32 AccType；
-- 物理 Tile 必须满足 512 B..32 KB active-size 约束。
+- dtype 必须精确匹配派生 AccType（FP32/S32/U32）；
+- 物理 Tile 必须满足 Local SizeCode 1..10（128 B..64 KiB）。
 
 例如 N=32、GroupN=8 时，valid columns 是 4。
 
@@ -390,6 +408,10 @@ mode 没有 PReLU Tile、RowMaxInit 没有 RowMaxIn、GroupMax shape 不匹配�
 dtype 与 PreQuantMode 不匹配。
 
 ## B.FPATR 与 operand 顺序
+
+PTO ISA 0.58.3 在 `B.FPATR` 低位增加 `TransA` 与 `TransB`。TileOP 通过
+`options.transpose_a()` / `options.transpose_b()` 设置；它们只作用于对应
+的 cooperative Shared 主矩阵，Local 主矩阵使用 transpose 位属于非法组合。
 
 TileOP 固定生成：
 

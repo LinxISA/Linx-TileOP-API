@@ -112,7 +112,7 @@ void TADD_MUL_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
-  // PTO 0.58.1 TileOperandsLegal_TCVT requires the source and destination to
+  // PTO ISA 0.58.3 TileOperandsLegal_TCVT requires the source and destination to
   // match on physical rows, physical columns, valid rows and valid columns.
   // A destination declared with fewer physical rows/columns than the source
   // (e.g. Tile<1,1024> with valid 2x512) would violate TileLogicalShapeMatch
@@ -120,7 +120,7 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
   static_assert(tile_shape_out::Rows == tile_shape_in::Rows &&
                     tile_shape_out::Cols == tile_shape_in::Cols,
                 "TCVT source and destination must have identical physical "
-                "Rows/Cols (PTO 0.58.1 TileLogicalShapeMatch)");
+                "Rows/Cols (PTO ISA 0.58.3 TileLogicalShapeMatch)");
   static_assert((tile_shape_out::ValidRow == DYNAMIC ||
                  tile_shape_out::Rows >= tile_shape_out::ValidRow) &&
                     (tile_shape_out::ValidCol == DYNAMIC ||
@@ -185,7 +185,7 @@ template <is_local_tile_v Tile>
 inline void TMOV(Tile &dst, const Tile &src) {
   static_assert(
       tile_type_traits<typename Tile::TileDType>::IsValidActiveSize,
-      "TMOV logical Tile size must be 128 B..8 KB");
+      "TMOV logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
@@ -281,7 +281,7 @@ void TLOAD2_ND2NZ(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()*2), [__pto_VROW]"r"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
-      [__pto_GmStride]"r"(src.GetStride(3))
+      [__pto_GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -304,7 +304,7 @@ void TLOAD2_ND2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()*2), [__pto_VROW]"r"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
-      [__pto_GmStride]"r"(src.GetStride(3))
+      [__pto_GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -327,7 +327,7 @@ void TLOAD2_DN2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst1.GetValidCol()), [__pto_VROW]"r"(dst1.GetValidRow()*2), [__pto_COL]"i"(tile_shape::Cols),
-      [__pto_GmStride]"r"(src.GetStride(4))
+      [__pto_GmStride]"r"(src.GetStrideBytes(4))
       : "memory");
 }
 
@@ -348,7 +348,7 @@ void TSTORE2_DN2DN(gm_shape &dst, tile_shape &src1, tile_shape &src0) {
       [__pto_DstType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
       [__pto_VCOL]"r"(src0.GetValidRow()*2), [__pto_VROW]"r"(src0.GetValidCol()), [__pto_COL]"i"(tile_shape::Rows*2),
-      [__pto_GmStride]"r"(dst.GetStride(4))
+      [__pto_GmStride]"r"(dst.GetStrideBytes(4))
       : "memory");
 }
 
@@ -373,7 +373,7 @@ void TLOAD4_ND2NZ(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidCol()*4), [__pto_VROW]"r"(dst3.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*4),
-      [__pto_GmStride]"r"(src.GetStride(3))
+      [__pto_GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -398,7 +398,7 @@ void TLOAD4_ND2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidRow()*4), [__pto_VROW]"r"(dst3.GetValidCol()), [__pto_COL]"i"(tile_shape::Rows*4),
-      [__pto_GmStride]"r"(src.GetStride(3))
+      [__pto_GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -423,7 +423,7 @@ void TLOAD4_DN2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [__pto_VCOL]"r"(dst3.GetValidCol()*4), [__pto_VROW]"r"(dst3.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*4),
-      [__pto_GmStride]"r"(src.GetStride(4))
+      [__pto_GmStride]"r"(src.GetStrideBytes(4))
       : "memory");
 }
 
@@ -440,7 +440,7 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
                     const tile_shape_offset &offset) {
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
-                "MGATHER dst logical Tile size must be 512 B..32 KB (TSize=1..7) "
+                "MGATHER dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
       "BSTART.TLSU MGATHER, %c[DataType]\n"
@@ -468,7 +468,7 @@ inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
                      const tile_shape_offset &offset) {
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
-                "MSCATTER src logical Tile size must be 512 B..32 KB (TSize=1..7) "
+                "MSCATTER src logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
       "BSTART.TLSU MSCATTER, %c[DataType]\n"
@@ -496,7 +496,7 @@ inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
                          const tile_shape_mask &mask) {
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
-                "MGATHER_MASK dst logical Tile size must be 512 B..32 KB (TSize=1..7) "
+                "MGATHER_MASK dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
       "BSTART.TLSU MGATHER.MASK, %c[DataType]\n"
@@ -528,7 +528,7 @@ inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
                           const tile_shape_mask &mask) {
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
-                "MSCATTER_MASK src logical Tile size must be 512 B..32 KB (TSize=1..7) "
+                "MSCATTER_MASK src logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
       "BSTART.TLSU MSCATTER.MASK, %c[DataType]\n"
@@ -1755,7 +1755,7 @@ template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
 void TLOAD(tile_shape &dst, gm_shape &src) {
   static_assert(
       tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
-      "TLOAD dst logical Tile size must be 512 B..32 KB (TSize=1..7)");
+      "TLOAD dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
@@ -1771,7 +1771,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(tile_shape::Cols),
-      [GmStride]"r"(src.GetStride(3))
+      [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -1781,7 +1781,8 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
 template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
 SharedTile<shp> TLOAD(const gm_shape &src) {
   using shp_dtype = typename shp::TileDType;
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
       "TLOAD Shared dst logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
@@ -1802,7 +1803,7 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
-      [GmStride]"r"(src.GetStride(3))
+      [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
   return result;
 }
@@ -1810,7 +1811,8 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
 template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
 void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
   using shp_dtype = typename shp::TileDType;
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
       "TLOAD Shared dst logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
@@ -1830,7 +1832,7 @@ void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(shp::Cols),
-      [GmStride]"r"(src.GetStride(3))
+      [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
 
@@ -1838,7 +1840,7 @@ void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 void TSTORE(gm_shape &dst, tile_shape &src) {
   static_assert(tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
-                "TSTORE src logical Tile size must be 512 B..32 KB (TSize=1..7) "
+                "TSTORE src logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
@@ -1854,11 +1856,72 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
       [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
       [COL]"i"(tile_shape::Cols),
-      [GmStride]"r"(dst.GetStride(3))
+      [GmStride]"r"(dst.GetStrideBytes(3))
       : "memory");
 }
 
-// TSTORE: Shared Tile -> GM (PTO 0.58.1 TLSU Function 1 Shared form).
+// PTO ISA 0.58.3 GM -> persistent Local CUBE CELL transport.  The layout
+// conversion is explicit, LB0/LB1 carry logical valid columns/rows, LB2 is
+// absent, and SizeCode describes capacity rather than logical M/N/K.
+template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
+  requires(cube_shape::IsCubeLayout)
+void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
+  static_assert(std::is_same_v<typename cube_shape::DType,
+                               typename gm_shape::DType>,
+                "TLOAD_CUBE requires matching GM and CUBE dtypes");
+  static_assert(cube_shape::CubeRequiredBytes <= cube_shape::LogicalTileBytes,
+                "TLOAD_CUBE CUBE CELL storage exceeds Local SizeCode capacity");
+  static_assert(cube_shape::IsValidActiveSize,
+                "TLOAD_CUBE Local CUBE capacity must be 128 B..64 KiB");
+  const size_t valid_col = dst.GetValidCol();
+  const size_t valid_row = dst.GetValidRow();
+  asm volatile(
+      "BSTART.TLSU TLOAD, %c[DataType]\n"
+      "B.DATR layout%c[Layout], DTYPE_NONE, Null\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
+      "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Base] "r"(src.data()),
+        [RowStrideBytes] "r"(src.GetStrideBytes(3)),
+        [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
+        [Layout] "i"(cube_shape::CubeLoadLayout),
+        [SizeCode] "i"(cube_shape::TilesizeCode),
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+      : "memory");
+}
+
+// PTO ISA 0.58.3 persistent Local CUBE CELL -> GM transport.  The source
+// descriptor survives the operation and only its logical valid rectangle is
+// exported.
+template <is_global_data_v gm_shape, is_local_tile_v cube_shape>
+  requires(cube_shape::IsCubeLayout)
+void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
+  static_assert(std::is_same_v<typename cube_shape::DType,
+                               typename gm_shape::DType>,
+                "TSTORE_CUBE requires matching GM and CUBE dtypes");
+  static_assert(cube_shape::IsValidActiveSize,
+                "TSTORE_CUBE Local CUBE capacity must be 128 B..64 KiB");
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
+  asm volatile(
+      "BSTART.TLSU TSTORE, %c[DataType]\n"
+      "B.DATR layout%c[Layout], DTYPE_NONE, Null\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+      :
+      : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
+        [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
+        [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
+        [Layout] "i"(cube_shape::CubeStoreLayout),
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+      : "memory");
+}
+
+// TSTORE: Shared Tile -> GM (PTO ISA 0.58.3 TLSU Function 1 Shared form).
 // Exactly one source B.IOS (PE_MASK=1111), no B.IOT, at most one B.IOR
 // (GM base + logical row stride). Symmetric to Shared TLOAD.
 template <is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
@@ -1886,16 +1949,17 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src) {
       [SrcType] "i"(type_traits<typename LocalType::DType>::TypeCode),
       [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
       [COL] "i"(LocalType::Cols),
-      [GmStride] "r"(dst.GetStride(3))
+      [GmStride] "r"(dst.GetStrideBytes(3))
     : "memory");
 }
 
 // TSTORE.SPART: Shared Tile -> GM on an explicit nonzero PE subset
-// (PTO 0.58.1 TLSU Function 14). Exactly one source B.IOS with the caller's
+// (PTO ISA 0.58.3 TLSU Function 14). Exactly one source B.IOS with the caller's
 // PE mask (any nonzero subset), no B.IOT; B.IOR carries base + stride.
 template <int PEMask = 15, is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
 PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
-  static_assert(PEMask > 0 && PEMask < 16, "TSTORE.SPART PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "TSTORE.SPART PEMask must be one of 1,2,4,8,12,14,15");
   using LocalType = typename SharedTileT::LocalTileType;
   static_assert(std::is_same_v<typename LocalType::DType,
                                typename gm_shape::DType>,
@@ -1920,7 +1984,7 @@ PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
       [SrcType] "i"(type_traits<typename LocalType::DType>::TypeCode),
       [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
       [COL] "i"(LocalType::Cols),
-      [GmStride] "r"(dst.GetStride(3))
+      [GmStride] "r"(dst.GetStrideBytes(3))
     : "memory");
 }
 
@@ -1949,7 +2013,7 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
     : "memory");
 }
 
-// MGATHER_CAS: atomic compare-and-swap at byte displacements (PTO 0.58.1
+// MGATHER_CAS: atomic compare-and-swap at byte displacements (PTO ISA 0.58.3
 // TLSU function 8; canonical BSTART.MGATHER.CAS). Exactly two Local B.IOT
 // bindings: IndexTile+ExpectedTile (TwoSrc_NoDst, no destination, L=0) then
 // ReplacementTile+last ->DstTile (L=1); B.IOR carries only the byte-address
@@ -2014,7 +2078,8 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
 template <int PEMask = 15, is_tile_data_v tile_shape_dst,
           is_tile_data_v tile_shape_src>
 void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
-  static_assert(PEMask > 0 && PEMask < 16, "GMOV PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "GMOV PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(std::is_same_v<typename tile_shape_dst::DType,
                                typename tile_shape_src::DType>,
                 "GMOV source and destination dtypes must match");
@@ -2031,7 +2096,7 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
                 "GMOV source and destination descriptors must match");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
-      "GMOV logical Tile size must be 512 B..32 KB (TSize=1..7)");
+      "GMOV logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
   static_assert(sizeof(typename tile_shape_dst::TileDType) ==
                     sizeof(typename tile_shape_src::TileDType),
                 "GMOV source and destination logical sizes must match");
@@ -2057,7 +2122,8 @@ template <int PEMask = 15, is_tile_data_v tile_shape_src>
 PTO_SHARED_INLINE void
 TMOV_L2S_INSERT(SharedTile<tile_shape_src> &dst,
                 const tile_shape_src &src) {
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<typename tile_shape_src::TileDType>::IsValidSharedActiveSize,
       "TMOV.L2S.INSERT logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
@@ -2087,7 +2153,8 @@ template <int PEMask = 15, is_tile_data_v tile_shape_src>
 PTO_SHARED_INLINE void
 TMOV_L2S_PUBLISH(SharedTile<tile_shape_src> &dst,
                  const tile_shape_src &src) {
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<typename tile_shape_src::TileDType>::IsValidSharedActiveSize,
       "TMOV.L2S.PUBLISH logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
@@ -2117,10 +2184,11 @@ template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
 PTO_SHARED_INLINE void
 TMOV_S2L_BROADCAST(tile_shape_dst &dst,
                    const SharedTile<LocalTile> &shared) {
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
-      "TMOV.S2L.BROADCAST logical Tile size must be 512 B..32 KB");
+      "TMOV.S2L.BROADCAST logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
   asm volatile(
       "BSTART.TLSU TMOV.S2L.BROADCAST, %c[DataType]\n"
       "B.IOS %S[Shared], mask=%c[PEMask]\n"
@@ -2136,10 +2204,11 @@ TMOV_S2L_BROADCAST(tile_shape_dst &dst,
 template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
 PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
     tile_shape_dst &dst, const SharedTile<LocalTile> &shared) {
-  static_assert(PEMask > 0 && PEMask < 16, "PEMask must be 1..15");
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
-      "TMOV.S2L.EXTRACT logical Tile size must be 512 B..32 KB");
+      "TMOV.S2L.EXTRACT logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
   asm volatile(
       "BSTART.TLSU TMOV.S2L.EXTRACT, %c[DataType]\n"
       "B.IOS %S[Shared], mask=%c[PEMask]\n"
@@ -2187,7 +2256,7 @@ inline size_t matrix_valid_col(const Matrix &matrix) {
   return matrix.GetValidCol();
 }
 
-// PTO_FIXP_ATTR / PTO_FIXP_ATTR_INPUTS emit the B.FPATR line and its seven
+// PTO_FIXP_ATTR / PTO_FIXP_ATTR_INPUTS emit the B.FPATR line and its nine
 // immediate operands. Every TMATMUL/TMATMULMX CUBE bundle carries exactly one
 // B.FPATR after B.DATR, so these are shared by the whole family, not just the
 // .FIXP variants. The macros reference the template parameter Attr, so the
@@ -2197,29 +2266,224 @@ inline size_t matrix_valid_col(const Matrix &matrix) {
 // PTO-ISA v0.58 B.FPATR fields:
 //   PreQuantMode(6b@26) ReluMode(3b@23) GroupNCode(4b@19, <=9)
 //   RowMaxEn(1b@18) GroupMaxEn(1b@17) RowMaxInit(1b@16) MaxAbsEn(1b@15)
+//   TransB(1b@8) TransA(1b@7).  Transpose applies only when the corresponding
+//   primary matrix operand is cooperative Shared storage.
 #define PTO_FIXP_ATTR \
   "B.FPATR %c[PreQuant], %c[ReluMode], %c[GroupNCode], %c[RowMaxEn], " \
-  "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn]\n"
+  "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn], %c[TransA], %c[TransB]\n"
 
 #define PTO_FIXP_ATTR_INPUTS \
   [PreQuant] "i"(static_cast<uint8_t>(Attr.PreQuant)), \
   [ReluMode] "i"(static_cast<uint8_t>(Attr.Relu)), \
   [GroupNCode] "i"(Attr.GroupNCode), [RowMaxEn] "i"(Attr.RowMaxEn), \
   [GroupMaxEn] "i"(Attr.GroupMaxEn), \
-  [RowMaxInit] "i"(Attr.RowMaxInit), [MaxAbsEn] "i"(Attr.MaxAbsEn)
+  [RowMaxInit] "i"(Attr.RowMaxInit), [MaxAbsEn] "i"(Attr.MaxAbsEn), \
+  [TransA] "i"(Attr.TransA), [TransB] "i"(Attr.TransB)
 
-template <typename A, typename B>
-constexpr void validate_shared_matrix_pair() {
+#define PTO_MX_SCALE_INPUTS \
+  [HasScaleA] "i"(HasScaleA), [HasScaleB] "i"(HasScaleB)
+
+template <typename T>
+inline constexpr bool is_cube_m_layout_v =
+    T::BFractal == BLayout::CubeM16 || T::BFractal == BLayout::CubeM32;
+
+template <FixpAttr Attr, typename Dst, typename A, typename B, bool MX = false>
+constexpr void validate_matrix_contract() {
+  static_assert(matrix_input_pair_legal<A, B, MX>(),
+                "Matrix A/B dtypes must be supported inputs from one numeric class");
+  static_assert(matrix_accumulator_mode_legal<Attr, A, B, MX>(),
+                "B.FPATR PreQuantMode is incompatible with the derived matrix accumulator type");
+  static_assert(matrix_output_type_legal<Attr, A, B, Dst, MX>(),
+                "Matrix D dtype must match the derived accumulator/output type");
+  static_assert(Dst::IsCubeLayout && is_cube_m_layout_v<Dst>,
+                "CUBE destination D must use CUBE_M16 or CUBE_M32 CELL layout");
   static_assert(!is_shared_tile_v<A> || is_shared_tile_v<B>,
                 "Shared matmul A requires B to be Shared as well; a lone "
                 "B.IOS binder denotes the existing Shared-Right form");
+  if constexpr (!is_shared_tile_v<A>) {
+    static_assert(A::IsCubeLayout && is_cube_m_layout_v<A>,
+                  "Local matrix A must use CUBE_M16 or CUBE_M32 CELL layout");
+    static_assert(A::BFractal == Dst::BFractal,
+                  "Local matrix A and destination D must use the same CUBE_M layout");
+  } else {
+    static_assert(A::BFractal == BLayout::RowMajor &&
+                      A::SFractal == SLayout::NoneBox,
+                  "Shared matrix A must be an ordinary RowMajor rectangle");
+  }
+  if constexpr (!is_shared_tile_v<B>) {
+    static_assert(B::IsCubeLayout && B::BFractal == BLayout::CubeN8,
+                  "Local matrix B must use CUBE_N8 CELL layout");
+  } else {
+    static_assert(B::BFractal == BLayout::RowMajor &&
+                      B::SFractal == SLayout::NoneBox,
+                  "Shared matrix B must be an ordinary RowMajor rectangle");
+  }
+  static_assert(!Attr.TransA || is_shared_tile_v<A>,
+                "B.FPATR TransA requires a cooperative Shared A primary");
+  static_assert(!Attr.TransB || is_shared_tile_v<B>,
+                "B.FPATR TransB requires a cooperative Shared B primary");
+  static_assert(A::ValidRow != DYNAMIC && A::ValidCol != DYNAMIC &&
+                    B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC &&
+                    Dst::ValidRow != DYNAMIC && Dst::ValidCol != DYNAMIC,
+                "Matrix dynamic valid shapes are not supported");
+  constexpr int AValidRows = is_shared_tile_v<A> && Attr.TransA
+      ? A::ValidCol : A::ValidRow;
+  constexpr int AValidCols = is_shared_tile_v<A> && Attr.TransA
+      ? A::ValidRow : A::ValidCol;
+  constexpr int BValidRows = is_shared_tile_v<B> && Attr.TransB
+      ? B::ValidCol : B::ValidRow;
+  constexpr int BValidCols = is_shared_tile_v<B> && Attr.TransB
+      ? B::ValidRow : B::ValidCol;
+  static_assert(AValidCols == BValidRows,
+                "Matrix effective valid K dimensions must match");
+  static_assert(Dst::ValidRow == AValidRows && Dst::ValidCol == BValidCols,
+                "Matrix D valid shape must match effective M x N");
 }
 
-// Issue #18: for a Group TMATMUL (Shared A + Shared B, local C per PE) the
-// B.DIM window must describe each PE's compute slice, not the full Shared A
-// rows. LB0 = local C rows = SharedA.Rows / PECount. These helpers centralize
-// the shape decision so basic/ACC/BIAS/MX and options overloads cannot
-// diverge.
+template <FixpAttr Attr, typename Dst, typename Acc, typename A, typename B,
+          bool MX = false>
+constexpr void validate_matrix_accumulator_contract() {
+  static_assert(matrix_accumulator_type_legal<A, B, Acc, MX>(),
+                "Matrix accumulator C dtype must match the derived accumulator type");
+  static_assert(Acc::IsCubeLayout && is_cube_m_layout_v<Acc>,
+                "Matrix accumulator C must use CUBE_M16 or CUBE_M32 CELL layout");
+  static_assert(Acc::BFractal == Dst::BFractal,
+                "Matrix accumulator C and destination D must use the same CUBE_M layout");
+  if constexpr (Acc::ValidRow != DYNAMIC && Dst::ValidRow != DYNAMIC)
+    static_assert(Acc::ValidRow == Dst::ValidRow,
+                  "Matrix accumulator C and destination D valid rows must match");
+  if constexpr (Acc::ValidCol != DYNAMIC && Dst::ValidCol != DYNAMIC)
+    static_assert(Acc::ValidCol == Dst::ValidCol,
+                  "Matrix accumulator C and destination D valid columns must match");
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::None)
+    static_assert(Acc::LogicalTileBytes == Dst::LogicalTileBytes,
+                  "Unconverted matrix C and D capacities must match");
+}
+
+template <FixpAttr Attr, typename Bias, typename A, typename B, bool MX = false>
+constexpr void validate_matrix_bias_contract() {
+  static_assert(matrix_accumulator_type_legal<A, B, Bias, MX>(),
+                "Matrix Bias dtype must match the derived accumulator type");
+  static_assert(Bias::BFractal == BLayout::RowMajor &&
+                    Bias::SFractal == SLayout::NoneBox,
+                "Matrix Bias must use ordinary RowMajor layout");
+  static_assert(Bias::ValidRow != DYNAMIC && Bias::ValidCol != DYNAMIC &&
+                    B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC,
+                "Matrix Bias dynamic valid shapes are not supported");
+  constexpr int N = is_shared_tile_v<B> && Attr.TransB
+      ? B::ValidRow : B::ValidCol;
+  static_assert(Bias::ValidRow == 1 && Bias::ValidCol == N,
+                "Matrix Bias valid shape must be 1 x N");
+}
+
+template <FixpAttr Attr, bool HasScaleA, bool HasScaleB, typename ScaleA,
+          typename A, typename ScaleB, typename B>
+constexpr void validate_matrix_scale_contract() {
+  constexpr int ACode = type_traits<typename A::DType>::TypeCode;
+  constexpr int BCode = type_traits<typename B::DType>::TypeCode;
+  static_assert(HasScaleA == matrix_mx_input_needs_scale(ACode),
+                "ScaleA presence must match the PTO MX type contract");
+  static_assert(HasScaleB == matrix_mx_input_needs_scale(BCode),
+                "ScaleB presence must match the PTO MX type contract");
+  static_assert(A::ValidRow != DYNAMIC && A::ValidCol != DYNAMIC &&
+                    B::ValidCol != DYNAMIC,
+                "MX dynamic primary valid shapes are not supported");
+  constexpr int M = is_shared_tile_v<A> && Attr.TransA
+      ? A::ValidCol : A::ValidRow;
+  constexpr int K = is_shared_tile_v<A> && Attr.TransA
+      ? A::ValidRow : A::ValidCol;
+  constexpr int N = is_shared_tile_v<B> && Attr.TransB
+      ? B::ValidRow : B::ValidCol;
+  constexpr int KBlocks = (K + 31) / 32;
+  if constexpr (HasScaleA) {
+    static_assert(type_traits<typename ScaleA::DType>::TypeCode == __type_fp8_e8m0,
+                  "MX ScaleA dtype must be E8M0");
+    static_assert(ScaleA::BFractal == BLayout::RowMajor &&
+                      ScaleA::SFractal == SLayout::NoneBox,
+                  "MX ScaleA must use ordinary RowMajor layout");
+    static_assert(is_shared_tile_v<ScaleA> == is_shared_tile_v<A>,
+                  "MX ScaleA storage must match A storage");
+    static_assert(ScaleA::ValidRow == M && ScaleA::ValidCol == KBlocks,
+                  "MX ScaleA valid shape must be M x ceil(K/32)");
+  }
+  if constexpr (HasScaleB) {
+    static_assert(type_traits<typename ScaleB::DType>::TypeCode == __type_fp8_e8m0,
+                  "MX ScaleB dtype must be E8M0");
+    static_assert(ScaleB::BFractal == BLayout::RowMajor &&
+                      ScaleB::SFractal == SLayout::NoneBox,
+                  "MX ScaleB must use ordinary RowMajor layout");
+    static_assert(is_shared_tile_v<ScaleB> == is_shared_tile_v<B>,
+                  "MX ScaleB storage must match B storage");
+    static_assert(ScaleB::ValidRow == KBlocks && ScaleB::ValidCol == N,
+                  "MX ScaleB valid shape must be ceil(K/32) x N");
+  }
+}
+
+template <FixpAttr Attr, int SrcMask, int OutMask, typename A, typename B,
+          typename RowIn, typename QuantTile, typename ReluTile,
+          typename RowOut, typename GroupOut, bool MX = false>
+constexpr void validate_matrix_postprocess_contract() {
+  constexpr int AccCode = MX
+      ? __type_fp32
+      : matrix_accumulator_type_code(
+            type_traits<typename A::DType>::TypeCode);
+  constexpr int M = is_shared_tile_v<A> && Attr.TransA
+      ? A::ValidCol : A::ValidRow;
+  constexpr int N = is_shared_tile_v<B> && Attr.TransB
+      ? B::ValidRow : B::ValidCol;
+  if constexpr ((OutMask & 1) != 0) {
+    static_assert(type_traits<typename RowOut::DType>::TypeCode == AccCode,
+                  "RowMaxOut dtype must match the derived accumulator type");
+    static_assert(RowOut::ValidRow == M && RowOut::ValidCol == 1,
+                  "RowMaxOut valid shape must be M x 1");
+  }
+  if constexpr ((SrcMask & 1) != 0) {
+    static_assert(type_traits<typename RowIn::DType>::TypeCode == AccCode,
+                  "RowMaxIn dtype must match the derived accumulator type");
+    static_assert(RowIn::ValidRow == M && RowIn::ValidCol == 1,
+                  "RowMaxIn valid shape must be M x 1");
+  }
+  if constexpr ((OutMask & 2) != 0) {
+    constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
+    static_assert(type_traits<typename GroupOut::DType>::TypeCode == AccCode,
+                  "GroupMaxOut dtype must match the derived accumulator type");
+    static_assert(GroupOut::ValidRow == M &&
+                      GroupOut::ValidCol == (N + GroupN - 1) / GroupN,
+                  "GroupMaxOut valid shape must be M x ceil(N/GroupN)");
+  }
+  if constexpr ((SrcMask & 2) != 0) {
+    static_assert(type_traits<typename QuantTile::DType>::TypeCode == __type_uint64,
+                  "Vector quant parameter dtype must be U64");
+    static_assert(QuantTile::ValidRow == 1 && QuantTile::ValidCol == N,
+                  "Vector quant parameter valid shape must be 1 x N");
+  }
+  if constexpr ((SrcMask & 4) != 0) {
+    static_assert(type_traits<typename ReluTile::DType>::TypeCode == __type_uint64,
+                  "Vector PReLU parameter dtype must be U64");
+    static_assert(ReluTile::ValidRow == 1 && ReluTile::ValidCol == N,
+                  "Vector PReLU parameter valid shape must be 1 x N");
+  }
+}
+
+template <FixpAttr Attr, typename Dst, typename Vec, typename Mtx,
+          bool MX = false>
+constexpr void validate_gemv_contract() {
+  validate_matrix_contract<Attr, Dst, Vec, Mtx, MX>();
+  static_assert(Vec::ValidRow != DYNAMIC && Vec::ValidCol != DYNAMIC &&
+                    Mtx::ValidRow != DYNAMIC && Mtx::ValidCol != DYNAMIC &&
+                    Dst::ValidRow != DYNAMIC && Dst::ValidCol != DYNAMIC,
+                "TGEMV dynamic valid shapes are not supported");
+  static_assert(Vec::ValidRow == 1 && Dst::ValidRow == 1,
+                "TGEMV requires Vec.ValidRow and D.ValidRow to equal one");
+  static_assert(Vec::ValidCol == Mtx::ValidRow,
+                "TGEMV valid K mismatch: Vec.ValidCol must equal Mtx.ValidRow");
+  static_assert(Dst::ValidCol == Mtx::ValidCol,
+                "TGEMV D.ValidCol must equal Mtx.ValidCol");
+}
+
+// Shared A/B publication quarters do not multiply logical M/N/K. These
+// helpers centralize the shape decision so basic/ACC/BIAS/MX and options
+// overloads cannot diverge.
 struct MatmulShape {
   size_t M;
   size_t N;
@@ -2227,67 +2491,40 @@ struct MatmulShape {
   bool group;
 };
 
-// Fixed 4-PE Group contract matching the current mask=1111 inline-asm surface.
-inline constexpr size_t kGroupPeCount = 4;
-
-// Resolve M/N/K (per-PE compute window) for a matmul-style operation.
-// Non-group: M = A rows, N = B cols, K = A cols (unchanged). Group: M and N
-// come from the local destination C; K from Shared A cols; static asserts
-// enforce SharedA.Rows == PECount * C.Rows and the matching Cols.
-template <typename C, typename A, typename B>
+// Resolve M/N/K for a matmul-style operation. Cooperative Shared primaries
+// carry the same logical M/K and K/N rectangles as Local primaries; the four
+// fixed quarters are publication/readiness state, not a 4x logical-row ABI.
+template <FixpAttr Attr, typename C, typename A, typename B>
 constexpr MatmulShape resolve_matmul_shape() {
-  if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
-    static_assert(A::Rows == kGroupPeCount * C::Rows,
-                  "Group TMATMUL requires SharedA.Rows == 4 * local C.Rows");
-    static_assert(A::Cols == B::Rows,
-                  "Group TMATMUL requires A.Cols == B.Rows");
-    static_assert(B::Cols == C::Cols,
-                  "Group TMATMUL requires SharedB.Cols == local C.Cols");
-    static_assert(A::ValidRow != DYNAMIC && A::ValidCol != DYNAMIC &&
-                      B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC &&
-                      C::ValidRow != DYNAMIC && C::ValidCol != DYNAMIC,
-                  "Group TMATMUL dynamic valid shapes are not supported; use "
-                  "static valid shapes satisfying the 4-PE contract");
-    static_assert(A::ValidRow == kGroupPeCount * C::ValidRow,
-                  "Group TMATMUL requires SharedA.ValidRow == 4 * local "
-                  "C.ValidRow");
-    static_assert(A::ValidCol == B::ValidRow,
-                  "Group TMATMUL requires A.ValidCol == B.ValidRow");
-    static_assert(B::ValidCol == C::ValidCol,
-                  "Group TMATMUL requires SharedB.ValidCol == local "
-                  "C.ValidCol");
-    return MatmulShape{C::ValidRow, C::ValidCol, A::ValidCol, true};
-  } else {
-    static_assert(A::Rows == C::Rows && B::Cols == C::Cols,
-                  "TMATMUL output shape must be A.Rows x B.Cols");
-    return MatmulShape{0, 0, A::Cols, false};
-  }
+  static_assert(A::ValidRow != DYNAMIC && A::ValidCol != DYNAMIC &&
+                    B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC &&
+                    C::ValidRow != DYNAMIC && C::ValidCol != DYNAMIC,
+                "Matrix dynamic valid shapes are not supported");
+  constexpr size_t M = is_shared_tile_v<A> && Attr.TransA
+      ? A::ValidCol : A::ValidRow;
+  constexpr size_t K = is_shared_tile_v<A> && Attr.TransA
+      ? A::ValidRow : A::ValidCol;
+  constexpr size_t N = is_shared_tile_v<B> && Attr.TransB
+      ? B::ValidRow : B::ValidCol;
+  return MatmulShape{M, N, K,
+                     is_shared_tile_v<A> && is_shared_tile_v<B>};
 }
 
-// Runtime valid-shape resolver: Group M/N come from the destination C's
-// runtime valid shape; non-group from A rows / B cols / A cols.
-template <typename C, typename A, typename B>
+// The public Matrix surface rejects dynamic valid shapes, so resolution is
+// compile-time exact even though the values are passed through GPR operands.
+template <FixpAttr Attr, typename C, typename A, typename B>
 inline MatmulShape resolve_matmul_shape_runtime(const C &c, const A &a,
                                                 const B &b) {
-  // Instantiate the compile-time contract for every public entry point.
-  // Dynamic valid-shape Group operands are rejected there: introducing a
-  // control-flow check while Shared registers are live is not supported by
-  // the current Linx backend and must not silently emit an unchecked bundle.
-  [[maybe_unused]] constexpr MatmulShape StaticShape =
-      resolve_matmul_shape<C, A, B>();
-
-  if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
-    return StaticShape;
-  } else {
-    return MatmulShape{matrix_valid_row(a), matrix_valid_col(b),
-                       matrix_valid_col(a), false};
-  }
+  (void)c;
+  (void)a;
+  (void)b;
+  return resolve_matmul_shape<Attr, C, A, B>();
 }
 
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B>
 PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
                               size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_matrix_contract<Attr, Dst, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
@@ -2338,7 +2575,8 @@ template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B,     
           typename Extra>                                                        \
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 \
                             size_t M, size_t N, size_t K) {                      \
-  validate_shared_matrix_pair<A, B>();                                            \
+  validate_matrix_contract<Attr, Dst, A, B>();                                            \
+  validate_matrix_bias_contract<Attr, Extra, A, B>();                                           \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                 \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
@@ -2399,7 +2637,8 @@ template <FixpAttr Attr = FixpAttr{}, typename Dst, typename C, typename A,
           typename B>
 PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
                                   size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_matrix_contract<Attr, Dst, A, B>();
+  validate_matrix_accumulator_contract<Attr, Dst, C, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
@@ -2731,470 +2970,470 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_L_SRC_0 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_L_SRC_1 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_L_SRC_2 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_L_SRC_3 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_L_SRC_4 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_L_SRC_5 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_L_SRC_6 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_L_SRC_7 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_SB_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_SB_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_SB_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_SB_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_SB_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_SB_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_SB_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_SB_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_SA_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_SA_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_SA_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_SA_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_SA_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_SA_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_SA_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_SA_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_SAB_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_SAB_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_SAB_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_SAB_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_SAB_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_SAB_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_SAB_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_SAB_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_L_SRC_0 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_L_SRC_1 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_L_SRC_2 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_L_SRC_3 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_L_SRC_4 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_L_SRC_5 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_L_SRC_6 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_L_SRC_7 \
-  "B.IOT %[A], %[ScaleA], mask=15\n" \
-  "B.IOT %[B], %[ScaleB], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_7
 
 // TGEMV (Function 16-18, 20-22) math source streams. Local-only per
 // handoff Sec 1.5 (any B.IOS is illegal). A=1xK vector (M=1), B=KxN
 // matrix, C=1xN output. Scales follow their matrix/vector shape.
 #define PTO_FIXP_GV_GV_L_SRC_0 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GV_L_SRC_1 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GV_L_SRC_2 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GV_L_SRC_3 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GV_L_SRC_4 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GV_L_SRC_5 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GV_L_SRC_6 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GV_L_SRC_7 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVB_L_SRC_0 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVB_L_SRC_1 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVB_L_SRC_2 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVB_L_SRC_3 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVB_L_SRC_4 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVB_L_SRC_5 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVB_L_SRC_6 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVB_L_SRC_7 \
-  "B.IOT %[Mtx], %[Vec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVA_L_SRC_0 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVA_L_SRC_1 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVA_L_SRC_2 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVA_L_SRC_3 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVA_L_SRC_4 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVA_L_SRC_5 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVA_L_SRC_6 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVA_L_SRC_7 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[Vec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVMX_L_SRC_0 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVMX_L_SRC_1 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVMX_L_SRC_2 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVMX_L_SRC_3 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVMX_L_SRC_4 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVMX_L_SRC_5 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVMX_L_SRC_6 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVMX_L_SRC_7 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_0 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_1 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_2 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_3 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_4 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_5 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_6 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_7 \
-  "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_0 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_1 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_2 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_3 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_4 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_5 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_6 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_7 \
-  "B.IOT %[C]\n" "B.IOT %[Mtx], %[ScaleMtx], mask=15\n" "B.IOT %[Vec], %[ScaleVec], mask=15\n" \
+  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_SRC_0 \
@@ -3429,7 +3668,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
       PTO_FIXP_MX_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()),\
+      : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3439,7 +3678,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
       PTO_FIXP_MX_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()),\
+      : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3449,7 +3688,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
       PTO_FIXP_MX_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()),\
+      : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3459,7 +3698,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
       PTO_FIXP_MX_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()),\
+      : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3470,7 +3709,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       "B.IOT %[C]\n"                                                      \
       PTO_FIXP_MX_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()),\
+      : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3481,7 +3720,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       "B.IOT %[C]\n"                                                      \
       PTO_FIXP_MX_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()),\
+      : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3492,7 +3731,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       "B.IOT %[C]\n"                                                      \
       PTO_FIXP_MX_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()),\
+      : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3503,7 +3742,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       "B.IOT %[C]\n"                                                      \
       PTO_FIXP_MX_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()),\
+      : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3513,7 +3752,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_MATMUL_HEADER("TMATMULMX.BIAS", PTO_FIXP_ATTR)                        \
       PTO_FIXP_MX_BIAS_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), [Bias] "Tr"(bias.data()),\
+      : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3523,7 +3762,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_MATMUL_HEADER("TMATMULMX.BIAS", PTO_FIXP_ATTR)                        \
       PTO_FIXP_MX_BIAS_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), [Bias] "Tr"(bias.data()),\
+      : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3533,7 +3772,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_MATMUL_HEADER("TMATMULMX.BIAS", PTO_FIXP_ATTR)                        \
       PTO_FIXP_MX_BIAS_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), [Bias] "Tr"(bias.data()),\
+      : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3543,7 +3782,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_MATMUL_HEADER("TMATMULMX.BIAS", PTO_FIXP_ATTR)                        \
       PTO_FIXP_MX_BIAS_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), [Bias] "Tr"(bias.data()),\
+      : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
         [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
@@ -3642,7 +3881,9 @@ PTO_SHARED_INLINE void emit_fixp(
     Dst &dst, A &a, B &b, RowIn &row_in, QuantTile &quant_tile,
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_matrix_contract<Attr, Dst, A, B>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3671,7 +3912,10 @@ PTO_SHARED_INLINE void emit_matmul_acc_fixp(
     Dst &dst, C_ &c, A &a, B &b, RowIn &row_in, QuantTile &quant_tile,
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_matrix_contract<Attr, Dst, A, B>();
+  validate_matrix_accumulator_contract<Attr, Dst, C_, A, B>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_ACC_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3692,7 +3936,10 @@ PTO_SHARED_INLINE void emit_matmul_bias_fixp(
     Dst &dst, A &a, B &b, BiasT &bias, RowIn &row_in, QuantTile &quant_tile,
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  validate_matrix_contract<Attr, Dst, A, B>();
+  validate_matrix_bias_contract<Attr, BiasT, A, B>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_BIAS_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3705,7 +3952,7 @@ PTO_SHARED_INLINE void emit_matmul_bias_fixp(
 }
 
 // TMATMULMX full-PostProcess emitter: math source A,ScaleA,B,ScaleB.
-template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+template <FixpAttr Attr, int ScaleMask, int SrcMask, int OutMask, int IorMode,
           typename Dst, typename A, typename ScaleA, typename B,
           typename ScaleB, typename RowIn, typename QuantTile,
           typename ReluTile, typename RowOut, typename GroupOut>
@@ -3714,7 +3961,15 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  static_assert(ScaleMask >= 0 && ScaleMask <= 3,
+                "MX scale mask contains only independent A/B presence bits");
+  constexpr bool HasScaleA = (ScaleMask & 1) != 0;
+  constexpr bool HasScaleB = (ScaleMask & 2) != 0;
+  validate_matrix_contract<Attr, Dst, A, B, true>();
+  validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
+      ScaleA, A, ScaleB, B>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3727,7 +3982,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
 }
 
 // TMATMULMX.ACC full-PostProcess emitter: math source C,A,ScaleA,B,ScaleB.
-template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+template <FixpAttr Attr, int ScaleMask, int SrcMask, int OutMask, int IorMode,
           typename Dst, typename C_, typename A, typename ScaleA, typename B,
           typename ScaleB, typename RowIn, typename QuantTile,
           typename ReluTile, typename RowOut, typename GroupOut>
@@ -3736,7 +3991,16 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  static_assert(ScaleMask >= 0 && ScaleMask <= 3,
+                "MX scale mask contains only independent A/B presence bits");
+  constexpr bool HasScaleA = (ScaleMask & 1) != 0;
+  constexpr bool HasScaleB = (ScaleMask & 2) != 0;
+  validate_matrix_contract<Attr, Dst, A, B, true>();
+  validate_matrix_accumulator_contract<Attr, Dst, C_, A, B, true>();
+  validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
+      ScaleA, A, ScaleB, B>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3750,7 +4014,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
 
 // TMATMULMX.BIAS full-PostProcess emitter: math source
 // A,ScaleA,B,ScaleB,Bias, then PP aux.
-template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+template <FixpAttr Attr, int ScaleMask, int SrcMask, int OutMask, int IorMode,
           typename Dst, typename A, typename ScaleA, typename B,
           typename ScaleB, typename BiasT, typename RowIn, typename QuantTile,
           typename ReluTile, typename RowOut, typename GroupOut>
@@ -3759,7 +4023,16 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
-  validate_shared_matrix_pair<A, B>();
+  static_assert(ScaleMask >= 0 && ScaleMask <= 3,
+                "MX scale mask contains only independent A/B presence bits");
+  constexpr bool HasScaleA = (ScaleMask & 1) != 0;
+  constexpr bool HasScaleB = (ScaleMask & 2) != 0;
+  validate_matrix_contract<Attr, Dst, A, B, true>();
+  validate_matrix_bias_contract<Attr, BiasT, A, B, true>();
+  validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
+      ScaleA, A, ScaleB, B>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -3781,7 +4054,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()),                                                          \
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_GV_GVB_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -3791,7 +4064,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()), [Bias] "Tr"(bias.data()),                                                          \
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_GV_GVA_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -3801,7 +4074,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()),                                                          \
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_GV_GVMX_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -3809,9 +4082,9 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       PTO_MATMUL_HEADER("TGEMVMX", PTO_FIXP_ATTR)                         \
       PTO_FIXP_GV_GVMX_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()),                                                          \
+      : [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), PTO_MX_SCALE_INPUTS,                                                          \
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_GV_GVMXB_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -3819,9 +4092,9 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       PTO_MATMUL_HEADER("TGEMVMX.BIAS", PTO_FIXP_ATTR)                         \
       PTO_FIXP_GV_GVMXB_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), [Bias] "Tr"(bias.data()),                                                          \
+      : [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),                                                          \
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_GV_GVMXA_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -3829,9 +4102,9 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       PTO_MATMUL_HEADER("TGEMVMX.ACC", PTO_FIXP_ATTR)                         \
       PTO_FIXP_GV_GVMXA_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [C] "Tr"(c.data()), [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()),                                                          \
+      : [C] "Tr"(c.data()), [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), PTO_MX_SCALE_INPUTS,                                                          \
         [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 // emit_gemv_fixp: mtx / vec -> dst, Local-only.
@@ -3844,7 +4117,10 @@ PTO_SHARED_INLINE void emit_gemv_fixp(
     Vec &vec,
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
-    uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  validate_gemv_contract<Attr, Dst, Vec, Mtx>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GV_EMIT_LOCAL);
 }
 
@@ -3859,7 +4135,11 @@ PTO_SHARED_INLINE void emit_gemv_bias_fixp(
     BiasT &bias,
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
-    uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  validate_gemv_contract<Attr, Dst, Vec, Mtx>();
+  validate_matrix_bias_contract<Attr, BiasT, Vec, Mtx>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVB_EMIT_LOCAL);
 }
 
@@ -3875,11 +4155,15 @@ PTO_SHARED_INLINE void emit_gemv_acc_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  validate_gemv_contract<Attr, Dst, Vec, Mtx>();
+  validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVA_EMIT_LOCAL);
 }
 
 // emit_gemv_mx_fixp: mtx / smtx / vec / svec -> dst, Local-only.
-template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+template <FixpAttr Attr, int ScaleMask, int SrcMask, int OutMask, int IorMode,
           typename Dst, typename Mtx, typename ScaleMtx, typename Vec, typename ScaleVec, typename RowIn, typename QuantTile, typename ReluTile,
           typename RowOut, typename GroupOut>
 PTO_SHARED_INLINE void emit_gemv_mx_fixp(
@@ -3891,11 +4175,20 @@ PTO_SHARED_INLINE void emit_gemv_mx_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  static_assert(ScaleMask >= 0 && ScaleMask <= 3,
+                "MX scale mask contains only independent A/B presence bits");
+  constexpr bool HasScaleA = (ScaleMask & 1) != 0;
+  constexpr bool HasScaleB = (ScaleMask & 2) != 0;
+  validate_gemv_contract<Attr, Dst, Vec, Mtx, true>();
+  validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
+      ScaleVec, Vec, ScaleMtx, Mtx>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL);
 }
 
 // emit_gemv_mx_bias_fixp: mtx / smtx / vec / svec / bias -> dst, Local-only.
-template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+template <FixpAttr Attr, int ScaleMask, int SrcMask, int OutMask, int IorMode,
           typename Dst, typename Mtx, typename ScaleMtx, typename Vec, typename ScaleVec, typename BiasT, typename RowIn, typename QuantTile, typename ReluTile,
           typename RowOut, typename GroupOut>
 PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
@@ -3908,11 +4201,21 @@ PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  static_assert(ScaleMask >= 0 && ScaleMask <= 3,
+                "MX scale mask contains only independent A/B presence bits");
+  constexpr bool HasScaleA = (ScaleMask & 1) != 0;
+  constexpr bool HasScaleB = (ScaleMask & 2) != 0;
+  validate_gemv_contract<Attr, Dst, Vec, Mtx, true>();
+  validate_matrix_bias_contract<Attr, BiasT, Vec, Mtx, true>();
+  validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
+      ScaleVec, Vec, ScaleMtx, Mtx>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL);
 }
 
 // emit_gemv_mx_acc_fixp: c / mtx / smtx / vec / svec -> dst, Local-only.
-template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
+template <FixpAttr Attr, int ScaleMask, int SrcMask, int OutMask, int IorMode,
           typename Dst, typename C, typename Mtx, typename ScaleMtx, typename Vec, typename ScaleVec, typename RowIn, typename QuantTile, typename ReluTile,
           typename RowOut, typename GroupOut>
 PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
@@ -3925,6 +4228,16 @@ PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
+  static_assert(ScaleMask >= 0 && ScaleMask <= 3,
+                "MX scale mask contains only independent A/B presence bits");
+  constexpr bool HasScaleA = (ScaleMask & 1) != 0;
+  constexpr bool HasScaleB = (ScaleMask & 2) != 0;
+  validate_gemv_contract<Attr, Dst, Vec, Mtx, true>();
+  validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx, true>();
+  validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
+      ScaleVec, Vec, ScaleMtx, Mtx>();
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL);
 }
 
@@ -3986,16 +4299,19 @@ template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename ScaleA,
           typename B, typename ScaleB>                                           \
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
                             ScaleB &scale_b, size_t M, size_t N, size_t K) {     \
-  validate_shared_matrix_pair<A, B>();                                            \
+  constexpr bool HasScaleA = true;                                               \
+  constexpr bool HasScaleB = true;                                               \
+  validate_matrix_contract<Attr, Dst, A, B, true>();                                      \
+  validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB, ScaleA, A, ScaleB, B>();      \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOT %[A], %[ScaleA], mask=15\n"                                    \
+        "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n"                                    \
         "B.IOT %[B], %[ScaleB], mask=15, last, ->%[Dst]<%Z[TileSize]>\n"     \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
-          PTO_FIXP_ATTR_INPUTS,                                                \
+          PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {          \
@@ -4008,20 +4324,20 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
-          PTO_FIXP_ATTR_INPUTS,                                                \
+          PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOS %S[SharedB], mask=1111\n"                                              \
-        "B.IOT %[A], %[ScaleA], mask=15\n"                                   \
+        "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n"                                   \
         "B.IOT %[ScaleB]\n"                                                  \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
-          PTO_FIXP_ATTR_INPUTS,                                                \
+          PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else {                                                                      \
@@ -4034,7 +4350,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
-          PTO_FIXP_ATTR_INPUTS,                                                \
+          PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   }                                                                             \
@@ -4042,25 +4358,32 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
 
 PTO_DEFINE_MATMUL_MX_HELPER(matmul_mx, "TMATMULMX")
 
-#define PTO_DEFINE_MATMUL_MX_5SRC_HELPER(Name, Opcode)                          \
+#define PTO_DEFINE_MATMUL_MX_5SRC_HELPER(Name, Opcode, IsAcc)                   \
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename ScaleA,  \
           typename B, typename ScaleB, typename Extra>                           \
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
                             ScaleB &scale_b, Extra &extra, size_t M, size_t N,   \
                             size_t K) {                                          \
-  validate_shared_matrix_pair<A, B>();                                            \
+  constexpr bool HasScaleA = true;                                               \
+  constexpr bool HasScaleB = true;                                               \
+  validate_matrix_contract<Attr, Dst, A, B, true>();                                      \
+  validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB, ScaleA, A, ScaleB, B>();      \
+  if constexpr (IsAcc)                                                                    \
+    validate_matrix_accumulator_contract<Attr, Dst, Extra, A, B, true>();                       \
+  else                                                                                    \
+    validate_matrix_bias_contract<Attr, Extra, A, B, true>();                                   \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOT %[A], %[ScaleA], mask=15\n"                                    \
-        "B.IOT %[B], %[ScaleB], mask=15\n"                                   \
+        "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n"                                    \
+        "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n"                                   \
         "B.IOT %[Extra]\n"                                                   \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
           [Extra] "Tr"(extra.data()),                                         \
-          PTO_FIXP_ATTR_INPUTS,                                                \
+          PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {          \
@@ -4074,21 +4397,21 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
           [Extra] "Tr"(extra.data()),                                         \
-          PTO_FIXP_ATTR_INPUTS,                                                \
+          PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOS %S[SharedB], mask=1111\n"                                              \
-        "B.IOT %[A], %[ScaleA], mask=15\n"                                   \
+        "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n"                                   \
         "B.IOT %[ScaleB], %[Extra], mask=15\n"                               \
         "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
           [Extra] "Tr"(extra.data()),                                         \
-          PTO_FIXP_ATTR_INPUTS,                                                \
+          PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   } else {                                                                      \
@@ -4103,17 +4426,18 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
           [Extra] "Tr"(extra.data()),                                         \
-          PTO_FIXP_ATTR_INPUTS,                                                \
+          PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
   }                                                                             \
 }
 
-PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_bias, "TMATMULMX.BIAS")
-PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_acc, "TMATMULMX.ACC")
+PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_bias, "TMATMULMX.BIAS", false)
+PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_acc, "TMATMULMX.ACC", true)
 
 #undef PTO_DEFINE_MATMUL_MX_5SRC_HELPER
 #undef PTO_DEFINE_MATMUL_MX_HELPER
+#undef PTO_MX_SCALE_INPUTS
 #undef PTO_DEFINE_MATMUL_3SRC_HELPER
 #undef PTO_MATMUL_COMMON_INPUTS
 #undef PTO_MATMUL_HEADER
@@ -4138,7 +4462,7 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(c, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -4160,7 +4484,7 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -4193,6 +4517,10 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
   constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
   constexpr int IorMode = (HasScalarQuant ? 1 : 0) |
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+  constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
+      ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
+      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
 
   static_assert(HasVectorQuant ==
                     !std::is_same_v<typename Options::QuantTile,
@@ -4216,7 +4544,7 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -4265,10 +4593,10 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                 "TMATMUL input A must be Location::Left");
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
                 "TMATMUL input B must be a Right tile");
-  // Physical and valid M/N/K contracts, including the 4-PE Group case,
+  // Physical and valid M/N/K contracts, including cooperative Shared inputs,
   // are centralized in resolve_matmul_shape_runtime below.
   static_assert(tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
-                "TMATMUL output logical Tile size must be 512 B..32 KB");
+                "TMATMUL output logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
 
   constexpr bool HasVectorQuant =
       is_vector_fixp_pre_quant(Attr.PreQuant);
@@ -4321,40 +4649,36 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     using QuantTile = typename Options::QuantTile;
     static_assert(
         tile_type_traits<typename QuantTile::TileDType>::IsValidActiveSize,
-        "TMATMUL quant parameter Tile must occupy 512 B..32 KB; pad the "
+        "TMATMUL quant parameter Tile must occupy 128 B..64 KiB (SizeCode=1..10); pad the "
         "physical Tile and keep ValidRow=1, ValidCol=N when necessary");
     static_assert(QuantTile::ValidRow == -1 || QuantTile::ValidRow == 1,
                   "TMATMUL vector quant parameter must have ValidRow=1");
-    static_assert(QuantTile::ValidCol == -1 || tile_shape_b::ValidCol == -1 ||
-                      QuantTile::ValidCol == tile_shape_b::ValidCol,
+    static_assert(QuantTile::ValidCol == EffectiveN,
                   "TMATMUL vector quant parameter must have ValidCol=N");
   }
   if constexpr (HasPRelu) {
     using ReluTile = typename Options::ReluTile;
     static_assert(
         tile_type_traits<typename ReluTile::TileDType>::IsValidActiveSize,
-        "TMATMUL PReLU parameter Tile must occupy 512 B..32 KB; pad the "
+        "TMATMUL PReLU parameter Tile must occupy 128 B..64 KiB (SizeCode=1..10); pad the "
         "physical Tile and keep ValidRow=1, ValidCol=N when necessary");
     static_assert(ReluTile::ValidRow == -1 || ReluTile::ValidRow == 1,
                   "TMATMUL PReLU parameter must have ValidRow=1");
-    static_assert(ReluTile::ValidCol == -1 || tile_shape_b::ValidCol == -1 ||
-                      ReluTile::ValidCol == tile_shape_b::ValidCol,
+    static_assert(ReluTile::ValidCol == EffectiveN,
                   "TMATMUL PReLU parameter must have ValidCol=N");
   }
   if constexpr (HasRowOut) {
     using RowOut = typename Options::RowMaxOut;
-    static_assert(RowOut::ValidRow == -1 || tile_shape_a::ValidRow == -1 ||
-                      RowOut::ValidRow == tile_shape_a::ValidRow,
+    static_assert(RowOut::ValidRow == EffectiveM,
                   "TMATMUL RowMaxOut must have ValidRow=M");
     static_assert(RowOut::ValidCol == -1 || RowOut::ValidCol == 1,
                   "TMATMUL RowMaxOut must have ValidCol=1");
-    static_assert(type_traits<typename RowOut::DType>::TypeCode == __type_fp32 ||
-                      type_traits<typename RowOut::DType>::TypeCode ==
-                          __type_int32,
-                  "TMATMUL RowMaxOut dtype must be FP32 or S32 AccType");
+    static_assert(matrix_accumulator_type_legal<tile_shape_a, tile_shape_b,
+                                                RowOut>(),
+                  "TMATMUL RowMaxOut dtype must match FP32/S32/U32 AccType");
     static_assert(
         tile_type_traits<typename RowOut::TileDType>::IsValidActiveSize,
-        "TMATMUL RowMaxOut physical Tile must occupy 512 B..32 KB");
+        "TMATMUL RowMaxOut physical Tile must occupy 128 B..64 KiB (SizeCode=1..10)");
   }
   if constexpr (HasRowIn) {
     using RowIn = typename Options::RowMaxIn;
@@ -4371,32 +4695,28 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                   "TMATMUL RowMaxIn/RowMaxOut dtypes must match");
     static_assert(
         tile_type_traits<typename RowIn::TileDType>::IsValidActiveSize,
-        "TMATMUL RowMaxIn physical Tile must occupy 512 B..32 KB");
+        "TMATMUL RowMaxIn physical Tile must occupy 128 B..64 KiB (SizeCode=1..10)");
   }
   if constexpr (HasGroupOut) {
     using GroupOut = typename Options::GroupMaxOut;
     constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
     constexpr int ExpectedCols =
-        tile_shape_b::ValidCol == -1
-            ? -1
-            : (tile_shape_b::ValidCol + GroupN - 1) / GroupN;
-    static_assert(GroupOut::ValidRow == -1 || tile_shape_a::ValidRow == -1 ||
-                      GroupOut::ValidRow == tile_shape_a::ValidRow,
+        (EffectiveN + GroupN - 1) / GroupN;
+    static_assert(GroupOut::ValidRow == EffectiveM,
                   "TMATMUL GroupMaxOut must have ValidRow=M");
     static_assert(GroupOut::ValidCol == -1 || ExpectedCols == -1 ||
                       GroupOut::ValidCol == ExpectedCols,
                   "TMATMUL GroupMaxOut must have ValidCol=ceil(N/GroupN)");
-    static_assert(
-        type_traits<typename GroupOut::DType>::TypeCode == __type_fp32 ||
-            type_traits<typename GroupOut::DType>::TypeCode == __type_int32,
-        "TMATMUL GroupMaxOut dtype must be FP32 or S32 AccType");
+    static_assert(matrix_accumulator_type_legal<tile_shape_a, tile_shape_b,
+                                                GroupOut>(),
+                  "TMATMUL GroupMaxOut dtype must match FP32/S32/U32 AccType");
     static_assert(
         tile_type_traits<typename GroupOut::TileDType>::IsValidActiveSize,
-        "TMATMUL GroupMaxOut physical Tile must occupy 512 B..32 KB");
+        "TMATMUL GroupMaxOut physical Tile must occupy 128 B..64 KiB (SizeCode=1..10)");
   }
 
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -4431,7 +4751,7 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(c, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -4471,7 +4791,7 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(c, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -4500,14 +4820,14 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(c, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_detail::matmul_mx<Attr>(c, a, ascale, b, bscale, M, N, K);
 }
 
-template <is_tile_data_v tile_shape_c,
+template <int ScaleMask = 3, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
           is_any_tile_data_v tile_shape_ascale,
           is_local_or_shared_right tile_shape_b,
@@ -4542,7 +4862,7 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(c, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -4555,7 +4875,7 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
 
   volatile uint64_t quant_gpr = options.QuantDescriptor;
   volatile uint64_t lrelu_gpr = options.LReluDescriptor;
-  pto_matmul_detail::emit_matmul_mx_fixp<Attr, SrcMask, OutMask, IorMode>(c, a, ascale, b, bscale, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
+  pto_matmul_detail::emit_matmul_mx_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(c, a, ascale, b, bscale, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
@@ -4565,19 +4885,21 @@ template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
 PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
                     tile_shape_sa &scale_a, tile_shape_b &b,
                     tile_shape_sb &scale_b) {
+  pto_matmul_detail::validate_matrix_accumulator_contract<Attr,
+      tile_shape_d, tile_shape_c, tile_shape_a, tile_shape_b, true>();
   static_assert(is_basic_fixp_attr(Attr),
                 "TMATMUL_MX_ACC supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_detail::matmul_mx_acc<Attr>(d, a, scale_a, b, scale_b, c, M, N, K);
 }
 
-template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+template <int ScaleMask = 3, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a, is_any_tile_data_v tile_shape_sa,
           is_local_or_shared_right tile_shape_b, is_any_tile_data_v tile_shape_sb,
           fixp::is_options_v Options>
@@ -4585,6 +4907,8 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
                     tile_shape_sa &scale_a, tile_shape_b &b,
                     tile_shape_sb &scale_b, const Options &options) {
   constexpr FixpAttr Attr = Options::Attr;
+  pto_matmul_detail::validate_matrix_accumulator_contract<Attr,
+      tile_shape_d, tile_shape_c, tile_shape_a, tile_shape_b, true>();
   static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
   static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
                 "TMATMUL_MX_ACC destination dtype does not match PreQuantMode");
@@ -4611,7 +4935,7 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -4624,7 +4948,7 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
 
   volatile uint64_t quant_gpr = options.QuantDescriptor;
   volatile uint64_t lrelu_gpr = options.LReluDescriptor;
-  pto_matmul_detail::emit_matmul_mx_acc_fixp<Attr, SrcMask, OutMask, IorMode>(d, c, a, scale_a, b, scale_b, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
+  pto_matmul_detail::emit_matmul_mx_acc_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(d, c, a, scale_a, b, scale_b, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
@@ -4640,14 +4964,14 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_detail::matmul_mx_bias<Attr>(d, a, scale_a, b, scale_b, bias, M, N, K);
 }
 
-template <is_tile_data_v tile_shape_d,
+template <int ScaleMask = 3, is_tile_data_v tile_shape_d,
           is_local_or_shared_left tile_shape_a,
           is_any_tile_data_v tile_shape_sa,
           is_local_or_shared_right tile_shape_b,
@@ -4684,7 +5008,7 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
   pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime(d, a, b);
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -4697,7 +5021,127 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
 
   volatile uint64_t quant_gpr = options.QuantDescriptor;
   volatile uint64_t lrelu_gpr = options.LReluDescriptor;
-  pto_matmul_detail::emit_matmul_mx_bias_fixp<Attr, SrcMask, OutMask, IorMode>(d, a, scale_a, b, scale_b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
+  pto_matmul_detail::emit_matmul_mx_bias_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(d, a, scale_a, b, scale_b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
+}
+
+// MX scale presence is owned independently by each input side.  The primary
+// itself is passed as an unused compiler operand for an absent scale; the
+// constant `.if` in the inline assembly removes that binder completely.
+template <is_tile_data_v D, is_local_or_shared_left A,
+          is_local_or_shared_right B, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, B &b,
+                                  const Options &options) {
+  TMATMUL_MX<0>(d, a, a, b, b, options);
+}
+template <is_tile_data_v D, is_local_or_shared_left A,
+          is_any_tile_data_v SA, is_local_or_shared_right B,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, SA &sa, B &b,
+                                  const Options &options) {
+  TMATMUL_MX<1>(d, a, sa, b, b, options);
+}
+template <is_tile_data_v D, is_local_or_shared_left A,
+          is_local_or_shared_right B, is_any_tile_data_v SB,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, B &b, SB &sb,
+                                  const Options &options) {
+  TMATMUL_MX<2>(d, a, a, b, sb, options);
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_or_shared_left A, is_local_or_shared_right B>
+PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, B &b) {
+  TMATMUL_MX(d, a, b, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_or_shared_left A, is_any_tile_data_v SA,
+          is_local_or_shared_right B>
+PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, SA &sa, B &b) {
+  TMATMUL_MX(d, a, sa, b, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_or_shared_left A, is_local_or_shared_right B,
+          is_any_tile_data_v SB>
+PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, B &b, SB &sb) {
+  TMATMUL_MX(d, a, b, sb, fixp::Options<Attr>{});
+}
+
+template <is_tile_data_v D, is_tile_data_v C,
+          is_local_or_shared_left A, is_local_or_shared_right B,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC(D &d, C &c, A &a, B &b,
+                                      const Options &options) {
+  TMATMUL_MX_ACC<0>(d, c, a, a, b, b, options);
+}
+template <is_tile_data_v D, is_tile_data_v C,
+          is_local_or_shared_left A, is_any_tile_data_v SA,
+          is_local_or_shared_right B, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC(D &d, C &c, A &a, SA &sa, B &b,
+                                      const Options &options) {
+  TMATMUL_MX_ACC<1>(d, c, a, sa, b, b, options);
+}
+template <is_tile_data_v D, is_tile_data_v C,
+          is_local_or_shared_left A, is_local_or_shared_right B,
+          is_any_tile_data_v SB, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC(D &d, C &c, A &a, B &b, SB &sb,
+                                      const Options &options) {
+  TMATMUL_MX_ACC<2>(d, c, a, a, b, sb, options);
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D, is_tile_data_v C,
+          is_local_or_shared_left A, is_local_or_shared_right B>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC(D &d, C &c, A &a, B &b) {
+  TMATMUL_MX_ACC(d, c, a, b, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D, is_tile_data_v C,
+          is_local_or_shared_left A, is_any_tile_data_v SA,
+          is_local_or_shared_right B>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC(D &d, C &c, A &a, SA &sa, B &b) {
+  TMATMUL_MX_ACC(d, c, a, sa, b, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D, is_tile_data_v C,
+          is_local_or_shared_left A, is_local_or_shared_right B,
+          is_any_tile_data_v SB>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC(D &d, C &c, A &a, B &b, SB &sb) {
+  TMATMUL_MX_ACC(d, c, a, b, sb, fixp::Options<Attr>{});
+}
+
+template <is_tile_data_v D, is_local_or_shared_left A,
+          is_local_or_shared_right B, is_tile_data_v Bias,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_BIAS(D &d, A &a, B &b, Bias &bias,
+                                       const Options &options) {
+  TMATMUL_MX_BIAS<0>(d, a, a, b, b, bias, options);
+}
+template <is_tile_data_v D, is_local_or_shared_left A,
+          is_any_tile_data_v SA, is_local_or_shared_right B,
+          is_tile_data_v Bias, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_BIAS(D &d, A &a, SA &sa, B &b, Bias &bias,
+                                       const Options &options) {
+  TMATMUL_MX_BIAS<1>(d, a, sa, b, b, bias, options);
+}
+template <is_tile_data_v D, is_local_or_shared_left A,
+          is_local_or_shared_right B, is_any_tile_data_v SB,
+          is_tile_data_v Bias, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_BIAS(D &d, A &a, B &b, SB &sb, Bias &bias,
+                                       const Options &options) {
+  TMATMUL_MX_BIAS<2>(d, a, a, b, sb, bias, options);
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_or_shared_left A, is_local_or_shared_right B,
+          is_tile_data_v Bias>
+PTO_SHARED_INLINE void TMATMUL_MX_BIAS(D &d, A &a, B &b, Bias &bias) {
+  TMATMUL_MX_BIAS(d, a, b, bias, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_or_shared_left A, is_any_tile_data_v SA,
+          is_local_or_shared_right B, is_tile_data_v Bias>
+PTO_SHARED_INLINE void TMATMUL_MX_BIAS(D &d, A &a, SA &sa, B &b, Bias &bias) {
+  TMATMUL_MX_BIAS(d, a, sa, b, bias, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_or_shared_left A, is_local_or_shared_right B,
+          is_any_tile_data_v SB, is_tile_data_v Bias>
+PTO_SHARED_INLINE void TMATMUL_MX_BIAS(D &d, A &a, B &b, SB &sb, Bias &bias) {
+  TMATMUL_MX_BIAS(d, a, b, sb, bias, fixp::Options<Attr>{});
 }
 
 // ---- TGEMV family (Function 16-18, 20-22) ----
@@ -4926,7 +5370,7 @@ PTO_SHARED_INLINE void TGEMV_MX(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape
 }
 
 
-template <is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+template <int ScaleMask = 3, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
           is_local_tile_v tile_shape_smtx,
           is_local_tile_v tile_shape_vec,
           is_local_tile_v tile_shape_svec, fixp::is_options_v Options>
@@ -4972,7 +5416,7 @@ PTO_SHARED_INLINE void TGEMV_MX(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape
 
   volatile uint64_t quant_gpr = options.QuantDescriptor;
   volatile uint64_t lrelu_gpr = options.LReluDescriptor;
-  pto_matmul_detail::emit_gemv_mx_fixp<Attr, SrcMask, OutMask, IorMode>(
+  pto_matmul_detail::emit_gemv_mx_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, mtx, smtx, vec, svec,
       row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
@@ -4999,7 +5443,7 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(tile_shape_d &d, tile_shape_mtx &mtx, tile_
 }
 
 
-template <is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+template <int ScaleMask = 3, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
           is_local_tile_v tile_shape_smtx,
           is_local_tile_v tile_shape_vec,
           is_local_tile_v tile_shape_svec,
@@ -5047,7 +5491,7 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(tile_shape_d &d, tile_shape_mtx &mtx, tile_
 
   volatile uint64_t quant_gpr = options.QuantDescriptor;
   volatile uint64_t lrelu_gpr = options.LReluDescriptor;
-  pto_matmul_detail::emit_gemv_mx_bias_fixp<Attr, SrcMask, OutMask, IorMode>(
+  pto_matmul_detail::emit_gemv_mx_bias_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, mtx, smtx, vec, svec, bias,
       row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
@@ -5073,7 +5517,7 @@ PTO_SHARED_INLINE void TGEMV_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape
 }
 
 
-template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+template <int ScaleMask = 3, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
           is_local_tile_v tile_shape_mtx,
           is_local_tile_v tile_shape_smtx,
           is_local_tile_v tile_shape_vec,
@@ -5120,10 +5564,168 @@ PTO_SHARED_INLINE void TGEMV_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape
 
   volatile uint64_t quant_gpr = options.QuantDescriptor;
   volatile uint64_t lrelu_gpr = options.LReluDescriptor;
-  pto_matmul_detail::emit_gemv_mx_acc_fixp<Attr, SrcMask, OutMask, IorMode>(
+  pto_matmul_detail::emit_gemv_mx_acc_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, c, mtx, smtx, vec, svec,
       row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
+}
+
+template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v Vec,
+          fixp::is_options_v Options>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX(D &d, Mtx &mtx, Vec &vec,
+                                const Options &options) {
+  TGEMV_MX<0>(d, mtx, mtx, vec, vec, options);
+}
+template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v Vec,
+          is_local_tile_v ScaleVec, fixp::is_options_v Options>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX(D &d, Mtx &mtx, Vec &vec, ScaleVec &scale_vec,
+                                const Options &options) {
+  TGEMV_MX<1>(d, mtx, mtx, vec, scale_vec, options);
+}
+template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v ScaleMtx,
+          is_local_tile_v Vec, fixp::is_options_v Options>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX(D &d, Mtx &mtx, ScaleMtx &scale_mtx, Vec &vec,
+                                const Options &options) {
+  TGEMV_MX<2>(d, mtx, scale_mtx, vec, vec, options);
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_tile_v Mtx, is_local_tile_v Vec>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX(D &d, Mtx &mtx, Vec &vec) {
+  TGEMV_MX(d, mtx, vec, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_tile_v Mtx, is_local_tile_v Vec,
+          is_local_tile_v ScaleVec>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX(D &d, Mtx &mtx, Vec &vec,
+                                ScaleVec &scale_vec) {
+  TGEMV_MX(d, mtx, vec, scale_vec, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_tile_v Mtx, is_local_tile_v ScaleMtx,
+          is_local_tile_v Vec>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX(D &d, Mtx &mtx, ScaleMtx &scale_mtx,
+                                Vec &vec) {
+  TGEMV_MX(d, mtx, scale_mtx, vec, fixp::Options<Attr>{});
+}
+
+template <is_tile_data_v D, is_tile_data_v C, is_local_tile_v Mtx,
+          is_local_tile_v Vec, fixp::is_options_v Options>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_ACC(D &d, C &c, Mtx &mtx, Vec &vec,
+                                    const Options &options) {
+  TGEMV_MX_ACC<0>(d, c, mtx, mtx, vec, vec, options);
+}
+template <is_tile_data_v D, is_tile_data_v C, is_local_tile_v Mtx,
+          is_local_tile_v Vec, is_local_tile_v ScaleVec,
+          fixp::is_options_v Options>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_ACC(D &d, C &c, Mtx &mtx, Vec &vec,
+                                    ScaleVec &scale_vec,
+                                    const Options &options) {
+  TGEMV_MX_ACC<1>(d, c, mtx, mtx, vec, scale_vec, options);
+}
+template <is_tile_data_v D, is_tile_data_v C, is_local_tile_v Mtx,
+          is_local_tile_v ScaleMtx, is_local_tile_v Vec,
+          fixp::is_options_v Options>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_ACC(D &d, C &c, Mtx &mtx,
+                                    ScaleMtx &scale_mtx, Vec &vec,
+                                    const Options &options) {
+  TGEMV_MX_ACC<2>(d, c, mtx, scale_mtx, vec, vec, options);
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D, is_tile_data_v C,
+          is_local_tile_v Mtx, is_local_tile_v Vec>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_ACC(D &d, C &c, Mtx &mtx, Vec &vec) {
+  TGEMV_MX_ACC(d, c, mtx, vec, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D, is_tile_data_v C,
+          is_local_tile_v Mtx, is_local_tile_v Vec,
+          is_local_tile_v ScaleVec>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_ACC(D &d, C &c, Mtx &mtx, Vec &vec,
+                                    ScaleVec &scale_vec) {
+  TGEMV_MX_ACC(d, c, mtx, vec, scale_vec, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D, is_tile_data_v C,
+          is_local_tile_v Mtx, is_local_tile_v ScaleMtx,
+          is_local_tile_v Vec>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_ACC(D &d, C &c, Mtx &mtx,
+                                    ScaleMtx &scale_mtx, Vec &vec) {
+  TGEMV_MX_ACC(d, c, mtx, scale_mtx, vec, fixp::Options<Attr>{});
+}
+
+template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v Vec,
+          is_tile_data_v Bias, fixp::is_options_v Options>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, Vec &vec, Bias &bias,
+                                     const Options &options) {
+  TGEMV_MX_BIAS<0>(d, mtx, mtx, vec, vec, bias, options);
+}
+template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v Vec,
+          is_local_tile_v ScaleVec, is_tile_data_v Bias,
+          fixp::is_options_v Options>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, Vec &vec,
+                                     ScaleVec &scale_vec, Bias &bias,
+                                     const Options &options) {
+  TGEMV_MX_BIAS<1>(d, mtx, mtx, vec, scale_vec, bias, options);
+}
+template <is_tile_data_v D, is_local_tile_v Mtx,
+          is_local_tile_v ScaleMtx, is_local_tile_v Vec, is_tile_data_v Bias,
+          fixp::is_options_v Options>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, ScaleMtx &scale_mtx,
+                                     Vec &vec, Bias &bias,
+                                     const Options &options) {
+  TGEMV_MX_BIAS<2>(d, mtx, scale_mtx, vec, vec, bias, options);
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_tile_v Mtx, is_local_tile_v Vec, is_tile_data_v Bias>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, Vec &vec, Bias &bias) {
+  TGEMV_MX_BIAS(d, mtx, vec, bias, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_tile_v Mtx, is_local_tile_v Vec,
+          is_local_tile_v ScaleVec, is_tile_data_v Bias>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, Vec &vec,
+                                     ScaleVec &scale_vec, Bias &bias) {
+  TGEMV_MX_BIAS(d, mtx, vec, scale_vec, bias, fixp::Options<Attr>{});
+}
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
+          is_local_tile_v Mtx, is_local_tile_v ScaleMtx,
+          is_local_tile_v Vec, is_tile_data_v Bias>
+  requires(tile_role_v<Mtx> == Location::Right &&
+           tile_role_v<Vec> == Location::Left)
+PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, ScaleMtx &scale_mtx,
+                                     Vec &vec, Bias &bias) {
+  TGEMV_MX_BIAS(d, mtx, scale_mtx, vec, bias, fixp::Options<Attr>{});
 }
 
 
@@ -5244,7 +5846,7 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TFMOD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TFMOD is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TFMOD is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -5526,7 +6128,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
 template <is_tile_data_v tile_shape>
 void TPRELU(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TPRELU is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TPRELU is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -5737,7 +6339,7 @@ void TRELU(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TADDC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TADDC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TADDC is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -5745,7 +6347,7 @@ void TADDC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2
 template <is_tile_data_v tile_shape>
 void TSUBC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TSUBC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TSUBC is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -5891,7 +6493,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
 template <is_tile_data_v tile_shape>
 void TFMODS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TFMODS is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TFMODS is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -6212,7 +6814,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
 template <is_tile_data_v tile_shape>
 void TLRELU(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TLRELU is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TLRELU is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -6220,7 +6822,7 @@ void TLRELU(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
 template <is_tile_data_v tile_shape>
 void TAXPY(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TAXPY is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TAXPY is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -6228,7 +6830,7 @@ void TAXPY(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
 template <is_tile_data_v tile_shape>
 void TADDSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile_shape &src1) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TADDSC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TADDSC is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -6236,7 +6838,7 @@ void TADDSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, til
 template <is_tile_data_v tile_shape>
 void TSUBSC(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile_shape &src1) {
   static_assert(pto_dependent_false_v<tile_shape, tile_shape>,
-                "TSUBSC is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TSUBSC is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
@@ -6372,7 +6974,7 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
   );
 }
 
-// TIMG2COL: image-to-column with feature-map posM/posK (PTO 0.58.1 TEPL
+// TIMG2COL: image-to-column with feature-map posM/posK (PTO ISA 0.58.3 TEPL
 // Mode3 Fn4 / selector 0x064). B.IOR carries PosMGPR, PosKGPR (low 16 bits
 // each per B4; the spec's optional B.IOR defaults to posM=posK=0). The
 // source's feature-map descriptor (NC1HWC0 / NDC1HWC0 layout, filter,
@@ -6487,12 +7089,12 @@ void TTRI(tile_shape &dst) {
 template <is_tile_data_v tile_shape>
 void TRANDOM(tile_shape &dst, typename tile_shape::DType s) {
   static_assert(pto_dependent_false_v<tile_shape>,
-                "TRANDOM is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TRANDOM is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 
 // TQUANT: FP32 -> S8/U8 quantization with B.DATR RMode/Sat and B.IOR
-// multiplier/zero-point (PTO 0.58.1 TEPL Mode3 Fn10 / selector 0x06A).
+// multiplier/zero-point (PTO ISA 0.58.3 TEPL Mode3 Fn10 / selector 0x06A).
 // RMode and Sat are B.DATR fields: RMode accepts a numeric immediate (the
 // parser maps mnemonic or numeric), Sat only the NOSAT/SAT token, so Sat is
 // selected with if constexpr. The multiplier travels as its raw FP32 bits in
@@ -6534,7 +7136,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
   if constexpr (Mode == RoundMode::RNE && Saturate) {
     asm volatile(
       "BSTART.TEPL 106, %c[SType]\n"
-      // LLVM currently names encoded RMode zero RNONE. PTO 0.58.1 defines
+      // LLVM currently names encoded RMode zero RNONE. PTO ISA 0.58.3 defines
       // that encoding as the operation default, which is RNE for TQUANT.
       "B.DATR %c[DType], RNONE, SAT\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
@@ -6695,7 +7297,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src) {
 }
 
 // TSORT: stable per-row group sort producing sorted values (FP16/FP32) and
-// group-local original indices (U32). PTO 0.58.1: TEPL Mode 3 Function 12
+// group-local original indices (U32). PTO ISA 0.58.3: TEPL Mode 3 Function 12
 // (selector 0x06c). Each row sorts its columns in `sortWidth`-width groups
 // from column 0; the last group may be short. ascending when descending is
 // false, descending otherwise. sortWidth must be 1..64 (0/LB0 omitted -> 32).
@@ -6773,19 +7375,19 @@ void TSORT(ValueDstTile &valueDst, IndexDstTile &indexDst,
   );
 }
 
-// Deprecated single-output sort: does not match the PTO 0.58.1 TSORT
+// Deprecated single-output sort: does not match the PTO ISA 0.58.3 TSORT
 // contract (no U32 index destination, legacy LB1/LB2 shape bundle). Kept as
 // a migration diagnostic that fails at instantiation.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TSORT32(tile_shape_out &dst, tile_shape_in &src) {
   static_assert(pto_dependent_false_v<tile_shape_out, tile_shape_in>,
                 "TSORT32 is removed; use TSORT(valueDst, indexDst, source, "
-                "sortWidth, descending), which emits the PTO 0.58.1 "
+                "sortWidth, descending), which emits the PTO ISA 0.58.3 "
                 "value+index dual-output bundle");
 }
 
 // TMRGSORT: merge two sorted single-row sources into one destination
-// (PTO 0.58.1 TEPL Mode 3 Function 13 / selector 0x06D; canonical
+// (PTO ISA 0.58.3 TEPL Mode 3 Function 13 / selector 0x06D; canonical
 // BSTART.SFU TMRGSORT). No B.DIM: the block carries only B.IOR RegSrc0
 // (0/1 ascending/descending) and one TwoSrc_Dst B.IOT with <last>.
 template <is_tile_data_v DstTile, is_tile_data_v LeftTile,
@@ -7737,7 +8339,7 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_offset, is_global_data_v gm_shape>
 void TGATHERB(tile_shape_out &dst, gm_shape &src, tile_shape_offset &offset) {
   static_assert(pto_dependent_false_v<tile_shape_out, gm_shape>,
-                "TGATHERB is retired in PTO 0.58.1; no active replacement. Remove the call or migrate to the active surface.");
+                "TGATHERB is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
 
 

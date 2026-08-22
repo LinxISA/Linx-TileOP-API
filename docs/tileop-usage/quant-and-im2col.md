@@ -75,7 +75,7 @@ void TIMG2COL(tile_shape_out &dst, tile_shape_in &src,
               uint32_t posM = 0, uint32_t posK = 0);
 ```
 
-Implements the PTO 0.58.1 image-to-column transform (TEPL Mode 3 Function 4 /
+Implements the PTO ISA 0.58.3 image-to-column transform (TEPL Mode 3 Function 4 /
 selector 0x064; canonical `BSTART.SFU TIMG2COL`).
 
 - The feature-map position selectors `posM` / `posK` are encoded into

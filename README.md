@@ -1,13 +1,14 @@
 # Linx TileOP API
 
-Header-only C++ TileOP bindings for the LinxISA v0.58 architectural contract.
+Header-only C++ TileOP bindings for the LinxISA / PTO ISA v0.58.3 architectural contract.
 
 The normative instruction names, encodings, and execution-engine classification come from the
 pinned LinxISA projection in
 [`contracts/linxisa-v0.58-engine-ops.json`](contracts/linxisa-v0.58-engine-ops.json). The public
-bindings emit canonical `BSTART.VEC` and `BSTART.SFU` aliases plus the named TLSU and CUBE forms
-such as `BSTART.TLOAD` and `BSTART.TMATMUL`. The historical TEPL spelling is not emitted by this
-library.
+bindings retain the unique compiled `BSTART.TEPL` carrier for VEC/SFU source
+compatibility and emit the named TLSU/CUBE operation forms accepted by the
+current Linx compiler. The generated engine index shows the corresponding
+canonical aliases.
 
 ## Documentation
 
@@ -26,7 +27,13 @@ library.
 make check
 ```
 
-To refresh the pinned projection from a clean, exact LinxISA v0.58 checkout:
+Target compilation additionally requires the matching PTO ISA 0.58.3 Linx
+LLVM. Run `test/tileop_api/compile.all`, `run_negatives.sh`, and the
+disassembly checks with that exact compiler build; a 0.58.1 compiler is
+expected to reject the nine-field B.FPATR and new layout/PEMode encodings.
+
+To refresh the pinned projection from the clean, exact reviewed LinxISA
+authority commit recorded by the generator:
 
 ```sh
 python3 tools/sync_linxisa_v058_contract.py \

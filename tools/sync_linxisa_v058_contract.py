@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project the released LinxISA v0.58 engine catalog into this API repo."""
+"""Project the reviewed LinxISA/PTO 0.58.3 engine catalog into this API."""
 
 from __future__ import annotations
 
@@ -12,10 +12,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "contracts" / "linxisa-v0.58-engine-ops.json"
-EXPECTED_COUNTS = {"CUBE": 12, "SFU": 52, "TLSU": 10, "VEC": 35}
-EXPECTED_COMMIT = "0a12890427edc2179ed75ad26039cdcebc6b4486"
-EXPECTED_TREE = "fef6c084b166f3fd85a1b3d1b72fc069e6050800"
-EXPECTED_CATALOG_SHA256 = "b38864f4630be258ec62e5690d794463d0574443782c06b9a79d7d0a4362c61b"
+EXPECTED_COUNTS = {"CUBE": 12, "SFU": 56, "TLSU": 10, "VEC": 31}
+EXPECTED_COMMIT = "dd52a2e579d8058c0d8e33043e705122b340e73f"
+EXPECTED_TREE = "1cfc7343e714489f95f67592475e8b9f079241ee"
+EXPECTED_CATALOG_SHA256 = "34ecbcfa075166490b622647eb53c13a9c360848d6c7acb2e034d3e47f8c9a8a"
+EXPECTED_PTO_COMMIT = "e599a3d36ebfad43362ff591ea5e128816c684c7"
+EXPECTED_PTO_TREE = "abb6899d2e664e378ac9c1b77062670daa4d31b4"
+EXPECTED_PTO_ENCODING_SHA256 = "8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172"
+EXPECTED_PTO_CONTENT_SHA256 = "f299fe3d256c5d071e57bb4aaa2be2de2e4a386ae090048df1f73ae92d392678"
 
 
 def git(repo: Path, *args: str) -> str:
@@ -33,8 +37,6 @@ def build_projection(source: Path) -> dict[str, object]:
     repo = Path(git(source.parent, "rev-parse", "--show-toplevel"))
     if git(repo, "status", "--porcelain=v1", "--untracked-files=all"):
         raise SystemExit(f"refusing dirty LinxISA source tree: {repo}")
-    if git(repo, "describe", "--exact-match", "--tags", "HEAD") != "v0.58":
-        raise SystemExit("LinxISA source HEAD is not the exact v0.58 tag")
     commit = git(repo, "rev-parse", "HEAD")
     tree = git(repo, "rev-parse", "HEAD^{tree}")
     source_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -42,11 +44,29 @@ def build_projection(source: Path) -> dict[str, object]:
         raise SystemExit("LinxISA v0.58 source identity does not match the reviewed release")
 
     data = json.loads(source.read_text(encoding="utf-8"))
-    if data.get("isa") != "LinxISA" or data.get("version") != "0.58.0":
-        raise SystemExit("source is not the LinxISA 0.58.0 canonical catalog")
+    if data.get("isa") != "LinxISA" or data.get("version") != "0.58.3":
+        raise SystemExit("source is not the LinxISA/PTO 0.58.3 canonical catalog")
     engine_ops = data["state"]["engine_ops"]
     if engine_ops["semantic_engine_counts"] != EXPECTED_COUNTS:
         raise SystemExit("unexpected LinxISA v0.58 engine counts")
+    pto_lock_path = source.parent / "pto-spec.lock.json"
+    pto_lock = json.loads(pto_lock_path.read_text(encoding="utf-8"))
+    pto_identity = (
+        pto_lock.get("release"),
+        pto_lock.get("source", {}).get("commit"),
+        pto_lock.get("source", {}).get("tree"),
+        pto_lock.get("encoding_projection_sha256"),
+        pto_lock.get("content_sha256"),
+    )
+    expected_pto_identity = (
+        "0.58.3",
+        EXPECTED_PTO_COMMIT,
+        EXPECTED_PTO_TREE,
+        EXPECTED_PTO_ENCODING_SHA256,
+        EXPECTED_PTO_CONTENT_SHA256,
+    )
+    if pto_identity != expected_pto_identity:
+        raise SystemExit("LinxISA authority does not carry the reviewed PTO 0.58.3 lock")
 
     relative = source.relative_to(repo).as_posix()
     return {
@@ -54,11 +74,20 @@ def build_projection(source: Path) -> dict[str, object]:
         "profile": "v0.58",
         "source": {
             "repo": "https://github.com/LinxISA/linx-isa",
-            "release": "v0.58",
+            "release": "0.58.3",
             "commit": commit,
             "tree": tree,
             "path": relative,
             "sha256": source_sha256,
+        },
+        "pto_source": {
+            "repo": pto_lock["source"]["repository"],
+            "release": pto_lock["release"],
+            "commit": pto_lock["source"]["commit"],
+            "tree": pto_lock["source"]["tree"],
+            "encoding_abi": pto_lock["encoding_abi"],
+            "encoding_projection_sha256": pto_lock["encoding_projection_sha256"],
+            "content_sha256": pto_lock["content_sha256"],
         },
         "semantic_engine_counts": engine_ops["semantic_engine_counts"],
         "tepl_carrier": {

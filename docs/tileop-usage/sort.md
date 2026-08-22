@@ -1,6 +1,6 @@
 # Sorting operations
 
-`TSORT` implements the PTO v0.58.1 stable row-group sort operation. It sorts
+`TSORT` implements the PTO ISA 0.58.3 stable row-group sort operation. It sorts
 FP16 or FP32 values and produces both the reordered values and their original
 zero-based column indices within each group.
 
@@ -72,7 +72,7 @@ and any additional Local Tile binding are illegal for TSORT.
 ## TMRGSORT
 
 `TMRGSORT` merges two sorted single-row sources into one destination
-(PTO 0.58.1 TEPL Mode 3 Function 13 / selector 0x06D; canonical
+(PTO ISA 0.58.3 TEPL Mode 3 Function 13 / selector 0x06D; canonical
 `BSTART.SFU TMRGSORT`).
 
 ```cpp
@@ -104,7 +104,7 @@ TMRGSORT(out, a, b, true);    // descending merge
 ## Deprecated interface
 
 The historical single-output `TSORT32(dst, src)` interface does not represent
-the PTO v0.58.1 dual-output contract and now fails at template instantiation.
+the PTO ISA 0.58.3 dual-output contract and now fails at template instantiation.
 Use `TSORT(valueDst, indexDst, source, sortWidth, descending)` instead.
 
 ## Test coverage

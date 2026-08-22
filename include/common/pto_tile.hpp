@@ -132,6 +132,8 @@ struct FixpAttr {
   bool GroupMaxEn = false;
   bool RowMaxInit = false;
   bool MaxAbsEn = false;
+  bool TransA = false;
+  bool TransB = false;
 
   static constexpr FixpAttr keep_acc(
       FixpReluMode ReluMode = FixpReluMode::None) {
@@ -156,6 +158,18 @@ struct FixpAttr {
     return Attr;
   }
 
+  constexpr FixpAttr transpose_a(bool Enable = true) const {
+    FixpAttr Attr = *this;
+    Attr.TransA = Enable;
+    return Attr;
+  }
+
+  constexpr FixpAttr transpose_b(bool Enable = true) const {
+    FixpAttr Attr = *this;
+    Attr.TransB = Enable;
+    return Attr;
+  }
+
   constexpr uint32_t encoding() const {
     return (static_cast<uint32_t>(PreQuant) << 26) |
            (static_cast<uint32_t>(Relu) << 23) |
@@ -163,7 +177,9 @@ struct FixpAttr {
            (static_cast<uint32_t>(RowMaxEn) << 18) |
            (static_cast<uint32_t>(GroupMaxEn) << 17) |
            (static_cast<uint32_t>(RowMaxInit) << 16) |
-           (static_cast<uint32_t>(MaxAbsEn) << 15) | 0x2023;
+           (static_cast<uint32_t>(MaxAbsEn) << 15) |
+           (static_cast<uint32_t>(TransB) << 8) |
+           (static_cast<uint32_t>(TransA) << 7) | 0x2023;
   }
 
   constexpr bool operator==(const FixpAttr &) const = default;
@@ -274,13 +290,150 @@ constexpr bool is_vector_fixp_pre_quant(FixpPreQuantMode Mode) {
   }
 }
 
+enum class MatrixNumericClass : uint8_t {
+  Unsupported,
+  Floating,
+  Signed,
+  Unsigned,
+};
+
+constexpr MatrixNumericClass matrix_numeric_class(int TypeCode) {
+  switch (TypeCode) {
+  case __type_fp32:
+  case __type_tf32:
+  case __type_hf32:
+  case __type_fp16:
+  case __type_bf16:
+  case __type_hif8:
+  case __type_fp8_e4m3:
+  case __type_fp8_e5m2:
+  case __type_fp6_e3m2:
+  case __type_fp5_e2m3:
+  case __type_fp4_e2m1x2:
+  case __type_fp4_e1m2x2:
+    return MatrixNumericClass::Floating;
+  case __type_int16:
+  case __type_int8:
+  case __type_int4x2:
+    return MatrixNumericClass::Signed;
+  case __type_uint16:
+  case __type_uint8:
+  case __type_uint4x2:
+    return MatrixNumericClass::Unsigned;
+  default:
+    return MatrixNumericClass::Unsupported;
+  }
+}
+
+constexpr bool matrix_mx_input_supported(int TypeCode) {
+  return TypeCode == __type_fp16 || TypeCode == __type_bf16 ||
+         TypeCode == __type_fp8_e4m3 || TypeCode == __type_fp8_e5m2 ||
+         TypeCode == __type_fp4_e2m1x2 || TypeCode == __type_fp4_e1m2x2;
+}
+
+constexpr bool matrix_mx_input_needs_scale(int TypeCode) {
+  return matrix_mx_input_supported(TypeCode) &&
+         TypeCode != __type_fp16 && TypeCode != __type_bf16;
+}
+
+constexpr int matrix_accumulator_type_code(int InputTypeCode) {
+  switch (matrix_numeric_class(InputTypeCode)) {
+  case MatrixNumericClass::Floating:
+    return __type_fp32;
+  case MatrixNumericClass::Signed:
+    return __type_int32;
+  case MatrixNumericClass::Unsigned:
+    return __type_uint32;
+  default:
+    return -1;
+  }
+}
+
+constexpr bool matrix_mode_uses_s32_accumulator(FixpPreQuantMode Mode) {
+  switch (Mode) {
+  case FixpPreQuantMode::VREQS8Pre:
+  case FixpPreQuantMode::REQS8Pre:
+  case FixpPreQuantMode::VDEQF16:
+  case FixpPreQuantMode::DEQF16:
+  case FixpPreQuantMode::VSHIFTS322S16:
+  case FixpPreQuantMode::SHIFTS322S16:
+  case FixpPreQuantMode::QF322S4Pre:
+  case FixpPreQuantMode::VQF322S4Pre:
+  case FixpPreQuantMode::QF322S16Pre:
+  case FixpPreQuantMode::VQF322S16Pre:
+  case FixpPreQuantMode::QS322BF16Pre:
+  case FixpPreQuantMode::VQS322BF16Pre:
+    return true;
+  default:
+    return false;
+  }
+}
+
+template <typename Left, typename Right, bool MX = false>
+constexpr bool matrix_input_pair_legal() {
+  constexpr int LeftCode = type_traits<typename Left::DType>::TypeCode;
+  constexpr int RightCode = type_traits<typename Right::DType>::TypeCode;
+  if constexpr (MX)
+    return matrix_mx_input_supported(LeftCode) &&
+           matrix_mx_input_supported(RightCode);
+  constexpr MatrixNumericClass LeftClass = matrix_numeric_class(LeftCode);
+  return LeftClass != MatrixNumericClass::Unsupported &&
+         LeftClass == matrix_numeric_class(RightCode);
+}
+
+template <FixpAttr Attr, typename Left, typename Right, bool MX = false>
+constexpr bool matrix_accumulator_mode_legal() {
+  if constexpr (!matrix_input_pair_legal<Left, Right, MX>())
+    return false;
+  constexpr int AccCode = MX
+      ? __type_fp32
+      : matrix_accumulator_type_code(
+            type_traits<typename Left::DType>::TypeCode);
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::None)
+    return AccCode == __type_fp32 || AccCode == __type_int32 ||
+           AccCode == __type_uint32;
+  if constexpr (matrix_mode_uses_s32_accumulator(Attr.PreQuant))
+    return AccCode == __type_int32;
+  return AccCode == __type_fp32;
+}
+
+template <FixpAttr Attr, typename DType>
+constexpr bool is_fixp_output_type();
+
+template <FixpAttr Attr, typename Left, typename Right, typename Output,
+          bool MX = false>
+constexpr bool matrix_output_type_legal() {
+  if constexpr (!matrix_accumulator_mode_legal<Attr, Left, Right, MX>())
+    return false;
+  constexpr int OutputCode = type_traits<typename Output::DType>::TypeCode;
+  if constexpr (Attr.PreQuant == FixpPreQuantMode::None) {
+    constexpr int AccCode = MX
+        ? __type_fp32
+        : matrix_accumulator_type_code(
+              type_traits<typename Left::DType>::TypeCode);
+    return OutputCode == AccCode;
+  }
+  return is_fixp_output_type<Attr, typename Output::DType>();
+}
+
+template <typename Left, typename Right, typename Accumulator, bool MX = false>
+constexpr bool matrix_accumulator_type_legal() {
+  if constexpr (!matrix_input_pair_legal<Left, Right, MX>())
+    return false;
+  constexpr int Expected = MX
+      ? __type_fp32
+      : matrix_accumulator_type_code(
+            type_traits<typename Left::DType>::TypeCode);
+  return type_traits<typename Accumulator::DType>::TypeCode == Expected;
+}
+
 template <FixpAttr Attr, typename DType>
 constexpr bool is_fixp_output_type() {
   constexpr int TypeCode = type_traits<DType>::TypeCode;
   if constexpr (Attr.PreQuant == FixpPreQuantMode::None)
-    // PreQuant=None keeps the AccType result; only FP32 is accepted (no S32
-    // alias) per PTO 0.58 (handoff 3327).
-    return TypeCode == __type_fp32;
+    // PreQuant=None preserves the derived FP32/S32/U32 AccType.
+    return TypeCode == __type_fp32 || TypeCode == __type_int32 ||
+           TypeCode == __type_uint32;
   if constexpr (Attr.PreQuant == FixpPreQuantMode::F322F16 ||
                 Attr.PreQuant == FixpPreQuantMode::VDEQF16 ||
                 Attr.PreQuant == FixpPreQuantMode::DEQF16 ||
@@ -566,6 +719,11 @@ struct GlobalTensor {
     }
   }
 
+  inline size_t GetStrideBytes(const int dim) const {
+    const size_t elements = static_cast<size_t>(GetStride(dim));
+    return (elements * type_traits<DType>::bits + 7) / 8;
+  }
+
   DType *data() { return data_; }
   const DType *data() const { return data_; }
 
@@ -637,13 +795,96 @@ public:
   static constexpr Location Loc = Loc_;
   static constexpr int Rows = Rows_;
   static constexpr int Cols = Cols_;
-  static constexpr int RowStride = BFractal_ == BLayout::RowMajor ? Cols : 1;
-  static constexpr int ColStride = BFractal_ == BLayout::RowMajor ? 1 : Rows;
+  static constexpr bool IsCubeLayout =
+      BFractal_ == BLayout::CubeM16 || BFractal_ == BLayout::CubeM32 ||
+      BFractal_ == BLayout::CubeN8;
+  static constexpr int RowStride = BFractal_ == BLayout::RowMajor ? Cols :
+                                   BFractal_ == BLayout::ColMajor ? 1 : 0;
+  static constexpr int ColStride = BFractal_ == BLayout::RowMajor ? 1 :
+                                   BFractal_ == BLayout::ColMajor ? Rows : 0;
+
+  static constexpr int CubeCellBytes = 128;
+  static constexpr int CubeElementBits =
+      type_traits<DType>::TypeCode == __type_fp4_e2m1x2 ||
+              type_traits<DType>::TypeCode == __type_fp4_e1m2x2 ||
+              type_traits<DType>::TypeCode == __type_fp4_hif4x2 ||
+              type_traits<DType>::TypeCode == __type_int4x2 ||
+              type_traits<DType>::TypeCode == __type_uint4x2
+          ? 4
+          : type_traits<DType>::bits;
+  static constexpr int CubeCellRows = [] {
+    if constexpr (BFractal_ == BLayout::CubeM16) return 16;
+    if constexpr (BFractal_ == BLayout::CubeM32) return 32;
+    if constexpr (BFractal_ == BLayout::CubeN8)
+      return CubeElementBits == 32 ? 4 : CubeElementBits == 16 ? 8
+                                  : CubeElementBits == 8      ? 16
+                                                               : 32;
+    return 0;
+  }();
+  static constexpr int CubeCellCols = [] {
+    if constexpr (BFractal_ == BLayout::CubeN8) return 8;
+    if constexpr (BFractal_ == BLayout::CubeM16)
+      return 128 * 8 / (16 * CubeElementBits);
+    if constexpr (BFractal_ == BLayout::CubeM32)
+      return 128 * 8 / (32 * CubeElementBits);
+    return 0;
+  }();
+  static constexpr int CubeStorageRows = [] {
+    if constexpr (BFractal_ == BLayout::CubeN8)
+      return ((Rows + CubeCellRows - 1) / CubeCellRows) * CubeCellRows;
+    if constexpr (IsCubeLayout) return CubeCellRows;
+    return Rows;
+  }();
+  static constexpr int CubeStorageCols = IsCubeLayout
+      ? ((Cols + CubeCellCols - 1) / CubeCellCols) * CubeCellCols : Cols;
+  static constexpr int CubeCellCount = IsCubeLayout
+      ? (CubeStorageRows / CubeCellRows) * (CubeStorageCols / CubeCellCols) : 0;
+  static constexpr int CubeRequiredBytes =
+      IsCubeLayout ? CubeCellCount * CubeCellBytes : 0;
+  static constexpr int CubeLoadLayout =
+      BFractal_ == BLayout::CubeM32 ? LayoutCvtEnum::ND2M32 :
+      BFractal_ == BLayout::CubeM16 ? LayoutCvtEnum::ND2M16 :
+      BFractal_ == BLayout::CubeN8  ? LayoutCvtEnum::ND2N8 : -1;
+  static constexpr int CubeStoreLayout =
+      BFractal_ == BLayout::CubeM32 ? LayoutCvtEnum::M322ND :
+      BFractal_ == BLayout::CubeM16 ? LayoutCvtEnum::M162ND :
+      BFractal_ == BLayout::CubeN8  ? LayoutCvtEnum::N82ND : -1;
+  static constexpr int round_capacity(int bytes) {
+    int capacity = 128;
+    while (capacity < bytes) capacity *= 2;
+    return capacity;
+  }
+  static constexpr int StorageBytes =
+      IsCubeLayout ? round_capacity(CubeRequiredBytes) :
+      (Rows * Cols * type_traits<DType>::bits + 7) / 8;
+  static constexpr int CubeStorageIndex(int row, int column) {
+    const int cell_elements = CubeCellRows * CubeCellCols;
+    if constexpr (BFractal_ == BLayout::CubeN8) {
+      const int k_repeat = CubeStorageRows / CubeCellRows;
+      const int cell_k = row / CubeCellRows;
+      const int cell_n = column / CubeCellCols;
+      const int inner_row = row % CubeCellRows;
+      const int inner_column = column % CubeCellCols;
+      const int local = inner_column * CubeCellRows + inner_row;
+      return (cell_n * k_repeat + cell_k) * cell_elements + local;
+    }
+    int mapped_column = column % CubeCellCols;
+    if constexpr (BFractal_ == BLayout::CubeM16) {
+      if constexpr (CubeElementBits == 4) {
+        if (mapped_column >= 4 && mapped_column < 8)
+          mapped_column += 4;
+        else if (mapped_column >= 8 && mapped_column < 12)
+          mapped_column -= 4;
+      }
+    }
+    const int cell_index = column / CubeCellCols;
+    const int local = row * CubeCellCols + mapped_column;
+    return cell_index * cell_elements + local;
+  }
 
   static constexpr int kBytes = (Rows_ * Cols_ * type_traits<DType>::bits + 7) / 8;
   // static_assert(kBytes % 512 == 0, "Tile size must be 512 bytes aligned");
   // static_assert(((kBytes / 512 - 1) & (kBytes / 512)) == 0, "Tile size must by (512 * 2 ^ n) Bytes");
-  // static_assert(kBytes >= 512 && kBytes <= 64 * 1024, "Tile size must be in [512B, 32kB]");
 
   static constexpr int ValidRow = RowValid_;
   static constexpr int ValidCol = ColValid_;
@@ -656,6 +897,16 @@ public:
                 "local register-backed storage only.");
   static_assert(Rows > 0 && ValidRow <= Rows && Cols > 0 && ValidCol <= Cols,
                 "Invalid Tile Layout.");
+  static_assert(!IsCubeLayout ||
+                    ((CubeElementBits == 4 || CubeElementBits == 8 ||
+                      CubeElementBits == 16 || CubeElementBits == 32) &&
+                     type_traits<DType>::TypeCode != __type_fp4_hif4x2),
+                "CUBE CELL layouts support only 4/8/16/32-bit element widths "
+                "and reject HiF4X2");
+  static_assert(BFractal_ != BLayout::CubeM16 || Rows <= 16,
+                "CUBE_M16 supports at most 16 logical rows");
+  static_assert(BFractal_ != BLayout::CubeM32 || Rows <= 32,
+                "CUBE_M32 supports at most 32 logical rows");
 
   static constexpr BLayout BFractal = BFractal_;
   static constexpr SLayout SFractal = SFractal_;
@@ -665,8 +916,7 @@ public:
   static constexpr int SFractalSize = SFractalSize_;
   static constexpr PadValue PadVal = PadVal_;
   static constexpr CompactMode Compact = Compact_;
-  static constexpr int LogicalTileBytes =
-      (Rows * Cols * type_traits<DType>::bits + 7) / 8;
+  static constexpr int LogicalTileBytes = StorageBytes;
   static constexpr int TilesizeCode =
       LogicalTileBytes == 128  ? __tilesize_128B :
       LogicalTileBytes == 256  ? __tilesize_256B :
@@ -674,9 +924,12 @@ public:
       LogicalTileBytes == 1024 ? __tilesize_1KB :
       LogicalTileBytes == 2048 ? __tilesize_2KB :
       LogicalTileBytes == 4096 ? __tilesize_4KB :
-      LogicalTileBytes == 8192 ? __tilesize_8KB : __tilesize_unknown;
+      LogicalTileBytes == 8192 ? __tilesize_8KB :
+      LogicalTileBytes == 16384 ? __tilesize_16KB :
+      LogicalTileBytes == 32768 ? __tilesize_32KB :
+      LogicalTileBytes == 65536 ? __tilesize_64KB : __tilesize_unknown;
   static constexpr bool IsValidActiveSize =
-      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_8KB;
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_64KB;
 
   // constructor for static shape
   Tile() { };
@@ -719,12 +972,10 @@ public:
                 "Layout cols must be divisible by inner box cols");
 
   static_assert(
-      (BFractal_ == BLayout::RowMajor && SFractal_ == SLayout::NoneBox && Cols * type_traits<DType>::bits % (32 * 8) == 0) ||
-      (BFractal_ == BLayout::ColMajor && SFractal_ == SLayout::NoneBox && Rows * type_traits<DType>::bits % (32 * 8) == 0) ||
+      IsCubeLayout ||
+      SFractal_ == SLayout::NoneBox ||
       (SFractal_ != SLayout::NoneBox) && (Rows % InnerRows == 0 && Cols % InnerCols == 0),
-      "BFractal_ is RowMajor and SFractal_ is NoneBox: Rows must be 32 bytes align, \
-        BFractal_ is ColMajor and SFractal_ is NoneBox: Cols must be 32 bytes align, \
-        SFractal_ in not NoneBox: Rows/Cols must be integer multiple of InnerRows/InnerCols."
+      "Boxed layouts require Rows/Cols to be integer multiples of their inner box."
         );
 
   static_assert(SFractalSize_ == 512 || SFractalSize_ == 1024,
@@ -732,10 +983,10 @@ public:
 
 #ifdef __linx
   using TileDType =
-      DType tile_size(Rows * Cols /
+      DType tile_size((StorageBytes * 8 / type_traits<DType>::bits) /
                       (sizeof(DType) * 8 / type_traits<DType>::bits));
 #else
-  using TileDType = DType[Rows * Cols];
+  using TileDType = DType[StorageBytes * 8 / type_traits<DType>::bits];
 #endif
 
   TileDType &data() { return data_; }
@@ -781,6 +1032,51 @@ template <typename Element_, const int Rows_, const int Cols_,
 using TileRight =
   Tile<Location::Right, Element_, Rows_, Cols_, BLayout::RowMajor,
        RowValid_, ColValid_, SLayout::ColMajor, 512>;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using CubeTileM16 =
+  Tile<Location::Left, Element_, Rows_, Cols_, BLayout::CubeM16,
+       RowValid_, ColValid_>;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using CubeTileM32 =
+  Tile<Location::Left, Element_, Rows_, Cols_, BLayout::CubeM32,
+       RowValid_, ColValid_>;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using CubeTileN8 =
+  Tile<Location::Right, Element_, Rows_, Cols_, BLayout::CubeN8,
+       RowValid_, ColValid_>;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using CubeAccumulatorM16 =
+  Tile<Location::Acc, Element_, Rows_, Cols_, BLayout::CubeM16,
+       RowValid_, ColValid_>;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using CubeAccumulatorM32 =
+  Tile<Location::Acc, Element_, Rows_, Cols_, BLayout::CubeM32,
+       RowValid_, ColValid_>;
+
+// Cooperative Shared matrix primaries are published as ordinary RowMajor
+// rectangles. Their Left/Right role controls CUBE operand ordering; CELL
+// layout is materialized only for Local matrix storage and destinations.
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using SharedMatrixLeft =
+  Tile<Location::Left, Element_, Rows_, Cols_, BLayout::RowMajor,
+       RowValid_, ColValid_>;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using SharedMatrixRight =
+  Tile<Location::Right, Element_, Rows_, Cols_, BLayout::RowMajor,
+       RowValid_, ColValid_>;
 
 template <int Rows, int Cols, bool RowMajor>
 struct stride_selector;
@@ -872,6 +1168,7 @@ public:
 
   int GetShape(int dim) const { return impl_.GetShape(dim); }
   int GetStride(int dim) const { return impl_.GetStride(dim); }
+  size_t GetStrideBytes(int dim) const { return impl_.GetStrideBytes(dim); }
 
 private:
   Impl impl_;
@@ -1127,6 +1424,20 @@ struct Options {
         Quant(Quant), Relu(Relu), RowIn(RowIn), RowOut(RowOut),
         GroupOut(GroupOut) {}
 
+  template <bool Enable = true> constexpr auto transpose_a() const {
+    constexpr FixpAttr NewAttr = Attr.transpose_a(Enable);
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
+                                RowIn, RowOut, GroupOut);
+  }
+
+  template <bool Enable = true> constexpr auto transpose_b() const {
+    constexpr FixpAttr NewAttr = Attr.transpose_b(Enable);
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
+                                RowIn, RowOut, GroupOut);
+  }
+
   constexpr auto relu() const {
     static_assert(Attr.Relu == FixpReluMode::None,
                   "FPATR config ReLU mode was already selected");
@@ -1270,6 +1581,9 @@ template <typename shape> int index(int i, int j) {
   if constexpr (is_global_data_v<shape>) {
     return i * shape::RowStride + j * shape::ColStride;
   } else if constexpr (is_tile_data_v<shape>) {
+    if constexpr (shape::IsCubeLayout) {
+      return shape::CubeStorageIndex(i, j);
+    } else
     if constexpr (is_boxed_data_v<shape>) {
       int sub_tile_i = i / shape::InnerRows;
       int sub_tile_j = j / shape::InnerCols;

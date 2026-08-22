@@ -1,14 +1,13 @@
-// Issue #18: Group TMATMUL (Shared A + Shared B, local C per PE) must use
-// per-PE compute window: LB0 = local C rows = SharedA.Rows / PECount(4).
-// Group: SharedA=[64,16] SharedB=[16,16] C=[16,16] -> LB0=16, LB1=16, LB2=16.
+// PTO 0.58.3 cooperative Shared TMATMUL keeps logical M/K and K/N independent
+// of the four publication quarters.
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
 
-using A = TileLeft<float, 64, 16>;
-using B = TileRight<float, 16, 16>;
-using C = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
-using AC = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
+using A = SharedMatrixLeft<float, 16, 16>;
+using B = SharedMatrixRight<float, 16, 16>;
+using C = CubeAccumulatorM16<float, 16, 16>;
+using AC = CubeAccumulatorM16<float, 16, 16>;
 
 __attribute__((noinline)) void group_basic(C &c, A &a, B &b) {
   auto sa = TMOV_L2S_INSERT(a);

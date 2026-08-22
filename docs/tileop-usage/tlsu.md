@@ -31,8 +31,9 @@ runtime stride supplies both the physical row width and row stride, so no
 `B.IOR`. An omitted scalar input uses the operation's dense-row default
 (straight to the physical columns). An explicitly encoded zero register means
 zero stride; it is not the omitted form. The C++ wrapper passes the row stride
-in **logical elements** (not bytes) exactly as required by the v0.58
-architecture contract; address scaling by element size is architectural.
+as a row stride in **bytes** exactly as required by PTO ISA 0.58.3. The
+`global_tensor` object continues to expose element strides to ordinary C++;
+`GetStrideBytes()` performs the checked boundary conversion for TLOAD/TSTORE.
 For dynamic `global_tensor` layouts, the wrapper reads the stride stored in
 the tensor object with `GetStride`; it never passes the layout template's
 `-1` dynamic sentinel to `B.IOR`.
@@ -45,7 +46,7 @@ B.DIM a0, 0, ->lb0      ; LB0 = valid columns
 B.DIM a1, 0, ->lb1      ; LB1 = valid rows
 B.DIM zero, a2, ->lb2   ; LB2 = physical columns
 B.IOT mask=1111, last, ->t0<3>
-B.IOR [a3,a4], []       ; [base, logical-row-stride]
+B.IOR [a3,a4], []       ; [base, byte-row-stride]
 ```
 
 ### Shared store (TSTORE / TSTORE.SPART)
@@ -85,6 +86,17 @@ issue 166 and LLVM issue 37.
 Gather/scatter offset and mask tiles are Local operands. The global base and
 row stride are scalar inputs. Destination/source tile size uses the per-PE `SizeCode` domain
 (B.IOT Local: 1..10 = 128 B..64 KB; B.IOS Shared: 1..12 = 128 B..256 KB).
+The public `PEMask` template argument is accepted only for the fixed decoder
+set `0000`, `1000`, `0100`, `0010`, `0001`, `1100`, `1110`, and `1111`;
+operations requiring participation reject mode zero.
+
+## CUBE CELL transport
+
+`TLOAD_CUBE` and `TSTORE_CUBE` are the explicit GM transport boundary for
+persistent Local CUBE storage. They select `ND2M32`, `ND2M16`, or `ND2N8` on
+load and the inverse `M322ND`, `M162ND`, or `N82ND` on store. These forms
+carry only LB0/LB1 logical dimensions, never LB2, and retain byte row stride
+in `B.IOR.RegSrc1`. SizeCode is capacity; it is independent of logical M/N/K.
 
 ### MGATHER_CAS (atomic compare-and-swap)
 

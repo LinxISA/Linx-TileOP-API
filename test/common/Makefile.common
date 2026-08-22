@@ -5,7 +5,7 @@ CATEGORY_NAME := $(shell echo $(CATEGORY) | sed -e 's/\//_/g')
 OBJ_ROOT := $(abspath $(TEST_ROOT)/../output)
 CASE_SRC_DIR := $(CATEGORY)/src
 ELF_DIR := $(OBJ_ROOT)/$(CATEGORY)/elf
-SRC_DIR := $(shell dirname $(SRC_FILE))
+SRC_DIR := $(if $(strip $(SRC_FILE)),$(shell dirname $(SRC_FILE)),)
 OBJ_DIR := $(OBJ_ROOT)/$(CASE_SRC_DIR)
 ELF_HEAD := $(ELF_DIR)/$(CATEGORY_NAME)
 
@@ -118,7 +118,9 @@ pre_work:
 
 clean:
 #	rm -rf $(OBJ_ROOT)/*/*.o
-	@find $(OBJ_ROOT) -type f -name "*.o" -exec rm -rf {} \;
+	@if [ -d "$(OBJ_ROOT)" ]; then \
+		find "$(OBJ_ROOT)" -type f -name "*.o" -exec rm -f {} \;; \
+	fi
 
 clean_all:
 	@rm -rf $(OBJ_ROOT)

@@ -1,16 +1,17 @@
 # TileOP API usage
 
-This directory documents the active LinxISA v0.58 surface implemented by
+This directory documents the active LinxISA / PTO ISA 0.58.3 surface implemented by
 `include/jcore/template_asm.hpp` and the sibling `include/jcore/*.hpp`
 kernel wrappers. The operation list, engine classes, and function values are
 projected from the pinned LinxISA release recorded in
 [`contracts/linxisa-v0.58-engine-ops.json`](../../contracts/linxisa-v0.58-engine-ops.json),
-which mirrors the PTO-ISA v0.58 tile-operation catalog
+which mirrors the PTO ISA 0.58.3 tile-operation catalog
 (`spec/catalog/tile-operations.json`).
 
 | Area | Reference |
 | --- | --- |
 | VEC / SFU / TLSU / CUBE operation index | [engines.md](engines.md) |
+| PTO ISA 0.58.3 migration and compatibility boundary | [pto-0583-migration.md](pto-0583-migration.md) |
 | Tile load, store, move, gather, scatter, and peer move | [tlsu.md](tlsu.md) |
 | Matrix operations | [cube.md](cube.md) |
 | Tile size, valid region, Shared register, and PE mask rules | [constraints.md](constraints.md) |
