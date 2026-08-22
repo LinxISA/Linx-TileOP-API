@@ -5,17 +5,18 @@
 
 using namespace pto;
 
-using A = TileLeft<float, 16, 16>;
-using B = TileRight<float, 16, 16>;
-using S = TileLeft<float, 16, 16>;
-using C = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
+using A = CubeTileM16<float, 16, 16>;
+using B = SharedMatrixRight<float, 16, 16>;
+using SA = Tile<Location::Scaling, float, 16, 16, BLayout::RowMajor>;
+using SB = SharedMatrixRight<float, 16, 16>;
+using C = CubeAccumulatorM16<float, 16, 16>;
 
-using GroupA = TileLeft<float, 64, 16>;
-using GroupB = TileRight<float, 16, 16>;
-using GroupAScale = TileLeft<float, 64, 16>;
-using GroupBScale = TileRight<float, 16, 16>;
+using GroupA = SharedMatrixLeft<float, 64, 16>;
+using GroupB = SharedMatrixRight<float, 16, 16>;
+using GroupAScale = SharedMatrixLeft<float, 64, 16>;
+using GroupBScale = SharedMatrixRight<float, 16, 16>;
 
-void shared_b_forms(C &d, C &c, A &a, B &b, S &sa, S &sb) {
+void shared_b_forms(C &d, C &c, A &a, B &b, SA &sa, SB &sb) {
   auto keep = fixp::Options<FixpAttr::keep_acc()>{};
   auto shared_b = TMOV_L2S_INSERT(b);
   auto shared_sb = TMOV_L2S_INSERT(sb);
@@ -56,7 +57,8 @@ int main() {
   static C d, c;
   static A a;
   static B b;
-  static S sa, sb;
+  static SA sa;
+  static SB sb;
   static GroupA group_a;
   static GroupB group_b;
   static GroupAScale group_sa;

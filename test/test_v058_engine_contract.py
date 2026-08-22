@@ -11,7 +11,11 @@
 # directly from the header text.
 
 import json
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -183,6 +187,27 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn('"B.IOT %[C]\\n"', self.header)
         self.assertIn('[Dst] "=&Tr"(dst.data())', self.header)
 
+    def test_tgemv_uses_a_then_b_source_and_type_order(self) -> None:
+        self.assertIn('"B.IOT %[Vec], %[Mtx], mask=15\\n"', self.header)
+        self.assertNotIn('"B.IOT %[Mtx], %[Vec], mask=15\\n"', self.header)
+        self.assertIn(
+            '"B.IOT %[Vec], %[ScaleVec], mask=15\\n" '
+            '"B.IOT %[Mtx], %[ScaleMtx], mask=15\\n"',
+            self.header,
+        )
+        self.assertIn("PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx", self.header)
+        self.assertNotIn("PTO_MATMUL_COMMON_INPUTS(Dst, Mtx, Vec", self.header)
+
+    def test_local_cube_descriptor_contract_is_compile_time_guarded(self) -> None:
+        self.assertIn("Local matrix A must use CUBE_M16 or CUBE_M32", self.header)
+        self.assertIn("Local matrix B must use CUBE_N8", self.header)
+        self.assertIn("destination D must use CUBE_M16 or CUBE_M32", self.header)
+        self.assertIn("Matrix accumulator C and destination D must use the same", self.header)
+        for fixture in ("TMatmulAllOptions.cpp", "TGEMVAllOptions.cpp",
+                        "GroupMatmul.cpp", "CubeCellTransport.cpp"):
+            text = (ROOT / "test" / "tileop_api" / "src" / fixture).read_text()
+            self.assertRegex(text, r"Cube(Tile|Accumulator)(M16|M32|N8)")
+
     def test_pe_mode_rejects_unassigned_masks(self) -> None:
         type_header = (ROOT / "include" / "jcore" / "type.hpp").read_text(
             encoding="utf-8"
@@ -190,6 +215,26 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("is_valid_pe_mask", type_header)
         self.assertIn("pe_mode_from_mask", type_header)
         self.assertNotIn("PEMask > 0 && PEMask < 16", self.header)
+
+    def test_fp6_cube_cell_instantiation_is_rejected(self) -> None:
+        compiler = os.environ.get("CXX") or shutil.which("c++")
+        self.assertIsNotNone(compiler)
+        source = """
+#include \"common/pto_tile.hpp\"
+using Bad = pto::CubeTileM16<__fp6_e3m2, 16, 32>;
+int main() { return sizeof(Bad); }
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bad_fp6_cube.cpp"
+            path.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [compiler, "-std=c++20", "-D__linx",
+                 "-include", str(ROOT / "test" / "linx_host_type_shim.hpp"),
+                 "-fsyntax-only", "-I", str(ROOT / "include"), str(path)],
+                text=True, capture_output=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CUBE CELL layouts support only", result.stderr)
 
     # --- TMOV shared source forms ---
 

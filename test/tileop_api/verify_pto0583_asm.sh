@@ -15,8 +15,8 @@ trap 'rm -rf "$OUT"' EXIT
 grep -Eq 'B\.FPATR[[:space:]]+0, 0, 0, 0, 0, 0, 0, 1, 1' "$OUT/contract.diss"
 grep -Eq 'B\.IOT[[:space:]]+t#1, mask=1100, last,.*->m<64KB>' "$OUT/contract.diss"
 grep -Eq 'B\.IOS[[:space:]]+mask=1111, ->S255<256KB>' "$OUT/contract.diss"
-grep -Eiq 'B\.DATR.*layout21' "$OUT/contract.diss"
-grep -Eiq 'B\.DATR.*layout26' "$OUT/contract.diss"
+grep -Eiq 'B\.DATR.*layout21, DTYPE_NONE, Null' "$OUT/contract.diss"
+grep -Eiq 'B\.DATR.*layout26, DTYPE_NONE, Null' "$OUT/contract.diss"
 
 for invalid in \
   'B.IOT t#1, mask=0011, last, ->m<128B>' \

@@ -6,8 +6,8 @@
 BSTART.TLOAD FP32
 BSTART.TSTORE FP32
 BSTART.TMATMUL FP32
-B.DATR layout21, Null
-B.DATR layout26, Null
+B.DATR layout21, DTYPE_NONE, Null
+B.DATR layout26, DTYPE_NONE, Null
 B.FPATR 0, 0, 0, 0, 0, 0, 0, 1, 1
 B.IOR [a0, a1], []
 B.IOT t#1, mask=1100, last, ->m<64KB>

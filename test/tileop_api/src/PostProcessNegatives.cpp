@@ -5,22 +5,25 @@
 
 using namespace pto;
 
-using D = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor>;
-using Ds8 = Tile<Location::Vec, int8_t, 32, 32, BLayout::RowMajor>;
-using A = TileLeft<float, 32, 64>;
-using B = TileRight<float, 64, 32>;
+using D = CubeAccumulatorM32<float, 32, 32>;
+using Ds8 = CubeAccumulatorM32<int8_t, 32, 32>;
+using A = CubeTileM32<float, 32, 64>;
+using B = CubeTileN8<float, 64, 32>;
 using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 2>;  // bad ValidCol
 using G = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 8>;  // bad for N=32/GroupN=16
-using GroupA = TileLeft<float, 64, 16>;
-using GroupB = TileRight<float, 16, 16>;
-using C = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
-using BadGroupC = Tile<Location::Vec, float, 8, 16, BLayout::RowMajor>;
-using BadGroupK = TileRight<float, 32, 16>;
-using BadGroupN = TileRight<float, 16, 32>;
-using DynamicGroupA = TileLeft<float, 64, 16, DYNAMIC, DYNAMIC>;
-using DynamicGroupB = TileRight<float, 16, 16, DYNAMIC, DYNAMIC>;
-using DynamicGroupC = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor,
-                           DYNAMIC, DYNAMIC>;
+using GroupA = SharedMatrixLeft<float, 64, 16>;
+using GroupB = SharedMatrixRight<float, 16, 16>;
+using C = CubeAccumulatorM16<float, 16, 16>;
+using BadGroupC = CubeAccumulatorM16<float, 8, 16>;
+using BadGroupK = SharedMatrixRight<float, 32, 16>;
+using BadGroupN = SharedMatrixRight<float, 16, 32>;
+using DynamicGroupA = SharedMatrixLeft<float, 64, 16, DYNAMIC, DYNAMIC>;
+using DynamicGroupB = SharedMatrixRight<float, 16, 16, DYNAMIC, DYNAMIC>;
+using DynamicGroupC = CubeAccumulatorM16<float, 16, 16, DYNAMIC, DYNAMIC>;
+using OldA = TileLeft<float, 32, 64>;
+using BadLayoutD = CubeAccumulatorM16<float, 16, 32>;
+using BadLayoutA = CubeTileM32<float, 16, 64>;
+using BadK = CubeTileN8<float, 32, 32>;
 
 void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
 #if defined(SHOULD_FAIL_dtype)
@@ -47,6 +50,19 @@ void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
 #if defined(SHOULD_FAIL_local_transpose)
   // FPATR transpose is a cooperative Shared materialization control.
   TMATMUL(d, a, b, fixp::keep_acc().transpose_a());
+#endif
+#if defined(SHOULD_FAIL_old_rowmajor)
+  OldA old_a;
+  TMATMUL(d, old_a, b);
+#endif
+#if defined(SHOULD_FAIL_mismatched_m_layout)
+  BadLayoutD bad_d;
+  BadLayoutA bad_a;
+  TMATMUL(bad_d, bad_a, b);
+#endif
+#if defined(SHOULD_FAIL_local_k)
+  BadK bad_b;
+  TMATMUL(d, a, bad_b);
 #endif
 #if defined(SHOULD_FAIL_group_shape)
   GroupA group_a;

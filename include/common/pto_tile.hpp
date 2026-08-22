@@ -762,9 +762,11 @@ public:
   static_assert(Rows > 0 && ValidRow <= Rows && Cols > 0 && ValidCol <= Cols,
                 "Invalid Tile Layout.");
   static_assert(!IsCubeLayout ||
-                    (type_traits<DType>::bits != 64 &&
+                    ((CubeElementBits == 4 || CubeElementBits == 8 ||
+                      CubeElementBits == 16 || CubeElementBits == 32) &&
                      type_traits<DType>::TypeCode != __type_fp4_hif4x2),
-                "CUBE CELL layouts reject 64-bit and HiF4X2 element types");
+                "CUBE CELL layouts support only 4/8/16/32-bit element widths "
+                "and reject HiF4X2");
   static_assert(BFractal_ != BLayout::CubeM16 || Rows <= 16,
                 "CUBE_M16 supports at most 16 logical rows");
   static_assert(BFractal_ != BLayout::CubeM32 || Rows <= 32,

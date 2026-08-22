@@ -6,9 +6,9 @@
 
 using namespace pto;
 
-using D = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor>;
-using A = TileLeft<float, 32, 64>;
-using B = TileRight<float, 64, 32>;
+using D = CubeAccumulatorM32<float, 32, 32>;
+using A = CubeTileM32<float, 32, 64>;
+using B = CubeTileN8<float, 64, 32>;
 using S = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor>;
 using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
 

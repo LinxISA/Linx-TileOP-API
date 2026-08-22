@@ -10,7 +10,7 @@ stream.
 
 Requirements:
 
-- `dst`、`a` 和所有辅助 Tile 都是普通 Local Tile；`a` 必须是 `Location::Left`，`b` 必须是 `Location::Right`。
+- Local `a`/`c`/`dst` 必须使用 CUBE_M16/M32 CELL layout，Local `b` 必须使用 CUBE_N8；辅助参数仍是普通 Local Tile。
 - `right` 可以是普通 `Tile<Location::Right, ...>`，也可以是 `SharedTile<RightTile>`（或 `SharedTile<LeftTile>` 作为 `a`）。
 - 所有 `B.FPATR` 配置和可选 operand 都封装在唯一的 `options` 参数中。
 - options 的类型在编译期确定模式；scalar descriptor 的值和 Tile 寄存器内容可在运行时确定。
@@ -18,15 +18,16 @@ Requirements:
 ## 基础类型
 
 ```cpp
-using tile_a = Tile<Location::Left, __half, 32, 32>;
-using tile_b = Tile<Location::Right, __half, 32, 32>;
-using tile_fp32 = Tile<Location::Vec, __fp32, 32, 32>;
-using tile_fp16 = Tile<Location::Vec, __half, 32, 32>;
-using tile_bf16 = Tile<Location::Vec, __bf16, 32, 32>;
-using tile_s8 = Tile<Location::Vec, int8_t, 32, 32>;
+using tile_a = CubeTileM32<__half, 32, 32>;
+using tile_b = CubeTileN8<__half, 32, 32>;
+using tile_fp32 = CubeAccumulatorM32<__fp32, 32, 32>;
+using tile_fp16 = CubeAccumulatorM32<__half, 32, 32>;
+using tile_bf16 = CubeAccumulatorM32<__bf16, 32, 32>;
+using tile_s8 = CubeAccumulatorM32<int8_t, 32, 32>;
 ```
 
-A/B/dst 的物理 Tile 必须满足 TileOP 的对齐和 512 B..32 KB active-size 约束。`dst` 的 valid shape 必须为 `M x N`。
+A/B/dst 的 Local SizeCode 容量必须在 128 B..64 KiB；CELL 所需容量按
+128 B 单元推导并向合法 SizeCode 取整。`dst` 的 valid shape 必须为 `M x N`。
 
 ## C++ 操作族与签名
 
@@ -61,12 +62,12 @@ keep_acc/f16/bf16/relu 模式。
 
 - `Vec` = 1×K（Left，逻辑 `ValidRow=1`），`Mtx` = K×N（Right），
   `Dst` = 1×N（逻辑 `ValidRow=1`）。
-- 物理 Tile 仍需满足 512 B..32 KB active-size，因此向量通常用
-  `Tile<Location::Left, T, K, K, BLayout::RowMajor, 1, K>` 这类满物理 +
-  逻辑 1×K 的 shape。
+- `Vec` 使用 `CubeTileM16<T, 1, K>`，`Mtx` 使用
+  `CubeTileN8<T, K, N>`，`Dst` 使用 `CubeAccumulatorM16<AccT, 1, N>`。
 - 所有 TGEMV 都是 Local-only；任何 `B.IOS` 都 illegal（handoff Sec 1.5），
   Shared 参数在概念层被拒绝。
-- `B.DIM` 角色相对 TMATMUL 反转：`LB0 = N`、`LB1 = M(=1)`、`LB2 = Col`。
+- `B.DIM` 与 TMATMUL 一致：`LB0 = M(=1)`、`LB1 = N`、`LB2 = K`；
+  B.IOT 数学源顺序为 A=`Vec`、B=`Mtx`。
 
 ## Shared / Local 存储形态
 

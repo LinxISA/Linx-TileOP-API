@@ -7,11 +7,11 @@
 using namespace pto;
 
 // TMATMUL shapes
-using D = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor>;
-using Ds8 = Tile<Location::Vec, int8_t, 32, 32, BLayout::RowMajor>;
-using Df16 = Tile<Location::Vec, __half, 32, 32, BLayout::RowMajor>;
-using A = TileLeft<float, 32, 64>;
-using B = TileRight<float, 64, 32>;
+using D = CubeAccumulatorM32<float, 32, 32>;
+using Ds8 = CubeAccumulatorM32<int8_t, 32, 32>;
+using Df16 = CubeAccumulatorM32<__half, 32, 32>;
+using A = CubeTileM32<float, 32, 64>;
+using B = CubeTileN8<float, 64, 32>;
 // scale/quant/PReLU param: 1xN logical, physical 2x32 (>= 512 B)
 using P = Tile<Location::Vec, uint64_t, 2, 32, BLayout::RowMajor, 1, 32>;
 // RowMaxOut (Mx1) / GroupMaxOut (Mx2 for GroupN=16, N=32)
@@ -19,11 +19,11 @@ using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
 using G = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 2>;
 
 // TGEMV shapes: d 1xN, vec 1xK, mtx KxN
-using GV_D = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 1, 32>;
-using GV_Ds8 = Tile<Location::Vec, int8_t, 32, 32, BLayout::RowMajor, 1, 32>;
-using GV_Df16 = Tile<Location::Vec, __half, 32, 32, BLayout::RowMajor, 1, 32>;
-using GV_V = Tile<Location::Left, float, 64, 64, BLayout::RowMajor, 1, 64>;
-using GV_M = TileRight<float, 64, 32>;
+using GV_D = CubeAccumulatorM16<float, 1, 32>;
+using GV_Ds8 = CubeAccumulatorM16<int8_t, 1, 32>;
+using GV_Df16 = CubeAccumulatorM16<__half, 1, 32>;
+using GV_V = CubeTileM16<float, 1, 64>;
+using GV_M = CubeTileN8<float, 64, 32>;
 
 static constexpr uint64_t s8_desc =
     (static_cast<uint64_t>(0x7) << 13) |  // fp19 scale = 7

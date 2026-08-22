@@ -25,8 +25,9 @@ TMATMUL(out, a, b);
 
 ## Dimensions
 
-M, N, and K are powers of two; valid rows and columns may describe a smaller
-active region but may not exceed the allocated rows and columns. For TMATMUL
+M, N, and K are arbitrary positive values independent of SizeCode. Valid rows
+and columns may describe a smaller active region but may not exceed the
+allocated rows and columns. For TMATMUL
 the `B.DIM` roles are `LB0 = M` (result rows), `LB1 = N` (result columns),
 and `LB2 = K` (the shared inner dimension). The K value is derived from the
 two source descriptors' matching inner dimension; `LB2` is not a second
@@ -74,8 +75,9 @@ source types before publishing them through `TMOV_L2S_*`.
 ## Matrix-vector family
 
 `TGEMV` and its `*.BIAS/*.ACC/*.MX*` forms operate on a matrix and a vector.
-Per the v0.58 contract the `B.DIM` roles are reversed relative to TMATMUL:
-`LB0 = N`, `LB1 = M`, `LB2 = Col`. `TGEMV` rejects all Shared binders.
+The same dimension roles apply: `LB0 = M` (fixed to 1), `LB1 = N`, and
+`LB2 = K`. The ordered mathematical sources are A=`Vec` first and B=`Mtx`
+second. `TGEMV` rejects all Shared binders.
 
 ## Note on canonical block spellings
 

@@ -4,9 +4,9 @@ using namespace pto;
 
 using TileF = Tile<Location::Vec, float, 16, 32, BLayout::RowMajor, -1, -1>;
 using RowF = Tile<Location::Vec, float, 16, 32, BLayout::RowMajor, -1, 1>;
-using LeftF = TileLeft<float, 16, 32, -1, -1>;
-using RightF = TileRight<float, 32, 16, -1, -1>;
-using MatOutF = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor, -1, -1>;
+using LeftF = SharedMatrixLeft<float, 16, 32, -1, -1>;
+using RightF = SharedMatrixRight<float, 32, 16, -1, -1>;
+using MatOutF = CubeAccumulatorM16<float, 16, 16, -1, -1>;
 using GlobalF = global_tensor<float, RowMajor<-1, -1>>;
 
 __attribute__((noinline)) void dynamic_elementwise(TileF &dst, TileF &src0,
