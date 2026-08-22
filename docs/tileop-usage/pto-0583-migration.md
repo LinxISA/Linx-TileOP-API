@@ -32,3 +32,12 @@ new 0.58.3 descriptors cannot be assembled by a 0.58.1 LLVM. Passing
 `make check` proves the header-level and provenance contracts only. Promotion
 also requires the exact 0.58.3 compiler to pass `test/tileop_api/compile.all`,
 the negative corpus, and disassembly checks.
+
+At the reviewed LLVM integration point, the MC/CodeGen compiler implements the
+0.58.3 instruction encodings but does not ship the C++ Tile register frontend
+used by this header (`linx_blkc.h`, `tile_size`, or the `Tr` constraint).
+`verify_pto0583_asm.sh` therefore proves the integrated assembler,
+disassembler, SizeCode/PEMode, layout, and FPATR contracts directly. The full
+C++ target corpus remains a compiler packaging/frontend blocker until those
+Tile ABI definitions are supplied; `make check` still covers all public C++
+types and builders with a host syntax gate.

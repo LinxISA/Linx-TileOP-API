@@ -16,6 +16,8 @@ check:
 		-fsyntax-only -Iinclude test/ptoas_linx_type_compat.cpp
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
 		-fsyntax-only -Iinclude test/pto0583_contract.cpp
+	bash -n test/tileop_api/compile.all test/tileop_api/run_negatives.sh \
+		test/tileop_api/verify_pto0583_asm.sh
 	git diff --check
 
 install:
