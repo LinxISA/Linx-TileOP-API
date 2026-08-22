@@ -720,6 +720,30 @@ public:
   static constexpr int StorageBytes =
       IsCubeLayout ? round_capacity(CubeRequiredBytes) :
       (Rows * Cols * type_traits<DType>::bits + 7) / 8;
+  static constexpr int CubeStorageIndex(int row, int column) {
+    const int cell_elements = CubeCellRows * CubeCellCols;
+    if constexpr (BFractal_ == BLayout::CubeN8) {
+      const int k_repeat = CubeStorageRows / CubeCellRows;
+      const int cell_k = row / CubeCellRows;
+      const int cell_n = column / CubeCellCols;
+      const int inner_row = row % CubeCellRows;
+      const int inner_column = column % CubeCellCols;
+      const int local = inner_column * CubeCellRows + inner_row;
+      return (cell_n * k_repeat + cell_k) * cell_elements + local;
+    }
+    int mapped_column = column % CubeCellCols;
+    if constexpr (BFractal_ == BLayout::CubeM16) {
+      if constexpr (CubeElementBits == 4) {
+        if (mapped_column >= 4 && mapped_column < 8)
+          mapped_column += 4;
+        else if (mapped_column >= 8 && mapped_column < 12)
+          mapped_column -= 4;
+      }
+    }
+    const int cell_index = column / CubeCellCols;
+    const int local = row * CubeCellCols + mapped_column;
+    return cell_index * cell_elements + local;
+  }
 
   static constexpr int kBytes = (Rows_ * Cols_ * type_traits<DType>::bits + 7) / 8;
   // static_assert(kBytes % 512 == 0, "Tile size must be 512 bytes aligned");
@@ -1422,6 +1446,9 @@ template <typename shape> int index(int i, int j) {
   if constexpr (is_global_data_v<shape>) {
     return i * shape::RowStride + j * shape::ColStride;
   } else if constexpr (is_tile_data_v<shape>) {
+    if constexpr (shape::IsCubeLayout) {
+      return shape::CubeStorageIndex(i, j);
+    } else
     if constexpr (is_boxed_data_v<shape>) {
       int sub_tile_i = i / shape::InnerRows;
       int sub_tile_j = j / shape::InnerCols;

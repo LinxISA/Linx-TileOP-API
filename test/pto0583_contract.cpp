@@ -34,6 +34,8 @@ static_assert(M32::CubeRequiredBytes == 4096);
 static_assert(N8::CubeRequiredBytes == 2048);
 static_assert(M16S4::CubeElementBits == 4);
 static_assert(M16S4::CubeCellCols == 16);
+static_assert(M16::CubeStorageIndex(1, 2) == 34);
+static_assert(N8::CubeStorageIndex(5, 9) == 293);
 static_assert(SharedMatrixLeft<float, 16, 16>::BFractal == BLayout::RowMajor);
 static_assert(SharedMatrixRight<float, 16, 16>::BFractal == BLayout::RowMajor);
 
