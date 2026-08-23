@@ -242,6 +242,9 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_matrix_dtype_and_effective_shape_contract_is_centralized(self) -> None:
         tile = PTO_TILE.read_text(encoding="utf-8")
+        self.assertIn(
+            '"B.DATR %D[DataTypeB], rmode0, Zero\\n"', self.header
+        )
         self.assertIn("matrix_accumulator_type_code", tile)
         self.assertIn("MatrixNumericClass::Unsigned", tile)
         self.assertIn("OutputCode == AccCode", tile)
