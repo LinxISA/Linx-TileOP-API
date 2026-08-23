@@ -444,27 +444,38 @@ int main() { return sizeof(Bad); }
 
         def make_elf(desc: bytes = expected, owner: bytes = b"PTO\0",
                      machine: int = 0xE9, magic: bytes = b"\x7fELF",
-                     duplicate: bool = False) -> bytes:
-            name = owner + b"\0" * ((-len(owner)) & 3)
-            note = (struct.pack("<III", len(owner), len(desc), 1) + name +
-                    desc + b"\0" * ((-len(desc)) & 3))
-            if duplicate:
-                note += note
-            note_offset = 64 + 56
+                     extra_desc: bytes | None = None) -> bytes:
+            def make_note(note_desc: bytes) -> bytes:
+                name = owner + b"\0" * ((-len(owner)) & 3)
+                return (struct.pack("<III", len(owner), len(note_desc), 1) +
+                        name + note_desc + b"\0" * ((-len(note_desc)) & 3))
+
+            note = make_note(desc)
+            extra_note = make_note(extra_desc) if extra_desc is not None else b""
+            phnum = 2 if extra_note else 1
+            note_offset = 64 + phnum * 56
+            extra_offset = note_offset + len(note)
             shstr = b"\0.note.pto.isa\0.shstrtab\0"
-            shstr_offset = note_offset + len(note)
+            shstr_offset = extra_offset + len(extra_note)
             section_offset = (shstr_offset + len(shstr) + 7) & ~7
             image = bytearray(section_offset + 3 * 64)
             ident = magic + bytes((2, 1, 1, 0)) + bytes(8)
             struct.pack_into(
                 "<16sHHIQQQIHHHHHH", image, 0, ident, 3, machine, 1, 0,
-                64, section_offset, 0, 64, 56, 1, 64, 3, 2,
+                64, section_offset, 0, 64, 56, phnum, 64, 3, 2,
             )
             struct.pack_into(
                 "<IIQQQQQQ", image, 64, 4, 4, note_offset, note_offset,
                 note_offset, len(note), len(note), 4,
             )
+            if extra_note:
+                struct.pack_into(
+                    "<IIQQQQQQ", image, 64 + 56, 4, 4, extra_offset,
+                    extra_offset, extra_offset, len(extra_note),
+                    len(extra_note), 4,
+                )
             image[note_offset:note_offset + len(note)] = note
+            image[extra_offset:extra_offset + len(extra_note)] = extra_note
             image[shstr_offset:shstr_offset + len(shstr)] = shstr
             struct.pack_into(
                 "<IIQQQQIIQQ", image, section_offset + 64,
@@ -487,7 +498,9 @@ int main() { return sizeof(Bad); }
                 "wrong-machine": make_elf(machine=0x3E),
                 "wrong-identity": make_elf(desc=expected.replace(b"0.58.3", b"0.58.2")),
                 "trailing-nul": make_elf(desc=expected + b"\0"),
-                "conflicting": make_elf(duplicate=True),
+                "duplicate-segment": make_elf(extra_desc=expected),
+                "conflicting-segment": make_elf(
+                    extra_desc=expected.replace(b"0.58.3", b"0.58.2")),
             }
             for name, contents in variants.items():
                 path = temporary_path / f"{name}.elf"

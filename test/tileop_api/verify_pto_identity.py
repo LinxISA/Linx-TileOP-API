@@ -92,14 +92,26 @@ def validate(path: Path) -> None:
     shstr = section_headers[shstrndx]
     names = bounded(data, shstr[4], shstr[5], "section-name table")
     pto_sections = []
-    all_pto_notes = []
+    note_ranges: dict[tuple[int, int], list[tuple[bytes, int, bytes]]] = {}
+    for header in program_headers:
+        if header[0] != PT_NOTE:
+            continue
+        key = (header[2], header[5])
+        notes = parse_notes(bounded(data, key[0], key[1], "PT_NOTE segment"))
+        if any(owner == b"PTO\0" and note_type == 1
+               for owner, note_type, _ in notes):
+            require(header[7] == 4, "PTO PT_NOTE p_align must be 4")
+        note_ranges[key] = notes
+
     for section in section_headers:
         name = c_string(names, section[0]) if section[0] else b""
         if section[1] != SHT_NOTE:
             continue
-        contents = bounded(data, section[4], section[5], "SHT_NOTE section")
-        notes = parse_notes(contents)
-        all_pto_notes.extend(note for note in notes if note[0] == b"PTO\0")
+        key = (section[4], section[5])
+        if key not in note_ranges:
+            note_ranges[key] = parse_notes(
+                bounded(data, key[0], key[1], "SHT_NOTE section"))
+        notes = note_ranges[key]
         if name == b".note.pto.isa":
             pto_sections.append((section, notes))
 
@@ -115,15 +127,25 @@ def validate(path: Path) -> None:
             ".note.pto.isa must have one exact PT_NOTE segment")
     require(matching_segments[0][7] == 4, "PTO PT_NOTE p_align must be 4")
 
-    pto_notes = [note for note in section_notes if note[0] == b"PTO\0"]
-    require(len(pto_notes) == 1 and len(all_pto_notes) == 1,
-            "PTO identity note is missing or conflicting")
+    pto_notes = [note for note in section_notes
+                 if note[0] == b"PTO\0" and note[1] == 1]
+    require(len(pto_notes) == 1, "primary PTO identity note is missing")
+    identities = [note for notes in note_ranges.values() for note in notes
+                  if note[0] == b"PTO\0" and note[1] == 1]
+    for _, _, identity_desc in identities:
+        require(len(identity_desc) == 165,
+                "PTO note descriptor size must be 165")
+        require(not identity_desc.endswith(b"\0"),
+                "PTO JSON must not have a trailing NUL")
+        require(identity_desc == EXPECTED_DESC,
+                "PTO identity JSON is not exact 0.58.3")
+    require(len(identities) == 1,
+            "PTO identity must have exactly one note range")
+
     owner, note_type, desc = pto_notes[0]
     require(owner == b"PTO\0", "PTO note owner must be PTO\\0")
     require(note_type == 1, "PTO note type must be 1")
-    require(len(desc) == 165, "PTO note descriptor size must be 165")
-    require(not desc.endswith(b"\0"), "PTO JSON must not have a trailing NUL")
-    require(desc == EXPECTED_DESC, "PTO identity JSON is not exact 0.58.3")
+    require(desc == EXPECTED_DESC, "primary PTO identity payload is invalid")
 
 
 def main(argv: list[str]) -> int:
