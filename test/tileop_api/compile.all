@@ -60,21 +60,7 @@ run_objects() {
 
 verify_pto_identity() {
   local elf=$1
-  "$COMPILER_DIR/llvm-readelf" -n "$elf" | grep -q 'PTO'
-  python3 - "$elf" <<'PY'
-import sys
-from pathlib import Path
-
-data = Path(sys.argv[1]).read_bytes()
-expected = (
-    b'"release":"0.58.3"',
-    b'"encoding_abi":"pto-isa-0.58.3-mode-function-v1"',
-    b'"encoding_projection_sha256":"8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172"',
-)
-missing = [item.decode() for item in expected if item not in data]
-if missing:
-    raise SystemExit(f"{sys.argv[1]}: missing exact PTO identity fields: {missing}")
-PY
+  python3 ./verify_pto_identity.py "$elf" || return 1
 }
 
 run_link_smokes() {

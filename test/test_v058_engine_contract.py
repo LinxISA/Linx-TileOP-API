@@ -14,7 +14,9 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -430,6 +432,74 @@ int main() { return sizeof(Bad); }
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("FAIL object: CubeCellTransport", result.stderr)
             self.assertIn("TESTCASE=TTrans object", calls.read_text(encoding="utf-8"))
+
+    def test_pto_identity_verifier_rejects_hostile_elf_notes(self) -> None:
+        verifier = ROOT / "test" / "tileop_api" / "verify_pto_identity.py"
+        expected = (
+            b'{"encoding_abi":"pto-isa-0.58.3-mode-function-v1",'
+            b'"encoding_projection_sha256":'
+            b'"8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172",'
+            b'"release":"0.58.3"}'
+        )
+
+        def make_elf(desc: bytes = expected, owner: bytes = b"PTO\0",
+                     machine: int = 0xE9, magic: bytes = b"\x7fELF",
+                     duplicate: bool = False) -> bytes:
+            name = owner + b"\0" * ((-len(owner)) & 3)
+            note = (struct.pack("<III", len(owner), len(desc), 1) + name +
+                    desc + b"\0" * ((-len(desc)) & 3))
+            if duplicate:
+                note += note
+            note_offset = 64 + 56
+            shstr = b"\0.note.pto.isa\0.shstrtab\0"
+            shstr_offset = note_offset + len(note)
+            section_offset = (shstr_offset + len(shstr) + 7) & ~7
+            image = bytearray(section_offset + 3 * 64)
+            ident = magic + bytes((2, 1, 1, 0)) + bytes(8)
+            struct.pack_into(
+                "<16sHHIQQQIHHHHHH", image, 0, ident, 3, machine, 1, 0,
+                64, section_offset, 0, 64, 56, 1, 64, 3, 2,
+            )
+            struct.pack_into(
+                "<IIQQQQQQ", image, 64, 4, 4, note_offset, note_offset,
+                note_offset, len(note), len(note), 4,
+            )
+            image[note_offset:note_offset + len(note)] = note
+            image[shstr_offset:shstr_offset + len(shstr)] = shstr
+            struct.pack_into(
+                "<IIQQQQIIQQ", image, section_offset + 64,
+                shstr.index(b".note.pto.isa"), 7, 2, note_offset,
+                note_offset, len(note), 0, 0, 4, 0,
+            )
+            struct.pack_into(
+                "<IIQQQQIIQQ", image, section_offset + 128,
+                shstr.index(b".shstrtab"), 3, 0, 0, shstr_offset,
+                len(shstr), 0, 0, 1, 0,
+            )
+            return bytes(image)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            variants = {
+                "valid": make_elf(),
+                "missing": make_elf(owner=b"GNU\0"),
+                "corrupt": make_elf(magic=b"BAD!"),
+                "wrong-machine": make_elf(machine=0x3E),
+                "wrong-identity": make_elf(desc=expected.replace(b"0.58.3", b"0.58.2")),
+                "trailing-nul": make_elf(desc=expected + b"\0"),
+                "conflicting": make_elf(duplicate=True),
+            }
+            for name, contents in variants.items():
+                path = temporary_path / f"{name}.elf"
+                path.write_bytes(contents)
+                result = subprocess.run(
+                    [sys.executable, str(verifier), str(path)],
+                    text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                )
+                if name == "valid":
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                else:
+                    self.assertNotEqual(result.returncode, 0, name)
 
 
 if __name__ == "__main__":
