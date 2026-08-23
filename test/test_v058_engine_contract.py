@@ -181,7 +181,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertNotRegex(self.header, r"B\.IOS %S\[Shared[AB]\], mask=0000")
 
     def test_cube_accumulator_is_explicit_and_destination_is_distinct(self) -> None:
-        self.assertIn('"B.IOT %[C]\\n"', self.header)
+        self.assertIn('"B.IOT %[C], mask=1111\\n"', self.header)
         self.assertIn('[Dst] "=&Tr"(dst.data())', self.header)
 
     def test_tgemv_uses_a_then_b_source_and_type_order(self) -> None:
