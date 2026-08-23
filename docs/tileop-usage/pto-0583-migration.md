@@ -38,13 +38,14 @@ new 0.58.3 descriptors cannot be assembled by a 0.58.1 LLVM. Passing
 also requires the exact 0.58.3 compiler to pass `test/tileop_api/compile.all`,
 the negative corpus, and disassembly checks.
 
-At the reviewed LLVM integration point, the MC/CodeGen compiler implements the
-0.58.3 instruction encodings but does not ship the C++ Tile register frontend
-used by this header (`linx_blkc.h`, `tile_size`, or the `Tr` constraint).
-`verify_pto0583_asm.sh` therefore gates the integrated assembler,
-disassembler, SizeCode/PEMode, layout, DTYPE_NONE, and FPATR contracts
-directly. It must fail on a compiler that silently renders the required CUBE
-conversion dtype as FP64. The full
-C++ target corpus remains a compiler packaging/frontend blocker until those
-Tile ABI definitions are supplied; `make check` still covers all public C++
-types and builders with a host syntax gate.
+Target compilation defaults to the hosted musl triple
+`linx64-unknown-linux-musl`. Override it with `LINX_TARGET` only when testing
+another complete Linx runtime profile. `compile.all objects` compiles every
+active Linx fixture without requiring a `main`; `compile.all link-smoke` links
+the explicit hosted subset and rejects ELFs that do not carry the exact PTO
+0.58.3 encoding identity. Pre-v0.58 wrapper fixtures remain cpu_sim-only.
+
+`verify_pto0583_asm.sh` independently gates the integrated assembler,
+disassembler, SizeCode/PEMode, layout, DTYPE_NONE, and FPATR contracts. It
+must fail on a compiler that silently renders the required CUBE conversion
+dtype as FP64.

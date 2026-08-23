@@ -16,21 +16,24 @@ using SA = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
 using SB = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
                 BLayout::RowMajor, 2, 32>;
 using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
+using Bias = Tile<Location::Bias, float, 8, 32,
+                  BLayout::RowMajor, 1, 32>;
 
-void all_variants(D &d, D &c, A &a, B &b, MXA &mxa, MXB &mxb,
+void all_variants(D &d, D &c, Bias &bias, A &a, B &b, MXA &mxa, MXB &mxb,
                   SA &sa, SB &sb, R &rout, R &rin) {
   auto opts = fixp::Options<FixpAttr::keep_acc()>{}.row_max(rin, rout).group_max<32>(rout);
   TMATMUL_ACC(d, c, a, b, opts);
-  TMATMUL_BIAS(d, a, b, c, opts);
+  TMATMUL_BIAS(d, a, b, bias, opts);
   TMATMUL_MX(d, mxa, sa, mxb, sb, opts);
   TMATMUL_MX_ACC(d, c, mxa, sa, mxb, sb, opts);
-  TMATMUL_MX_BIAS(d, mxa, sa, mxb, sb, c, opts);
+  TMATMUL_MX_BIAS(d, mxa, sa, mxb, sb, bias, opts);
 }
 
 void use(void *) {}
 
 int main() {
   D d, c;
+  Bias bias;
   A a;
   B b;
   MXA mxa;
@@ -38,7 +41,7 @@ int main() {
   SA sa;
   SB sb;
   R rout, rin;
-  all_variants(d, c, a, b, mxa, mxb, sa, sb, rout, rin);
+  all_variants(d, c, bias, a, b, mxa, mxb, sa, sb, rout, rin);
   use(&d);
   return 0;
 }

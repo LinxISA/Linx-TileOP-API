@@ -8,6 +8,8 @@ using A = SharedMatrixLeft<float, 16, 16>;
 using B = SharedMatrixRight<float, 16, 16>;
 using C = CubeAccumulatorM16<float, 16, 16>;
 using AC = CubeAccumulatorM16<float, 16, 16>;
+using Bias = Tile<Location::Bias, float, 8, 16,
+                  BLayout::RowMajor, 1, 16>;
 
 __attribute__((noinline)) void group_basic(C &c, A &a, B &b) {
   auto sa = TMOV_L2S_INSERT(a);
@@ -19,17 +21,17 @@ __attribute__((noinline)) void group_acc(AC &d, AC &c0, A &a, B &b) {
   auto sb = TMOV_L2S_INSERT(b);
   TMATMUL_ACC(d, c0, sa, sb);
 }
-__attribute__((noinline)) void group_bias(C &c, A &a, B &b, C &bias) {
+__attribute__((noinline)) void group_bias(C &c, A &a, B &b, Bias &bias) {
   auto sa = TMOV_L2S_INSERT(a);
   auto sb = TMOV_L2S_INSERT(b);
-  auto sc = TMOV_L2S_INSERT(bias);
   TMATMUL_BIAS(c, sa, sb, bias);
 }
 
 void use(void *) {}
 
 int main() {
-  C c, bias;
+  C c;
+  Bias bias;
   AC d, c0;
   A a;
   B b;

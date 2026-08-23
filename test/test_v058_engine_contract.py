@@ -391,8 +391,45 @@ int main() { return sizeof(Bad); }
         makefile = (ROOT / "test" / "common" / "Makefile.common").read_text(encoding="utf-8")
         runner = (ROOT / "test" / "script" / "test.py").read_text(encoding="utf-8")
         harness = makefile + "\n" + runner
-        self.assertIn("--target=linx64", harness)
+        self.assertIn("linx64-unknown-linux-musl", harness)
+        self.assertIn("LINX_TARGET", harness)
         self.assertIn("-fenable-matrix", harness)
+
+    def test_compile_all_aggregates_active_object_failures(self) -> None:
+        harness = ROOT / "test" / "tileop_api" / "compile.all"
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            calls = temporary_path / "calls.log"
+            fake_make = temporary_path / "make"
+            fake_make.write_text(
+                "#!/bin/sh\n"
+                f"printf '%s\\n' \"$*\" >> {calls}\n"
+                "case \"$*\" in\n"
+                "  *TESTCASE=CubeCellTransport*object*) exit 1 ;;\n"
+                "esac\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            fake_make.chmod(0o755)
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "MAKE": str(fake_make),
+                    "COMPILER_DIR": temporary,
+                    "LINX_SYSROOT": temporary,
+                }
+            )
+            result = subprocess.run(
+                [str(harness), "objects"],
+                cwd=ROOT / "test" / "tileop_api",
+                env=environment,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("FAIL object: CubeCellTransport", result.stderr)
+            self.assertIn("TESTCASE=TTrans object", calls.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

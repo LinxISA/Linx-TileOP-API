@@ -3,12 +3,13 @@ set -euo pipefail
 
 TC_DIR=${TC_DIR:?set TC_DIR to the matching Linx LLVM bin directory}
 LINX_SYSROOT=${LINX_SYSROOT:?set LINX_SYSROOT to the musl libc++ sysroot}
+LINX_TARGET=${LINX_TARGET:-linx64-unknown-linux-musl}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=$(mktemp -d "${TMPDIR:-/tmp}/tileop-target-cxx.XXXXXX")
 trap 'rm -rf "$OUT"' EXIT
 
 FLAGS=(
-  --target=linx64
+  --target="$LINX_TARGET"
   --sysroot="$LINX_SYSROOT"
   -nostdinc++
   -isystem "$LINX_SYSROOT/include/c++/v1"

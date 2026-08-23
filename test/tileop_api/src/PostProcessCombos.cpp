@@ -23,6 +23,8 @@ using P = Tile<Location::Vec, uint64_t, 2, 32, BLayout::RowMajor, 1, 32>;
 // RowMaxOut (Mx1) / GroupMaxOut (Mx2 for GroupN=16, N=32)
 using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
 using G = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 2>;
+using Bias = Tile<Location::Bias, float, 8, 32,
+                  BLayout::RowMajor, 1, 32>;
 
 // TGEMV shapes: d 1xN, vec 1xK, mtx KxN
 using GV_D = CubeAccumulatorM16<float, 1, 32>;
@@ -36,13 +38,17 @@ using GV_MXSA = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
                      BLayout::RowMajor, 1, 2>;
 using GV_MXSB = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
                      BLayout::RowMajor, 2, 32>;
+using GV_R = Tile<Location::Vec, float, 16, 8,
+                  BLayout::RowMajor, 1, 1>;
+using GV_G = Tile<Location::Vec, float, 16, 8,
+                  BLayout::RowMajor, 1, 2>;
 
 static constexpr uint64_t s8_desc =
     (static_cast<uint64_t>(0x7) << 13) |  // fp19 scale = 7
     (static_cast<uint64_t>(0x1) << 37);   // s8 offset = 1
 
 // --- TMATMUL family ---
-void tmatmul_combos(D &d, Ds8 &d8, Df16 &df16, D &c, A &a, B &b,
+void tmatmul_combos(D &d, Ds8 &d8, Df16 &df16, D &c, Bias &bias, A &a, B &b,
                     MXA &mxa, MXB &mxb, MXSA &mxsa, MXSB &mxsb, P &q, P &p,
                     R &rout, R &rin, G &gout) {
   // scalar quant (s8) + LReLU
@@ -59,27 +65,27 @@ void tmatmul_combos(D &d, Ds8 &d8, Df16 &df16, D &c, A &a, B &b,
                         .group_max<16>(gout).max_abs());
 
   TMATMUL_ACC(d, c, a, b, fixp::keep_acc().row_max(rin, rout));
-  TMATMUL_BIAS(df16, a, b, c, fixp::f16().relu());
+  TMATMUL_BIAS(df16, a, b, bias, fixp::f16().relu());
   TMATMUL_MX(d, mxa, mxsa, mxb, mxsb,
              fixp::keep_acc().group_max<16>(gout));
   TMATMUL_MX_ACC(df16, c, mxa, mxsa, mxb, mxsb, fixp::f16());
-  TMATMUL_MX_BIAS(df16, mxa, mxsa, mxb, mxsb, c,
+  TMATMUL_MX_BIAS(df16, mxa, mxsa, mxb, mxsb, bias,
                   fixp::f16().prelu(p));
 }
 
 // --- TGEMV family ---
-void tgemv_combos(GV_D &d, GV_Ds8 &d8, GV_Df16 &df16, GV_D &c,
+void tgemv_combos(GV_D &d, GV_Ds8 &d8, GV_Df16 &df16, GV_D &c, Bias &bias,
                   GV_V &v, GV_M &m, GV_MXA &mxa, GV_MXB &mxb,
                   GV_MXSA &mxsa, GV_MXSB &mxsb,
-                  P &q, P &p, R &rout, R &rin, G &gout) {
+                  P &q, P &p, GV_R &rout, GV_R &rin, GV_G &gout) {
   TGEMV(d8, m, v, fixp::s8(s8_desc).lrelu(0x123));
   TGEMV(d, m, v, fixp::keep_acc().row_max(rout).group_max<16>(gout).max_abs());
   TGEMV_ACC(d, c, m, v, fixp::keep_acc().row_max(rin, rout));
-  TGEMV_BIAS(df16, m, v, c, fixp::f16().relu());
+  TGEMV_BIAS(df16, m, v, bias, fixp::f16().relu());
   TGEMV_MX(d, mxb, mxsb, mxa, mxsa,
            fixp::keep_acc().group_max<16>(gout));
   TGEMV_MX_ACC(df16, c, mxb, mxsb, mxa, mxsa, fixp::f16());
-  TGEMV_MX_BIAS(df16, mxb, mxsb, mxa, mxsa, c,
+  TGEMV_MX_BIAS(df16, mxb, mxsb, mxa, mxsa, bias,
                 fixp::f16().prelu(p));
 }
 
@@ -87,6 +93,7 @@ void use(void *) {}
 
 int main() {
   static D d, c;
+  static Bias bias;
   static Ds8 d8;
   static Df16 df16;
   static A a;
@@ -107,10 +114,12 @@ int main() {
   static GV_MXB gmxb;
   static GV_MXSA gmxsa;
   static GV_MXSB gmxsb;
-  tmatmul_combos(d, d8, df16, c, a, b, mxa, mxb, mxsa, mxsb,
+  static GV_R gr_out, gr_in;
+  static GV_G gg_out;
+  tmatmul_combos(d, d8, df16, c, bias, a, b, mxa, mxb, mxsa, mxsb,
                  q, p, rout, rin, gout);
-  tgemv_combos(gd, gd8, gdf16, gc, gv, gm, gmxa, gmxb, gmxsa, gmxsb,
-               q, p, rout, rin, gout);
+  tgemv_combos(gd, gd8, gdf16, gc, bias, gv, gm, gmxa, gmxb, gmxsa, gmxsb,
+               q, p, gr_out, gr_in, gg_out);
   use(&d);
   return 0;
 }
