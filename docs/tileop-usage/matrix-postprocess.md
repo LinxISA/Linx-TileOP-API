@@ -416,8 +416,8 @@ PTO ISA 0.58.3 在 `B.FPATR` 低位增加 `TransA` 与 `TransB`。TileOP 通过
 TileOP 固定生成：
 
 ```asm
-BSTART.CUBE TMATMUL, AType
-B.DATR BType, byte0, Null
+BSTART.TMATMUL AType
+B.DATR BType, rmode0
 B.FPATR PreQuant, Relu, GroupNCode,
          RowMaxEn, GroupMaxEn, RowMaxInit, MaxAbsEn
 B.DIM M, 0, ->lb0

@@ -157,4 +157,45 @@ public:
       TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_256KB;
 };
 
+#ifdef __linx
+// Linx inline-asm Tile operands use one whole-register carrier regardless of
+// their logical element type or encoded SizeCode.  Keep LogicalBytes in the
+// wrapper type so tile_type_traits continues to project the architectural
+// SizeCode while data() exposes the canonical v1024i32-compatible payload.
+template <int LogicalBytes>
+struct linx_tile_carrier {
+  using RegisterType = uint32_t tile_size(1024);
+  RegisterType Register;
+};
+
+template <int LogicalBytes>
+struct tile_type_traits<linx_tile_carrier<LogicalBytes>> {
+private:
+  static constexpr int mapBytesToEnum(int Bytes) {
+    return
+      Bytes == 128    ? __tilesize_128B :
+      Bytes == 256    ? __tilesize_256B :
+      Bytes == 512    ? __tilesize_512B :
+      Bytes == 1024   ? __tilesize_1KB :
+      Bytes == 2048   ? __tilesize_2KB :
+      Bytes == 4096   ? __tilesize_4KB :
+      Bytes == 8192   ? __tilesize_8KB :
+      Bytes == 16384  ? __tilesize_16KB :
+      Bytes == 32768  ? __tilesize_32KB :
+      Bytes == 65536  ? __tilesize_64KB :
+      Bytes == 131072 ? __tilesize_128KB :
+      Bytes == 262144 ? __tilesize_256KB :
+      __tilesize_unknown;
+  }
+
+public:
+  static constexpr int TilesizeCode = mapBytesToEnum(LogicalBytes);
+  static constexpr int Regsize = 4096;
+  static constexpr bool IsValidActiveSize =
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_64KB;
+  static constexpr bool IsValidSharedActiveSize =
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_256KB;
+};
+#endif
+
 #endif

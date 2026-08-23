@@ -7,10 +7,18 @@ using namespace pto;
 using StoredA = SharedMatrixLeft<float, 32, 16>;
 using StoredB = SharedMatrixRight<float, 32, 32, 24, 32>;
 using D = CubeAccumulatorM16<float, 16, 24>;
+using RowMax = Tile<Location::Vec, float, 16, 8,
+                    BLayout::RowMajor, 16, 1>;
+using GroupMax = Tile<Location::Vec, float, 16, 8,
+                      BLayout::RowMajor, 16, 3>;
 
-void non_square_transpose(D &d, StoredA &stored_a, StoredB &stored_b) {
+void non_square_transpose(D &d, StoredA &stored_a, StoredB &stored_b,
+                          RowMax &row_max, GroupMax &group_max) {
   auto shared_a = TMOV_L2S_INSERT(stored_a);
   auto shared_b = TMOV_L2S_INSERT(stored_b);
   TMATMUL(d, shared_a, shared_b,
-          fixp::keep_acc().transpose_a().transpose_b());
+          fixp::keep_acc()
+              .row_max(row_max)
+              .group_max<8>(group_max)
+              .transpose_a().transpose_b());
 }

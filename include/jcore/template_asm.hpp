@@ -10,6 +10,28 @@ using namespace pto;
 // the caller (they must never cross the ordinary C++ ABI as integer/stack).
 #define PTO_SHARED_INLINE __attribute__((always_inline)) inline
 
+// B.IOT/B.IOS mask syntax is a four-digit binary token, while public APIs use
+// the compact numeric PEMask template argument.  Select one canonical token
+// at assembly time without emitting a decimal mask spelling.
+#define PTO_PE_MASK_ASM(PREFIX, SUFFIX)                                        \
+  ".if %c[PEMask] == 1\n" PREFIX "0001" SUFFIX                             \
+  ".elseif %c[PEMask] == 2\n" PREFIX "0010" SUFFIX                         \
+  ".elseif %c[PEMask] == 4\n" PREFIX "0100" SUFFIX                         \
+  ".elseif %c[PEMask] == 8\n" PREFIX "1000" SUFFIX                         \
+  ".elseif %c[PEMask] == 12\n" PREFIX "1100" SUFFIX                        \
+  ".elseif %c[PEMask] == 14\n" PREFIX "1110" SUFFIX                        \
+  ".elseif %c[PEMask] == 15\n" PREFIX "1111" SUFFIX                        \
+  ".endif\n"
+
+#define PTO_RMODE_DATR_ASM(SUFFIX)                                             \
+  ".if %c[RMode] == 2\nB.DATR %D[DType], rmode2" SUFFIX                  \
+  ".elseif %c[RMode] == 3\nB.DATR %D[DType], rmode3" SUFFIX              \
+  ".elseif %c[RMode] == 4\nB.DATR %D[DType], rmode4" SUFFIX              \
+  ".elseif %c[RMode] == 5\nB.DATR %D[DType], rmode5" SUFFIX              \
+  ".elseif %c[RMode] == 6\nB.DATR %D[DType], rmode6" SUFFIX              \
+  ".elseif %c[RMode] == 7\nB.DATR %D[DType], rmode7" SUFFIX              \
+  ".endif\n"
+
 template <class...>
 inline constexpr bool pto_dependent_false_v = false;
 
@@ -44,7 +66,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_
 void TMAX_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   asm volatile(
     "BSTART.VPAR 0b0000100011, %c3\n"
-    "B.IOT %1, %2, mask=15, last, ->%0<%Z4>\n"
+    "B.IOT %1, %2, mask=1111, last, ->%0<%Z4>\n"
     "B.DIM %5, 0, ->lb0\n"
     "B.DIM %6, 0, ->lb1\n"
 
@@ -61,7 +83,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_
 void TSUB_EXP_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   asm volatile(
     "BSTART.VPAR 0b0001000011, %c3\n"
-    "B.IOT %1, %2, mask=15, last, ->%0<%Z4>\n"
+    "B.IOT %1, %2, mask=1111, last, ->%0<%Z4>\n"
     "B.DIM %5, 0, ->lb0\n"
     "B.DIM %6, 0, ->lb1\n"
 
@@ -78,8 +100,8 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_
 void TMUL_ADD_ROWSUM_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1, tile_shape_in2 &src2) {
   asm volatile(
     "BSTART.VPAR 0b0001100011, %c4\n"
-    "B.IOT %1, %2, mask=15, 0, ->%0<%Z5>\n"
-    "B.IOT %3, mask=15, last\n"
+    "B.IOT %1, %2, mask=1111, 0, ->%0<%Z5>\n"
+    "B.IOT %3, mask=1111, last\n"
     "B.DIM %6, 0, ->lb0\n"
     "B.DIM %7, 0, ->lb1\n"
 
@@ -96,8 +118,8 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0, is_tile_
 void TADD_MUL_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1, tile_shape_in2 &src2) {
   asm volatile(
     "BSTART.VPAR 0b0010000011, %c4\n"
-    "B.IOT %1, %2, mask=15, 0, ->%0<%Z5>\n"
-    "B.IOT %3, mask=15, last\n"
+    "B.IOT %1, %2, mask=1111, 0, ->%0<%Z5>\n"
+    "B.IOT %3, mask=1111, last\n"
     "B.DIM %6, 0, ->lb0\n"
     "B.DIM %7, 0, ->lb1\n"
 
@@ -130,9 +152,9 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 27, %c1\n"
-    "B.DATR %c2, RNone\n"
-    "B.IOT %3, mask=15, last, ->%0<%Z4>\n"
+    "BSTART.TEPL 0, 27, %D1\n"
+    "B.DATR %D2, rmode0\n"
+    "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
     "B.DIM %5, 0, ->lb0\n"
     "B.DIM %6, 0, ->lb1\n"
     "B.DIM zero, %c7, ->lb2\n"
@@ -151,9 +173,9 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>           \
 void TMOV_##LAYOUT_NAME(tile_shape_out &dst, tile_shape_in &src) {               \
   asm volatile(                                                                  \
-    "BSTART.TLSU 2, %c2\n"                                                        \
-    "B.DATR " #LAYOUT_NAME ".normal, Null\n"                                     \
-    "B.IOT %1, mask=15, last, ->%0<%Z3>\n"                                              \
+    "BSTART.TMOV %D2\n"                                                        \
+    "B.DATR " #LAYOUT_NAME ", DTYPE_NONE, Null\n"                                  \
+    "B.IOT %1, mask=1111, last, ->%0<%Z3>\n"                                              \
     "B.DIM %4, 0, ->lb0\n"                                                   \
     "B.DIM %5, 0, ->lb1\n"                                                   \
     : "=Tr"(dst.data())                                                          \
@@ -189,11 +211,11 @@ inline void TMOV(Tile &dst, const Tile &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TLSU TMOV, %c[DataType]\n"
-    "B.DATR NORM.normal, Zero\n"
+    "BSTART.TMOV %D[DataType]\n"
+    "B.DATR NORM, DTYPE_NONE, Zero\n"
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM %[ValidRow], 0, ->lb1\n"
-    "B.IOT %[Src], mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+    "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=&Tr"(dst.data())
     : [Src] "Tr"(src.data()),
       [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
@@ -205,9 +227,9 @@ inline void TMOV(Tile &dst, const Tile &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TMOV_DN2NZ_DYN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TLSU 2, %c2\n"
-    "B.DATR DN2NZ.normal, Null\n"
-    "B.IOT %1, mask=15, last, ->%0<%Z3>\n"
+    "BSTART.TMOV %D2\n"
+    "B.DATR DN2NZ, DTYPE_NONE, Null\n"
+    "B.IOT %1, mask=1111, last, ->%0<%Z3>\n"
     "B.DIM %4, 0, ->lb0\n"
     "B.DIM %5, 0, ->lb1\n"
 
@@ -224,12 +246,12 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void THISTOGRAM(tile_shape_out &dst, tile_shape_in &src, tile_shape_in &Idx, int ByteId) {
 #define THISTOGRAM_ASM(BYTE_NAME)                                      \
   asm volatile(                                                        \
-    "BSTART.TEPL 0b1101000, %c1\n"                                     \
-    "B.DATR %c2," BYTE_NAME ",Null\n"                                  \
+    "BSTART.TEPL 3, 8, %D1\n"                                     \
+    "B.DATR %D2," BYTE_NAME "\n"                                       \
     "B.DIM %3, 0, ->LB0\n"                                         \
     "B.DIM %4, 0, ->LB1\n"                                         \
     "B.DIM zero, %c5, ->LB2\n"                                         \
-    "B.IOT %6, %7, mask=15, last, ->%0<%Z8>\n"                                \
+    "B.IOT %6, %7, mask=1111, last, ->%0<%Z8>\n"                                \
     ""                                                                 \
     : "=Tr"(dst.data())                                                \
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),       \
@@ -267,13 +289,13 @@ void TLOAD2_ND2NZ(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
   static_assert(gm_shape::isRowMajor && is_Nz_layout<tile_shape>::value,
                     "GM_SHAPE should ND and TILE_SHAPE should be Nz ");
   asm volatile(
-    "BSTART.TLSU TLOAD, %c[__pto_SrcType]\n"
-    "B.DATR ND2NZ.normal, %c[__pto_DstType], Null\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "B.DATR ND2NZ, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, last, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, last, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data())
     : [__pto_s0]"r"(src.data()),
@@ -290,13 +312,13 @@ void TLOAD2_ND2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
   static_assert(gm_shape::isRowMajor && is_Zn_layout<tile_shape>::value,
                     "GM_SHAPE should ND and TILE_SHAPE should be Zn ");
   asm volatile(
-    "BSTART.TLSU TLOAD, %c[__pto_SrcType]\n"
-    "B.DATR ND2ZN.normal, %c[__pto_DstType], Null\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "B.DATR ND2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, last, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, last, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data())
     : [__pto_s0]"r"(src.data()),
@@ -313,13 +335,13 @@ void TLOAD2_DN2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
   static_assert(!gm_shape::isRowMajor && is_Nz_layout<tile_shape>::value,
                     "GM_SHAPE should DN and TILE_SHAPE should be Zn ");
   asm volatile(
-    "BSTART.TLSU TLOAD, %c[__pto_SrcType]\n"
-    "B.DATR DN2ZN.normal, %c[__pto_DstType], Null\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "B.DATR DN2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, last, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, last, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data())
     : [__pto_s0]"r"(src.data()),
@@ -336,12 +358,12 @@ void TSTORE2_DN2DN(gm_shape &dst, tile_shape &src1, tile_shape &src0) {
   static_assert(!gm_shape::isRowMajor && !tile_shape::isRowMajor,
                     "GM_SHAPE should DN and TILE_SHAPE should be DN");
   asm volatile(
-    "BSTART.TLSU TSTORE, %c[__pto_SrcType]\n"
-    "B.DATR NORM.normal, %c[__pto_DstType], Null\n"
+    "BSTART.TSTORE %D[__pto_SrcType]\n"
+    "B.DATR NORM, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT %[__pto_s0], %[s1], mask=15, last\n"
+    "B.IOT %[__pto_s0], %[s1], mask=1111, last\n"
     "B.IOR [%[__pto_d0],%[__pto_GmStride]], []\n"
     : 
     : [__pto_d0]"r"(dst.data()), [__pto_s0]"Tr"(src0.data()), [s1]"Tr"(src1.data()),
@@ -357,15 +379,15 @@ void TLOAD4_ND2NZ(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
   static_assert(gm_shape::isRowMajor && is_Nz_layout<tile_shape>::value,
                     "GM_SHAPE should ND and TILE_SHAPE should be Nz ");
   asm volatile(
-    "BSTART.TLSU TLOAD, %c[__pto_SrcType]\n"
-    "B.DATR ND2NZ.normal, %c[__pto_DstType], Null\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "B.DATR ND2NZ, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, 0, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, 0, ->%[d2]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, last, ->%[d3]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[d2]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, last, ->%[d3]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data()),[d2]"=Tr"(dst2.data()),[d3]"=Tr"(dst3.data())
     : [__pto_s0]"r"(src.data()),
@@ -382,15 +404,15 @@ void TLOAD4_ND2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
   static_assert(gm_shape::isRowMajor && is_Zn_layout<tile_shape>::value,
                     "GM_SHAPE should ND and TILE_SHAPE should be Nz ");
   asm volatile(
-    "BSTART.TLSU TLOAD, %c[__pto_SrcType]\n"
-    "B.DATR ND2ZN.normal, %c[__pto_DstType], Null\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "B.DATR ND2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, 0, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, 0, ->%[d2]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, last, ->%[d3]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[d2]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, last, ->%[d3]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data()),[d2]"=Tr"(dst2.data()),[d3]"=Tr"(dst3.data())
     : [__pto_s0]"r"(src.data()),
@@ -407,15 +429,15 @@ void TLOAD4_DN2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
   static_assert(!gm_shape::isRowMajor && is_Zn_layout<tile_shape>::value,
                     "GM_SHAPE should DN and TILE_SHAPE should be Zn ");
   asm volatile(
-    "BSTART.TLSU TLOAD, %c[__pto_SrcType]\n"
-    "B.DATR DN2ZN.normal, %c[__pto_DstType], Null\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "B.DATR DN2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %[__pto_COL], ->lb2\n"
-    "B.IOT mask=15, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, 0, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, 0, ->%[d2]<%Z[__pto_TileSize]>\n"
-    "B.IOT mask=15, last, ->%[d3]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[__pto_d0]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[__pto_d1]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, 0, ->%[d2]<%Z[__pto_TileSize]>\n"
+    "B.IOT mask=1111, last, ->%[d3]<%Z[__pto_TileSize]>\n"
     "B.IOR [%[__pto_s0],%[__pto_GmStride]], []\n"
     : [__pto_d0]"=Tr"(dst0.data()),[__pto_d1]"=Tr"(dst1.data()),[d2]"=Tr"(dst2.data()),[d3]"=Tr"(dst3.data())
     : [__pto_s0]"r"(src.data()),
@@ -443,12 +465,12 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
                 "MGATHER dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
-      "BSTART.TLSU MGATHER, %c[DataType]\n"
+      "BSTART.MGATHER %D[DataType]\n"
       "B.DATR Null\n"
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], mask=15, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base], %[GmStride]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -471,11 +493,11 @@ inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
                 "MSCATTER src logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
-      "BSTART.TLSU MSCATTER, %c[DataType]\n"
+      "BSTART.MSCATTER %D[DataType]\n"
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=15, last\n"
+      "B.IOT %[src], %[off], mask=1111, last\n"
       "B.IOR [%[base], %[GmStride]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
@@ -499,13 +521,13 @@ inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
                 "MGATHER_MASK dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
-      "BSTART.TLSU MGATHER.MASK, %c[DataType]\n"
+      "BSTART.MGATHER.MASK %D[DataType]\n"
       "B.DATR Null\n"
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], mask=15, 0, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOT %[mask], mask=15, last\n"
+      "B.IOT %[off], mask=1111, 0, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOT %[mask], mask=1111, last\n"
       "B.IOR [%[base], %[GmStride]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -531,12 +553,12 @@ inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
                 "MSCATTER_MASK src logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
-      "BSTART.TLSU MSCATTER.MASK, %c[DataType]\n"
+      "BSTART.MSCATTER.MASK %D[DataType]\n"
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=15, 0\n"
-      "B.IOT %[mask], mask=15, last\n"
+      "B.IOT %[src], %[off], mask=1111, 0\n"
+      "B.IOT %[mask], mask=1111, last\n"
       "B.IOR [%[base], %[GmStride]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
@@ -1733,24 +1755,21 @@ blkv_bf16x2_max(const BLKV_BF16X2_TYPE &src_l,
 //
 // Block-start function values per the pinned LinxISA v0.58 catalog
 // (contracts/linxisa-v0.58-engine-ops.json):
-//   BSTART.TLSU  op: TLOAD=0 TSTORE=1 TMOV=2 TPREFETCH=3 MGATHER=4 MSCATTER=5
+//   named TLSU starts: BSTART.TLOAD/TSTORE/TMOV/TPREFETCH/MGATHER/MSCATTER
 //                    MGATHER_MASK=6 MSCATTER_MASK=7 MGATHER_CAS=8 GMOV=13
-//   BSTART.CUBE op: TMATMUL=0, TMATMUL.BIAS=1, TMATMUL.ACC=2, TMATMULMX=4,
+//   named CUBE starts: TMATMUL, TMATMUL.BIAS, TMATMUL.ACC, TMATMULMX,
 //                   TMATMULMX.BIAS=5, TMATMULMX.ACC=6,
 //                   TGEMV=16, TGEMV.BIAS=17, TGEMV.ACC=18,
 //                   TGEMVMX=20, TGEMVMX.BIAS=21, TGEMVMX.ACC=22
-// (The legacy DavinciOO spelling `BSTART.TLSU <op>`/`BSTART.CUBE <op>` is
-// kept in this header's inline assembly because the current LinxV5 backend
-// assembler accepts the numbered/function forms; the PTO-ISA 0.58 reissue
-// canonicalizes these to named block starts such as BSTART.TLOAD /
-// BSTART.TMATMUL and renders VEC/SFU instead of TEPL.)
+// Active inline assembly uses the exact named TLSU/CUBE starts. VEC/SFU names
+// are rendered from the TEPL Mode/Function carrier without changing encoding.
 // The historical `TMATMUL*.FIXP` suffix was an implementation-local name;
 // PTO-ISA 0.58 carries post-processing through the B.FPATR attribute, so the
-// canonical emission is `BSTART.CUBE TMATMUL` + `B.FPATR`.
+// canonical emission is `BSTART.TMATMUL` + `B.FPATR`.
 // All variants below are the NORM (no layout conversion) generic form.
 //===----------------------------------------------------------------------===//
 
-// TLOAD: GM -> Local Tile (BSTART.TLSU TLOAD). dst[i,j] = src[r0+i, c0+j].
+// TLOAD: GM -> Local Tile (BSTART.TLOAD). dst[i,j] = src[r0+i, c0+j].
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
 void TLOAD(tile_shape &dst, gm_shape &src) {
   static_assert(
@@ -1759,11 +1778,11 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
-    "BSTART.TLSU TLOAD, %c[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOT mask=15, last, ->%[d0]<%Z[TileSize]>\n"
+    "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
     : [d0]"=Tr"(dst.data())
     : [s0]"r"(src.data()),
@@ -1779,7 +1798,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
 // absolute Core-local Shared register; B.IOS carries the per-PE size and PE
 // mask. B.IOR carries only the GM address operands (RegDst is zero).
 template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
-SharedTile<shp> TLOAD(const gm_shape &src) {
+PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
   using shp_dtype = typename shp::TileDType;
   static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
                 "PEMask must be one of 1,2,4,8,12,14,15");
@@ -1790,11 +1809,11 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
   const size_t valid_col = result.GetValidCol();
   const size_t valid_row = result.GetValidRow();
   asm volatile(
-    "BSTART.TLSU TLOAD, %c[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
     "B.IOR [%[s0],%[GmStride]], []\n"
     : [Shared] "=Sr"(result.handle_ref())
     : [s0]"r"(src.data()),
@@ -1809,7 +1828,7 @@ SharedTile<shp> TLOAD(const gm_shape &src) {
 }
 
 template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
-void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
+PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
   using shp_dtype = typename shp::TileDType;
   static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
                 "PEMask must be one of 1,2,4,8,12,14,15");
@@ -1819,11 +1838,11 @@ void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
-    "BSTART.TLSU TLOAD, %c[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
     "B.IOR [%[s0],%[GmStride]], []\n"
     : [Shared] "=Sr"(dst.handle_ref())
     : [s0]"r"(src.data()),
@@ -1836,7 +1855,7 @@ void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       : "memory");
 }
 
-// TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
+// TSTORE: Tile -> GM (BSTART.TSTORE). dst[r0+i, c0+j] = src[i,j].
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 void TSTORE(gm_shape &dst, tile_shape &src) {
   static_assert(tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
@@ -1845,11 +1864,11 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TLSU TSTORE, %c[SrcType]\n"
+    "BSTART.TSTORE %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOT %[s0], mask=15, last\n"
+    "B.IOT %[s0], mask=1111, last\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
@@ -1876,7 +1895,7 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
-      "BSTART.TLSU TLOAD, %c[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
       "B.DATR layout%c[Layout], DTYPE_NONE, Null\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -1906,7 +1925,7 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-      "BSTART.TLSU TSTORE, %c[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR layout%c[Layout], DTYPE_NONE, Null\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -1938,7 +1957,7 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TLSU TSTORE, %c[SrcType]\n"
+    "BSTART.TSTORE %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -1972,11 +1991,11 @@ PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TLSU TSTORE.SPART, %c[SrcType]\n"
+    "BSTART.TSTORE.SPART %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS %S[Shared], mask=%c[PEMask]\n"
+    PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
@@ -2000,7 +2019,7 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
   const size_t physicalCol =
       gm_shape::Cols == DYNAMIC ? rowStride : gm_shape::Cols;
   asm volatile(
-    "BSTART.TLSU TPREFETCH, %c[DataType]\n"
+    "BSTART.TPREFETCH %D[DataType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM %[Col], 0, ->lb2\n"
@@ -2055,7 +2074,7 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
                     DstTile::Cols == ExpectedTile::Cols,
                 "MGATHER_CAS tiles must match the resolved ValidRow x ValidCol");
   asm volatile(
-    "BSTART.TLSU MGATHER.CAS, %c[DataType]\n"
+    "BSTART.MGATHER.CAS %D[DataType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[Col], ->lb2\n"
@@ -2097,12 +2116,13 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "GMOV logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
-  static_assert(sizeof(typename tile_shape_dst::TileDType) ==
-                    sizeof(typename tile_shape_src::TileDType),
+  static_assert(tile_shape_dst::LogicalTileBytes ==
+                    tile_shape_src::LogicalTileBytes,
                 "GMOV source and destination logical sizes must match");
   asm volatile(
-      "BSTART.TLSU GMOV, %c[DataType]\n"
-      "B.IOT %[src], mask=%c[PEMask], last, ->%[dst]<%Z[TileSize]>\n"
+      "BSTART.GMOV %D[DataType]\n"
+      PTO_PE_MASK_ASM("B.IOT %[src], mask=",
+                      ", last, ->%[dst]<%Z[TileSize]>\n")
       "B.IOR [%[peer]],[]\n"
       : [dst] "=Tr"(dst.data())
       : [src] "Tr"(src.data()), [peer] "r"(peer_tid),
@@ -2129,9 +2149,9 @@ TMOV_L2S_INSERT(SharedTile<tile_shape_src> &dst,
       "TMOV.L2S.INSERT logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   dst.SetValidShape(src);
   asm volatile(
-      "BSTART.TLSU TMOV.L2S.INSERT, %c[DataType]\n"
-      "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
-      "B.IOT %[src], mask=%c[PEMask], last\n"
+      "BSTART.TMOV.L2S.INSERT %D[DataType]\n"
+      PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+      PTO_PE_MASK_ASM("B.IOT %[src], mask=", ", last\n")
       : [Shared] "=Sr"(dst.handle_ref())
       : [src] "Tr"(src.data()),
         [PEMask] "i"(PEMask),
@@ -2160,9 +2180,9 @@ TMOV_L2S_PUBLISH(SharedTile<tile_shape_src> &dst,
       "TMOV.L2S.PUBLISH logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   dst.SetValidShape(src);
   asm volatile(
-      "BSTART.TLSU TMOV.L2S.PUBLISH, %c[DataType]\n"
-      "B.IOS mask=%c[PEMask], ->%S[Shared]<%Z[TileSize]>\n"
-      "B.IOT %[src], mask=%c[PEMask], last\n"
+      "BSTART.TMOV.L2S.PUBLISH %D[DataType]\n"
+      PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+      PTO_PE_MASK_ASM("B.IOT %[src], mask=", ", last\n")
       : [Shared] "=Sr"(dst.handle_ref())
       : [src] "Tr"(src.data()),
         [PEMask] "i"(PEMask),
@@ -2190,9 +2210,9 @@ TMOV_S2L_BROADCAST(tile_shape_dst &dst,
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "TMOV.S2L.BROADCAST logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
   asm volatile(
-      "BSTART.TLSU TMOV.S2L.BROADCAST, %c[DataType]\n"
-      "B.IOS %S[Shared], mask=%c[PEMask]\n"
-      "B.IOT mask=%c[PEMask], last, ->%[dst]<%Z[TileSize]>\n"
+      "BSTART.TMOV.S2L.BROADCAST %D[DataType]\n"
+      PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
+      PTO_PE_MASK_ASM("B.IOT mask=", ", last, ->%[dst]<%Z[TileSize]>\n")
       : [dst] "=Tr"(dst.data())
       : [Shared] "Sr"(shared.handle()), [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_dst::DType>::TypeCode),
@@ -2210,9 +2230,9 @@ PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "TMOV.S2L.EXTRACT logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
   asm volatile(
-      "BSTART.TLSU TMOV.S2L.EXTRACT, %c[DataType]\n"
-      "B.IOS %S[Shared], mask=%c[PEMask]\n"
-      "B.IOT mask=%c[PEMask], last, ->%[dst]<%Z[TileSize]>\n"
+      "BSTART.TMOV.S2L.EXTRACT %D[DataType]\n"
+      PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
+      PTO_PE_MASK_ASM("B.IOT mask=", ", last, ->%[dst]<%Z[TileSize]>\n")
       : [dst] "=Tr"(dst.data())
       : [Shared] "Sr"(shared.handle()), [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_dst::DType>::TypeCode),
@@ -2233,8 +2253,8 @@ void ACCCVT(tile_shape_out &, tile_shape_in &) {
 namespace pto_matmul_detail {
 
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
-  "BSTART.CUBE " OPCODE ", %c[DataTypeA]\n"                                 \
-  "B.DATR %c[DataTypeB], byte0, Zero\n" EXTRA_ATTRS                         \
+  "BSTART." OPCODE " %D[DataTypeA]\n"                                      \
+  "B.DATR %D[DataTypeB], rmode0\n" EXTRA_ATTRS                           \
   "B.DIM %[M], 0, ->lb0\n"                                                   \
   "B.DIM %[N], 0, ->lb1\n"                                                   \
   "B.DIM %[K], 0, ->lb2\n"
@@ -2528,7 +2548,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "B.IOT %[A], %[B], mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOT %[A], %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
           PTO_FIXP_ATTR_INPUTS,
@@ -2538,8 +2558,8 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
         "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOT %[B]\n"
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOT %[B], mask=1111\n"
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),
           PTO_FIXP_ATTR_INPUTS,
@@ -2549,8 +2569,8 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
         "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT %[A]\n"
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOT %[A], mask=1111\n"
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),
           PTO_FIXP_ATTR_INPUTS,
@@ -2561,7 +2581,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
         "B.IOS %S[SharedA], mask=1111\n"
         "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),
           PTO_FIXP_ATTR_INPUTS,
@@ -2580,9 +2600,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                 \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
-        "B.IOT %[A], %[B], mask=15\n"                                         \
-        "B.IOT %[Extra]\n"                                                    \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
+        "B.IOT %[A], %[B], mask=1111\n"                                         \
+        "B.IOT %[Extra], mask=1111\n"                                                    \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [A] "Tr"(a.data()), [B] "Tr"(b.data()),                             \
           [Extra] "Tr"(extra.data()),                                          \
@@ -2593,9 +2613,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
         "B.IOS %S[SharedA], mask=1111\n"                                               \
-        "B.IOT %[B]\n"                                                       \
-        "B.IOT %[Extra]\n"                                                    \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
+        "B.IOT %[B], mask=1111\n"                                                       \
+        "B.IOT %[Extra], mask=1111\n"                                                    \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),                     \
           [Extra] "Tr"(extra.data()),                                          \
@@ -2606,9 +2626,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
         "B.IOS %S[SharedB], mask=1111\n"                                               \
-        "B.IOT %[A]\n"                                                       \
-        "B.IOT %[Extra]\n"                                                    \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
+        "B.IOT %[A], mask=1111\n"                                                       \
+        "B.IOT %[Extra], mask=1111\n"                                                    \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),                     \
           [Extra] "Tr"(extra.data()),                                          \
@@ -2620,8 +2640,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
         "B.IOS %S[SharedA], mask=1111\n"                                               \
         "B.IOS %S[SharedB], mask=1111\n"                                               \
-        "B.IOT %[Extra]\n"                                                    \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                       \
+        "B.IOT %[Extra], mask=1111\n"                                                    \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),             \
           [Extra] "Tr"(extra.data()),                                          \
@@ -2642,9 +2662,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOT %[C]\n"
-        "B.IOT %[A], %[B], mask=15\n"
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOT %[C], mask=1111\n"
+        "B.IOT %[A], %[B], mask=1111\n"
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [B] "Tr"(b.data()),
           PTO_FIXP_ATTR_INPUTS,
@@ -2653,10 +2673,10 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOT %[C]\n"
+        "B.IOT %[C], mask=1111\n"
         "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOT %[B]\n"
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOT %[B], mask=1111\n"
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()),
           [B] "Tr"(b.data()), PTO_FIXP_ATTR_INPUTS,
@@ -2665,10 +2685,10 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOT %[C]\n"
-        "B.IOT %[A]\n"
+        "B.IOT %[C], mask=1111\n"
+        "B.IOT %[A], mask=1111\n"
         "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [C] "Tr"(c.data()), [A] "Tr"(a.data()),
           [SharedB] "Sr"(b.handle()), PTO_FIXP_ATTR_INPUTS,
@@ -2677,10 +2697,10 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   } else {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOT %[C]\n"
+        "B.IOT %[C], mask=1111\n"
         "B.IOS %S[SharedA], mask=1111\n"
         "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()),
           [SharedB] "Sr"(b.handle()), PTO_FIXP_ATTR_INPUTS,
@@ -2698,379 +2718,379 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 // first and then reference the matching PTO_FIXP_PPSRC_<mask>.
 #define PTO_FIXP_PPSRC_0
 #define PTO_FIXP_PPSRC_1 \
-  "B.IOT %[RowIn]\n"
+  "B.IOT %[RowIn], mask=1111\n"
 #define PTO_FIXP_PPSRC_2 \
-  "B.IOT %[QuantTile]\n"
+  "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_PPSRC_3 \
-  "B.IOT %[RowIn], %[QuantTile]\n"
+  "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
 #define PTO_FIXP_PPSRC_4 \
-  "B.IOT %[ReluTile]\n"
+  "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_PPSRC_5 \
-  "B.IOT %[RowIn], %[ReluTile]\n"
+  "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_PPSRC_6 \
-  "B.IOT %[QuantTile], %[ReluTile]\n"
+  "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_PPSRC_7 \
-  "B.IOT %[RowIn], %[QuantTile]\n" \
-  "B.IOT %[ReluTile]\n"
+  "B.IOT %[RowIn], %[QuantTile], mask=1111\n" \
+  "B.IOT %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_ACC_L_SRC_0 \
-  "B.IOT %[C]\n" "B.IOT %[A], %[B], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_ACC_L_SRC_1 \
-  "B.IOT %[C]\n" "B.IOT %[A], %[B], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_ACC_L_SRC_2 \
-  "B.IOT %[C]\n" "B.IOT %[A], %[B], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_ACC_L_SRC_3 \
-  "B.IOT %[C]\n" "B.IOT %[A], %[B], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_ACC_L_SRC_4 \
-  "B.IOT %[C]\n" "B.IOT %[A], %[B], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_ACC_L_SRC_5 \
-  "B.IOT %[C]\n" "B.IOT %[A], %[B], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_ACC_L_SRC_6 \
-  "B.IOT %[C]\n" "B.IOT %[A], %[B], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_ACC_L_SRC_7 \
-  "B.IOT %[C]\n" "B.IOT %[A], %[B], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_ACC_SB_SRC_0 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_ACC_SB_SRC_1 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_ACC_SB_SRC_2 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_ACC_SB_SRC_3 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_ACC_SB_SRC_4 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_ACC_SB_SRC_5 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_ACC_SB_SRC_6 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_ACC_SB_SRC_7 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_ACC_SA_SRC_0 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_ACC_SA_SRC_1 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_ACC_SA_SRC_2 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_ACC_SA_SRC_3 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_ACC_SA_SRC_4 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_ACC_SA_SRC_5 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_ACC_SA_SRC_6 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_ACC_SA_SRC_7 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_ACC_SAB_SRC_0 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_ACC_SAB_SRC_1 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_ACC_SAB_SRC_2 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_ACC_SAB_SRC_3 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_ACC_SAB_SRC_4 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_ACC_SAB_SRC_5 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_ACC_SAB_SRC_6 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_ACC_SAB_SRC_7 \
-  "B.IOT %[C]\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_BIAS_L_SRC_0 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_BIAS_L_SRC_1 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_BIAS_L_SRC_2 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_BIAS_L_SRC_3 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_BIAS_L_SRC_4 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_BIAS_L_SRC_5 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_BIAS_L_SRC_6 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_BIAS_L_SRC_7 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_BIAS_SB_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_BIAS_SB_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_BIAS_SB_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_BIAS_SB_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_BIAS_SB_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_BIAS_SB_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_BIAS_SB_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_BIAS_SB_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_BIAS_SA_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_BIAS_SA_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_BIAS_SA_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_BIAS_SA_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_BIAS_SA_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_BIAS_SA_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_BIAS_SA_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_BIAS_SA_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_BIAS_SAB_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_BIAS_SAB_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_BIAS_SAB_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_BIAS_SAB_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_BIAS_SAB_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_BIAS_SAB_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_BIAS_SAB_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_BIAS_SAB_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_L_SRC_0 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_L_SRC_1 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_L_SRC_2 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_L_SRC_3 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_L_SRC_4 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_L_SRC_5 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_L_SRC_6 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_L_SRC_7 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_SB_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_SB_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_SB_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_SB_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_SB_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_SB_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_SB_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_SB_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_SA_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_SA_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_SA_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_SA_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_SA_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_SA_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_SA_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_SA_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_SAB_SRC_0 \
@@ -3106,378 +3126,378 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_L_SRC_0 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_L_SRC_1 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_L_SRC_2 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_L_SRC_3 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_L_SRC_4 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_L_SRC_5 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_L_SRC_6 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_L_SRC_7 \
-  "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" \
-  "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 // TGEMV (Function 16-18, 20-22) math source streams. Local-only per
 // handoff Sec 1.5 (any B.IOS is illegal). A=1xK vector (M=1), B=KxN
 // matrix, C=1xN output. Scales follow their matrix/vector shape.
 #define PTO_FIXP_GV_GV_L_SRC_0 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GV_L_SRC_1 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GV_L_SRC_2 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GV_L_SRC_3 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GV_L_SRC_4 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GV_L_SRC_5 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GV_L_SRC_6 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GV_L_SRC_7 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVB_L_SRC_0 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVB_L_SRC_1 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVB_L_SRC_2 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVB_L_SRC_3 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVB_L_SRC_4 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVB_L_SRC_5 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVB_L_SRC_6 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVB_L_SRC_7 \
-  "B.IOT %[Vec], %[Mtx], mask=15\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVA_L_SRC_0 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVA_L_SRC_1 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVA_L_SRC_2 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVA_L_SRC_3 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVA_L_SRC_4 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVA_L_SRC_5 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVA_L_SRC_6 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVA_L_SRC_7 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], %[Mtx], mask=15\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVMX_L_SRC_0 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVMX_L_SRC_1 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVMX_L_SRC_2 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVMX_L_SRC_3 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVMX_L_SRC_4 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVMX_L_SRC_5 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVMX_L_SRC_6 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVMX_L_SRC_7 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_0 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_1 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_2 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_3 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_4 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_5 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_6 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_7 \
-  "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" "B.IOT %[Bias]\n" \
+  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_0 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_1 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_2 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_3 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_4 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_5 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_6 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_7 \
-  "B.IOT %[C]\n" "B.IOT %[Vec], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=15\n" ".endif\n" "B.IOT %[Mtx], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=15\n" ".endif\n" \
+  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_SRC_0 \
-  "B.IOT %[A], %[B], mask=15\n"
+  "B.IOT %[A], %[B], mask=1111\n"
 #define PTO_FIXP_SRC_1 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[RowIn]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn]\n"
 #define PTO_FIXP_SRC_2 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[QuantTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile]\n"
 #define PTO_FIXP_SRC_3 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[RowIn], %[QuantTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[QuantTile]\n"
 #define PTO_FIXP_SRC_4 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[ReluTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[ReluTile]\n"
 #define PTO_FIXP_SRC_5 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[RowIn], %[ReluTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[ReluTile]\n"
 #define PTO_FIXP_SRC_6 \
-  "B.IOT %[A], %[B], mask=15\n" "B.IOT %[QuantTile], %[ReluTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile], %[ReluTile]\n"
 #define PTO_FIXP_SRC_7 \
-  "B.IOT %[A], %[B], mask=15\n" \
-  "B.IOT %[RowIn], %[QuantTile]\n" \
-  "B.IOT %[ReluTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" \
+  "B.IOT %[RowIn], %[QuantTile], mask=1111\n" \
+  "B.IOT %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_SHARED_B_SRC_0 \
   "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n"
 #define PTO_FIXP_SHARED_B_SRC_1 \
   "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[RowIn]\n"
+  "B.IOT %[RowIn], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_2 \
   "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[QuantTile]\n"
+  "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_3 \
   "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[RowIn], %[QuantTile]\n"
+  "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_4 \
   "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[ReluTile]\n"
+  "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_5 \
   "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[RowIn], %[ReluTile]\n"
+  "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_6 \
   "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[QuantTile], %[ReluTile]\n"
+  "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_7 \
   "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  "B.IOT %[RowIn], %[QuantTile]\n" "B.IOT %[ReluTile]\n"
+  "B.IOT %[RowIn], %[QuantTile], mask=1111\n" "B.IOT %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_SHARED_A_SRC_0 \
   "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n"
@@ -3487,36 +3507,36 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile]\n"
 #define PTO_FIXP_SHARED_A_SRC_3 \
   "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
-  "B.IOT %[QuantTile]\n"
+  "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_4 \
   "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[ReluTile]\n"
 #define PTO_FIXP_SHARED_A_SRC_5 \
   "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
-  "B.IOT %[ReluTile]\n"
+  "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_6 \
   "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile]\n" \
-  "B.IOT %[ReluTile]\n"
+  "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_7 \
   "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
-  "B.IOT %[QuantTile], %[ReluTile]\n"
+  "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_SHARED_AB_SRC_0 \
   "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_1 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_2 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_3 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[QuantTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_4 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[ReluTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_5 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[ReluTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_6 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile], %[ReluTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_7 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[QuantTile]\n" \
-  "B.IOT %[ReluTile]\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[QuantTile], mask=1111\n" \
+  "B.IOT %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_IOR_0 ""
 #define PTO_FIXP_IOR_1 "B.IOR [%[QuantGpr]],[]\n"
@@ -3524,21 +3544,19 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_IOR_3 "B.IOR [%[QuantGpr],%[LReluGpr]],[]\n"
 
 #define PTO_FIXP_OUT_0 \
-  "B.IOT mask=15, last, ->%[Dst]<%Z[DstSize]>\n"
-// Multi-output bundles: a non-final destination uses the legacy
-// "TSize=<code>, ->dst" spelling (a destination suffix without `last` is not
-// accepted by the LLVM parser); the final destination keeps the `<size>`
-// suffix form.
+  "B.IOT mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+// Multi-output bundles publish each non-final destination with its canonical
+// angle SizeCode; only the final destination carries `last`.
 #define PTO_FIXP_OUT_1 \
-  "B.IOT mask=15, TSize=%c[DstSize], ->%[Dst]\n" \
-  "B.IOT mask=15, last, ->%[RowOut]<%Z[RowSize]>\n"
+  "B.IOT mask=1111, ->%[Dst]<%Z[DstSize]>\n" \
+  "B.IOT mask=1111, last, ->%[RowOut]<%Z[RowSize]>\n"
 #define PTO_FIXP_OUT_2 \
-  "B.IOT mask=15, TSize=%c[DstSize], ->%[Dst]\n" \
-  "B.IOT mask=15, last, ->%[GroupOut]<%Z[GroupSize]>\n"
+  "B.IOT mask=1111, ->%[Dst]<%Z[DstSize]>\n" \
+  "B.IOT mask=1111, last, ->%[GroupOut]<%Z[GroupSize]>\n"
 #define PTO_FIXP_OUT_3 \
-  "B.IOT mask=15, TSize=%c[DstSize], ->%[Dst]\n" \
-  "B.IOT mask=15, TSize=%c[RowSize], ->%[RowOut]\n" \
-  "B.IOT mask=15, last, ->%[GroupOut]<%Z[GroupSize]>\n"
+  "B.IOT mask=1111, ->%[Dst]<%Z[DstSize]>\n" \
+  "B.IOT mask=1111, ->%[RowOut]<%Z[RowSize]>\n" \
+  "B.IOT mask=1111, last, ->%[GroupOut]<%Z[GroupSize]>\n"
 
 // Every destination uses an early-clobber "=&Tr" constraint. This gives the
 // read-old/write-new contract required by handoff Sec 6.2/5:
@@ -3557,6 +3575,15 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   [Dst] "=&Tr"(dst.data()), [RowOut] "=&Tr"(row_out.data()), \
   [GroupOut] "=&Tr"(group_out.data())
 
+#define PTO_PP_INPUTS_0
+#define PTO_PP_INPUTS_1 [RowIn] "Tr"(row_in.data()),
+#define PTO_PP_INPUTS_2 [QuantTile] "Tr"(quant_tile.data()),
+#define PTO_PP_INPUTS_3 [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),
+#define PTO_PP_INPUTS_4 [ReluTile] "Tr"(relu_tile.data()),
+#define PTO_PP_INPUTS_5 [RowIn] "Tr"(row_in.data()), [ReluTile] "Tr"(relu_tile.data()),
+#define PTO_PP_INPUTS_6 [QuantTile] "Tr"(quant_tile.data()), [ReluTile] "Tr"(relu_tile.data()),
+#define PTO_PP_INPUTS_7 [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()), [ReluTile] "Tr"(relu_tile.data()),
+
 // ACC PostProcess emitters: same OUT/IOR handling as the base emitter, but the
 // math source stream starts with the explicit C accumulator tile (order C,A,B).
 #define PTO_FIXP_ACC_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -3565,8 +3592,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_ACC_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [B] "Tr"(b.data()),         \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()),                                   \
+        PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
         PTO_FIXP_ATTR_INPUTS,                                                   \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                          \
@@ -3581,8 +3607,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_ACC_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR          \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()), \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()),                                   \
+        PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
         PTO_FIXP_ATTR_INPUTS,                                                   \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                          \
@@ -3597,8 +3622,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_ACC_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR          \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()), \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()),                                   \
+        PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
         PTO_FIXP_ATTR_INPUTS,                                                   \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                          \
@@ -3613,8 +3637,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_ACC_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR         \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()), \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()),                                   \
+        PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
         PTO_FIXP_ATTR_INPUTS,                                                   \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                          \
@@ -3629,8 +3652,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_BIAS_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [A] "Tr"(a.data()), [B] "Tr"(b.data()), [Bias] "Tr"(bias.data()),\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_BIAS_EMIT_SHARED_B(SRC, OUT, IOR) \
@@ -3639,8 +3661,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_BIAS_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()), [Bias] "Tr"(bias.data()),\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_BIAS_EMIT_SHARED_A(SRC, OUT, IOR) \
@@ -3649,8 +3670,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_BIAS_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()), [Bias] "Tr"(bias.data()),\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_BIAS_EMIT_SHARED_AB(SRC, OUT, IOR) \
@@ -3659,8 +3679,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_BIAS_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()), [Bias] "Tr"(bias.data()),\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -3669,8 +3688,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_MX_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_EMIT_SHARED_B(SRC, OUT, IOR) \
@@ -3679,8 +3697,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_MX_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_EMIT_SHARED_A(SRC, OUT, IOR) \
@@ -3689,8 +3706,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_MX_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_EMIT_SHARED_AB(SRC, OUT, IOR) \
@@ -3699,52 +3715,47 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_MX_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_ACC_EMIT_LOCAL(SRC, OUT, IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
-      "B.IOT %[C]\n"                                                      \
+      "B.IOT %[C], mask=1111\n"                                                      \
       PTO_FIXP_MX_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_ACC_EMIT_SHARED_B(SRC, OUT, IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
-      "B.IOT %[C]\n"                                                      \
+      "B.IOT %[C], mask=1111\n"                                                      \
       PTO_FIXP_MX_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_ACC_EMIT_SHARED_A(SRC, OUT, IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
-      "B.IOT %[C]\n"                                                      \
+      "B.IOT %[C], mask=1111\n"                                                      \
       PTO_FIXP_MX_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_ACC_EMIT_SHARED_AB(SRC, OUT, IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
-      "B.IOT %[C]\n"                                                      \
+      "B.IOT %[C], mask=1111\n"                                                      \
       PTO_FIXP_MX_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_BIAS_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -3753,8 +3764,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_MX_BIAS_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_BIAS_EMIT_SHARED_B(SRC, OUT, IOR) \
@@ -3763,8 +3773,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_MX_BIAS_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_BIAS_EMIT_SHARED_A(SRC, OUT, IOR) \
@@ -3773,8 +3782,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_MX_BIAS_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_MX_BIAS_EMIT_SHARED_AB(SRC, OUT, IOR) \
@@ -3783,9 +3791,141 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_MX_BIAS_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
+
+// Optional MX scale paths must omit absent operands from the LLVM IR inline-
+// asm constraint list.  These fragments describe exactly the architectural
+// source stream for ScaleMask 0/1/2; ScaleMask 3 uses the established emitters.
+#define PTO_MX_L_SRC_0 "B.IOT %[A], mask=1111\n" "B.IOT %[B], mask=1111\n"
+#define PTO_MX_L_SRC_1 "B.IOT %[A], %[ScaleA], mask=1111\n" "B.IOT %[B], mask=1111\n"
+#define PTO_MX_L_SRC_2 "B.IOT %[A], mask=1111\n" "B.IOT %[B], %[ScaleB], mask=1111\n"
+#define PTO_MX_L_INPUTS_0 [A] "Tr"(a.data()), [B] "Tr"(b.data())
+#define PTO_MX_L_INPUTS_1 [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data())
+#define PTO_MX_L_INPUTS_2 [A] "Tr"(a.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data())
+
+#define PTO_MX_SB_SRC_0 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n"
+#define PTO_MX_SB_SRC_1 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[ScaleA], mask=1111\n"
+#define PTO_MX_SB_SRC_2 "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], mask=1111\n"
+#define PTO_MX_SB_INPUTS_0 [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle())
+#define PTO_MX_SB_INPUTS_1 [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle())
+#define PTO_MX_SB_INPUTS_2 [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle())
+
+#define PTO_MX_SA_SRC_0 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], mask=1111\n"
+#define PTO_MX_SA_SRC_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], mask=1111\n"
+#define PTO_MX_SA_SRC_2 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[ScaleB], mask=1111\n"
+#define PTO_MX_SA_INPUTS_0 [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data())
+#define PTO_MX_SA_INPUTS_1 [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data())
+#define PTO_MX_SA_INPUTS_2 [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data())
+
+#define PTO_MX_SAB_SRC_0 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
+#define PTO_MX_SAB_SRC_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
+#define PTO_MX_SAB_SRC_2 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n"
+#define PTO_MX_SAB_INPUTS_0 [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle())
+#define PTO_MX_SAB_INPUTS_1 [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle())
+#define PTO_MX_SAB_INPUTS_2 [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle())
+
+#define PTO_MX_EXTRA_NONE
+#define PTO_MX_EXTRA_ACC [C] "Tr"(c.data()),
+#define PTO_MX_EXTRA_BIAS [Bias] "Tr"(bias.data()),
+#define PTO_MX_OPTIONAL_EMIT(OPCODE, STORAGE, PREFIX, SUFFIX, EXTRA, MASK, SRC, OUT, IOR) \
+  asm volatile(PTO_MATMUL_HEADER(OPCODE, PTO_FIXP_ATTR) PREFIX PTO_MX_##STORAGE##_SRC_##MASK SUFFIX \
+      PTO_FIXP_PPSRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
+      : PTO_FIXP_OUT_DECL_##OUT \
+      : PTO_MX_EXTRA_##EXTRA PTO_MX_##STORAGE##_INPUTS_##MASK, \
+        PTO_PP_INPUTS_##SRC \
+        [QuantGpr] "r"(quant_gpr), \
+        [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, \
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), \
+        [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), \
+        [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), \
+        [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+
+#define PTO_MX_OPT_PLAIN_L(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX",L,"","",NONE,M,S,O,I)
+#define PTO_MX_OPT_PLAIN_SB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX",SB,"","",NONE,M,S,O,I)
+#define PTO_MX_OPT_PLAIN_SA(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX",SA,"","",NONE,M,S,O,I)
+#define PTO_MX_OPT_PLAIN_SAB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX",SAB,"","",NONE,M,S,O,I)
+#define PTO_MX_OPT_ACC_L(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.ACC",L,"B.IOT %[C], mask=1111\n","",ACC,M,S,O,I)
+#define PTO_MX_OPT_ACC_SB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.ACC",SB,"B.IOT %[C], mask=1111\n","",ACC,M,S,O,I)
+#define PTO_MX_OPT_ACC_SA(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.ACC",SA,"B.IOT %[C], mask=1111\n","",ACC,M,S,O,I)
+#define PTO_MX_OPT_ACC_SAB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.ACC",SAB,"B.IOT %[C], mask=1111\n","",ACC,M,S,O,I)
+#define PTO_MX_OPT_BIAS_L(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",L,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
+#define PTO_MX_OPT_BIAS_SB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SB,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
+#define PTO_MX_OPT_BIAS_SA(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SA,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
+#define PTO_MX_OPT_BIAS_SAB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SAB,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
+#define PTO_MX_OPT_PLAIN_L_0(S,O,I) PTO_MX_OPT_PLAIN_L(0,S,O,I)
+#define PTO_MX_OPT_PLAIN_L_1(S,O,I) PTO_MX_OPT_PLAIN_L(1,S,O,I)
+#define PTO_MX_OPT_PLAIN_L_2(S,O,I) PTO_MX_OPT_PLAIN_L(2,S,O,I)
+#define PTO_MX_OPT_PLAIN_SB_0(S,O,I) PTO_MX_OPT_PLAIN_SB(0,S,O,I)
+#define PTO_MX_OPT_PLAIN_SB_1(S,O,I) PTO_MX_OPT_PLAIN_SB(1,S,O,I)
+#define PTO_MX_OPT_PLAIN_SB_2(S,O,I) PTO_MX_OPT_PLAIN_SB(2,S,O,I)
+#define PTO_MX_OPT_PLAIN_SA_0(S,O,I) PTO_MX_OPT_PLAIN_SA(0,S,O,I)
+#define PTO_MX_OPT_PLAIN_SA_1(S,O,I) PTO_MX_OPT_PLAIN_SA(1,S,O,I)
+#define PTO_MX_OPT_PLAIN_SA_2(S,O,I) PTO_MX_OPT_PLAIN_SA(2,S,O,I)
+#define PTO_MX_OPT_PLAIN_SAB_0(S,O,I) PTO_MX_OPT_PLAIN_SAB(0,S,O,I)
+#define PTO_MX_OPT_PLAIN_SAB_1(S,O,I) PTO_MX_OPT_PLAIN_SAB(1,S,O,I)
+#define PTO_MX_OPT_PLAIN_SAB_2(S,O,I) PTO_MX_OPT_PLAIN_SAB(2,S,O,I)
+#define PTO_MX_OPT_ACC_L_0(S,O,I) PTO_MX_OPT_ACC_L(0,S,O,I)
+#define PTO_MX_OPT_ACC_L_1(S,O,I) PTO_MX_OPT_ACC_L(1,S,O,I)
+#define PTO_MX_OPT_ACC_L_2(S,O,I) PTO_MX_OPT_ACC_L(2,S,O,I)
+#define PTO_MX_OPT_ACC_SB_0(S,O,I) PTO_MX_OPT_ACC_SB(0,S,O,I)
+#define PTO_MX_OPT_ACC_SB_1(S,O,I) PTO_MX_OPT_ACC_SB(1,S,O,I)
+#define PTO_MX_OPT_ACC_SB_2(S,O,I) PTO_MX_OPT_ACC_SB(2,S,O,I)
+#define PTO_MX_OPT_ACC_SA_0(S,O,I) PTO_MX_OPT_ACC_SA(0,S,O,I)
+#define PTO_MX_OPT_ACC_SA_1(S,O,I) PTO_MX_OPT_ACC_SA(1,S,O,I)
+#define PTO_MX_OPT_ACC_SA_2(S,O,I) PTO_MX_OPT_ACC_SA(2,S,O,I)
+#define PTO_MX_OPT_ACC_SAB_0(S,O,I) PTO_MX_OPT_ACC_SAB(0,S,O,I)
+#define PTO_MX_OPT_ACC_SAB_1(S,O,I) PTO_MX_OPT_ACC_SAB(1,S,O,I)
+#define PTO_MX_OPT_ACC_SAB_2(S,O,I) PTO_MX_OPT_ACC_SAB(2,S,O,I)
+#define PTO_MX_OPT_BIAS_L_0(S,O,I) PTO_MX_OPT_BIAS_L(0,S,O,I)
+#define PTO_MX_OPT_BIAS_L_1(S,O,I) PTO_MX_OPT_BIAS_L(1,S,O,I)
+#define PTO_MX_OPT_BIAS_L_2(S,O,I) PTO_MX_OPT_BIAS_L(2,S,O,I)
+#define PTO_MX_OPT_BIAS_SB_0(S,O,I) PTO_MX_OPT_BIAS_SB(0,S,O,I)
+#define PTO_MX_OPT_BIAS_SB_1(S,O,I) PTO_MX_OPT_BIAS_SB(1,S,O,I)
+#define PTO_MX_OPT_BIAS_SB_2(S,O,I) PTO_MX_OPT_BIAS_SB(2,S,O,I)
+#define PTO_MX_OPT_BIAS_SA_0(S,O,I) PTO_MX_OPT_BIAS_SA(0,S,O,I)
+#define PTO_MX_OPT_BIAS_SA_1(S,O,I) PTO_MX_OPT_BIAS_SA(1,S,O,I)
+#define PTO_MX_OPT_BIAS_SA_2(S,O,I) PTO_MX_OPT_BIAS_SA(2,S,O,I)
+#define PTO_MX_OPT_BIAS_SAB_0(S,O,I) PTO_MX_OPT_BIAS_SAB(0,S,O,I)
+#define PTO_MX_OPT_BIAS_SAB_1(S,O,I) PTO_MX_OPT_BIAS_SAB(1,S,O,I)
+#define PTO_MX_OPT_BIAS_SAB_2(S,O,I) PTO_MX_OPT_BIAS_SAB(2,S,O,I)
+#define PTO_MX_DISPATCH_OPTIONAL(BASE)                                         \
+  if constexpr (ScaleMask == 0) { PTO_FIXP_DISPATCH(BASE##_0); }              \
+  else if constexpr (ScaleMask == 1) { PTO_FIXP_DISPATCH(BASE##_1); }         \
+  else { PTO_FIXP_DISPATCH(BASE##_2); }
+
+#define PTO_GV_MX_SRC_0 "B.IOT %[Vec], mask=1111\n" "B.IOT %[Mtx], mask=1111\n"
+#define PTO_GV_MX_SRC_1 "B.IOT %[Vec], %[ScaleVec], mask=1111\n" "B.IOT %[Mtx], mask=1111\n"
+#define PTO_GV_MX_SRC_2 "B.IOT %[Vec], mask=1111\n" "B.IOT %[Mtx], %[ScaleMtx], mask=1111\n"
+#define PTO_GV_MX_INPUTS_0 [Vec] "Tr"(vec.data()), [Mtx] "Tr"(mtx.data())
+#define PTO_GV_MX_INPUTS_1 [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), [Mtx] "Tr"(mtx.data())
+#define PTO_GV_MX_INPUTS_2 [Vec] "Tr"(vec.data()), [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data())
+#define PTO_GV_MX_OPTIONAL_EMIT(OPCODE, PREFIX, SUFFIX, EXTRA, MASK, SRC, OUT, IOR) \
+  asm volatile(PTO_MATMUL_HEADER(OPCODE, PTO_FIXP_ATTR) PREFIX PTO_GV_MX_SRC_##MASK SUFFIX \
+      PTO_FIXP_PPSRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
+      : PTO_FIXP_OUT_DECL_##OUT \
+      : PTO_MX_EXTRA_##EXTRA PTO_GV_MX_INPUTS_##MASK, \
+        PTO_PP_INPUTS_##SRC \
+        [QuantGpr] "r"(quant_gpr), \
+        [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, \
+        PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), \
+        [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), \
+        [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), \
+        [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+#define PTO_GV_OPT_PLAIN(M,S,O,I) PTO_GV_MX_OPTIONAL_EMIT("TGEMVMX","","",NONE,M,S,O,I)
+#define PTO_GV_OPT_ACC(M,S,O,I) PTO_GV_MX_OPTIONAL_EMIT("TGEMVMX.ACC","B.IOT %[C], mask=1111\n","",ACC,M,S,O,I)
+#define PTO_GV_OPT_BIAS(M,S,O,I) PTO_GV_MX_OPTIONAL_EMIT("TGEMVMX.BIAS","","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
+#define PTO_GV_OPT_PLAIN_0(S,O,I) PTO_GV_OPT_PLAIN(0,S,O,I)
+#define PTO_GV_OPT_PLAIN_1(S,O,I) PTO_GV_OPT_PLAIN(1,S,O,I)
+#define PTO_GV_OPT_PLAIN_2(S,O,I) PTO_GV_OPT_PLAIN(2,S,O,I)
+#define PTO_GV_OPT_ACC_0(S,O,I) PTO_GV_OPT_ACC(0,S,O,I)
+#define PTO_GV_OPT_ACC_1(S,O,I) PTO_GV_OPT_ACC(1,S,O,I)
+#define PTO_GV_OPT_ACC_2(S,O,I) PTO_GV_OPT_ACC(2,S,O,I)
+#define PTO_GV_OPT_BIAS_0(S,O,I) PTO_GV_OPT_BIAS(0,S,O,I)
+#define PTO_GV_OPT_BIAS_1(S,O,I) PTO_GV_OPT_BIAS(1,S,O,I)
+#define PTO_GV_OPT_BIAS_2(S,O,I) PTO_GV_OPT_BIAS(2,S,O,I)
 
 #define PTO_FIXP_EMIT_LOCAL(SRC, OUT, IOR) \
   asm volatile(                                                               \
@@ -3793,8 +3933,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR                                \
       : PTO_FIXP_OUT_DECL_##OUT                                              \
       : [A] "Tr"(a.data()), [B] "Tr"(b.data()),                            \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),  \
-        [ReluTile] "Tr"(relu_tile.data()),                                  \
+        PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),              \
         PTO_FIXP_ATTR_INPUTS,                                                 \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                        \
@@ -3809,8 +3948,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_SHARED_B_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR       \
       : PTO_FIXP_OUT_DECL_##OUT                                              \
       : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),                   \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),  \
-        [ReluTile] "Tr"(relu_tile.data()),                                  \
+        PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),              \
         PTO_FIXP_ATTR_INPUTS,                                                 \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                        \
@@ -3825,8 +3963,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_SHARED_A_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR       \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),                    \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()),                                   \
+        PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
         PTO_FIXP_ATTR_INPUTS,                                                  \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                         \
@@ -3841,8 +3978,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_SHARED_AB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR      \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),            \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()),                                   \
+        PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
         PTO_FIXP_ATTR_INPUTS,                                                  \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                         \
@@ -3971,13 +4107,17 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_LOCAL);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_LOCAL); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_PLAIN_L); }
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_SHARED_A);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_SHARED_A); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_PLAIN_SA); }
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_SHARED_B);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_SHARED_B); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_PLAIN_SB); }
   } else {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_SHARED_AB);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_SHARED_AB); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_PLAIN_SAB); }
   }
 }
 
@@ -4002,13 +4142,17 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_LOCAL);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_LOCAL); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_ACC_L); }
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_SHARED_A);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_SHARED_A); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_ACC_SA); }
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_SHARED_B);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_SHARED_B); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_ACC_SB); }
   } else {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_SHARED_AB);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_SHARED_AB); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_ACC_SAB); }
   }
 }
 
@@ -4034,13 +4178,17 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_LOCAL);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_LOCAL); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_BIAS_L); }
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_SHARED_A);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_SHARED_A); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_BIAS_SA); }
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_SHARED_B);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_SHARED_B); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_BIAS_SB); }
   } else {
-    PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_SHARED_AB);
+    if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_SHARED_AB); }
+    else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_BIAS_SAB); }
   }
 }
 
@@ -4053,8 +4201,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       PTO_FIXP_GV_GV_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()),                                                          \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_GV_GVB_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -4063,8 +4210,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       PTO_FIXP_GV_GVB_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()), [Bias] "Tr"(bias.data()),                                                          \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_GV_GVA_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -4073,8 +4219,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       PTO_FIXP_GV_GVA_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()),                                                          \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_GV_GVMX_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -4083,8 +4228,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       PTO_FIXP_GV_GVMX_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), PTO_MX_SCALE_INPUTS,                                                          \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_GV_GVMXB_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -4093,8 +4237,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       PTO_FIXP_GV_GVMXB_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),                                                          \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 #define PTO_FIXP_GV_GVMXA_EMIT_LOCAL(SRC, OUT, IOR) \
@@ -4103,8 +4246,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       PTO_FIXP_GV_GVMXA_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), PTO_MX_SCALE_INPUTS,                                                          \
-        [RowIn] "Tr"(row_in.data()), [QuantTile] "Tr"(quant_tile.data()),   \
-        [ReluTile] "Tr"(relu_tile.data()), [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+        PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
 // emit_gemv_fixp: mtx / vec -> dst, Local-only.
@@ -4184,7 +4326,8 @@ PTO_SHARED_INLINE void emit_gemv_mx_fixp(
       ScaleVec, Vec, ScaleMtx, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
-  PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL);
+  if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL); }
+  else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_PLAIN); }
 }
 
 // emit_gemv_mx_bias_fixp: mtx / smtx / vec / svec / bias -> dst, Local-only.
@@ -4211,7 +4354,8 @@ PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
       ScaleVec, Vec, ScaleMtx, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
-  PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL);
+  if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL); }
+  else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_BIAS); }
 }
 
 // emit_gemv_mx_acc_fixp: c / mtx / smtx / vec / svec -> dst, Local-only.
@@ -4238,7 +4382,8 @@ PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
       ScaleVec, Vec, ScaleMtx, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
-  PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL);
+  if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL); }
+  else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_ACC); }
 }
 
 
@@ -4306,8 +4451,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n"                                    \
-        "B.IOT %[B], %[ScaleB], mask=15, last, ->%[Dst]<%Z[TileSize]>\n"     \
+        "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n"                                    \
+        "B.IOT %[B], %[ScaleB], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"     \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -4318,9 +4463,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOS %S[SharedA], mask=1111\n"                                              \
-        "B.IOT %[ScaleA], %[B], mask=15\n"                                   \
-        "B.IOT %[ScaleB]\n"                                                  \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
+        "B.IOT %[ScaleA], %[B], mask=1111\n"                                   \
+        "B.IOT %[ScaleB], mask=1111\n"                                                  \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -4331,9 +4476,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOS %S[SharedB], mask=1111\n"                                              \
-        "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n"                                   \
-        "B.IOT %[ScaleB]\n"                                                  \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
+        "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n"                                   \
+        "B.IOT %[ScaleB], mask=1111\n"                                                  \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
@@ -4345,8 +4490,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOS %S[SharedA], mask=1111\n"                                              \
         "B.IOS %S[SharedB], mask=1111\n"                                              \
-        "B.IOT %[ScaleA], %[ScaleB], mask=15\n"                              \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
+        "B.IOT %[ScaleA], %[ScaleB], mask=1111\n"                              \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
@@ -4357,6 +4502,57 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
 }
 
 PTO_DEFINE_MATMUL_MX_HELPER(matmul_mx, "TMATMULMX")
+
+template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B>
+PTO_SHARED_INLINE void matmul_mx_no_scale_local(
+    Dst &dst, A &a, B &b, size_t M, size_t N, size_t K) {
+  static_assert(!is_shared_tile_v<A> && !is_shared_tile_v<B>);
+  validate_matrix_contract<Attr, Dst, A, B, true>();
+  validate_matrix_scale_contract<Attr, false, false, A, A, B, B>();
+  asm volatile(
+      PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)
+      "B.IOT %[A], %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [A] "Tr"(a.data()), [B] "Tr"(b.data()), PTO_FIXP_ATTR_INPUTS,
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+      : "memory");
+}
+
+template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A,
+          typename ScaleA, typename B>
+PTO_SHARED_INLINE void matmul_mx_scale_a_local(
+    Dst &dst, A &a, ScaleA &scale_a, B &b, size_t M, size_t N, size_t K) {
+  static_assert(!is_shared_tile_v<A> && !is_shared_tile_v<B>);
+  validate_matrix_contract<Attr, Dst, A, B, true>();
+  validate_matrix_scale_contract<Attr, true, false, ScaleA, A, B, B>();
+  asm volatile(
+      PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)
+      "B.IOT %[A], %[ScaleA], mask=1111\n"
+      "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),
+        [B] "Tr"(b.data()), PTO_FIXP_ATTR_INPUTS,
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+      : "memory");
+}
+
+template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B,
+          typename ScaleB>
+PTO_SHARED_INLINE void matmul_mx_scale_b_local(
+    Dst &dst, A &a, B &b, ScaleB &scale_b, size_t M, size_t N, size_t K) {
+  static_assert(!is_shared_tile_v<A> && !is_shared_tile_v<B>);
+  validate_matrix_contract<Attr, Dst, A, B, true>();
+  validate_matrix_scale_contract<Attr, false, true, A, A, ScaleB, B>();
+  asm volatile(
+      PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)
+      "B.IOT %[A], mask=1111\n"
+      "B.IOT %[B], %[ScaleB], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+        [ScaleB] "Tr"(scale_b.data()), PTO_FIXP_ATTR_INPUTS,
+        PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+      : "memory");
+}
 
 #define PTO_DEFINE_MATMUL_MX_5SRC_HELPER(Name, Opcode, IsAcc)                   \
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename ScaleA,  \
@@ -4375,10 +4571,10 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n"                                    \
-        "B.IOT %[B], mask=15\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=15\n" ".endif\n"                                   \
-        "B.IOT %[Extra]\n"                                                   \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
+        "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n"                                    \
+        "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n"                                   \
+        "B.IOT %[Extra], mask=1111\n"                                                   \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -4390,9 +4586,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOS %S[SharedA], mask=1111\n"                                              \
-        "B.IOT %[ScaleA], %[B], mask=15\n"                                   \
-        "B.IOT %[ScaleB], %[Extra], mask=15\n"                               \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
+        "B.IOT %[ScaleA], %[B], mask=1111\n"                                   \
+        "B.IOT %[ScaleB], %[Extra], mask=1111\n"                               \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -4404,9 +4600,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOS %S[SharedB], mask=1111\n"                                              \
-        "B.IOT %[A], mask=15\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=15\n" ".endif\n"                                   \
-        "B.IOT %[ScaleB], %[Extra], mask=15\n"                               \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
+        "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n"                                   \
+        "B.IOT %[ScaleB], %[Extra], mask=1111\n"                               \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
@@ -4419,9 +4615,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOS %S[SharedA], mask=1111\n"                                              \
         "B.IOS %S[SharedB], mask=1111\n"                                              \
-        "B.IOT %[ScaleA], %[ScaleB], mask=15\n"                              \
-        "B.IOT %[Extra]\n"                                                   \
-        "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"                      \
+        "B.IOT %[ScaleA], %[ScaleB], mask=1111\n"                              \
+        "B.IOT %[Extra], mask=1111\n"                                                   \
+        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
@@ -4565,6 +4761,8 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
 
 namespace pto_matmul_detail {
 
+struct NoScaleOperand {};
+
 template <bool Use, typename Pointer, typename Dummy>
 decltype(auto) select_fixp_operand(Pointer *PointerValue, Dummy &DummyValue) {
   if constexpr (Use)
@@ -4611,6 +4809,10 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
   constexpr int IorMode = (HasScalarQuant ? 1 : 0) |
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+  constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
+      ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
+      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
 
   static_assert(HasVectorQuant ==
                     !std::is_same_v<typename Options::QuantTile,
@@ -4739,7 +4941,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
       quant_gpr, lrelu_gpr, M, N, K);
 }
 
-// TMATMUL_BIAS: C = A*B + bias (BSTART.CUBE TMATMUL.BIAS).
+// TMATMUL_BIAS: C = A*B + bias (BSTART.TMATMUL.BIAS).
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b,
@@ -4807,7 +5009,7 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   pto_matmul_detail::emit_matmul_bias_fixp<Attr, SrcMask, OutMask, IorMode>(c, a, b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
-// TMATMUL_MX: C = (A * aScale) * (B * bScale) (BSTART.CUBE TMATMULMX).
+// TMATMUL_MX: C = (A * aScale) * (B * bScale) (BSTART.TMATMULMX).
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
           is_tile_data_v tile_shape_ascale,
@@ -4829,9 +5031,9 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
 
 template <int ScaleMask = 3, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
-          is_any_tile_data_v tile_shape_ascale,
+          typename tile_shape_ascale,
           is_local_or_shared_right tile_shape_b,
-          is_any_tile_data_v tile_shape_bscale, fixp::is_options_v Options>
+          typename tile_shape_bscale, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_ascale &ascale,
                 tile_shape_b &b, tile_shape_bscale &bscale,
                 const Options &options) {
@@ -4900,8 +5102,8 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
 }
 
 template <int ScaleMask = 3, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
-          is_local_or_shared_left tile_shape_a, is_any_tile_data_v tile_shape_sa,
-          is_local_or_shared_right tile_shape_b, is_any_tile_data_v tile_shape_sb,
+          is_local_or_shared_left tile_shape_a, typename tile_shape_sa,
+          is_local_or_shared_right tile_shape_b, typename tile_shape_sb,
           fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
                     tile_shape_sa &scale_a, tile_shape_b &b,
@@ -4973,9 +5175,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
 
 template <int ScaleMask = 3, is_tile_data_v tile_shape_d,
           is_local_or_shared_left tile_shape_a,
-          is_any_tile_data_v tile_shape_sa,
+          typename tile_shape_sa,
           is_local_or_shared_right tile_shape_b,
-          is_any_tile_data_v tile_shape_sb, is_tile_data_v tile_shape_bias,
+          typename tile_shape_sb, is_tile_data_v tile_shape_bias,
           fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
                      tile_shape_sa &scale_a, tile_shape_b &b,
@@ -5031,21 +5233,48 @@ template <is_tile_data_v D, is_local_or_shared_left A,
           is_local_or_shared_right B, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, B &b,
                                   const Options &options) {
-  TMATMUL_MX<0>(d, a, a, b, b, options);
+  constexpr FixpAttr Attr = Options::Attr;
+  if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B> &&
+                is_basic_fixp_attr(Attr)) {
+    auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+    pto_matmul_detail::matmul_mx_no_scale_local<Attr>(
+        d, a, b, shape.M, shape.N, shape.K);
+  } else {
+    pto_matmul_detail::NoScaleOperand no_scale;
+    TMATMUL_MX<0>(d, a, no_scale, b, no_scale, options);
+  }
 }
 template <is_tile_data_v D, is_local_or_shared_left A,
           is_any_tile_data_v SA, is_local_or_shared_right B,
           fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, SA &sa, B &b,
                                   const Options &options) {
-  TMATMUL_MX<1>(d, a, sa, b, b, options);
+  constexpr FixpAttr Attr = Options::Attr;
+  if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<SA> &&
+                !is_shared_tile_v<B> && is_basic_fixp_attr(Attr)) {
+    auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+    pto_matmul_detail::matmul_mx_scale_a_local<Attr>(
+        d, a, sa, b, shape.M, shape.N, shape.K);
+  } else {
+    pto_matmul_detail::NoScaleOperand no_scale;
+    TMATMUL_MX<1>(d, a, sa, b, no_scale, options);
+  }
 }
 template <is_tile_data_v D, is_local_or_shared_left A,
           is_local_or_shared_right B, is_any_tile_data_v SB,
           fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, B &b, SB &sb,
                                   const Options &options) {
-  TMATMUL_MX<2>(d, a, a, b, sb, options);
+  constexpr FixpAttr Attr = Options::Attr;
+  if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B> &&
+                !is_shared_tile_v<SB> && is_basic_fixp_attr(Attr)) {
+    auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+    pto_matmul_detail::matmul_mx_scale_b_local<Attr>(
+        d, a, b, sb, shape.M, shape.N, shape.K);
+  } else {
+    pto_matmul_detail::NoScaleOperand no_scale;
+    TMATMUL_MX<2>(d, a, no_scale, b, sb, options);
+  }
 }
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
           is_local_or_shared_left A, is_local_or_shared_right B>
@@ -5070,21 +5299,24 @@ template <is_tile_data_v D, is_tile_data_v C,
           fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX_ACC(D &d, C &c, A &a, B &b,
                                       const Options &options) {
-  TMATMUL_MX_ACC<0>(d, c, a, a, b, b, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TMATMUL_MX_ACC<0>(d, c, a, no_scale, b, no_scale, options);
 }
 template <is_tile_data_v D, is_tile_data_v C,
           is_local_or_shared_left A, is_any_tile_data_v SA,
           is_local_or_shared_right B, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX_ACC(D &d, C &c, A &a, SA &sa, B &b,
                                       const Options &options) {
-  TMATMUL_MX_ACC<1>(d, c, a, sa, b, b, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TMATMUL_MX_ACC<1>(d, c, a, sa, b, no_scale, options);
 }
 template <is_tile_data_v D, is_tile_data_v C,
           is_local_or_shared_left A, is_local_or_shared_right B,
           is_any_tile_data_v SB, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX_ACC(D &d, C &c, A &a, B &b, SB &sb,
                                       const Options &options) {
-  TMATMUL_MX_ACC<2>(d, c, a, a, b, sb, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TMATMUL_MX_ACC<2>(d, c, a, no_scale, b, sb, options);
 }
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D, is_tile_data_v C,
           is_local_or_shared_left A, is_local_or_shared_right B>
@@ -5109,21 +5341,24 @@ template <is_tile_data_v D, is_local_or_shared_left A,
           fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX_BIAS(D &d, A &a, B &b, Bias &bias,
                                        const Options &options) {
-  TMATMUL_MX_BIAS<0>(d, a, a, b, b, bias, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TMATMUL_MX_BIAS<0>(d, a, no_scale, b, no_scale, bias, options);
 }
 template <is_tile_data_v D, is_local_or_shared_left A,
           is_any_tile_data_v SA, is_local_or_shared_right B,
           is_tile_data_v Bias, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX_BIAS(D &d, A &a, SA &sa, B &b, Bias &bias,
                                        const Options &options) {
-  TMATMUL_MX_BIAS<1>(d, a, sa, b, b, bias, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TMATMUL_MX_BIAS<1>(d, a, sa, b, no_scale, bias, options);
 }
 template <is_tile_data_v D, is_local_or_shared_left A,
           is_local_or_shared_right B, is_any_tile_data_v SB,
           is_tile_data_v Bias, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TMATMUL_MX_BIAS(D &d, A &a, B &b, SB &sb, Bias &bias,
                                        const Options &options) {
-  TMATMUL_MX_BIAS<2>(d, a, a, b, sb, bias, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TMATMUL_MX_BIAS<2>(d, a, no_scale, b, sb, bias, options);
 }
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
           is_local_or_shared_left A, is_local_or_shared_right B,
@@ -5371,9 +5606,9 @@ PTO_SHARED_INLINE void TGEMV_MX(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape
 
 
 template <int ScaleMask = 3, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
-          is_local_tile_v tile_shape_smtx,
+          typename tile_shape_smtx,
           is_local_tile_v tile_shape_vec,
-          is_local_tile_v tile_shape_svec, fixp::is_options_v Options>
+          typename tile_shape_svec, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TGEMV_MX(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape_smtx &smtx,
                  tile_shape_vec &vec, tile_shape_svec &svec,
                   const Options &options) {
@@ -5444,9 +5679,9 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(tile_shape_d &d, tile_shape_mtx &mtx, tile_
 
 
 template <int ScaleMask = 3, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
-          is_local_tile_v tile_shape_smtx,
+          typename tile_shape_smtx,
           is_local_tile_v tile_shape_vec,
-          is_local_tile_v tile_shape_svec,
+          typename tile_shape_svec,
           is_tile_data_v tile_shape_bias, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TGEMV_MX_BIAS(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape_smtx &smtx,
                  tile_shape_vec &vec, tile_shape_svec &svec,
@@ -5519,9 +5754,9 @@ PTO_SHARED_INLINE void TGEMV_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape
 
 template <int ScaleMask = 3, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
           is_local_tile_v tile_shape_mtx,
-          is_local_tile_v tile_shape_smtx,
+          typename tile_shape_smtx,
           is_local_tile_v tile_shape_vec,
-          is_local_tile_v tile_shape_svec, fixp::is_options_v Options>
+          typename tile_shape_svec, fixp::is_options_v Options>
 PTO_SHARED_INLINE void TGEMV_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_mtx &mtx, tile_shape_smtx &smtx,
                  tile_shape_vec &vec, tile_shape_svec &svec,
                   const Options &options) {
@@ -5576,7 +5811,8 @@ template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v Vec,
            tile_role_v<Vec> == Location::Left)
 PTO_SHARED_INLINE void TGEMV_MX(D &d, Mtx &mtx, Vec &vec,
                                 const Options &options) {
-  TGEMV_MX<0>(d, mtx, mtx, vec, vec, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TGEMV_MX<0>(d, mtx, no_scale, vec, no_scale, options);
 }
 template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v Vec,
           is_local_tile_v ScaleVec, fixp::is_options_v Options>
@@ -5584,7 +5820,8 @@ template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v Vec,
            tile_role_v<Vec> == Location::Left)
 PTO_SHARED_INLINE void TGEMV_MX(D &d, Mtx &mtx, Vec &vec, ScaleVec &scale_vec,
                                 const Options &options) {
-  TGEMV_MX<1>(d, mtx, mtx, vec, scale_vec, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TGEMV_MX<1>(d, mtx, no_scale, vec, scale_vec, options);
 }
 template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v ScaleMtx,
           is_local_tile_v Vec, fixp::is_options_v Options>
@@ -5592,7 +5829,8 @@ template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v ScaleMtx,
            tile_role_v<Vec> == Location::Left)
 PTO_SHARED_INLINE void TGEMV_MX(D &d, Mtx &mtx, ScaleMtx &scale_mtx, Vec &vec,
                                 const Options &options) {
-  TGEMV_MX<2>(d, mtx, scale_mtx, vec, vec, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TGEMV_MX<2>(d, mtx, scale_mtx, vec, no_scale, options);
 }
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
           is_local_tile_v Mtx, is_local_tile_v Vec>
@@ -5626,7 +5864,8 @@ template <is_tile_data_v D, is_tile_data_v C, is_local_tile_v Mtx,
            tile_role_v<Vec> == Location::Left)
 PTO_SHARED_INLINE void TGEMV_MX_ACC(D &d, C &c, Mtx &mtx, Vec &vec,
                                     const Options &options) {
-  TGEMV_MX_ACC<0>(d, c, mtx, mtx, vec, vec, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TGEMV_MX_ACC<0>(d, c, mtx, no_scale, vec, no_scale, options);
 }
 template <is_tile_data_v D, is_tile_data_v C, is_local_tile_v Mtx,
           is_local_tile_v Vec, is_local_tile_v ScaleVec,
@@ -5636,7 +5875,8 @@ template <is_tile_data_v D, is_tile_data_v C, is_local_tile_v Mtx,
 PTO_SHARED_INLINE void TGEMV_MX_ACC(D &d, C &c, Mtx &mtx, Vec &vec,
                                     ScaleVec &scale_vec,
                                     const Options &options) {
-  TGEMV_MX_ACC<1>(d, c, mtx, mtx, vec, scale_vec, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TGEMV_MX_ACC<1>(d, c, mtx, no_scale, vec, scale_vec, options);
 }
 template <is_tile_data_v D, is_tile_data_v C, is_local_tile_v Mtx,
           is_local_tile_v ScaleMtx, is_local_tile_v Vec,
@@ -5646,7 +5886,8 @@ template <is_tile_data_v D, is_tile_data_v C, is_local_tile_v Mtx,
 PTO_SHARED_INLINE void TGEMV_MX_ACC(D &d, C &c, Mtx &mtx,
                                     ScaleMtx &scale_mtx, Vec &vec,
                                     const Options &options) {
-  TGEMV_MX_ACC<2>(d, c, mtx, scale_mtx, vec, vec, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TGEMV_MX_ACC<2>(d, c, mtx, scale_mtx, vec, no_scale, options);
 }
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D, is_tile_data_v C,
           is_local_tile_v Mtx, is_local_tile_v Vec>
@@ -5680,7 +5921,8 @@ template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v Vec,
            tile_role_v<Vec> == Location::Left)
 PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, Vec &vec, Bias &bias,
                                      const Options &options) {
-  TGEMV_MX_BIAS<0>(d, mtx, mtx, vec, vec, bias, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TGEMV_MX_BIAS<0>(d, mtx, no_scale, vec, no_scale, bias, options);
 }
 template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v Vec,
           is_local_tile_v ScaleVec, is_tile_data_v Bias,
@@ -5690,7 +5932,8 @@ template <is_tile_data_v D, is_local_tile_v Mtx, is_local_tile_v Vec,
 PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, Vec &vec,
                                      ScaleVec &scale_vec, Bias &bias,
                                      const Options &options) {
-  TGEMV_MX_BIAS<1>(d, mtx, mtx, vec, scale_vec, bias, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TGEMV_MX_BIAS<1>(d, mtx, no_scale, vec, scale_vec, bias, options);
 }
 template <is_tile_data_v D, is_local_tile_v Mtx,
           is_local_tile_v ScaleMtx, is_local_tile_v Vec, is_tile_data_v Bias,
@@ -5700,7 +5943,8 @@ template <is_tile_data_v D, is_local_tile_v Mtx,
 PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, ScaleMtx &scale_mtx,
                                      Vec &vec, Bias &bias,
                                      const Options &options) {
-  TGEMV_MX_BIAS<2>(d, mtx, scale_mtx, vec, vec, bias, options);
+  pto_matmul_detail::NoScaleOperand no_scale;
+  TGEMV_MX_BIAS<2>(d, mtx, scale_mtx, vec, no_scale, bias, options);
 }
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v D,
           is_local_tile_v Mtx, is_local_tile_v Vec, is_tile_data_v Bias>
@@ -5739,11 +5983,11 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, ScaleMtx &scale_mtx,
 template <is_tile_data_v tile_shape>
 void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, %c1\n"
+    "BSTART.TEPL 0, 0, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5760,11 +6004,11 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 1, %c1\n"
+    "BSTART.TEPL 0, 1, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5783,11 +6027,11 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   const size_t valid_col = src0.GetValidCol();
   const size_t valid_row = src0.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 2, %c1\n"
+    "BSTART.TEPL 0, 2, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5804,11 +6048,11 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 3, %c1\n"
+    "BSTART.TEPL 0, 3, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5825,11 +6069,11 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 4, %c1\n"
+    "BSTART.TEPL 0, 4, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5854,11 +6098,11 @@ void TFMOD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 6, %c1\n"
+    "BSTART.TEPL 0, 6, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5875,11 +6119,11 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 7, %c1\n"
+    "BSTART.TEPL 0, 7, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5896,11 +6140,11 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 8, %c1\n"
+    "BSTART.TEPL 0, 8, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5917,11 +6161,11 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 9, %c1\n"
+    "BSTART.TEPL 0, 9, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5938,11 +6182,11 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 10, %c1\n"
+    "BSTART.TEPL 0, 10, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5959,11 +6203,11 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 11, %c1\n"
+    "BSTART.TEPL 0, 11, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -5980,11 +6224,11 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 12, %c1\n"
+    "BSTART.TEPL 0, 12, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6009,12 +6253,12 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
                 "TCMP output shape must match input shape");
   if constexpr (Mode == CmpMode::EQ) {
     asm volatile(
-      "BSTART.TEPL 13, %c[TCode]\n"
+      "BSTART.TEPL 0, 13, %D[TCode]\n"
       "B.DATR Zero, eq\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -6027,12 +6271,12 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     );
   } else if constexpr (Mode == CmpMode::NE) {
     asm volatile(
-      "BSTART.TEPL 13, %c[TCode]\n"
+      "BSTART.TEPL 0, 13, %D[TCode]\n"
       "B.DATR Zero, ne\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -6045,12 +6289,12 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     );
   } else if constexpr (Mode == CmpMode::LT) {
     asm volatile(
-      "BSTART.TEPL 13, %c[TCode]\n"
+      "BSTART.TEPL 0, 13, %D[TCode]\n"
       "B.DATR Zero, lt\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -6063,12 +6307,12 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     );
   } else if constexpr (Mode == CmpMode::GT) {
     asm volatile(
-      "BSTART.TEPL 13, %c[TCode]\n"
+      "BSTART.TEPL 0, 13, %D[TCode]\n"
       "B.DATR Zero, gt\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -6081,12 +6325,12 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     );
   } else if constexpr (Mode == CmpMode::LE) {
     asm volatile(
-      "BSTART.TEPL 13, %c[TCode]\n"
+      "BSTART.TEPL 0, 13, %D[TCode]\n"
       "B.DATR Zero, le\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -6099,12 +6343,12 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     );
   } else if constexpr (Mode == CmpMode::GE) {
     asm volatile(
-      "BSTART.TEPL 13, %c[TCode]\n"
+      "BSTART.TEPL 0, 13, %D[TCode]\n"
       "B.DATR Zero, ge\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -6136,11 +6380,11 @@ void TPRELU(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TSEL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 26, %c1\n"
+    "BSTART.TEPL 0, 26, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6157,11 +6401,11 @@ void TSEL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TABS(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 15, %c1\n"
+    "BSTART.TEPL 0, 15, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6177,11 +6421,11 @@ void TABS(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TNOT(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 16, %c1\n"
+    "BSTART.TEPL 0, 16, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6197,11 +6441,11 @@ void TNOT(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TNEG(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 17, %c1\n"
+    "BSTART.TEPL 0, 17, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6217,11 +6461,11 @@ void TNEG(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TEXP(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 18, %c1\n"
+    "BSTART.TEPL 0, 18, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6237,11 +6481,11 @@ void TEXP(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TLOG(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 19, %c1\n"
+    "BSTART.TEPL 0, 19, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6259,11 +6503,11 @@ void TRECIP(tile_shape &dst, tile_shape &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 20, %c1\n"
+    "BSTART.TEPL 0, 20, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6279,11 +6523,11 @@ void TRECIP(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TSQRT(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 21, %c1\n"
+    "BSTART.TEPL 0, 21, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6299,11 +6543,11 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TRSQRT(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 22, %c1\n"
+    "BSTART.TEPL 0, 22, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6319,11 +6563,11 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TRELU(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 23, %c1\n"
+    "BSTART.TEPL 0, 23, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6369,11 +6613,11 @@ void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 32, %c1\n"
+    "BSTART.TEPL 1, 0, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6394,11 +6638,11 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 33, %c1\n"
+    "BSTART.TEPL 1, 1, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6421,11 +6665,11 @@ void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 34, %c1\n"
+    "BSTART.TEPL 1, 2, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6446,11 +6690,11 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 35, %c1\n"
+    "BSTART.TEPL 1, 3, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6471,11 +6715,11 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 36, %c1\n"
+    "BSTART.TEPL 1, 4, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6504,11 +6748,11 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 38, %c1\n"
+    "BSTART.TEPL 1, 6, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6529,11 +6773,11 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 39, %c1\n"
+    "BSTART.TEPL 1, 7, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6554,11 +6798,11 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 40, %c1\n"
+    "BSTART.TEPL 1, 8, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6579,11 +6823,11 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 41, %c1\n"
+    "BSTART.TEPL 1, 9, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6604,11 +6848,11 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 42, %c1\n"
+    "BSTART.TEPL 1, 10, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6629,11 +6873,11 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 43, %c1\n"
+    "BSTART.TEPL 1, 11, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6654,11 +6898,11 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 44, %c1\n"
+    "BSTART.TEPL 1, 12, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6688,12 +6932,12 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   volatile typename tile_shape_in::DType sv = s;
   if constexpr (Mode == CmpMode::EQ) {
     asm volatile(
-      "BSTART.TEPL 45, %c[TCode]\n"
+      "BSTART.TEPL 1, 13, %D[TCode]\n"
       "B.DATR Zero, eq\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -6707,12 +6951,12 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     );
   } else if constexpr (Mode == CmpMode::NE) {
     asm volatile(
-      "BSTART.TEPL 45, %c[TCode]\n"
+      "BSTART.TEPL 1, 13, %D[TCode]\n"
       "B.DATR Zero, ne\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -6726,12 +6970,12 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     );
   } else if constexpr (Mode == CmpMode::LT) {
     asm volatile(
-      "BSTART.TEPL 45, %c[TCode]\n"
+      "BSTART.TEPL 1, 13, %D[TCode]\n"
       "B.DATR Zero, lt\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -6745,12 +6989,12 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     );
   } else if constexpr (Mode == CmpMode::GT) {
     asm volatile(
-      "BSTART.TEPL 45, %c[TCode]\n"
+      "BSTART.TEPL 1, 13, %D[TCode]\n"
       "B.DATR Zero, gt\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -6764,12 +7008,12 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     );
   } else if constexpr (Mode == CmpMode::LE) {
     asm volatile(
-      "BSTART.TEPL 45, %c[TCode]\n"
+      "BSTART.TEPL 1, 13, %D[TCode]\n"
       "B.DATR Zero, le\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -6783,12 +7027,12 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     );
   } else if constexpr (Mode == CmpMode::GE) {
     asm volatile(
-      "BSTART.TEPL 45, %c[TCode]\n"
+      "BSTART.TEPL 1, 13, %D[TCode]\n"
       "B.DATR Zero, ge\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=15, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -6849,11 +7093,11 @@ void TSELS(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 58, %c1\n"
+    "BSTART.TEPL 1, 26, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     "B.IOR [%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6875,11 +7119,11 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 59, %c1\n"
+    "BSTART.TEPL 1, 27, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT mask=15, last, ->%0<%Z5>\n"
+    "B.IOT mask=1111, last, ->%0<%Z5>\n"
     "B.IOR [%6],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6899,12 +7143,12 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
 template <is_tile_data_v tile_shape>
 void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2) {
   asm volatile(
-    "BSTART.TEPL 28, %c1\n"
+    "BSTART.TEPL 0, 28, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15\n"
-    "B.IOT %7, mask=15, last, ->%0<%Z8>\n"
+    "B.IOT %5, %6, mask=1111\n"
+    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -6928,11 +7172,11 @@ void TEXTRACT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t
   volatile int32_t irv = indexRow;
   volatile int32_t icv = indexCol;
   asm volatile(
-    "BSTART.TEPL 98, %c1\n"
+    "BSTART.TEPL 3, 2, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7,%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6955,11 +7199,11 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
   volatile int32_t irv = indexRow;
   volatile int32_t icv = indexCol;
   asm volatile(
-    "BSTART.TEPL 99, %c1\n"
+    "BSTART.TEPL 3, 3, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7,%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -6987,7 +7231,7 @@ void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0,
   volatile uint32_t posM_v = posM & 0xffffu;
   volatile uint32_t posK_v = posK & 0xffffu;
   asm volatile(
-    "BSTART.TEPL 100, %c1\n"
+    "BSTART.TEPL 3, 4, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7009,11 +7253,11 @@ void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0,
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TFILLPAD(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 101, %c1\n"
+    "BSTART.TEPL 3, 5, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7051,11 +7295,11 @@ void TCI(tile_shape &dst, T s) {
   volatile typename tile_shape::DType startValue = s;
   volatile uint32_t directionValue = descending;
   asm volatile(
-    "BSTART.TEPL 102, %c[DataType]\n"
+    "BSTART.TEPL 3, 6, %D[DataType]\n"
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
     "B.IOR [%[Start],%[Direction]],[]\n"
-    "B.IOT mask=15, last, ->%[Dst]<%Z[TileSize]>\n"
+    "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=Tr"(dst.data())
     : [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
       [ValidCol] "r"(dst.GetValidCol()),
@@ -7070,11 +7314,11 @@ void TCI(tile_shape &dst, T s) {
 template <is_tile_data_v tile_shape>
 void TTRI(tile_shape &dst) {
   asm volatile(
-    "BSTART.TEPL 103, %c1\n"
+    "BSTART.TEPL 3, 7, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT mask=15, last, ->%0<%Z5>\n"
+    "B.IOT mask=1111, last, ->%0<%Z5>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -7135,10 +7379,10 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
   volatile int32_t zp = zeroPoint;
   if constexpr (Mode == RoundMode::RNE && Saturate) {
     asm volatile(
-      "BSTART.TEPL 106, %c[SType]\n"
+      "BSTART.TEPL 3, 10, %D[SType]\n"
       // LLVM currently names encoded RMode zero RNONE. PTO ISA 0.58.3 defines
       // that encoding as the operation default, which is RNE for TQUANT.
-      "B.DATR %c[DType], RNONE, SAT\n"
+      "B.DATR %D[DType], rmode0, sat\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
@@ -7155,8 +7399,8 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     );
   } else if constexpr (Mode == RoundMode::RNE) {
     asm volatile(
-      "BSTART.TEPL 106, %c[SType]\n"
-      "B.DATR %c[DType], RNONE, NOSAT\n"
+      "BSTART.TEPL 3, 10, %D[SType]\n"
+      "B.DATR %D[DType], rmode0\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
@@ -7173,8 +7417,8 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     );
   } else if constexpr (Saturate) {
     asm volatile(
-      "BSTART.TEPL 106, %c[SType]\n"
-      "B.DATR %c[DType], %c[RMode], SAT\n"
+      "BSTART.TEPL 3, 10, %D[SType]\n"
+      PTO_RMODE_DATR_ASM(", sat\n")
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
@@ -7192,8 +7436,8 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     );
   } else {
     asm volatile(
-      "BSTART.TEPL 106, %c[SType]\n"
-      "B.DATR %c[DType], %c[RMode], NOSAT\n"
+      "BSTART.TEPL 3, 10, %D[SType]\n"
+      PTO_RMODE_DATR_ASM("\n")
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
@@ -7250,7 +7494,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
   volatile int32_t zp = zeroPoint;
   if constexpr (Mode == RoundMode::RNE) {
     asm volatile(
-      "BSTART.TEPL 107, %c[SType]\n"
+      "BSTART.TEPL 3, 11, %D[SType]\n"
       "B.DATR FP32, RNONE\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7269,7 +7513,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     );
   } else {
     asm volatile(
-      "BSTART.TEPL 107, %c[SType]\n"
+      "BSTART.TEPL 3, 11, %D[SType]\n"
       "B.DATR FP32, %c[RMode]\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7356,7 +7600,7 @@ void TSORT(ValueDstTile &valueDst, IndexDstTile &indexDst,
   // B.IOR binder still carries a real GPR (B.IOR [zero],[] does not match).
   volatile uint32_t descendingValue = descending ? 1u : 0u;
   asm volatile(
-    "BSTART.TEPL 108, %c[DataType]\n"
+    "BSTART.TEPL 3, 12, %D[DataType]\n"
     "B.DIM %[SortWidth], 0, ->lb0\n"
     "B.IOR [%[Descending]], []\n"
     "B.IOT %[Source], mask=1111, ->%[ValueDst]<%Z[ValueTileSize]>\n"
@@ -7430,7 +7674,7 @@ void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right,
   // not match).
   volatile uint32_t descendingValue = descending ? 1u : 0u;
   asm volatile(
-    "BSTART.TEPL 109, %c[DataType]\n"
+    "BSTART.TEPL 3, 13, %D[DataType]\n"
     "B.IOR [%[Descending]], []\n"
     "B.IOT %[Left], %[Right], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
     : [Dst] "=&Tr"(dst.data())
@@ -7445,11 +7689,11 @@ void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right,
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TTRANS(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 110, %c1\n"
+    "BSTART.TEPL 3, 14, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7465,11 +7709,11 @@ void TTRANS(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in, is_tile_data_v tile_shape_off>
 void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
   asm volatile(
-    "BSTART.TEPL 111, %c1\n"
+    "BSTART.TEPL 3, 15, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -7487,11 +7731,11 @@ void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in, is_tile_data_v tile_shape_off>
 void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
   asm volatile(
-    "BSTART.TEPL 112, %c1\n"
+    "BSTART.TEPL 3, 16, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -7509,11 +7753,11 @@ void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
 template <is_tile_data_v tile_shape>
 void TPARTADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 113, %c1\n"
+    "BSTART.TEPL 3, 17, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -7530,11 +7774,11 @@ void TPARTADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TPARTMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 114, %c1\n"
+    "BSTART.TEPL 3, 18, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -7551,11 +7795,11 @@ void TPARTMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TPARTMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 115, %c1\n"
+    "BSTART.TEPL 3, 19, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -7572,11 +7816,11 @@ void TPARTMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TPARTMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 116, %c1\n"
+    "BSTART.TEPL 3, 20, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -7597,11 +7841,11 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 64, %c1\n"
+    "BSTART.TEPL 2, 0, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7617,11 +7861,11 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 65, %c1\n"
+    "BSTART.TEPL 2, 1, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7637,11 +7881,11 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 66, %c1\n"
+    "BSTART.TEPL 2, 2, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7657,11 +7901,11 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 67, %c1\n"
+    "BSTART.TEPL 2, 3, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7677,11 +7921,11 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 68, %c1\n"
+    "BSTART.TEPL 2, 4, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7697,11 +7941,11 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 76, %c1\n"
+    "BSTART.TEPL 2, 12, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7717,11 +7961,11 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 77, %c1\n"
+    "BSTART.TEPL 2, 13, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7737,11 +7981,11 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 80, %c1\n"
+    "BSTART.TEPL 2, 16, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7757,11 +8001,11 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 81, %c1\n"
+    "BSTART.TEPL 2, 17, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7777,11 +8021,11 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 82, %c1\n"
+    "BSTART.TEPL 2, 18, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7797,11 +8041,11 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 83, %c1\n"
+    "BSTART.TEPL 2, 19, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7817,11 +8061,11 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 84, %c1\n"
+    "BSTART.TEPL 2, 20, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7837,11 +8081,11 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 92, %c1\n"
+    "BSTART.TEPL 2, 28, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7857,11 +8101,11 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 93, %c1\n"
+    "BSTART.TEPL 2, 29, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=15, last, ->%0<%Z6>\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -7886,11 +8130,11 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDADD: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 69, %c1\n"
+    "BSTART.TEPL 2, 5, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -7916,11 +8160,11 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDSUB: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 70, %c1\n"
+    "BSTART.TEPL 2, 6, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -7948,11 +8192,11 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
   const size_t valid_col = src0.GetValidCol();
   const size_t valid_row = src0.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 71, %c1\n"
+    "BSTART.TEPL 2, 7, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -7978,11 +8222,11 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDDIV: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 72, %c1\n"
+    "BSTART.TEPL 2, 8, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8008,11 +8252,11 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDMAX: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 73, %c1\n"
+    "BSTART.TEPL 2, 9, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8038,11 +8282,11 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDMIN: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 74, %c1\n"
+    "BSTART.TEPL 2, 10, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8068,11 +8312,11 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDEXPDIF: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 75, %c1\n"
+    "BSTART.TEPL 2, 11, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8098,11 +8342,11 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDADD: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 85, %c1\n"
+    "BSTART.TEPL 2, 21, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8128,11 +8372,11 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDSUB: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 86, %c1\n"
+    "BSTART.TEPL 2, 22, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8158,11 +8402,11 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDMUL: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 87, %c1\n"
+    "BSTART.TEPL 2, 23, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8188,11 +8432,11 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDDIV: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 88, %c1\n"
+    "BSTART.TEPL 2, 24, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8218,11 +8462,11 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDMAX: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 89, %c1\n"
+    "BSTART.TEPL 2, 25, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8248,11 +8492,11 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDMIN: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 90, %c1\n"
+    "BSTART.TEPL 2, 26, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8278,11 +8522,11 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDEXPDIF: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 91, %c1\n"
+    "BSTART.TEPL 2, 27, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -8318,11 +8562,11 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   static_assert(tile_shape_in0::Rows == tile_shape_out::Rows,
                 "TCONCAT: src0/dst row count must match");
   asm volatile(
-    "BSTART.TEPL 96, %c1\n"
+    "BSTART.TEPL 3, 0, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=15, last, ->%0<%Z7>\n"
+    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),

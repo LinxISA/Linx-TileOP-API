@@ -46,6 +46,18 @@ static_assert(Local64K::TilesizeCode == __tilesize_64KB);
 static_assert(Local64K::IsValidActiveSize);
 static_assert(tile_type_traits<typename Shared256K::TileDType>::
                   IsValidSharedActiveSize);
+#ifdef __linx
+static_assert(sizeof(typename M16::TileDType) == 4096);
+static_assert(sizeof(typename M16::TileDType::RegisterType) == 4096);
+static_assert(sizeof(typename Local64K::TileDType) == 4096);
+static_assert(M16::LogicalTileBytes == 2048);
+static_assert(tile_type_traits<typename M16::TileDType>::TilesizeCode ==
+              __tilesize_2KB);
+static_assert(tile_type_traits<typename Local64K::TileDType>::TilesizeCode ==
+              __tilesize_64KB);
+static_assert(tile_type_traits<typename Shared256K::TileDType>::TilesizeCode ==
+              __tilesize_256KB);
+#endif
 
 constexpr FixpAttr transposed = FixpAttr::keep_acc().transpose_a().transpose_b();
 static_assert(transposed.TransA && transposed.TransB);
