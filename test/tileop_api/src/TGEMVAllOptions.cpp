@@ -14,16 +14,21 @@ using SV = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
                 BLayout::RowMajor, 1, 2>;
 using SM = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
                 BLayout::RowMajor, 2, 32>;
-using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
+using R = Tile<Location::Vec, float, 16, 8, BLayout::RowMajor, 1, 1>;
+using G = Tile<Location::Vec, float, 16, 8, BLayout::RowMajor, 1, 1>;
+using Bias = Tile<Location::Bias, float, 8, 32,
+                  BLayout::RowMajor, 1, 32>;
 
-void all_variants(D &d, D &c, V &v, Mtx &mtx, MXV &mxv, MXM &mxm,
-                  SV &sv, SM &sm, R &rout, R &rin) {
-  auto opts = fixp::Options<FixpAttr::keep_acc()>{}.row_max(rin, rout).group_max<32>(rout);
+void all_variants(D &d, D &c, Bias &bias, V &v, Mtx &mtx,
+                  MXV &mxv, MXM &mxm, SV &sv, SM &sm,
+                  R &rout, R &rin, G &gout) {
+  auto opts = fixp::Options<FixpAttr::keep_acc()>{}
+                  .row_max(rin, rout).group_max<32>(gout);
   TGEMV(d, mtx, v, opts);
-  TGEMV_BIAS(d, mtx, v, c, opts);
+  TGEMV_BIAS(d, mtx, v, bias, opts);
   TGEMV_ACC(d, c, mtx, v, opts);
   TGEMV_MX(d, mxm, sm, mxv, sv, opts);
-  TGEMV_MX_BIAS(d, mxm, sm, mxv, sv, c, opts);
+  TGEMV_MX_BIAS(d, mxm, sm, mxv, sv, bias, opts);
   TGEMV_MX_ACC(d, c, mxm, sm, mxv, sv, opts);
 }
 
@@ -31,6 +36,7 @@ void use(void *) {}
 
 int main() {
   static D d, c;
+  static Bias bias;
   static V v;
   static Mtx mtx;
   static MXV mxv;
@@ -38,7 +44,8 @@ int main() {
   static SV sv;
   static SM sm;
   static R rout, rin;
-  all_variants(d, c, v, mtx, mxv, mxm, sv, sm, rout, rin);
+  static G gout;
+  all_variants(d, c, bias, v, mtx, mxv, mxm, sv, sm, rout, rin, gout);
   use(&d);
   return 0;
 }

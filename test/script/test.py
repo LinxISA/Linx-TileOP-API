@@ -166,9 +166,10 @@ class Compile_Linx:
             sys.exit("Error! {} not exist.".format(LLVM_LINX))
 
         pmc_paras = self.readying(pmc_able)
+        linx_target = os.environ.get("LINX_TARGET", "linx64-unknown-linux-musl")
         cmp_paras = (
             self.Compile_T.cmp_paras
-            + " --target=linx64 -fenable-matrix -I"
+            + " --target=" + linx_target + " -fenable-matrix -I"
             + os.path.join(BenchMark_dir, "include")
             + " "
             + pmc_paras

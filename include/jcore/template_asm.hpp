@@ -3459,65 +3459,65 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_SRC_0 \
   "B.IOT %[A], %[B], mask=1111\n"
 #define PTO_FIXP_SRC_1 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], mask=1111\n"
 #define PTO_FIXP_SRC_2 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SRC_3 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[QuantTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SRC_4 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[ReluTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SRC_5 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[ReluTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SRC_6 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile], %[ReluTile]\n"
+  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SRC_7 \
   "B.IOT %[A], %[B], mask=1111\n" \
   "B.IOT %[RowIn], %[QuantTile], mask=1111\n" \
   "B.IOT %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_SHARED_B_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n"
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
   "B.IOT %[RowIn], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
   "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
   "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
   "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
   "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
   "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
+  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
   "B.IOT %[RowIn], %[QuantTile], mask=1111\n" "B.IOT %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_SHARED_A_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n" \
   "B.IOT %[QuantTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[ReluTile]\n"
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n" \
   "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile], mask=1111\n" \
   "B.IOT %[ReluTile], mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn]\n" \
+  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n" \
   "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
 
 #define PTO_FIXP_SHARED_AB_SRC_0 \
@@ -5380,6 +5380,11 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(D &d, A &a, B &b, SB &sb, Bias &bias) {
 }
 
 // ---- TGEMV family (Function 16-18, 20-22) ----
+template <is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_vec, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx,
+                             tile_shape_vec &vec, const Options &options);
+
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
           is_local_tile_v tile_shape_vec>
 PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx,
@@ -6254,7 +6259,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   if constexpr (Mode == CmpMode::EQ) {
     asm volatile(
       "BSTART.TEPL 0, 13, %D[TCode]\n"
-      "B.DATR Zero, eq\n"
+      "B.DATR Zero, cmode0\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6272,7 +6277,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   } else if constexpr (Mode == CmpMode::NE) {
     asm volatile(
       "BSTART.TEPL 0, 13, %D[TCode]\n"
-      "B.DATR Zero, ne\n"
+      "B.DATR Zero, cmode1\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6290,7 +6295,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   } else if constexpr (Mode == CmpMode::LT) {
     asm volatile(
       "BSTART.TEPL 0, 13, %D[TCode]\n"
-      "B.DATR Zero, lt\n"
+      "B.DATR Zero, cmode2\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6308,7 +6313,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   } else if constexpr (Mode == CmpMode::GT) {
     asm volatile(
       "BSTART.TEPL 0, 13, %D[TCode]\n"
-      "B.DATR Zero, gt\n"
+      "B.DATR Zero, cmode3\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6326,7 +6331,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   } else if constexpr (Mode == CmpMode::LE) {
     asm volatile(
       "BSTART.TEPL 0, 13, %D[TCode]\n"
-      "B.DATR Zero, le\n"
+      "B.DATR Zero, cmode4\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6344,7 +6349,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   } else if constexpr (Mode == CmpMode::GE) {
     asm volatile(
       "BSTART.TEPL 0, 13, %D[TCode]\n"
-      "B.DATR Zero, ge\n"
+      "B.DATR Zero, cmode5\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6933,7 +6938,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   if constexpr (Mode == CmpMode::EQ) {
     asm volatile(
       "BSTART.TEPL 1, 13, %D[TCode]\n"
-      "B.DATR Zero, eq\n"
+      "B.DATR Zero, cmode0\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6952,7 +6957,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   } else if constexpr (Mode == CmpMode::NE) {
     asm volatile(
       "BSTART.TEPL 1, 13, %D[TCode]\n"
-      "B.DATR Zero, ne\n"
+      "B.DATR Zero, cmode1\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6971,7 +6976,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   } else if constexpr (Mode == CmpMode::LT) {
     asm volatile(
       "BSTART.TEPL 1, 13, %D[TCode]\n"
-      "B.DATR Zero, lt\n"
+      "B.DATR Zero, cmode2\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6990,7 +6995,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   } else if constexpr (Mode == CmpMode::GT) {
     asm volatile(
       "BSTART.TEPL 1, 13, %D[TCode]\n"
-      "B.DATR Zero, gt\n"
+      "B.DATR Zero, cmode3\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -7009,7 +7014,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   } else if constexpr (Mode == CmpMode::LE) {
     asm volatile(
       "BSTART.TEPL 1, 13, %D[TCode]\n"
-      "B.DATR Zero, le\n"
+      "B.DATR Zero, cmode4\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -7028,7 +7033,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   } else if constexpr (Mode == CmpMode::GE) {
     asm volatile(
       "BSTART.TEPL 1, 13, %D[TCode]\n"
-      "B.DATR Zero, ge\n"
+      "B.DATR Zero, cmode5\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -7514,7 +7519,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
   } else {
     asm volatile(
       "BSTART.TEPL 3, 11, %D[SType]\n"
-      "B.DATR FP32, %c[RMode]\n"
+      PTO_RMODE_DATR_ASM("\n")
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
@@ -7525,6 +7530,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
         [SType] "i"(
             type_traits<typename tile_shape_in::DType>::TypeCode == __type_int8
                 ? __type_int8 : __type_uint8),
+        [DType] "i"(__type_fp32),
         [RMode] "i"(static_cast<unsigned>(Mode)),
         [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),

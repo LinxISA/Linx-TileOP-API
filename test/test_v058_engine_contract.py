@@ -14,7 +14,9 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -391,8 +393,126 @@ int main() { return sizeof(Bad); }
         makefile = (ROOT / "test" / "common" / "Makefile.common").read_text(encoding="utf-8")
         runner = (ROOT / "test" / "script" / "test.py").read_text(encoding="utf-8")
         harness = makefile + "\n" + runner
-        self.assertIn("--target=linx64", harness)
+        self.assertIn("linx64-unknown-linux-musl", harness)
+        self.assertIn("LINX_TARGET", harness)
         self.assertIn("-fenable-matrix", harness)
+
+    def test_compile_all_aggregates_active_object_failures(self) -> None:
+        harness = ROOT / "test" / "tileop_api" / "compile.all"
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            calls = temporary_path / "calls.log"
+            fake_make = temporary_path / "make"
+            fake_make.write_text(
+                "#!/bin/sh\n"
+                f"printf '%s\\n' \"$*\" >> {calls}\n"
+                "case \"$*\" in\n"
+                "  *TESTCASE=CubeCellTransport*object*) exit 1 ;;\n"
+                "esac\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            fake_make.chmod(0o755)
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "MAKE": str(fake_make),
+                    "COMPILER_DIR": temporary,
+                    "LINX_SYSROOT": temporary,
+                }
+            )
+            result = subprocess.run(
+                [str(harness), "objects"],
+                cwd=ROOT / "test" / "tileop_api",
+                env=environment,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("FAIL object: CubeCellTransport", result.stderr)
+            self.assertIn("TESTCASE=TTrans object", calls.read_text(encoding="utf-8"))
+
+    def test_pto_identity_verifier_rejects_hostile_elf_notes(self) -> None:
+        verifier = ROOT / "test" / "tileop_api" / "verify_pto_identity.py"
+        expected = (
+            b'{"encoding_abi":"pto-isa-0.58.3-mode-function-v1",'
+            b'"encoding_projection_sha256":'
+            b'"8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172",'
+            b'"release":"0.58.3"}'
+        )
+
+        def make_elf(desc: bytes = expected, owner: bytes = b"PTO\0",
+                     machine: int = 0xE9, magic: bytes = b"\x7fELF",
+                     extra_desc: bytes | None = None) -> bytes:
+            def make_note(note_desc: bytes) -> bytes:
+                name = owner + b"\0" * ((-len(owner)) & 3)
+                return (struct.pack("<III", len(owner), len(note_desc), 1) +
+                        name + note_desc + b"\0" * ((-len(note_desc)) & 3))
+
+            note = make_note(desc)
+            extra_note = make_note(extra_desc) if extra_desc is not None else b""
+            phnum = 2 if extra_note else 1
+            note_offset = 64 + phnum * 56
+            extra_offset = note_offset + len(note)
+            shstr = b"\0.note.pto.isa\0.shstrtab\0"
+            shstr_offset = extra_offset + len(extra_note)
+            section_offset = (shstr_offset + len(shstr) + 7) & ~7
+            image = bytearray(section_offset + 3 * 64)
+            ident = magic + bytes((2, 1, 1, 0)) + bytes(8)
+            struct.pack_into(
+                "<16sHHIQQQIHHHHHH", image, 0, ident, 3, machine, 1, 0,
+                64, section_offset, 0, 64, 56, phnum, 64, 3, 2,
+            )
+            struct.pack_into(
+                "<IIQQQQQQ", image, 64, 4, 4, note_offset, note_offset,
+                note_offset, len(note), len(note), 4,
+            )
+            if extra_note:
+                struct.pack_into(
+                    "<IIQQQQQQ", image, 64 + 56, 4, 4, extra_offset,
+                    extra_offset, extra_offset, len(extra_note),
+                    len(extra_note), 4,
+                )
+            image[note_offset:note_offset + len(note)] = note
+            image[extra_offset:extra_offset + len(extra_note)] = extra_note
+            image[shstr_offset:shstr_offset + len(shstr)] = shstr
+            struct.pack_into(
+                "<IIQQQQIIQQ", image, section_offset + 64,
+                shstr.index(b".note.pto.isa"), 7, 2, note_offset,
+                note_offset, len(note), 0, 0, 4, 0,
+            )
+            struct.pack_into(
+                "<IIQQQQIIQQ", image, section_offset + 128,
+                shstr.index(b".shstrtab"), 3, 0, 0, shstr_offset,
+                len(shstr), 0, 0, 1, 0,
+            )
+            return bytes(image)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            variants = {
+                "valid": make_elf(),
+                "missing": make_elf(owner=b"GNU\0"),
+                "corrupt": make_elf(magic=b"BAD!"),
+                "wrong-machine": make_elf(machine=0x3E),
+                "wrong-identity": make_elf(desc=expected.replace(b"0.58.3", b"0.58.2")),
+                "trailing-nul": make_elf(desc=expected + b"\0"),
+                "duplicate-segment": make_elf(extra_desc=expected),
+                "conflicting-segment": make_elf(
+                    extra_desc=expected.replace(b"0.58.3", b"0.58.2")),
+            }
+            for name, contents in variants.items():
+                path = temporary_path / f"{name}.elf"
+                path.write_bytes(contents)
+                result = subprocess.run(
+                    [sys.executable, str(verifier), str(path)],
+                    text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                )
+                if name == "valid":
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                else:
+                    self.assertNotEqual(result.returncode, 0, name)
 
 
 if __name__ == "__main__":

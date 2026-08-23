@@ -36,7 +36,14 @@ void init_src_int8(int8_t *aar, uint16_t size) {
 
 template <typename T> void init_src_fp(T *aar, uint16_t size) {
   for (uint16_t i = 0; i < size; i++) {
+#ifdef __linx
+    // Target object coverage exercises the TileOP code path, not host-side
+    // libm lowering. Keep initialization scalar-only until the Linx backend
+    // promotes fsin; executable numerical tests retain the host sine pattern.
+    aar[i] = static_cast<T>((i + 1) / 100.0f);
+#else
     aar[i] = sin((i + 1) / 100.0f);
+#endif
   }
 }
 
