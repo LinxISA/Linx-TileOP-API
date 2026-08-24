@@ -24,12 +24,12 @@ using namespace pto;
   ".endif\n"
 
 #define PTO_RMODE_DATR_ASM(SUFFIX)                                             \
-  ".if %c[RMode] == 2\nB.DATR %D[DType], rmode2" SUFFIX                  \
-  ".elseif %c[RMode] == 3\nB.DATR %D[DType], rmode3" SUFFIX              \
-  ".elseif %c[RMode] == 4\nB.DATR %D[DType], rmode4" SUFFIX              \
-  ".elseif %c[RMode] == 5\nB.DATR %D[DType], rmode5" SUFFIX              \
-  ".elseif %c[RMode] == 6\nB.DATR %D[DType], rmode6" SUFFIX              \
-  ".elseif %c[RMode] == 7\nB.DATR %D[DType], rmode7" SUFFIX              \
+  ".if %c[RMode] == 2\nB.DATR %D[__pto_DstType], rmode2" SUFFIX                  \
+  ".elseif %c[RMode] == 3\nB.DATR %D[__pto_DstType], rmode3" SUFFIX              \
+  ".elseif %c[RMode] == 4\nB.DATR %D[__pto_DstType], rmode4" SUFFIX              \
+  ".elseif %c[RMode] == 5\nB.DATR %D[__pto_DstType], rmode5" SUFFIX              \
+  ".elseif %c[RMode] == 6\nB.DATR %D[__pto_DstType], rmode6" SUFFIX              \
+  ".elseif %c[RMode] == 7\nB.DATR %D[__pto_DstType], rmode7" SUFFIX              \
   ".endif\n"
 
 template <class...>
@@ -7387,7 +7387,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
       "BSTART.TEPL 3, 10, %D[SType]\n"
       // LLVM currently names encoded RMode zero RNONE. PTO ISA 0.58.3 defines
       // that encoding as the operation default, which is RNE for TQUANT.
-      "B.DATR %D[DType], rmode0, sat\n"
+      "B.DATR %D[__pto_DstType], rmode0, sat\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
@@ -7396,7 +7396,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
       : [Dst] "=&Tr"(dst.data())
       : [Src] "Tr"(src.data()),
         [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [DType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [__pto_DstType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
         [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),
         [Mult] "r"(mult), [ZP] "r"(zp),
@@ -7405,7 +7405,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
   } else if constexpr (Mode == RoundMode::RNE) {
     asm volatile(
       "BSTART.TEPL 3, 10, %D[SType]\n"
-      "B.DATR %D[DType], rmode0\n"
+      "B.DATR %D[__pto_DstType], rmode0\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
@@ -7414,7 +7414,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
       : [Dst] "=&Tr"(dst.data())
       : [Src] "Tr"(src.data()),
         [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [DType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [__pto_DstType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
         [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),
         [Mult] "r"(mult), [ZP] "r"(zp),
@@ -7432,7 +7432,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
       : [Dst] "=&Tr"(dst.data())
       : [Src] "Tr"(src.data()),
         [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [DType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [__pto_DstType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
         [RMode] "i"(static_cast<unsigned>(Mode)),
         [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),
@@ -7451,7 +7451,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
       : [Dst] "=&Tr"(dst.data())
       : [Src] "Tr"(src.data()),
         [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [DType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [__pto_DstType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
         [RMode] "i"(static_cast<unsigned>(Mode)),
         [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),
