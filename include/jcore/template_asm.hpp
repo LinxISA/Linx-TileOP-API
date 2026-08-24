@@ -1894,9 +1894,14 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
                 "TLOAD_CUBE Local CUBE capacity must be 128 B..64 KiB");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
+  // Persistent CUBE cell layout selects the canonical GM->Local transport
+  // selector (PTO-ISA ADR-0070); the B.DATR line is fixed per layout class,
+  // with load padding Zero. Selector text is constant, not an integer
+  // immediate, so it assembles as the ISA mnemonic.
+  if constexpr (cube_shape::BFractal == BLayout::CubeM32) {
   asm volatile(
-      "BSTART.TLOAD %D[DataType]\n"
-      "B.DATR layout%c[Layout], DTYPE_NONE, Null\n"
+      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "B.DATR ND2M32.normal, Zero\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -1905,10 +1910,40 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
       : [Base] "r"(src.data()),
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
-        [Layout] "i"(cube_shape::CubeLoadLayout),
         [SizeCode] "i"(cube_shape::TilesizeCode),
         [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
       : "memory");
+  } else if constexpr (cube_shape::BFractal == BLayout::CubeM16) {
+  asm volatile(
+      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "B.DATR ND2M16.normal, Zero\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
+      "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Base] "r"(src.data()),
+        [RowStrideBytes] "r"(src.GetStrideBytes(3)),
+        [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
+        [SizeCode] "i"(cube_shape::TilesizeCode),
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+      : "memory");
+  } else { // CubeN8
+  asm volatile(
+      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "B.DATR ND2N8.normal, Zero\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
+      "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Base] "r"(src.data()),
+        [RowStrideBytes] "r"(src.GetStrideBytes(3)),
+        [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
+        [SizeCode] "i"(cube_shape::TilesizeCode),
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+      : "memory");
+  }
 }
 
 // PTO ISA 0.58.3 persistent Local CUBE CELL -> GM transport.  The source
@@ -1924,9 +1959,13 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
                 "TSTORE_CUBE Local CUBE capacity must be 128 B..64 KiB");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
+  // Persistent CUBE cell layout selects the canonical Local->GM transport
+  // selector (PTO-ISA ADR-0070); store padding is Null. Selector text is
+  // constant per layout class, not an integer immediate.
+  if constexpr (cube_shape::BFractal == BLayout::CubeM32) {
   asm volatile(
-      "BSTART.TSTORE %D[DataType]\n"
-      "B.DATR layout%c[Layout], DTYPE_NONE, Null\n"
+      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "B.DATR M322ND.normal, Null\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.IOT %[Src], mask=1111, last\n"
@@ -1935,9 +1974,37 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
         [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
-        [Layout] "i"(cube_shape::CubeStoreLayout),
         [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
       : "memory");
+  } else if constexpr (cube_shape::BFractal == BLayout::CubeM16) {
+  asm volatile(
+      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "B.DATR M162ND.normal, Null\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+      :
+      : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
+        [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
+        [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+      : "memory");
+  } else { // CubeN8
+  asm volatile(
+      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "B.DATR N82ND.normal, Null\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+      :
+      : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
+        [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
+        [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+      : "memory");
+  }
 }
 
 // TSTORE: Shared Tile -> GM (PTO ISA 0.58.3 TLSU Function 1 Shared form).
@@ -7530,7 +7597,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
         [SType] "i"(
             type_traits<typename tile_shape_in::DType>::TypeCode == __type_int8
                 ? __type_int8 : __type_uint8),
-        [DType] "i"(__type_fp32),
+        [__pto_DstType] "i"(__type_fp32),
         [RMode] "i"(static_cast<unsigned>(Mode)),
         [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),

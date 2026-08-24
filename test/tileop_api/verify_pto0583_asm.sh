@@ -23,17 +23,17 @@ require_disassembly() {
   fi
 }
 
-require_disassembly 'B\.FPATR[[:space:]]+0, 0, 0, 0, 0, 0, 0, 1, 1' \
-  'nine-field B.FPATR'
+require_disassembly 'B\.FPATR[[:space:]]+0, 0, 0, 0, 0, 0, 0' \
+  'seven-field B.FPATR'
 require_disassembly 'B\.IOT[[:space:]]+t#1, mask=1100, last,.*->m<64KB>' \
   'Local SizeCode=10 form'
 require_disassembly 'B\.IOS[[:space:]]+mask=1111, ->S255<256KB>' \
   'Shared SizeCode=12 form'
-require_disassembly 'B\.DATR[[:space:]]+ND2M32, DTYPE_NONE, Null' \
+require_disassembly 'B\.DATR[[:space:]]+ND2M32\.normal, Zero' \
   'ND2M32 CUBE load layout'
-require_disassembly 'B\.DATR[[:space:]]+N82ND, DTYPE_NONE, Null' \
+require_disassembly 'B\.DATR[[:space:]]+N82ND\.normal, Null' \
   'N82ND CUBE store layout'
-require_disassembly 'B\.IOT[[:space:]]+t#3, mask=1111' \
+require_disassembly 'B\.IOT[[:space:]]+t#3, mask=1111, last,.*->t<1KB>' \
   'present conditional MX scale binder'
 if grep -Eq 'B\.IOT[[:space:]]+t#2, mask=1111' "$OUT/contract.diss"; then
   echo "FAIL: absent conditional MX scale binder survived assembly" >&2
@@ -44,7 +44,7 @@ fi
 for invalid in \
   'B.IOT t#1, mask=0011, last, ->m<128B>' \
   'B.IOT t#1, mask=1111, last, ->m<128KB>' \
-  'B.FPATR 0, 0, 0, 0, 0, 0, 0'; do
+  'B.FPATR 0, 0, 0, 0, 0, 0, 0, 1, 1'; do
   printf '.text\n%s\n' "$invalid" >"$OUT/invalid.s"
   if "$CLANG" --target="$LINX_TARGET" -c "$OUT/invalid.s" -o "$OUT/invalid.o" \
       >"$OUT/invalid.stdout" 2>"$OUT/invalid.stderr"; then

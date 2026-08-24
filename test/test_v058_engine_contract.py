@@ -277,18 +277,29 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_mc_gate_requires_canonical_cube_layout_names(self) -> None:
         gate = (ROOT / "test" / "tileop_api" /
                 "verify_pto0583_asm.sh").read_text()
-        self.assertIn("ND2M32, DTYPE_NONE, Null", gate)
-        self.assertIn("N82ND, DTYPE_NONE, Null", gate)
+        self.assertIn(r"ND2M32\.normal", gate)
+        self.assertIn(r"N82ND\.normal", gate)
         self.assertIn("missing canonical $description", gate)
 
     def test_active_inline_asm_uses_exact_pto0583_surface(self) -> None:
-        self.assertNotRegex(self.header, r'"[^"\n]*BSTART\.(?:TLSU|CUBE)')
+        # CUBE transport (TLOAD_CUBE/TSTORE_CUBE) legitimately uses the
+        # canonical TLSU carrier ("BSTART.TLSU TLOAD/TSTORE") and the
+        # ".normal" CUBE selectors (ND2M16/ND2M32/ND2N8/M162ND/M322ND/
+        # N82ND); ordinary non-CUBE code must keep the exact 0.58.3 surface.
         self.assertNotRegex(self.header, r'"[^"\n]*mask=15(?:\D|$)')
         self.assertNotIn("mask=%c[PEMask]", self.header)
         self.assertNotRegex(
             self.header, r'"BSTART\.TEPL\s+\d+,\s*%[cD]'
         )
-        self.assertNotRegex(self.header, r'"B\.DATR[^"\n]*\.normal')
+        # Only the CUBE transport selectors may carry a ".normal" suffix on
+        # B.DATR; any other B.DATR ... .normal is the old spelling.
+        self.assertNotRegex(
+            self.header,
+            r'"B\.DATR (?!ND2M(?:16|32)|ND2N8|M(?:16|32)2ND|N82ND)[^"\n]*\.normal',
+        )
+        self.assertIn('"BSTART.TLSU TLOAD, %D[DataType]\\n"', self.header)
+        self.assertIn('"BSTART.TLSU TSTORE, %D[DataType]\\n"', self.header)
+        self.assertIn('"B.DATR ND2M32.normal, Zero\\n"', self.header)
         self.assertNotIn(
             '"B.DATR %c[DataTypeB], byte0, Zero\\n"', self.header
         )
