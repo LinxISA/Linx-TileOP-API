@@ -382,7 +382,7 @@ int main() { return sizeof(Bad); }
     def test_tquant_tdequant_use_datr_and_ior(self) -> None:
         # TQUANT/TDEQUANT: B.DATR carries named dtype/RMode and optional sat,
         # and B.IOR carries multiplier+zero-point.
-        self.assertRegex(self.header, r"B\.DATR %D\[DType\], rmode[0-7]")
+        self.assertRegex(self.header, r"B\.DATR %D\[__pto_DstType\], rmode[0-7]")
         self.assertRegex(self.header, r"B\.IOR \[%\[Mult\], %\[ZP\]\]")
 
     # --- docs and harness sanity ---
