@@ -2692,10 +2692,9 @@ constexpr void validate_gemv_contract() {
                 "TGEMV D.ValidCol must equal Mtx.ValidCol");
 }
 
-// Cooperative Shared A/B uses Core-total group_M in LB0 while each PE owns a
-// 16-row or 32-row Local destination block. These helpers centralize the
-// encoded M/N/K decision so basic/ACC/BIAS/MX and options overloads cannot
-// diverge.
+// These helpers centralize the encoded M/N/K decision so basic/ACC/BIAS/MX
+// and options overloads cannot diverge. LB0/M always follows the effective
+// row count of input A, for both Local and cooperative Shared A/B operands.
 struct MatmulShape {
   size_t M;
   size_t N;
@@ -2703,23 +2702,20 @@ struct MatmulShape {
   bool group;
 };
 
-// Resolve M/N/K for a matmul-style operation. For Shared A/B, M is the
-// Core-total group_M from Shared A; destination validation separately checks
-// the per-PE Local row block.
 template <FixpAttr Attr, typename C, typename A, typename B>
 constexpr MatmulShape resolve_matmul_shape() {
   static_assert(A::ValidRow != DYNAMIC && A::ValidCol != DYNAMIC &&
                     B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC &&
                     C::ValidRow != DYNAMIC && C::ValidCol != DYNAMIC,
                 "Matrix dynamic valid shapes are not supported");
+  constexpr bool IsGroup = is_shared_tile_v<A> && is_shared_tile_v<B>;
   constexpr size_t M = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidCol : A::ValidRow;
   constexpr size_t K = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidRow : A::ValidCol;
   constexpr size_t N = is_shared_tile_v<B> && Attr.TransB
       ? B::ValidRow : B::ValidCol;
-  return MatmulShape{M, N, K,
-                     is_shared_tile_v<A> && is_shared_tile_v<B>};
+  return MatmulShape{M, N, K, IsGroup};
 }
 
 // The public Matrix surface rejects dynamic valid shapes, so resolution is

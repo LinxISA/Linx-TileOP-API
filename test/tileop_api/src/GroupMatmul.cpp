@@ -4,7 +4,8 @@
 
 using namespace pto;
 
-using A = SharedMatrixLeft<float, 16, 16>;
+// Group and local TMATMUL both derive LB0/M from input A's effective rows.
+using A = SharedMatrixLeft<float, 64, 16>;
 using B = SharedMatrixRight<float, 16, 16>;
 using C = CubeAccumulatorM16<float, 16, 16>;
 using AC = CubeAccumulatorM16<float, 16, 16>;
