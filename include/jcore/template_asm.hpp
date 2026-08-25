@@ -1777,6 +1777,50 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       "TLOAD dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
+  if constexpr (is_assemble_v<tile_shape>) {
+    // Destination wraps a B.ASSEMBLE range modifier attached to the B.IOT
+    // destination binder (PTO-ISA 0.58.4 ADR-0098). INIT/LAST/Offset are
+    // compile-time wrapper parameters so they satisfy the "i" constraint.
+    #define PTO_RANGE_ASSEMBLE_CASE(N) \
+      if constexpr (tile_shape::RegSrc == N) { \
+        register uintptr_t range_base asm("r" #N) = \
+            static_cast<uintptr_t>(dst.GetRangeBase()); \
+        asm volatile( \
+          "BSTART.TLSU TLOAD, %D[SrcType]\n" \
+          "B.DIM %[VCOL], 0, ->lb0\n" \
+          "B.DIM %[VROW], 0, ->lb1\n" \
+          "B.DIM zero, %c[COL], ->lb2\n" \
+          "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n" \
+          "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[ParentSize]\n" \
+          "B.IOR [%[s0],%[GmStride]], []\n" \
+          : [d0]"=Tr"(dst.data()) \
+          : [s0]"r"(src.data()), \
+            [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode), \
+            [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode), \
+            [VCOL]"r"(valid_col), [VROW]"r"(valid_row), \
+            [COL]"i"(tile_shape::Cols), \
+            [GmStride]"r"(src.GetStrideBytes(3)), \
+            [Init]"i"(static_cast<int>(tile_shape::INIT)), \
+            [Last]"i"(static_cast<int>(tile_shape::LAST)), \
+            [RegSrc]"r"(range_base), \
+            [Off]"i"(tile_shape::Offset), \
+            [ParentSize]"i"(tile_shape::ParentSizeCode) \
+          : "memory"); \
+      }
+    PTO_RANGE_ASSEMBLE_CASE(0) else PTO_RANGE_ASSEMBLE_CASE(1) else
+    PTO_RANGE_ASSEMBLE_CASE(2) else PTO_RANGE_ASSEMBLE_CASE(3) else
+    PTO_RANGE_ASSEMBLE_CASE(4) else PTO_RANGE_ASSEMBLE_CASE(5) else
+    PTO_RANGE_ASSEMBLE_CASE(6) else PTO_RANGE_ASSEMBLE_CASE(7) else
+    PTO_RANGE_ASSEMBLE_CASE(8) else PTO_RANGE_ASSEMBLE_CASE(9) else
+    PTO_RANGE_ASSEMBLE_CASE(10) else PTO_RANGE_ASSEMBLE_CASE(11) else
+    PTO_RANGE_ASSEMBLE_CASE(12) else PTO_RANGE_ASSEMBLE_CASE(13) else
+    PTO_RANGE_ASSEMBLE_CASE(14) else PTO_RANGE_ASSEMBLE_CASE(15) else
+    PTO_RANGE_ASSEMBLE_CASE(16) else PTO_RANGE_ASSEMBLE_CASE(17) else
+    PTO_RANGE_ASSEMBLE_CASE(18) else PTO_RANGE_ASSEMBLE_CASE(19) else
+    PTO_RANGE_ASSEMBLE_CASE(20) else PTO_RANGE_ASSEMBLE_CASE(21) else
+    PTO_RANGE_ASSEMBLE_CASE(22) else PTO_RANGE_ASSEMBLE_CASE(23)
+    #undef PTO_RANGE_ASSEMBLE_CASE
+  } else {
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
@@ -1792,6 +1836,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
+  }
 }
 
 // TLOAD: GM -> Shared Tile (PTO v0.58 reissue). The destination is one
@@ -1863,6 +1908,47 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
                 "per DavinciOO v5 B.IOT encoding");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
+  if constexpr (is_subview_v<tile_shape>) {
+    // Source wraps a B.SUBVIEW range modifier attached to the B.IOT source
+    // binder (PTO-ISA 0.58.4 ADR-0098).
+    #define PTO_RANGE_SUBVIEW_CASE(N) \
+      if constexpr (tile_shape::RegSrc == N) { \
+        register uintptr_t range_base asm("r" #N) = \
+            static_cast<uintptr_t>(src.GetRangeBase()); \
+        asm volatile( \
+          "BSTART.TLSU TSTORE, %D[SrcType]\n" \
+          "B.DIM %[VCOL], 0, ->lb0\n" \
+          "B.DIM %[VROW], 0, ->lb1\n" \
+          "B.DIM zero, %c[COL], ->lb2\n" \
+          "B.IOT %[s0], mask=1111, last\n" \
+          "B.SUBVIEW %c[SrcSelect], r" #N ", %c[Off], %c[SubSize]\n" \
+          "B.IOR [%[d0],%[GmStride]], []\n" \
+          : \
+          : [d0]"r"(dst.data()), [s0]"Tr"(src.data()), \
+            [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode), \
+            [VCOL]"r"(valid_col), [VROW]"r"(valid_row), \
+            [COL]"i"(tile_shape::Cols), \
+            [GmStride]"r"(dst.GetStrideBytes(3)), \
+            [SrcSelect]"i"(0), \
+            [RegSrc]"r"(range_base), \
+            [Off]"i"(tile_shape::Offset), \
+            [SubSize]"i"(tile_shape::SubviewSizeCode) \
+          : "memory"); \
+      }
+    PTO_RANGE_SUBVIEW_CASE(0) else PTO_RANGE_SUBVIEW_CASE(1) else
+    PTO_RANGE_SUBVIEW_CASE(2) else PTO_RANGE_SUBVIEW_CASE(3) else
+    PTO_RANGE_SUBVIEW_CASE(4) else PTO_RANGE_SUBVIEW_CASE(5) else
+    PTO_RANGE_SUBVIEW_CASE(6) else PTO_RANGE_SUBVIEW_CASE(7) else
+    PTO_RANGE_SUBVIEW_CASE(8) else PTO_RANGE_SUBVIEW_CASE(9) else
+    PTO_RANGE_SUBVIEW_CASE(10) else PTO_RANGE_SUBVIEW_CASE(11) else
+    PTO_RANGE_SUBVIEW_CASE(12) else PTO_RANGE_SUBVIEW_CASE(13) else
+    PTO_RANGE_SUBVIEW_CASE(14) else PTO_RANGE_SUBVIEW_CASE(15) else
+    PTO_RANGE_SUBVIEW_CASE(16) else PTO_RANGE_SUBVIEW_CASE(17) else
+    PTO_RANGE_SUBVIEW_CASE(18) else PTO_RANGE_SUBVIEW_CASE(19) else
+    PTO_RANGE_SUBVIEW_CASE(20) else PTO_RANGE_SUBVIEW_CASE(21) else
+    PTO_RANGE_SUBVIEW_CASE(22) else PTO_RANGE_SUBVIEW_CASE(23)
+    #undef PTO_RANGE_SUBVIEW_CASE
+  } else {
   asm volatile(
     "BSTART.TLSU TSTORE, %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
@@ -1877,6 +1963,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(dst.GetStrideBytes(3))
       : "memory");
+  }
 }
 
 // PTO ISA 0.58.3 GM -> persistent Local CUBE CELL transport.  The layout

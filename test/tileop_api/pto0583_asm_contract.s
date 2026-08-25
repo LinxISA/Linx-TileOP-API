@@ -23,3 +23,10 @@ B.IOT t#2, mask=1111
 .if 1
 B.IOT t#3, mask=1111, last, ->t<1KB>
 .endif
+
+# PTO-ISA 0.58.4 range modifiers (ADR-0098): standalone block commands whose
+# B.SUBVIEW/B.ASSEMBLE lines attach to the immediately preceding binder in a
+# real bundle; here they are validated as independently assemblable commands
+# so the MC/disassembler round-trip covers their fields.
+B.SUBVIEW 0, a0, 0, 1
+B.ASSEMBLE 1, 0, a0, 100, 12

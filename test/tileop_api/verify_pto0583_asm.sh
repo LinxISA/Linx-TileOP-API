@@ -33,6 +33,10 @@ require_disassembly 'B\.DATR[[:space:]]+ND2M32\.normal, Zero' \
   'ND2M32 CUBE load layout'
 require_disassembly 'B\.DATR[[:space:]]+N82ND\.normal, Null' \
   'N82ND CUBE store layout'
+require_disassembly 'B\.SUBVIEW[[:space:]]+0, a0, 0, 1' \
+  'B.SUBVIEW range modifier'
+require_disassembly 'B\.ASSEMBLE[[:space:]]+1, 0, a0, 100, 12' \
+  'B.ASSEMBLE range modifier'
 require_disassembly 'B\.IOT[[:space:]]+t#3, mask=1111, last,.*->t<1KB>' \
   'present conditional MX scale binder'
 if grep -Eq 'B\.IOT[[:space:]]+t#2, mask=1111' "$OUT/contract.diss"; then

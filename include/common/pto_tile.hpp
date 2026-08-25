@@ -1249,12 +1249,30 @@ public:
   static constexpr Location Role = LocalTile::Loc;
   static constexpr int Rows = LocalTile::Rows;
   static constexpr int Cols = LocalTile::Cols;
+  static constexpr int RowStride = LocalTile::RowStride;
+  static constexpr int ColStride = LocalTile::ColStride;
   static constexpr int ValidRow = LocalTile::ValidRow;
   static constexpr int ValidCol = LocalTile::ValidCol;
   static constexpr BLayout BFractal = LocalTile::BFractal;
   static constexpr SLayout SFractal = LocalTile::SFractal;
   static constexpr int SFractalSize = LocalTile::SFractalSize;
   static constexpr PadValue PadVal = LocalTile::PadVal;
+  static constexpr CompactMode Compact = LocalTile::Compact;
+  static constexpr bool IsCubeLayout = LocalTile::IsCubeLayout;
+  using TileDType = typename LocalTile::TileDType;
+  static constexpr int LogicalTileBytes = LocalTile::LogicalTileBytes;
+  static constexpr int TilesizeCode = LocalTile::TilesizeCode;
+  static constexpr bool IsValidActiveSize = LocalTile::IsValidActiveSize;
+  static constexpr bool isRowMajor = LocalTile::isRowMajor;
+  static constexpr bool isBoxedLayout = LocalTile::isBoxedLayout;
+  static constexpr bool isInnerRowMajor = LocalTile::isInnerRowMajor;
+  static constexpr bool isInnerColMajor = LocalTile::isInnerColMajor;
+  static constexpr int InnerRows = LocalTile::InnerRows;
+  static constexpr int InnerCols = LocalTile::InnerCols;
+  static constexpr int InnerNumel = LocalTile::InnerNumel;
+  static constexpr int Numel = LocalTile::Numel;
+  static constexpr int byteSize = LocalTile::byteSize;
+  static constexpr int kBytes = LocalTile::kBytes;
 
   SharedTile()
       : RowMaskInternal(ValidRow == DYNAMIC ? 0 : ValidRow),
@@ -1763,16 +1781,30 @@ constexpr bool is_valid_uimm11(unsigned u) { return u <= 2047; }
 /// Source-side range carrier. Forwards every tile-shaped static member of
 /// Parent so it can be bound as a Local operand; the B.SUBVIEW line is
 /// emitted after the source binder by the consuming operation.
-template <typename Parent, unsigned SubviewSizeCode_>
+///
+/// uimm11 Offset and RegSrc must be compile-time constants: the B.SUBVIEW
+/// Modifier slots are inline-asm "i" constraints, so callers cannot thread
+/// runtime values into a range descriptor (PTO-ISA 0.58.4 ADR-0098 models
+/// the range descriptor as a static part of the binder contract). RegSrc is
+/// the absolute GPR selector 0..23 for the base-address register (defaults
+/// to a0/R2, the conventional base register).
+template <typename Parent, unsigned SubviewSizeCode_, unsigned Offset_ = 0,
+          unsigned RegSrc_ = 2>
 class Subview {
   static_assert(is_valid_subview_size_code(SubviewSizeCode_),
                 "B.SUBVIEW SubviewSizeCode must be 1..12 (128B..256KB per PE)");
+  static_assert(is_valid_uimm11(Offset_),
+                "B.SUBVIEW uimm11 offset must be 0..2047");
+  static_assert(RegSrc_ <= 23,
+                "B.SUBVIEW RegSrc must be an absolute GPR selector 0..23");
 public:
   using DType = typename Parent::DType;
   using ParentTile = Parent;
   using TileDType = typename Parent::TileDType;
 
   static constexpr unsigned SubviewSizeCode = SubviewSizeCode_;
+  static constexpr unsigned Offset = Offset_;
+  static constexpr unsigned RegSrc = RegSrc_;
   static constexpr Location Loc = Parent::Loc;
   static constexpr int Rows = Parent::Rows;
   static constexpr int Cols = Parent::Cols;
@@ -1785,39 +1817,70 @@ public:
   static constexpr int SFractalSize = Parent::SFractalSize;
   static constexpr bool isRowMajor = Parent::isRowMajor;
   static constexpr bool isBoxedLayout = Parent::isBoxedLayout;
+  static constexpr bool isInnerRowMajor = Parent::isInnerRowMajor;
+  static constexpr bool isInnerColMajor = Parent::isInnerColMajor;
+  static constexpr int InnerRows = Parent::InnerRows;
+  static constexpr int InnerCols = Parent::InnerCols;
   static constexpr int Numel = Parent::Numel;
   static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
   static constexpr int TilesizeCode = Parent::TilesizeCode;
   static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
 
-  Subview(Parent &parent, int regSrc, unsigned offset)
-      : ParentValue(parent), RegSrc(regSrc), Offset(offset) {}
+  Subview(Parent &parent, uintptr_t range_base = 0)
+      : ParentValue(parent), RangeBaseValue(range_base) {}
 
-  decltype(auto) data() { return ParentValue.data(); }
+  // A range carrier over an ordinary Local Tile binds through data(); a
+  // carrier over a SharedTile binds through handle() (Shared uses the B.IOS
+  // binder with the compiler's dedicated S register constraint, and has no
+  // conventional data()).
+  decltype(auto) data()
+      requires(!is_shared_tile_v<Parent>) {
+    return ParentValue.data();
+  }
+  unsigned long handle()
+      requires(is_shared_tile_v<Parent>) {
+    return ParentValue.handle();
+  }
 
   int GetValidRow() const { return ParentValue.GetValidRow(); }
   int GetValidCol() const { return ParentValue.GetValidCol(); }
-
-  int RegSrc;
-  unsigned Offset; // uimm11; caller ensures <= 2047
+  uintptr_t GetRangeBase() const { return RangeBaseValue; }
 
 private:
   Parent &ParentValue;
+  uintptr_t RangeBaseValue;
 };
 
 /// Destination-side range carrier. Capable of the multi-PE Shared
 /// destination requirement (operation enforces it); carries INIT/LAST and
-/// ParentSizeCode.
-template <typename Parent, unsigned ParentSizeCode_>
+/// ParentSizeCode. INIT/LAST/Offset/RegSrc are compile-time constants for
+/// the same inline-asm "i" constraint reason as Subview: the range
+/// descriptor is a static part of the destination binder contract. RegSrc
+/// is the absolute GPR selector 0..23 for the base-address register
+/// (defaults to a0/R2, the conventional base register).
+template <typename Parent, unsigned ParentSizeCode_, bool INIT_ = true,
+          bool LAST_ = false, unsigned Offset_ = 0, unsigned RegSrc_ = 2>
 class Assemble {
   static_assert(is_valid_parent_size_code(ParentSizeCode_),
                 "B.ASSEMBLE ParentSizeCode must be 0..12; 13..15 reserved");
+  static_assert(!((INIT_ == false) && (ParentSizeCode_ != 0)),
+                "B.ASSEMBLE: non-INIT modifier requires ParentSizeCode=0");
+  static_assert(!((INIT_ != false) && (ParentSizeCode_ == 0)),
+                "B.ASSEMBLE: INIT modifier requires ParentSizeCode 1..12");
+  static_assert(is_valid_uimm11(Offset_),
+                "B.ASSEMBLE uimm11 offset must be 0..2047");
+  static_assert(RegSrc_ <= 23,
+                "B.ASSEMBLE RegSrc must be an absolute GPR selector 0..23");
 public:
   using DType = typename Parent::DType;
   using ParentTile = Parent;
   using TileDType = typename Parent::TileDType;
 
   static constexpr unsigned ParentSizeCode = ParentSizeCode_;
+  static constexpr bool INIT = INIT_;
+  static constexpr bool LAST = LAST_;
+  static constexpr unsigned Offset = Offset_;
+  static constexpr unsigned RegSrc = RegSrc_;
   static constexpr Location Loc = Parent::Loc;
   static constexpr int Rows = Parent::Rows;
   static constexpr int Cols = Parent::Cols;
@@ -1830,41 +1893,64 @@ public:
   static constexpr int SFractalSize = Parent::SFractalSize;
   static constexpr bool isRowMajor = Parent::isRowMajor;
   static constexpr bool isBoxedLayout = Parent::isBoxedLayout;
+  static constexpr bool isInnerRowMajor = Parent::isInnerRowMajor;
+  static constexpr bool isInnerColMajor = Parent::isInnerColMajor;
+  static constexpr int InnerRows = Parent::InnerRows;
+  static constexpr int InnerCols = Parent::InnerCols;
   static constexpr int Numel = Parent::Numel;
   static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
   static constexpr int TilesizeCode = Parent::TilesizeCode;
   static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
 
-  Assemble(Parent &parent, int regSrc, unsigned offset, bool init = true,
-           bool last = false)
-      : ParentValue(parent), RegSrc(regSrc), Offset(offset), INIT(init),
-        LAST(last) {}
+  Assemble(Parent &parent, uintptr_t range_base = 0)
+      : ParentValue(parent), RangeBaseValue(range_base) {}
 
-  decltype(auto) data() { return ParentValue.data(); }
+  // Local binds through data(); SharedTile binds through handle() (B.IOS).
+  decltype(auto) data()
+      requires(!is_shared_tile_v<Parent>) {
+    return ParentValue.data();
+  }
+  unsigned long handle()
+      requires(is_shared_tile_v<Parent>) {
+    return ParentValue.handle();
+  }
 
   int GetValidRow() const { return ParentValue.GetValidRow(); }
   int GetValidCol() const { return ParentValue.GetValidCol(); }
-
-  int RegSrc;
-  unsigned Offset; // uimm11; caller ensures <= 2047
-  bool INIT;
-  bool LAST;
+  uintptr_t GetRangeBase() const { return RangeBaseValue; }
 
 private:
   Parent &ParentValue;
+  uintptr_t RangeBaseValue;
 };
 
 } // namespace range
 
 // Range wrappers count as Local tile-shaped operands for binding purposes.
-template <typename Parent, unsigned SC>
-struct is_tile<range::Subview<Parent, SC>> : std::true_type {
+template <typename Parent, unsigned SC, auto... Rest>
+struct is_tile<range::Subview<Parent, SC, Rest...>> : std::true_type {
   static constexpr SLayout layout_enum = Parent::SFractal;
 };
-template <typename Parent, unsigned SC>
-struct is_tile<range::Assemble<Parent, SC>> : std::true_type {
+template <typename Parent, unsigned SC, auto... Rest>
+struct is_tile<range::Assemble<Parent, SC, Rest...>> : std::true_type {
   static constexpr SLayout layout_enum = Parent::SFractal;
 };
+
+// Range-modifier traits: a Subview is a source-side range carrier and an
+// Assemble is a destination-side range carrier.
+template <typename T> struct is_subview : std::false_type {};
+template <typename Parent, unsigned SC, auto... Rest>
+struct is_subview<range::Subview<Parent, SC, Rest...>> : std::true_type {};
+template <typename T> struct is_assemble : std::false_type {};
+template <typename Parent, unsigned SC, auto... Rest>
+struct is_assemble<range::Assemble<Parent, SC, Rest...>> : std::true_type {};
+
+template <typename T>
+concept is_subview_v = is_subview<T>::value;
+template <typename T>
+concept is_assemble_v = is_assemble<T>::value;
+template <typename T>
+concept is_range_v = is_subview<T>::value || is_assemble<T>::value;
 
 // Equal bit-width is required: the reinterpret must not change the number of
 // logical elements, physical bytes or TileSizeCode.
