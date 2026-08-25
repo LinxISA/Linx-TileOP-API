@@ -936,9 +936,11 @@ public:
       LogicalTileBytes == 8192 ? __tilesize_8KB :
       LogicalTileBytes == 16384 ? __tilesize_16KB :
       LogicalTileBytes == 32768 ? __tilesize_32KB :
-      LogicalTileBytes == 65536 ? __tilesize_64KB : __tilesize_unknown;
+      LogicalTileBytes == 65536 ? __tilesize_64KB :
+      LogicalTileBytes == 131072 ? __tilesize_128KB :
+      LogicalTileBytes == 262144 ? __tilesize_256KB : __tilesize_unknown;
   static constexpr bool IsValidActiveSize =
-      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_64KB;
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_256KB;
 
   // constructor for static shape
   Tile() { };

@@ -207,7 +207,7 @@ template <is_local_tile_v Tile>
 inline void TMOV(Tile &dst, const Tile &src) {
   static_assert(
       tile_type_traits<typename Tile::TileDType>::IsValidActiveSize,
-      "TMOV logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
+      "TMOV logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
@@ -462,7 +462,7 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
                     const tile_shape_offset &offset) {
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
-                "MGATHER dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
+                "MGATHER dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
       "BSTART.TLSU MGATHER, %D[DataType]\n"
@@ -490,7 +490,7 @@ inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
                      const tile_shape_offset &offset) {
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
-                "MSCATTER src logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
+                "MSCATTER src logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
       "BSTART.TLSU MSCATTER, %D[DataType]\n"
@@ -518,7 +518,7 @@ inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
                          const tile_shape_mask &mask) {
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
-                "MGATHER_MASK dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
+                "MGATHER_MASK dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
       "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
@@ -550,7 +550,7 @@ inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
                           const tile_shape_mask &mask) {
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
-                "MSCATTER_MASK src logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
+                "MSCATTER_MASK src logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
       "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
@@ -1774,7 +1774,7 @@ template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
 void TLOAD(tile_shape &dst, gm_shape &src) {
   static_assert(
       tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
-      "TLOAD dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
+      "TLOAD dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   if constexpr (is_assemble_v<tile_shape>) {
@@ -1904,7 +1904,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 void TSTORE(gm_shape &dst, tile_shape &src) {
   static_assert(tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
-                "TSTORE src logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
+                "TSTORE src logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
                 "per DavinciOO v5 B.IOT encoding");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
@@ -1978,7 +1978,7 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
   static_assert(cube_shape::CubeRequiredBytes <= cube_shape::LogicalTileBytes,
                 "TLOAD_CUBE CUBE CELL storage exceeds Local SizeCode capacity");
   static_assert(cube_shape::IsValidActiveSize,
-                "TLOAD_CUBE Local CUBE capacity must be 128 B..64 KiB");
+                "TLOAD_CUBE Local CUBE capacity must be 128 B..256 KiB");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   // Persistent CUBE cell layout selects the canonical GM->Local transport
@@ -2043,7 +2043,7 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
                                typename gm_shape::DType>,
                 "TSTORE_CUBE requires matching GM and CUBE dtypes");
   static_assert(cube_shape::IsValidActiveSize,
-                "TSTORE_CUBE Local CUBE capacity must be 128 B..64 KiB");
+                "TSTORE_CUBE Local CUBE capacity must be 128 B..256 KiB");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   // Persistent CUBE cell layout selects the canonical Local->GM transport
@@ -2269,7 +2269,7 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
                 "GMOV source and destination descriptors must match");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
-      "GMOV logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
+      "GMOV logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
   static_assert(tile_shape_dst::LogicalTileBytes ==
                     tile_shape_src::LogicalTileBytes,
                 "GMOV source and destination logical sizes must match");
@@ -2362,7 +2362,7 @@ TMOV_S2L_BROADCAST(tile_shape_dst &dst,
                 "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
-      "TMOV.S2L.BROADCAST logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
+      "TMOV.S2L.BROADCAST logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
   asm volatile(
       "BSTART.TLSU TMOV.S2L.BROADCAST, %D[DataType]\n"
       PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
@@ -2382,7 +2382,7 @@ PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
                 "PEMask must be one of 1,2,4,8,12,14,15");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
-      "TMOV.S2L.EXTRACT logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
+      "TMOV.S2L.EXTRACT logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
   asm volatile(
       "BSTART.TLSU TMOV.S2L.EXTRACT, %D[DataType]\n"
       PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
@@ -5148,7 +5148,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   // Physical and valid M/N/K contracts, including cooperative Shared inputs,
   // are centralized in resolve_matmul_shape_runtime below.
   static_assert(tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
-                "TMATMUL output logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
+                "TMATMUL output logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
 
   constexpr bool HasVectorQuant =
       is_vector_fixp_pre_quant(Attr.PreQuant);
@@ -5205,7 +5205,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     using QuantTile = typename Options::QuantTile;
     static_assert(
         tile_type_traits<typename QuantTile::TileDType>::IsValidActiveSize,
-        "TMATMUL quant parameter Tile must occupy 128 B..64 KiB (SizeCode=1..10); pad the "
+        "TMATMUL quant parameter Tile must occupy 128 B..256 KiB (SizeCode=1..12); pad the "
         "physical Tile and keep ValidRow=1, ValidCol=N when necessary");
     static_assert(QuantTile::ValidRow == -1 || QuantTile::ValidRow == 1,
                   "TMATMUL vector quant parameter must have ValidRow=1");
@@ -5216,7 +5216,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     using ReluTile = typename Options::ReluTile;
     static_assert(
         tile_type_traits<typename ReluTile::TileDType>::IsValidActiveSize,
-        "TMATMUL PReLU parameter Tile must occupy 128 B..64 KiB (SizeCode=1..10); pad the "
+        "TMATMUL PReLU parameter Tile must occupy 128 B..256 KiB (SizeCode=1..12); pad the "
         "physical Tile and keep ValidRow=1, ValidCol=N when necessary");
     static_assert(ReluTile::ValidRow == -1 || ReluTile::ValidRow == 1,
                   "TMATMUL PReLU parameter must have ValidRow=1");
@@ -5234,7 +5234,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                   "TMATMUL RowMaxOut dtype must match FP32/S32/U32 AccType");
     static_assert(
         tile_type_traits<typename RowOut::TileDType>::IsValidActiveSize,
-        "TMATMUL RowMaxOut physical Tile must occupy 128 B..64 KiB (SizeCode=1..10)");
+        "TMATMUL RowMaxOut physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
   }
   if constexpr (HasRowIn) {
     using RowIn = typename Options::RowMaxIn;
@@ -5251,7 +5251,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                   "TMATMUL RowMaxIn/RowMaxOut dtypes must match");
     static_assert(
         tile_type_traits<typename RowIn::TileDType>::IsValidActiveSize,
-        "TMATMUL RowMaxIn physical Tile must occupy 128 B..64 KiB (SizeCode=1..10)");
+        "TMATMUL RowMaxIn physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
   }
   if constexpr (HasGroupOut) {
     using GroupOut = typename Options::GroupMaxOut;
@@ -5268,7 +5268,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                   "TMATMUL GroupMaxOut dtype must match FP32/S32/U32 AccType");
     static_assert(
         tile_type_traits<typename GroupOut::TileDType>::IsValidActiveSize,
-        "TMATMUL GroupMaxOut physical Tile must occupy 128 B..64 KiB (SizeCode=1..10)");
+        "TMATMUL GroupMaxOut physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
   }
 
   pto_matmul_detail::MatmulShape __shape =

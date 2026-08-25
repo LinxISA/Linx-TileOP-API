@@ -45,10 +45,18 @@ static_assert(SharedMatrixLeft<float, 16, 16>::BFractal == BLayout::RowMajor);
 static_assert(SharedMatrixRight<float, 16, 16>::BFractal == BLayout::RowMajor);
 using Local64K = Tile<Location::Vec, uint8_t, 256, 256,
                       BLayout::RowMajor>;
+using Local128K = Tile<Location::Vec, uint8_t, 512, 256,
+                       BLayout::RowMajor>;
+using Local256K = Tile<Location::Vec, uint8_t, 1024, 256,
+                       BLayout::RowMajor>;
 using Shared256K = Tile<Location::Vec, uint8_t, 512, 512,
                         BLayout::RowMajor>;
 static_assert(Local64K::TilesizeCode == __tilesize_64KB);
 static_assert(Local64K::IsValidActiveSize);
+static_assert(Local128K::TilesizeCode == __tilesize_128KB);
+static_assert(Local128K::IsValidActiveSize);
+static_assert(Local256K::TilesizeCode == __tilesize_256KB);
+static_assert(Local256K::IsValidActiveSize);
 static_assert(tile_type_traits<typename Shared256K::TileDType>::
                   IsValidSharedActiveSize);
 #ifdef __linx
