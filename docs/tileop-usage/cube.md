@@ -89,9 +89,9 @@ second. `TGEMV` rejects all Shared binders.
 
 ## Note on canonical block spellings
 
-PTO-ISA v0.58 canonicalizes the CUBE operations to named block starts
-(`BSTART.TMATMUL`, `BSTART.TMATMUL.BIAS`, `BSTART.TMATMULMX`, `BSTART.TGEMV`,
-...). The historical DavinciOO `TMATMUL*.FIXP` spelling was an
+PTO-ISA v0.58 canonicalizes the CUBE operations under the CUBE carrier
+(`BSTART.CUBE TMATMUL`, `BSTART.CUBE TMATMUL.BIAS`,
+`BSTART.CUBE TMATMULMX`, `BSTART.CUBE TGEMV`, ...). The historical DavinciOO `TMATMUL*.FIXP` spelling was an
 implementation-local name and has been removed; post-processing is
 carried by `B.FPATR`, so the canonical emission is `BSTART.CUBE TMATMUL` +
 `B.FPATR`. See [matrix-postprocess.md](matrix-postprocess.md).

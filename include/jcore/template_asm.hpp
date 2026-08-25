@@ -173,7 +173,7 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>           \
 void TMOV_##LAYOUT_NAME(tile_shape_out &dst, tile_shape_in &src) {               \
   asm volatile(                                                                  \
-    "BSTART.TMOV %D2\n"                                                        \
+    "BSTART.TLSU TMOV, %D2\n"                                                        \
     "B.DATR " #LAYOUT_NAME ", DTYPE_NONE, Null\n"                                  \
     "B.IOT %1, mask=1111, last, ->%0<%Z3>\n"                                              \
     "B.DIM %4, 0, ->lb0\n"                                                   \
@@ -211,7 +211,7 @@ inline void TMOV(Tile &dst, const Tile &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TMOV %D[DataType]\n"
+    "BSTART.TLSU TMOV, %D[DataType]\n"
     "B.DATR NORM, DTYPE_NONE, Zero\n"
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM %[ValidRow], 0, ->lb1\n"
@@ -227,7 +227,7 @@ inline void TMOV(Tile &dst, const Tile &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TMOV_DN2NZ_DYN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TMOV %D2\n"
+    "BSTART.TLSU TMOV, %D2\n"
     "B.DATR DN2NZ, DTYPE_NONE, Null\n"
     "B.IOT %1, mask=1111, last, ->%0<%Z3>\n"
     "B.DIM %4, 0, ->lb0\n"
@@ -289,7 +289,7 @@ void TLOAD2_ND2NZ(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
   static_assert(gm_shape::isRowMajor && is_Nz_layout<tile_shape>::value,
                     "GM_SHAPE should ND and TILE_SHAPE should be Nz ");
   asm volatile(
-    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
     "B.DATR ND2NZ, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -312,7 +312,7 @@ void TLOAD2_ND2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
   static_assert(gm_shape::isRowMajor && is_Zn_layout<tile_shape>::value,
                     "GM_SHAPE should ND and TILE_SHAPE should be Zn ");
   asm volatile(
-    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
     "B.DATR ND2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -335,7 +335,7 @@ void TLOAD2_DN2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
   static_assert(!gm_shape::isRowMajor && is_Nz_layout<tile_shape>::value,
                     "GM_SHAPE should DN and TILE_SHAPE should be Zn ");
   asm volatile(
-    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
     "B.DATR DN2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -358,7 +358,7 @@ void TSTORE2_DN2DN(gm_shape &dst, tile_shape &src1, tile_shape &src0) {
   static_assert(!gm_shape::isRowMajor && !tile_shape::isRowMajor,
                     "GM_SHAPE should DN and TILE_SHAPE should be DN");
   asm volatile(
-    "BSTART.TSTORE %D[__pto_SrcType]\n"
+    "BSTART.TLSU TSTORE, %D[__pto_SrcType]\n"
     "B.DATR NORM, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -379,7 +379,7 @@ void TLOAD4_ND2NZ(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
   static_assert(gm_shape::isRowMajor && is_Nz_layout<tile_shape>::value,
                     "GM_SHAPE should ND and TILE_SHAPE should be Nz ");
   asm volatile(
-    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
     "B.DATR ND2NZ, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -404,7 +404,7 @@ void TLOAD4_ND2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
   static_assert(gm_shape::isRowMajor && is_Zn_layout<tile_shape>::value,
                     "GM_SHAPE should ND and TILE_SHAPE should be Nz ");
   asm volatile(
-    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
     "B.DATR ND2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -429,7 +429,7 @@ void TLOAD4_DN2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
   static_assert(!gm_shape::isRowMajor && is_Zn_layout<tile_shape>::value,
                     "GM_SHAPE should DN and TILE_SHAPE should be Zn ");
   asm volatile(
-    "BSTART.TLOAD %D[__pto_SrcType]\n"
+    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
     "B.DATR DN2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -465,7 +465,7 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
                 "MGATHER dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
-      "BSTART.MGATHER %D[DataType]\n"
+      "BSTART.TLSU MGATHER, %D[DataType]\n"
       "B.DATR Null\n"
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
@@ -493,7 +493,7 @@ inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
                 "MSCATTER src logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
-      "BSTART.MSCATTER %D[DataType]\n"
+      "BSTART.TLSU MSCATTER, %D[DataType]\n"
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -521,7 +521,7 @@ inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
                 "MGATHER_MASK dst logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
-      "BSTART.MGATHER.MASK %D[DataType]\n"
+      "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
       "B.DATR Null\n"
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
@@ -553,7 +553,7 @@ inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
                 "MSCATTER_MASK src logical Tile size must be 128 B..64 KiB (SizeCode=1..10) "
                 "per DavinciOO v5 B.IOT encoding");
   asm volatile(
-      "BSTART.MSCATTER.MASK %D[DataType]\n"
+      "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -1755,7 +1755,7 @@ blkv_bf16x2_max(const BLKV_BF16X2_TYPE &src_l,
 //
 // Block-start function values per the pinned LinxISA v0.58 catalog
 // (contracts/linxisa-v0.58-engine-ops.json):
-//   named TLSU starts: BSTART.TLOAD/TSTORE/TMOV/TPREFETCH/MGATHER/MSCATTER
+//   named TLSU starts: BSTART.TLSU TLOAD/TSTORE/TMOV/TPREFETCH/MGATHER/MSCATTER
 //                    MGATHER_MASK=6 MSCATTER_MASK=7 MGATHER_CAS=8 GMOV=13
 //   named CUBE starts: TMATMUL, TMATMUL.BIAS, TMATMUL.ACC, TMATMULMX,
 //                   TMATMULMX.BIAS=5, TMATMULMX.ACC=6,
@@ -1765,11 +1765,11 @@ blkv_bf16x2_max(const BLKV_BF16X2_TYPE &src_l,
 // are rendered from the TEPL Mode/Function carrier without changing encoding.
 // The historical `TMATMUL*.FIXP` suffix was an implementation-local name;
 // PTO-ISA 0.58 carries post-processing through the B.FPATR attribute, so the
-// canonical emission is `BSTART.TMATMUL` + `B.FPATR`.
+// canonical emission is `BSTART.CUBE TMATMUL` + `B.FPATR`.
 // All variants below are the NORM (no layout conversion) generic form.
 //===----------------------------------------------------------------------===//
 
-// TLOAD: GM -> Local Tile (BSTART.TLOAD). dst[i,j] = src[r0+i, c0+j].
+// TLOAD: GM -> Local Tile (BSTART.TLSU TLOAD). dst[i,j] = src[r0+i, c0+j].
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
 void TLOAD(tile_shape &dst, gm_shape &src) {
   static_assert(
@@ -1778,7 +1778,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
-    "BSTART.TLOAD %D[SrcType]\n"
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -1809,7 +1809,7 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
   const size_t valid_col = result.GetValidCol();
   const size_t valid_row = result.GetValidRow();
   asm volatile(
-    "BSTART.TLOAD %D[SrcType]\n"
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -1838,7 +1838,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
-    "BSTART.TLOAD %D[SrcType]\n"
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -1855,7 +1855,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       : "memory");
 }
 
-// TSTORE: Tile -> GM (BSTART.TSTORE). dst[r0+i, c0+j] = src[i,j].
+// TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 void TSTORE(gm_shape &dst, tile_shape &src) {
   static_assert(tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
@@ -1864,7 +1864,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TSTORE %D[SrcType]\n"
+    "BSTART.TLSU TSTORE, %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2024,7 +2024,7 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TSTORE %D[SrcType]\n"
+    "BSTART.TLSU TSTORE, %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2058,7 +2058,7 @@ PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TSTORE.SPART %D[SrcType]\n"
+    "BSTART.TLSU TSTORE.SPART, %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2086,7 +2086,7 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
   const size_t physicalCol =
       gm_shape::Cols == DYNAMIC ? rowStride : gm_shape::Cols;
   asm volatile(
-    "BSTART.TPREFETCH %D[DataType]\n"
+    "BSTART.TLSU TPREFETCH, %D[DataType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM %[Col], 0, ->lb2\n"
@@ -2141,7 +2141,7 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
                     DstTile::Cols == ExpectedTile::Cols,
                 "MGATHER_CAS tiles must match the resolved ValidRow x ValidCol");
   asm volatile(
-    "BSTART.MGATHER.CAS %D[DataType]\n"
+    "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[Col], ->lb2\n"
@@ -2187,7 +2187,7 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
                     tile_shape_src::LogicalTileBytes,
                 "GMOV source and destination logical sizes must match");
   asm volatile(
-      "BSTART.GMOV %D[DataType]\n"
+      "BSTART.TLSU GMOV, %D[DataType]\n"
       PTO_PE_MASK_ASM("B.IOT %[src], mask=",
                       ", last, ->%[dst]<%Z[TileSize]>\n")
       "B.IOR [%[peer]],[]\n"
@@ -2216,7 +2216,7 @@ TMOV_L2S_INSERT(SharedTile<tile_shape_src> &dst,
       "TMOV.L2S.INSERT logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   dst.SetValidShape(src);
   asm volatile(
-      "BSTART.TMOV.L2S.INSERT %D[DataType]\n"
+      "BSTART.TLSU TMOV.L2S.INSERT, %D[DataType]\n"
       PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
       PTO_PE_MASK_ASM("B.IOT %[src], mask=", ", last\n")
       : [Shared] "=Sr"(dst.handle_ref())
@@ -2247,7 +2247,7 @@ TMOV_L2S_PUBLISH(SharedTile<tile_shape_src> &dst,
       "TMOV.L2S.PUBLISH logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   dst.SetValidShape(src);
   asm volatile(
-      "BSTART.TMOV.L2S.PUBLISH %D[DataType]\n"
+      "BSTART.TLSU TMOV.L2S.PUBLISH, %D[DataType]\n"
       PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
       PTO_PE_MASK_ASM("B.IOT %[src], mask=", ", last\n")
       : [Shared] "=Sr"(dst.handle_ref())
@@ -2277,7 +2277,7 @@ TMOV_S2L_BROADCAST(tile_shape_dst &dst,
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "TMOV.S2L.BROADCAST logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
   asm volatile(
-      "BSTART.TMOV.S2L.BROADCAST %D[DataType]\n"
+      "BSTART.TLSU TMOV.S2L.BROADCAST, %D[DataType]\n"
       PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
       PTO_PE_MASK_ASM("B.IOT mask=", ", last, ->%[dst]<%Z[TileSize]>\n")
       : [dst] "=Tr"(dst.data())
@@ -2297,7 +2297,7 @@ PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "TMOV.S2L.EXTRACT logical Tile size must be 128 B..64 KiB (SizeCode=1..10)");
   asm volatile(
-      "BSTART.TMOV.S2L.EXTRACT %D[DataType]\n"
+      "BSTART.TLSU TMOV.S2L.EXTRACT, %D[DataType]\n"
       PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
       PTO_PE_MASK_ASM("B.IOT mask=", ", last, ->%[dst]<%Z[TileSize]>\n")
       : [dst] "=Tr"(dst.data())
@@ -2320,7 +2320,7 @@ void ACCCVT(tile_shape_out &, tile_shape_in &) {
 namespace pto_matmul_detail {
 
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
-  "BSTART." OPCODE " %D[DataTypeA]\n"                                      \
+  "BSTART.CUBE " OPCODE ", %D[DataTypeA]\n"                                      \
   "B.DATR %D[DataTypeB], rmode0, Zero\n" EXTRA_ATTRS                     \
   "B.DIM %[M], 0, ->lb0\n"                                                   \
   "B.DIM %[N], 0, ->lb1\n"                                                   \
@@ -5008,7 +5008,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
       quant_gpr, lrelu_gpr, M, N, K);
 }
 
-// TMATMUL_BIAS: C = A*B + bias (BSTART.TMATMUL.BIAS).
+// TMATMUL_BIAS: C = A*B + bias (BSTART.CUBE TMATMUL.BIAS).
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b,
@@ -5076,7 +5076,7 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   pto_matmul_detail::emit_matmul_bias_fixp<Attr, SrcMask, OutMask, IorMode>(c, a, b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
-// TMATMUL_MX: C = (A * aScale) * (B * bScale) (BSTART.TMATMULMX).
+// TMATMUL_MX: C = (A * aScale) * (B * bScale) (BSTART.CUBE TMATMULMX).
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
           is_tile_data_v tile_shape_ascale,

@@ -68,7 +68,7 @@ for name, counts in expected.items():
         raise SystemExit(f"missing object-producing function {name}")
     calls = [line for line in body.splitlines()
              if "asm sideeffect" in line and
-             ("BSTART.TMATMULMX" in line or "BSTART.TGEMVMX" in line)]
+             ("BSTART.CUBE TMATMULMX" in line or "BSTART.CUBE TGEMVMX" in line)]
     if len(calls) != 3:
         raise SystemExit(f"{name}: expected 3 MX family calls, got {len(calls)}")
     constraints = [line.split('"', 4)[3] for line in calls]
@@ -79,7 +79,7 @@ for name, counts in expected.items():
 
 post = next(part for part in functions if "carrier_postprocess_all_sources" in part)
 post_calls = [line for line in post.splitlines()
-              if "asm sideeffect" in line and "BSTART.TMATMULMX" in line]
+              if "asm sideeffect" in line and "BSTART.CUBE TMATMULMX" in line]
 if len(post_calls) != 1:
     raise SystemExit("postprocess carrier must emit exactly one MX call")
 constraints = post_calls[0].split('"', 4)[3]
@@ -87,9 +87,9 @@ if constraints.count("^Tr") + constraints.count("^Sr") != 9:
     raise SystemExit("postprocess MX call must bind 2 outputs + 7 present inputs")
 PY
 
-grep -Eq 'BSTART\.TMATMULMX[[:space:]]+FP16' "$OUT/MXScaleVariants.dis"
-grep -Eq 'BSTART\.TMATMULMX\.ACC[[:space:]]+E4M3' "$OUT/MXScaleVariants.dis"
-grep -Eq 'BSTART\.TGEMVMX\.BIAS[[:space:]]+BF16' "$OUT/MXScaleVariants.dis"
+grep -Eq 'BSTART\.CUBE TMATMULMX,[[:space:]]+FP16' "$OUT/MXScaleVariants.dis"
+grep -Eq 'BSTART\.CUBE TMATMULMX\.ACC,[[:space:]]+E4M3' "$OUT/MXScaleVariants.dis"
+grep -Eq 'BSTART\.CUBE TGEMVMX\.BIAS,[[:space:]]+BF16' "$OUT/MXScaleVariants.dis"
 grep -Eq 'B\.IOT[[:space:]]+t#[1-8], t#[1-8], mask=1111' "$OUT/MXScaleVariants.dis"
 
 echo "Linx target C++ frontend MX/effective-shape contract: PASS"
