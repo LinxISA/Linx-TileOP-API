@@ -26,7 +26,7 @@ jobs:
       TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
       TOOLCHAIN_REF: main
       TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
-      LINX_TARGET: linx64-unknown-linux-musl
+      LINX_TARGET: linx64v5-unknown-linux-musl
 
     steps:
       - name: Checkout PR code
@@ -47,6 +47,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             git make cmake ninja-build gcc g++ python3 autoconf m4 \
             pkg-config ccache rsync
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Configure git for component clones
         run: git config --global --add safe.directory '*'
