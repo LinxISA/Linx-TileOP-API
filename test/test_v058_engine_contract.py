@@ -243,7 +243,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_matrix_dtype_and_effective_shape_contract_is_centralized(self) -> None:
         tile = PTO_TILE.read_text(encoding="utf-8")
         self.assertIn(
-            '"B.DATR %D[DataTypeB], rmode0, Zero\\n"', self.header
+            '"B.DATR %D[DataTypeB], RNONE, NOSAT\\n"', self.header
         )
         self.assertIn("matrix_accumulator_type_code", tile)
         self.assertIn("MatrixNumericClass::Unsigned", tile)
@@ -393,7 +393,10 @@ int main() { return sizeof(Bad); }
     def test_tquant_tdequant_use_datr_and_ior(self) -> None:
         # TQUANT/TDEQUANT: B.DATR carries named dtype/RMode and optional sat,
         # and B.IOR carries multiplier+zero-point.
-        self.assertRegex(self.header, r"B\.DATR %D\[__pto_DstType\], rmode[0-7]")
+        self.assertRegex(
+            self.header,
+            r"B\.DATR %D\[__pto_DstType\], (?:RTZ|RTM|RTP|RNA|RTO|RHB)",
+        )
         self.assertRegex(self.header, r"B\.IOR \[%\[Mult\], %\[ZP\]\]")
 
     # --- docs and harness sanity ---

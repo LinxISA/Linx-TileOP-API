@@ -24,12 +24,12 @@ using namespace pto;
   ".endif\n"
 
 #define PTO_RMODE_DATR_ASM(SUFFIX)                                             \
-  ".if %c[RMode] == 2\nB.DATR %D[__pto_DstType], rmode2" SUFFIX                  \
-  ".elseif %c[RMode] == 3\nB.DATR %D[__pto_DstType], rmode3" SUFFIX              \
-  ".elseif %c[RMode] == 4\nB.DATR %D[__pto_DstType], rmode4" SUFFIX              \
-  ".elseif %c[RMode] == 5\nB.DATR %D[__pto_DstType], rmode5" SUFFIX              \
-  ".elseif %c[RMode] == 6\nB.DATR %D[__pto_DstType], rmode6" SUFFIX              \
-  ".elseif %c[RMode] == 7\nB.DATR %D[__pto_DstType], rmode7" SUFFIX              \
+  ".if %c[RMode] == 2\nB.DATR %D[__pto_DstType], RTZ" SUFFIX                    \
+  ".elseif %c[RMode] == 3\nB.DATR %D[__pto_DstType], RTM" SUFFIX                \
+  ".elseif %c[RMode] == 4\nB.DATR %D[__pto_DstType], RTP" SUFFIX                \
+  ".elseif %c[RMode] == 5\nB.DATR %D[__pto_DstType], RNA" SUFFIX                \
+  ".elseif %c[RMode] == 6\nB.DATR %D[__pto_DstType], RTO" SUFFIX                \
+  ".elseif %c[RMode] == 7\nB.DATR %D[__pto_DstType], RHB" SUFFIX                \
   ".endif\n"
 
 template <class...>
@@ -153,7 +153,7 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
   const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TEPL 0, 27, %D1\n"
-    "B.DATR %D2, rmode0\n"
+    "B.DATR %D2, RNONE\n"
     "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
     "B.DIM %5, 0, ->lb0\n"
     "B.DIM %6, 0, ->lb1\n"
@@ -679,19 +679,19 @@ struct linx_valid_sat {
     } else if constexpr ((RMODE) == LINX_RDN && (SAT) == LINX_NOSAT) {        \
       LINX_CVT_EMIT_NORMAL(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC,                \
-                           "RDN", "nosat");                                   \
+                           "RTM", "nosat");                                   \
     } else if constexpr ((RMODE) == LINX_RDN && (SAT) == LINX_SAT) {          \
       LINX_CVT_EMIT_NORMAL(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC,                \
-                           "RDN", "sat");                                     \
+                           "RTM", "sat");                                     \
     } else if constexpr ((RMODE) == LINX_RUP && (SAT) == LINX_NOSAT) {        \
       LINX_CVT_EMIT_NORMAL(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC,                \
-                           "RUP", "nosat");                                   \
+                           "RTP", "nosat");                                   \
     } else if constexpr ((RMODE) == LINX_RUP && (SAT) == LINX_SAT) {          \
       LINX_CVT_EMIT_NORMAL(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC,                \
-                           "RUP", "sat");                                     \
+                           "RTP", "sat");                                     \
     } else if constexpr ((RMODE) == LINX_RNA && (SAT) == LINX_NOSAT) {        \
       LINX_CVT_EMIT_NORMAL(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC,                \
@@ -752,19 +752,19 @@ struct linx_valid_sat {
     } else if constexpr ((RMODE) == LINX_RDN && (SAT) == LINX_NOSAT) {        \
       LINX_CVT_EMIT_PACKED(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC0, SRC1,         \
-                           "RDN", "nosat");                                   \
+                           "RTM", "nosat");                                   \
     } else if constexpr ((RMODE) == LINX_RDN && (SAT) == LINX_SAT) {          \
       LINX_CVT_EMIT_PACKED(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC0, SRC1,         \
-                           "RDN", "sat");                                     \
+                           "RTM", "sat");                                     \
     } else if constexpr ((RMODE) == LINX_RUP && (SAT) == LINX_NOSAT) {        \
       LINX_CVT_EMIT_PACKED(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC0, SRC1,         \
-                           "RUP", "nosat");                                   \
+                           "RTP", "nosat");                                   \
     } else if constexpr ((RMODE) == LINX_RUP && (SAT) == LINX_SAT) {          \
       LINX_CVT_EMIT_PACKED(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC0, SRC1,         \
-                           "RUP", "sat");                                     \
+                           "RTP", "sat");                                     \
     } else if constexpr ((RMODE) == LINX_RNA && (SAT) == LINX_NOSAT) {        \
       LINX_CVT_EMIT_PACKED(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC0, SRC1,         \
@@ -1356,13 +1356,13 @@ enum BlkvBf16Sat {
     } else if constexpr ((RMODE) == 2 && (SAT) == 1) {                        \
       EMIT(__VA_ARGS__, "RTZ", "sat");                                        \
     } else if constexpr ((RMODE) == 3 && (SAT) == 0) {                        \
-      EMIT(__VA_ARGS__, "RDN", "nosat");                                      \
+      EMIT(__VA_ARGS__, "RTM", "nosat");                                      \
     } else if constexpr ((RMODE) == 3 && (SAT) == 1) {                        \
-      EMIT(__VA_ARGS__, "RDN", "sat");                                        \
+      EMIT(__VA_ARGS__, "RTM", "sat");                                        \
     } else if constexpr ((RMODE) == 4 && (SAT) == 0) {                        \
-      EMIT(__VA_ARGS__, "RUP", "nosat");                                      \
+      EMIT(__VA_ARGS__, "RTP", "nosat");                                      \
     } else if constexpr ((RMODE) == 4 && (SAT) == 1) {                        \
-      EMIT(__VA_ARGS__, "RUP", "sat");                                        \
+      EMIT(__VA_ARGS__, "RTP", "sat");                                        \
     } else if constexpr ((RMODE) == 5 && (SAT) == 0) {                        \
       EMIT(__VA_ARGS__, "RNA", "nosat");                                      \
     } else if constexpr ((RMODE) == 5 && (SAT) == 1) {                        \
@@ -2408,7 +2408,7 @@ namespace pto_matmul_detail {
 
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
   "BSTART.CUBE " OPCODE ", %D[DataTypeA]\n"                                      \
-  "B.DATR %D[DataTypeB], rmode0, Zero\n" EXTRA_ATTRS                     \
+  "B.DATR %D[DataTypeB], RNONE, NOSAT\n" EXTRA_ATTRS                     \
   "B.DIM %[M], 0, ->lb0\n"                                                   \
   "B.DIM %[N], 0, ->lb1\n"                                                   \
   "B.DIM %[K], 0, ->lb2\n"
@@ -7747,7 +7747,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
       "BSTART.TEPL 3, 10, %D[SType]\n"
       // LLVM currently names encoded RMode zero RNONE. PTO ISA 0.58.3 defines
       // that encoding as the operation default, which is RNE for TQUANT.
-      "B.DATR %D[__pto_DstType], rmode0, sat\n"
+      "B.DATR %D[__pto_DstType], RNONE, sat\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
@@ -7765,7 +7765,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
   } else if constexpr (Mode == RoundMode::RNE) {
     asm volatile(
       "BSTART.TEPL 3, 10, %D[SType]\n"
-      "B.DATR %D[__pto_DstType], rmode0\n"
+      "B.DATR %D[__pto_DstType], RNONE\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
