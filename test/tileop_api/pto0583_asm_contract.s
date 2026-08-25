@@ -8,7 +8,7 @@ B.DATR ND2M32.normal, Zero
 BSTART.TLSU TSTORE, FP32
 B.DATR N82ND.normal, Null
 BSTART.CUBE TMATMUL, FP32
-B.FPATR 0, 0, 0, 0, 0, 0, 0
+B.FPATR 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 B.IOR [a0, a1], []
 B.IOT t#1, mask=1100, last, ->m<64KB>
 B.IOS S1, mask=1111

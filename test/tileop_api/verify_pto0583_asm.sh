@@ -23,8 +23,8 @@ require_disassembly() {
   fi
 }
 
-require_disassembly 'B\.FPATR[[:space:]]+0, 0, 0, 0, 0, 0, 0' \
-  'seven-field B.FPATR'
+require_disassembly 'B\.FPATR[[:space:]]+0, 0, 0, 0, 0, 0, 0, 0, 0, 0' \
+  'ten-field B.FPATR'
 require_disassembly 'B\.IOT[[:space:]]+t#1, mask=1100, last,.*->m<64KB>' \
   'Local SizeCode=10 form'
 require_disassembly 'B\.IOS[[:space:]]+mask=1111, ->S255<256KB>' \

@@ -67,6 +67,15 @@ static_assert(tile_type_traits<typename Shared256K::TileDType>::TilesizeCode ==
 constexpr FixpAttr transposed = FixpAttr::keep_acc().transpose_a().transpose_b();
 static_assert(transposed.TransA && transposed.TransB);
 static_assert(transposed.encoding() == 0x000021a3u);
+constexpr FixpAttr cscaled = FixpAttr::keep_acc().cscale_enable();
+static_assert(cscaled.CScaleEn);
+static_assert(cscaled.encoding() == 0x00002223u);
+using CScaleTile = Tile<Location::Vec, uint8_t, 32, 32, BLayout::CubeM32,
+                        32, 1>;
+using CScaleOptions = decltype(
+    fixp::keep_acc().cscale(std::declval<CScaleTile &>()));
+static_assert(CScaleOptions::Attr.CScaleEn);
+static_assert(std::is_same_v<typename CScaleOptions::CScaleTile, CScaleTile>);
 constexpr auto transposed_options =
     fixp::keep_acc().transpose_a().transpose_b();
 static_assert(transposed_options.Attr.TransA && transposed_options.Attr.TransB);

@@ -134,6 +134,7 @@ struct FixpAttr {
   bool MaxAbsEn = false;
   bool TransA = false;
   bool TransB = false;
+  bool CScaleEn = false;
 
   static constexpr FixpAttr keep_acc(
       FixpReluMode ReluMode = FixpReluMode::None) {
@@ -170,6 +171,12 @@ struct FixpAttr {
     return Attr;
   }
 
+  constexpr FixpAttr cscale_enable(bool Enable = true) const {
+    FixpAttr Attr = *this;
+    Attr.CScaleEn = Enable;
+    return Attr;
+  }
+
   constexpr uint32_t encoding() const {
     return (static_cast<uint32_t>(PreQuant) << 26) |
            (static_cast<uint32_t>(Relu) << 23) |
@@ -179,7 +186,8 @@ struct FixpAttr {
            (static_cast<uint32_t>(RowMaxInit) << 16) |
            (static_cast<uint32_t>(MaxAbsEn) << 15) |
            (static_cast<uint32_t>(TransB) << 8) |
-           (static_cast<uint32_t>(TransA) << 7) | 0x2023;
+           (static_cast<uint32_t>(TransA) << 7) |
+           (static_cast<uint32_t>(CScaleEn) << 9) | 0x2023;
   }
 
   constexpr bool operator==(const FixpAttr &) const = default;
@@ -1421,7 +1429,7 @@ template <int GroupN> constexpr uint8_t group_n_code() {
 template <FixpAttr Attr_, typename QuantTile_ = NoOperand,
           typename ReluTile_ = NoOperand, typename RowMaxIn_ = NoOperand,
           typename RowMaxOut_ = NoOperand,
-          typename GroupMaxOut_ = NoOperand>
+          typename GroupMaxOut_ = NoOperand, typename CScaleTile_ = NoOperand>
 struct Options {
   static constexpr FixpAttr Attr = Attr_;
   using QuantTile = QuantTile_;
@@ -1429,6 +1437,7 @@ struct Options {
   using RowMaxIn = RowMaxIn_;
   using RowMaxOut = RowMaxOut_;
   using GroupMaxOut = GroupMaxOut_;
+  using CScaleTile = CScaleTile_;
 
   uint64_t QuantDescriptor = 0;
   uint64_t LReluDescriptor = 0;
@@ -1437,28 +1446,40 @@ struct Options {
   RowMaxIn *RowIn = nullptr;
   RowMaxOut *RowOut = nullptr;
   GroupMaxOut *GroupOut = nullptr;
+  CScaleTile *CScale = nullptr;
 
   constexpr Options() = default;
 
   constexpr Options(uint64_t QuantDescriptor, uint64_t LReluDescriptor,
                     QuantTile *Quant, ReluTile *Relu, RowMaxIn *RowIn,
-                    RowMaxOut *RowOut, GroupMaxOut *GroupOut)
+                    RowMaxOut *RowOut, GroupMaxOut *GroupOut,
+                    CScaleTile *CScale = nullptr)
       : QuantDescriptor(QuantDescriptor), LReluDescriptor(LReluDescriptor),
         Quant(Quant), Relu(Relu), RowIn(RowIn), RowOut(RowOut),
-        GroupOut(GroupOut) {}
+        GroupOut(GroupOut), CScale(CScale) {}
 
   template <bool Enable = true> constexpr auto transpose_a() const {
     constexpr FixpAttr NewAttr = Attr.transpose_a(Enable);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
   }
 
   template <bool Enable = true> constexpr auto transpose_b() const {
     constexpr FixpAttr NewAttr = Attr.transpose_b(Enable);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
+  }
+
+  template <bool Enable = true> constexpr auto cscale_enable() const {
+    constexpr FixpAttr NewAttr = Attr.cscale_enable(Enable);
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
   }
 
   constexpr auto relu() const {
@@ -1466,8 +1487,9 @@ struct Options {
                   "FPATR config ReLU mode was already selected");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::Relu);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
   }
 
   constexpr auto lrelu(uint64_t Descriptor) const {
@@ -1475,8 +1497,9 @@ struct Options {
                   "FPATR config ReLU mode was already selected");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::LRelu);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, Descriptor, Quant, Relu,
-                                RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, Descriptor, Quant,
+                                            Relu, RowIn, RowOut, GroupOut,
+                                            CScale);
   }
 
   template <is_local_tile_v Tile>
@@ -1487,8 +1510,9 @@ struct Options {
                   "FPATR config PReLU Tile was already supplied");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::PRelu);
     return Options<NewAttr, QuantTile, Tile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant,
-                                &Parameter, RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, &Parameter, RowIn, RowOut,
+                                            GroupOut, CScale);
   }
 
   template <is_local_tile_v Tile>
@@ -1500,8 +1524,9 @@ struct Options {
                   "FPATR config RowMax operands were already supplied");
     constexpr FixpAttr NewAttr = with_row_max(Attr, false);
     return Options<NewAttr, QuantTile, ReluTile, NoOperand, Tile,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                nullptr, &Output, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, nullptr, &Output,
+                                            GroupOut, CScale);
   }
 
   template <is_local_tile_v InputTile, is_local_tile_v OutputTile>
@@ -1513,8 +1538,9 @@ struct Options {
                   "FPATR config RowMax operands were already supplied");
     constexpr FixpAttr NewAttr = with_row_max(Attr, true);
     return Options<NewAttr, QuantTile, ReluTile, InputTile, OutputTile,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                &Input, &Output, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, &Input, &Output,
+                                            GroupOut, CScale);
   }
 
   template <int GroupN, is_local_tile_v Tile>
@@ -1525,8 +1551,9 @@ struct Options {
                   "FPATR config GroupMax output was already supplied");
     constexpr FixpAttr NewAttr =
         with_group_max(Attr, group_n_code<GroupN>());
-    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut, Tile>(
-        QuantDescriptor, LReluDescriptor, Quant, Relu, RowIn, RowOut, &Output);
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut, Tile,
+                   CScaleTile>(QuantDescriptor, LReluDescriptor, Quant, Relu,
+                               RowIn, RowOut, &Output, CScale);
   }
 
   constexpr auto max_abs() const {
@@ -1534,8 +1561,19 @@ struct Options {
                   "FPATR config max_abs requires RowMax or GroupMax");
     constexpr FixpAttr NewAttr = with_max_abs(Attr);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
+  }
+
+  template <is_local_tile_v Tile>
+  constexpr auto cscale(Tile &Scale) const {
+    static_assert(std::is_same_v<CScaleTile, NoOperand>,
+                  "FPATR CScale tile was already supplied");
+    constexpr FixpAttr NewAttr = Attr.cscale_enable();
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut, Tile>(QuantDescriptor, LReluDescriptor, Quant,
+                                      Relu, RowIn, RowOut, GroupOut, &Scale);
   }
 };
 
@@ -1590,9 +1628,10 @@ template <is_local_tile_v Tile> constexpr auto s8(Tile &QuantParameter) {
 
 template <typename T> struct is_options : std::false_type {};
 template <FixpAttr Attr, typename QuantTile, typename ReluTile,
-          typename RowMaxIn, typename RowMaxOut, typename GroupMaxOut>
+          typename RowMaxIn, typename RowMaxOut, typename GroupMaxOut,
+          typename CScaleTile>
 struct is_options<Options<Attr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                          GroupMaxOut>> : std::true_type {};
+                          GroupMaxOut, CScaleTile>> : std::true_type {};
 
 template <typename T>
 concept is_options_v = is_options<std::remove_cv_t<T>>::value;

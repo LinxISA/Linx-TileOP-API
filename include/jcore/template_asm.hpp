@@ -2430,7 +2430,7 @@ inline size_t matrix_valid_col(const Matrix &matrix) {
   return matrix.GetValidCol();
 }
 
-// PTO_FIXP_ATTR / PTO_FIXP_ATTR_INPUTS emit the B.FPATR line and its nine
+// PTO_FIXP_ATTR / PTO_FIXP_ATTR_INPUTS emit the B.FPATR line and its ten
 // immediate operands. Every TMATMUL/TMATMULMX CUBE bundle carries exactly one
 // B.FPATR after B.DATR, so these are shared by the whole family, not just the
 // .FIXP variants. The macros reference the template parameter Attr, so the
@@ -2440,11 +2440,14 @@ inline size_t matrix_valid_col(const Matrix &matrix) {
 // PTO-ISA v0.58 B.FPATR fields:
 //   PreQuantMode(6b@26) ReluMode(3b@23) GroupNCode(4b@19, <=9)
 //   RowMaxEn(1b@18) GroupMaxEn(1b@17) RowMaxInit(1b@16) MaxAbsEn(1b@15)
-//   TransB(1b@8) TransA(1b@7).  Transpose applies only when the corresponding
-//   primary matrix operand is cooperative Shared storage.
+//   TransB(1b@8) TransA(1b@7) CScaleEn(1b@9), with bit10 reserved zero.
+//   Transpose applies only when the corresponding primary matrix operand is
+//   cooperative Shared storage. CScaleEn is an attribute bit; the CScale
+//   operand/binder is a separate follow-up API.
 #define PTO_FIXP_ATTR \
   "B.FPATR %c[PreQuant], %c[ReluMode], %c[GroupNCode], %c[RowMaxEn], " \
-  "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn], %c[TransA], %c[TransB]\n"
+  "%c[GroupMaxEn], %c[RowMaxInit], %c[MaxAbsEn], %c[TransA], %c[TransB], " \
+  "%c[CScaleEn]\n"
 
 #define PTO_FIXP_ATTR_INPUTS \
   [PreQuant] "i"(static_cast<uint8_t>(Attr.PreQuant)), \
@@ -2452,7 +2455,8 @@ inline size_t matrix_valid_col(const Matrix &matrix) {
   [GroupNCode] "i"(Attr.GroupNCode), [RowMaxEn] "i"(Attr.RowMaxEn), \
   [GroupMaxEn] "i"(Attr.GroupMaxEn), \
   [RowMaxInit] "i"(Attr.RowMaxInit), [MaxAbsEn] "i"(Attr.MaxAbsEn), \
-  [TransA] "i"(Attr.TransA), [TransB] "i"(Attr.TransB)
+  [TransA] "i"(Attr.TransA), [TransB] "i"(Attr.TransB), \
+  [CScaleEn] "i"(Attr.CScaleEn)
 
 #define PTO_MX_SCALE_INPUTS \
   [HasScaleA] "i"(HasScaleA), [HasScaleB] "i"(HasScaleB)
@@ -2547,6 +2551,24 @@ constexpr void validate_matrix_accumulator_contract() {
   if constexpr (Attr.PreQuant == FixpPreQuantMode::None)
     static_assert(Acc::LogicalTileBytes == Dst::LogicalTileBytes,
                   "Unconverted matrix C and D capacities must match");
+}
+
+template <FixpAttr Attr, typename Acc, typename CScale>
+constexpr void validate_cscale_contract() {
+  if constexpr (Attr.CScaleEn) {
+    static_assert(type_traits<typename Acc::DType>::TypeCode == __type_fp32,
+                  "CScaleEn requires an FP32 accumulator C");
+    static_assert(!is_shared_tile_v<CScale>,
+                  "CScale must be a Local mathematical source");
+    static_assert(type_traits<typename CScale::DType>::TypeCode == __type_uint8,
+                  "CScale dtype must be U8");
+    static_assert(CScale::IsCubeLayout &&
+                      CScale::BFractal == BLayout::CubeM32,
+                  "CScale must use the CUBE_M32 CELL layout");
+    static_assert(CScale::ValidRow == Acc::ValidRow &&
+                      CScale::ValidCol == 1,
+                  "CScale valid shape must be M x 1");
+  }
 }
 
 template <FixpAttr Attr, typename Bias, typename A, typename B, bool MX = false>
@@ -2903,133 +2925,147 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   "B.IOT %[RowIn], %[QuantTile], mask=1111\n" \
   "B.IOT %[ReluTile], mask=1111\n"
 
+#define PTO_FIXP_ACC_CSCALE \
+  ".if %c[CScaleEn]\n" \
+  "B.IOT %[CScaleOperand], mask=1111\n" \
+  ".endif\n"
+
+#define PTO_FIXP_ACC_PPSRC_0 PTO_FIXP_ACC_CSCALE PTO_FIXP_PPSRC_0
+#define PTO_FIXP_ACC_PPSRC_1 PTO_FIXP_ACC_CSCALE PTO_FIXP_PPSRC_1
+#define PTO_FIXP_ACC_PPSRC_2 PTO_FIXP_ACC_CSCALE PTO_FIXP_PPSRC_2
+#define PTO_FIXP_ACC_PPSRC_3 PTO_FIXP_ACC_CSCALE PTO_FIXP_PPSRC_3
+#define PTO_FIXP_ACC_PPSRC_4 PTO_FIXP_ACC_CSCALE PTO_FIXP_PPSRC_4
+#define PTO_FIXP_ACC_PPSRC_5 PTO_FIXP_ACC_CSCALE PTO_FIXP_PPSRC_5
+#define PTO_FIXP_ACC_PPSRC_6 PTO_FIXP_ACC_CSCALE PTO_FIXP_PPSRC_6
+#define PTO_FIXP_ACC_PPSRC_7 PTO_FIXP_ACC_CSCALE PTO_FIXP_PPSRC_7
+
 #define PTO_FIXP_ACC_L_SRC_0 \
   "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
-  PTO_FIXP_PPSRC_0
+  PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_ACC_L_SRC_1 \
   "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
-  PTO_FIXP_PPSRC_1
+  PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_ACC_L_SRC_2 \
   "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
-  PTO_FIXP_PPSRC_2
+  PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_ACC_L_SRC_3 \
   "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
-  PTO_FIXP_PPSRC_3
+  PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_ACC_L_SRC_4 \
   "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
-  PTO_FIXP_PPSRC_4
+  PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_ACC_L_SRC_5 \
   "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
-  PTO_FIXP_PPSRC_5
+  PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_ACC_L_SRC_6 \
   "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
-  PTO_FIXP_PPSRC_6
+  PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_ACC_L_SRC_7 \
   "B.IOT %[C], mask=1111\n" "B.IOT %[A], %[B], mask=1111\n" \
-  PTO_FIXP_PPSRC_7
+  PTO_FIXP_ACC_PPSRC_7
 
 #define PTO_FIXP_ACC_SB_SRC_0 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  PTO_FIXP_PPSRC_0
+  PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_ACC_SB_SRC_1 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  PTO_FIXP_PPSRC_1
+  PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_ACC_SB_SRC_2 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  PTO_FIXP_PPSRC_2
+  PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_ACC_SB_SRC_3 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  PTO_FIXP_PPSRC_3
+  PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_ACC_SB_SRC_4 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  PTO_FIXP_PPSRC_4
+  PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_ACC_SB_SRC_5 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  PTO_FIXP_PPSRC_5
+  PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_ACC_SB_SRC_6 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  PTO_FIXP_PPSRC_6
+  PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_ACC_SB_SRC_7 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A]\n" \
-  PTO_FIXP_PPSRC_7
+  PTO_FIXP_ACC_PPSRC_7
 
 #define PTO_FIXP_ACC_SA_SRC_0 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
-  PTO_FIXP_PPSRC_0
+  PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_ACC_SA_SRC_1 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
-  PTO_FIXP_PPSRC_1
+  PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_ACC_SA_SRC_2 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
-  PTO_FIXP_PPSRC_2
+  PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_ACC_SA_SRC_3 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
-  PTO_FIXP_PPSRC_3
+  PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_ACC_SA_SRC_4 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
-  PTO_FIXP_PPSRC_4
+  PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_ACC_SA_SRC_5 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
-  PTO_FIXP_PPSRC_5
+  PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_ACC_SA_SRC_6 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
-  PTO_FIXP_PPSRC_6
+  PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_ACC_SA_SRC_7 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B]\n" \
-  PTO_FIXP_PPSRC_7
+  PTO_FIXP_ACC_PPSRC_7
 
 #define PTO_FIXP_ACC_SAB_SRC_0 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
-  PTO_FIXP_PPSRC_0
+  PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_ACC_SAB_SRC_1 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
-  PTO_FIXP_PPSRC_1
+  PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_ACC_SAB_SRC_2 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
-  PTO_FIXP_PPSRC_2
+  PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_ACC_SAB_SRC_3 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
-  PTO_FIXP_PPSRC_3
+  PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_ACC_SAB_SRC_4 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
-  PTO_FIXP_PPSRC_4
+  PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_ACC_SAB_SRC_5 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
-  PTO_FIXP_PPSRC_5
+  PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_ACC_SAB_SRC_6 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
-  PTO_FIXP_PPSRC_6
+  PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_ACC_SAB_SRC_7 \
   "B.IOT %[C], mask=1111\n" "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
-  PTO_FIXP_PPSRC_7
+  PTO_FIXP_ACC_PPSRC_7
 
 #define PTO_FIXP_BIAS_L_SRC_0 \
   "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
@@ -3294,6 +3330,144 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_SAB_SRC_7 \
   "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
+
+// CScale-aware MX ACC source streams keep the CScale source after all matrix and MX scale sources.
+#define PTO_FIXP_MX_ACC_L_SRC_0 \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_0
+
+#define PTO_FIXP_MX_ACC_L_SRC_1 \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_1
+
+#define PTO_FIXP_MX_ACC_L_SRC_2 \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_2
+
+#define PTO_FIXP_MX_ACC_L_SRC_3 \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_3
+
+#define PTO_FIXP_MX_ACC_L_SRC_4 \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_4
+
+#define PTO_FIXP_MX_ACC_L_SRC_5 \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_5
+
+#define PTO_FIXP_MX_ACC_L_SRC_6 \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_6
+
+#define PTO_FIXP_MX_ACC_L_SRC_7 \
+  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_7
+
+#define PTO_FIXP_MX_ACC_SB_SRC_0 \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_0
+
+#define PTO_FIXP_MX_ACC_SB_SRC_1 \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_1
+
+#define PTO_FIXP_MX_ACC_SB_SRC_2 \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_2
+
+#define PTO_FIXP_MX_ACC_SB_SRC_3 \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_3
+
+#define PTO_FIXP_MX_ACC_SB_SRC_4 \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_4
+
+#define PTO_FIXP_MX_ACC_SB_SRC_5 \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_5
+
+#define PTO_FIXP_MX_ACC_SB_SRC_6 \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_6
+
+#define PTO_FIXP_MX_ACC_SB_SRC_7 \
+  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_7
+
+#define PTO_FIXP_MX_ACC_SA_SRC_0 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_0
+
+#define PTO_FIXP_MX_ACC_SA_SRC_1 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_1
+
+#define PTO_FIXP_MX_ACC_SA_SRC_2 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_2
+
+#define PTO_FIXP_MX_ACC_SA_SRC_3 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_3
+
+#define PTO_FIXP_MX_ACC_SA_SRC_4 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_4
+
+#define PTO_FIXP_MX_ACC_SA_SRC_5 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_5
+
+#define PTO_FIXP_MX_ACC_SA_SRC_6 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_6
+
+#define PTO_FIXP_MX_ACC_SA_SRC_7 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_7
+
+#define PTO_FIXP_MX_ACC_SAB_SRC_0 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_0
+
+#define PTO_FIXP_MX_ACC_SAB_SRC_1 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_1
+
+#define PTO_FIXP_MX_ACC_SAB_SRC_2 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_2
+
+#define PTO_FIXP_MX_ACC_SAB_SRC_3 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_3
+
+#define PTO_FIXP_MX_ACC_SAB_SRC_4 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_4
+
+#define PTO_FIXP_MX_ACC_SAB_SRC_5 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_5
+
+#define PTO_FIXP_MX_ACC_SAB_SRC_6 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_6
+
+#define PTO_FIXP_MX_ACC_SAB_SRC_7 \
+  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  PTO_FIXP_ACC_PPSRC_7
+
 
 #define PTO_FIXP_MX_BIAS_L_SRC_0 \
   "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
@@ -3762,7 +3936,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_ACC_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [B] "Tr"(b.data()),         \
-        PTO_PP_INPUTS_##SRC \
+        [CScaleOperand] "Tr"(cscale.data()), PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
         PTO_FIXP_ATTR_INPUTS,                                                   \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                          \
@@ -3777,7 +3951,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_ACC_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR          \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()), \
-        PTO_PP_INPUTS_##SRC \
+        [CScaleOperand] "Tr"(cscale.data()), PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
         PTO_FIXP_ATTR_INPUTS,                                                   \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                          \
@@ -3792,7 +3966,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_ACC_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR          \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()), \
-        PTO_PP_INPUTS_##SRC \
+        [CScaleOperand] "Tr"(cscale.data()), PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
         PTO_FIXP_ATTR_INPUTS,                                                   \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                          \
@@ -3807,7 +3981,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       PTO_FIXP_ACC_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR         \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()), \
-        PTO_PP_INPUTS_##SRC \
+        [CScaleOperand] "Tr"(cscale.data()), PTO_PP_INPUTS_##SRC \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr),               \
         PTO_FIXP_ATTR_INPUTS,                                                   \
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K),                          \
@@ -3855,7 +4029,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_EMIT_LOCAL(SRC, OUT, IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
-      PTO_FIXP_MX_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
+      PTO_FIXP_MX_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR       \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
         PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -3864,7 +4038,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_EMIT_SHARED_B(SRC, OUT, IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
-      PTO_FIXP_MX_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
+      PTO_FIXP_MX_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR      \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
         PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -3873,7 +4047,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_EMIT_SHARED_A(SRC, OUT, IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
-      PTO_FIXP_MX_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
+      PTO_FIXP_MX_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR      \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
         PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -3882,7 +4056,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_EMIT_SHARED_AB(SRC, OUT, IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
-      PTO_FIXP_MX_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
+      PTO_FIXP_MX_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR          \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
       : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
         PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -3892,9 +4066,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
       "B.IOT %[C], mask=1111\n"                                                      \
-      PTO_FIXP_MX_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
+      PTO_FIXP_MX_ACC_L_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
+      : [C] "Tr"(c.data()), [CScaleOperand] "Tr"(cscale.data()), [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
         PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
@@ -3902,9 +4076,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
       "B.IOT %[C], mask=1111\n"                                                      \
-      PTO_FIXP_MX_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
+      PTO_FIXP_MX_ACC_SB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
+      : [C] "Tr"(c.data()), [CScaleOperand] "Tr"(cscale.data()), [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
         PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
@@ -3912,9 +4086,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
       "B.IOT %[C], mask=1111\n"                                                      \
-      PTO_FIXP_MX_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
+      PTO_FIXP_MX_ACC_SA_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
+      : [C] "Tr"(c.data()), [CScaleOperand] "Tr"(cscale.data()), [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
         PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
@@ -3922,9 +4096,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
       "B.IOT %[C], mask=1111\n"                                                      \
-      PTO_FIXP_MX_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR           \
+      PTO_FIXP_MX_ACC_SAB_SRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR     \
       : PTO_FIXP_OUT_DECL_##OUT                                               \
-      : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
+      : [C] "Tr"(c.data()), [CScaleOperand] "Tr"(cscale.data()), [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
         PTO_PP_INPUTS_##SRC [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
@@ -4213,13 +4387,16 @@ decltype(auto) select_fixp_operand(Pointer *PointerValue, Dummy &DummyValue);
 template <FixpAttr Attr, int SrcMask, int OutMask, int IorMode,
           typename Dst, typename C_, typename A, typename B, typename RowIn,
           typename QuantTile,
-          typename ReluTile, typename RowOut, typename GroupOut>
+          typename ReluTile, typename RowOut, typename GroupOut,
+          typename CScale>
 PTO_SHARED_INLINE void emit_matmul_acc_fixp(
-    Dst &dst, C_ &c, A &a, B &b, RowIn &row_in, QuantTile &quant_tile,
+    Dst &dst, C_ &c, A &a, B &b, CScale &cscale, RowIn &row_in,
+    QuantTile &quant_tile,
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_accumulator_contract<Attr, Dst, C_, A, B>();
+  validate_cscale_contract<Attr, C_, CScale>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -4295,9 +4472,11 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
 template <FixpAttr Attr, int ScaleMask, int SrcMask, int OutMask, int IorMode,
           typename Dst, typename C_, typename A, typename ScaleA, typename B,
           typename ScaleB, typename RowIn, typename QuantTile,
-          typename ReluTile, typename RowOut, typename GroupOut>
+          typename ReluTile, typename RowOut, typename GroupOut,
+          typename CScale>
 PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
     Dst &dst, C_ &c, A &a, ScaleA &ascale, B &b, ScaleB &bscale,
+    CScale &cscale,
     RowIn &row_in, QuantTile &quant_tile, ReluTile &relu_tile,
     RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
@@ -4307,6 +4486,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
   constexpr bool HasScaleB = (ScaleMask & 2) != 0;
   validate_matrix_contract<Attr, Dst, A, B, true>();
   validate_matrix_accumulator_contract<Attr, Dst, C_, A, B, true>();
+  validate_cscale_contract<Attr, C_, CScale>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
@@ -4849,6 +5029,8 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                 "TMATMUL_ACC supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
+  static_assert(!Attr.CScaleEn,
+                "CScale requires the ACC overload with a CScale tile");
   pto_matmul_detail::MatmulShape __shape =
       pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
   size_t M = __shape.M;
@@ -4920,11 +5102,13 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
   auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+  auto &cscale = pto_matmul_detail::select_fixp_operand<Attr.CScaleEn>(
+      options.CScale, c);
 
   volatile uint64_t quant_gpr = options.QuantDescriptor;
   volatile uint64_t lrelu_gpr = options.LReluDescriptor;
   pto_matmul_detail::emit_matmul_acc_fixp<Attr, SrcMask, OutMask, IorMode>(
-      d, c, a, b, row_in, quant_tile, relu_tile, row_out, group_out,
+      d, c, a, b, cscale, row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
 }
 
@@ -5263,6 +5447,8 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
                 "TMATMUL_MX_ACC supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
+  static_assert(!Attr.CScaleEn,
+                "CScale requires the MX_ACC overload with a CScale tile");
   pto_matmul_detail::MatmulShape __shape =
       pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
   size_t M = __shape.M;
@@ -5317,10 +5503,14 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
   auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+  auto &cscale = pto_matmul_detail::select_fixp_operand<Attr.CScaleEn>(
+      options.CScale, c);
 
   volatile uint64_t quant_gpr = options.QuantDescriptor;
   volatile uint64_t lrelu_gpr = options.LReluDescriptor;
-  pto_matmul_detail::emit_matmul_mx_acc_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(d, c, a, scale_a, b, scale_b, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
+  pto_matmul_detail::emit_matmul_mx_acc_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
+      d, c, a, scale_a, b, scale_b, cscale, row_in, quant_tile, relu_tile,
+      row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
