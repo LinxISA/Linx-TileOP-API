@@ -2374,6 +2374,10 @@ template <typename T>
 inline constexpr bool is_cube_m_layout_v =
     T::BFractal == BLayout::CubeM16 || T::BFractal == BLayout::CubeM32;
 
+constexpr int cooperative_group_m_rows_per_pe(int group_m) {
+  return group_m <= 64 ? 16 : 32;
+}
+
 template <FixpAttr Attr, typename Dst, typename A, typename B, bool MX = false>
 constexpr void validate_matrix_contract() {
   static_assert(matrix_input_pair_legal<A, B, MX>(),
@@ -2423,8 +2427,19 @@ constexpr void validate_matrix_contract() {
       ? B::ValidRow : B::ValidCol;
   static_assert(AValidCols == BValidRows,
                 "Matrix effective valid K dimensions must match");
-  static_assert(Dst::ValidRow == AValidRows && Dst::ValidCol == BValidCols,
-                "Matrix D valid shape must match effective M x N");
+  if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
+    static_assert(AValidRows >= 1 && AValidRows <= 128,
+                  "Cooperative Matrix group_M must be in the range 1..128");
+    constexpr int RowsPerPE = cooperative_group_m_rows_per_pe(AValidRows);
+    static_assert(Dst::ValidRow == RowsPerPE &&
+                      Dst::ValidCol == BValidCols,
+                  "Cooperative Matrix D valid shape must match the per-PE "
+                  "M block (16 rows for group_M<=64, otherwise 32) x N");
+  } else {
+    static_assert(Dst::ValidRow == AValidRows &&
+                      Dst::ValidCol == BValidCols,
+                  "Matrix D valid shape must match effective M x N");
+  }
 }
 
 template <FixpAttr Attr, typename Dst, typename Acc, typename A, typename B,
@@ -2568,9 +2583,10 @@ constexpr void validate_gemv_contract() {
                 "TGEMV D.ValidCol must equal Mtx.ValidCol");
 }
 
-// Shared A/B publication quarters do not multiply logical M/N/K. These
-// helpers centralize the shape decision so basic/ACC/BIAS/MX and options
-// overloads cannot diverge.
+// Cooperative Shared A/B uses Core-total group_M in LB0 while each PE owns a
+// 16-row or 32-row Local destination block. These helpers centralize the
+// encoded M/N/K decision so basic/ACC/BIAS/MX and options overloads cannot
+// diverge.
 struct MatmulShape {
   size_t M;
   size_t N;
@@ -2578,9 +2594,9 @@ struct MatmulShape {
   bool group;
 };
 
-// Resolve M/N/K for a matmul-style operation. Cooperative Shared primaries
-// carry the same logical M/K and K/N rectangles as Local primaries; the four
-// fixed quarters are publication/readiness state, not a 4x logical-row ABI.
+// Resolve M/N/K for a matmul-style operation. For Shared A/B, M is the
+// Core-total group_M from Shared A; destination validation separately checks
+// the per-PE Local row block.
 template <FixpAttr Attr, typename C, typename A, typename B>
 constexpr MatmulShape resolve_matmul_shape() {
   static_assert(A::ValidRow != DYNAMIC && A::ValidCol != DYNAMIC &&
