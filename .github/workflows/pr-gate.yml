@@ -1,0 +1,153 @@
+name: PR Gate with latest dev-llvm15_56
+
+on:
+  pull_request:
+    branches:
+      - linx
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: tileop-pr-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Build toolchain and validate TileOP API
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    env:
+      LLVM_REPO: https://github.com/LinxISA/llvm-project.git
+      LLVM_REF: dev-llvm15_56
+      TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
+      TOOLCHAIN_REF: main
+      TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
+      LINX_TARGET: linx64-unknown-linux-musl
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          path: tileop-api
+
+      - name: Checkout toolchain build repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TOOLCHAIN_REPO }}
+          ref: ${{ env.TOOLCHAIN_REF }}
+          path: toolchain
+
+      - name: Install host build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git make cmake ninja-build gcc g++ python3 autoconf m4 \
+            pkg-config ccache rsync
+
+      - name: Configure git for component clones
+        run: git config --global --add safe.directory '*'
+
+      - name: Resolve LLVM source SHA
+        id: llvm-source
+        run: |
+          LLVM_SOURCE_SHA="$(git ls-remote "${LLVM_REPO}" "refs/heads/${LLVM_REF}" | awk '{print $1}')"
+          if [ -z "${LLVM_SOURCE_SHA}" ]; then
+            echo "ERROR: failed to resolve ${LLVM_REPO} ${LLVM_REF}" >&2
+            exit 1
+          fi
+          echo "sha=${LLVM_SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Resolved LLVM ${LLVM_REF} -> ${LLVM_SOURCE_SHA}"
+
+      - name: Restore LLVM build cache
+        id: cache-llvm
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            toolchain/build/build-llvm-musl
+            toolchain/stamps/build-llvm-musl
+            toolchain/output/linx_blockisa_llvm_musl/bin
+            toolchain/output/linx_blockisa_llvm_musl/lib
+            toolchain/output/linx_blockisa_llvm_musl/include
+          key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-pr-gate-v1
+
+      - name: Initialize component sources
+        working-directory: toolchain
+        run: make init-src
+
+      - name: Replace TileOP source with PR content
+        run: |
+          rsync -a --delete \
+            --exclude .git \
+            tileop-api/ toolchain/src/Linx-TileOP-API/
+
+      - name: Show resolved source revisions
+        run: |
+          echo "TileOP PR SHA: $(git -C tileop-api rev-parse HEAD)"
+          echo "Toolchain SHA: $(git -C toolchain rev-parse HEAD)"
+          echo "LLVM SHA: $(git -C toolchain/src/llvm-project rev-parse HEAD)"
+          echo "LLVM branch: $(git -C toolchain/src/llvm-project branch --show-current)"
+
+      - name: Build latest toolchain
+        working-directory: toolchain
+        env:
+          ENABLE_CCACHE: on
+          THREADS: '4'
+        run: |
+          export PATH="/usr/lib/ccache:$PATH"
+          make WITH_TARGET=linx64v5-linux-musl
+
+      - name: Save LLVM cache
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            toolchain/build/build-llvm-musl
+            toolchain/stamps/build-llvm-musl
+            toolchain/output/linx_blockisa_llvm_musl/bin
+            toolchain/output/linx_blockisa_llvm_musl/lib
+            toolchain/output/linx_blockisa_llvm_musl/include
+          key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-pr-gate-v1
+
+      - name: Run TileOP make check
+        working-directory: toolchain/src/Linx-TileOP-API
+        env:
+          CC: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang
+          CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
+        run: |
+          export PATH="${TOOLCHAIN_INSTALL_DIR}/bin:$PATH"
+          make check
+
+      - name: Run target compile and validation scripts
+        working-directory: toolchain/src/Linx-TileOP-API/test/tileop_api
+        env:
+          TC_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
+          COMPILER_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
+          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot/usr
+          LINX_TARGET: ${{ env.LINX_TARGET }}
+          PLAT: linx
+        run: |
+          export PATH="${TOOLCHAIN_INSTALL_DIR}/bin:$PATH"
+          bash ./compile.all
+          bash ./run_negatives.sh
+          bash ./verify_pto0583_asm.sh
+          bash ./verify_target_cxx_frontend.sh
+
+      - name: Upload build log on failure
+        if: failure() && hashFiles('toolchain/build.log') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-build-log
+          path: toolchain/build.log
+          retention-days: 14
+
+      - name: Print build log tail on failure
+        if: failure()
+        run: |
+          if [ -f toolchain/build.log ]; then
+            echo "===== toolchain/build.log (last 300 lines) ====="
+            tail -n 300 toolchain/build.log
+          fi
