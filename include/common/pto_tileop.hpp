@@ -4,6 +4,7 @@
 #include "common/pto_tile.hpp"
 #include "common/tileop_api.hpp"
 #include "common/global_iterator.hpp"
+#include "common/linx_group_runtime.h"
 #include "common/tile_tensor_impl.hpp"
 #include "common/debug_utils.hpp"
 

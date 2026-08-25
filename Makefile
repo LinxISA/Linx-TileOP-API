@@ -16,6 +16,8 @@ check:
 		-fsyntax-only -Iinclude test/ptoas_linx_type_compat.cpp
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
 		-fsyntax-only -Iinclude test/pto0583_contract.cpp
+	$(CXX) -std=c++20 -D__linx -fsyntax-only -Iinclude \
+		test/linx_group_runtime_api.cpp
 	bash -n test/tileop_api/compile.all test/tileop_api/run_negatives.sh \
 		test/tileop_api/verify_pto0583_asm.sh \
 		test/tileop_api/verify_target_cxx_frontend.sh
