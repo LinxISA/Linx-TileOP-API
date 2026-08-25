@@ -855,8 +855,9 @@ public:
     return capacity;
   }
   static constexpr int StorageBytes =
-      IsCubeLayout ? round_capacity(CubeRequiredBytes) :
-      (Rows * Cols * type_traits<DType>::bits + 7) / 8;
+      round_capacity(IsCubeLayout
+                         ? CubeRequiredBytes
+                         : (Rows * Cols * type_traits<DType>::bits + 7) / 8);
   static constexpr int CubeStorageIndex(int row, int column) {
     const int cell_elements = CubeCellRows * CubeCellCols;
     if constexpr (BFractal_ == BLayout::CubeN8) {
@@ -1740,6 +1741,129 @@ private:
 template <typename NewDType, typename SourceTile>
 struct is_tile<ReinterpretedTileView<NewDType, SourceTile>> : std::true_type {
   static constexpr SLayout layout_enum = SourceTile::SFractal;
+};
+
+// ---- Range modifiers (PTO-ISA 0.58.4, ADR-0098) --------------------------
+//
+// B.SUBVIEW / B.ASSEMBLE attach to the immediately preceding B.IOT/B.IOS
+// binder and carry a range descriptor (RegSrc + uimm11 offset + parent size).
+// These wrappers model source (Subview) and destination (Assemble) range
+// carriers without creating a second Tile register namespace: they forward
+// the parent's shape/dtype/storage and expose the modifier runtime fields.
+namespace range {
+
+constexpr bool is_valid_parent_size_code(unsigned code) {
+  return code <= 12; // 0 is legal on non-INIT modifiers; 13..15 reserved
+}
+constexpr bool is_valid_subview_size_code(unsigned code) {
+  return code >= 1 && code <= 12;
+}
+constexpr bool is_valid_uimm11(unsigned u) { return u <= 2047; }
+
+/// Source-side range carrier. Forwards every tile-shaped static member of
+/// Parent so it can be bound as a Local operand; the B.SUBVIEW line is
+/// emitted after the source binder by the consuming operation.
+template <typename Parent, unsigned SubviewSizeCode_>
+class Subview {
+  static_assert(is_valid_subview_size_code(SubviewSizeCode_),
+                "B.SUBVIEW SubviewSizeCode must be 1..12 (128B..256KB per PE)");
+public:
+  using DType = typename Parent::DType;
+  using ParentTile = Parent;
+  using TileDType = typename Parent::TileDType;
+
+  static constexpr unsigned SubviewSizeCode = SubviewSizeCode_;
+  static constexpr Location Loc = Parent::Loc;
+  static constexpr int Rows = Parent::Rows;
+  static constexpr int Cols = Parent::Cols;
+  static constexpr int RowStride = Parent::RowStride;
+  static constexpr int ColStride = Parent::ColStride;
+  static constexpr int ValidRow = Parent::ValidRow;
+  static constexpr int ValidCol = Parent::ValidCol;
+  static constexpr BLayout BFractal = Parent::BFractal;
+  static constexpr SLayout SFractal = Parent::SFractal;
+  static constexpr int SFractalSize = Parent::SFractalSize;
+  static constexpr bool isRowMajor = Parent::isRowMajor;
+  static constexpr bool isBoxedLayout = Parent::isBoxedLayout;
+  static constexpr int Numel = Parent::Numel;
+  static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
+  static constexpr int TilesizeCode = Parent::TilesizeCode;
+  static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
+
+  Subview(Parent &parent, int regSrc, unsigned offset)
+      : ParentValue(parent), RegSrc(regSrc), Offset(offset) {}
+
+  decltype(auto) data() { return ParentValue.data(); }
+
+  int GetValidRow() const { return ParentValue.GetValidRow(); }
+  int GetValidCol() const { return ParentValue.GetValidCol(); }
+
+  int RegSrc;
+  unsigned Offset; // uimm11; caller ensures <= 2047
+
+private:
+  Parent &ParentValue;
+};
+
+/// Destination-side range carrier. Capable of the multi-PE Shared
+/// destination requirement (operation enforces it); carries INIT/LAST and
+/// ParentSizeCode.
+template <typename Parent, unsigned ParentSizeCode_>
+class Assemble {
+  static_assert(is_valid_parent_size_code(ParentSizeCode_),
+                "B.ASSEMBLE ParentSizeCode must be 0..12; 13..15 reserved");
+public:
+  using DType = typename Parent::DType;
+  using ParentTile = Parent;
+  using TileDType = typename Parent::TileDType;
+
+  static constexpr unsigned ParentSizeCode = ParentSizeCode_;
+  static constexpr Location Loc = Parent::Loc;
+  static constexpr int Rows = Parent::Rows;
+  static constexpr int Cols = Parent::Cols;
+  static constexpr int RowStride = Parent::RowStride;
+  static constexpr int ColStride = Parent::ColStride;
+  static constexpr int ValidRow = Parent::ValidRow;
+  static constexpr int ValidCol = Parent::ValidCol;
+  static constexpr BLayout BFractal = Parent::BFractal;
+  static constexpr SLayout SFractal = Parent::SFractal;
+  static constexpr int SFractalSize = Parent::SFractalSize;
+  static constexpr bool isRowMajor = Parent::isRowMajor;
+  static constexpr bool isBoxedLayout = Parent::isBoxedLayout;
+  static constexpr int Numel = Parent::Numel;
+  static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
+  static constexpr int TilesizeCode = Parent::TilesizeCode;
+  static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
+
+  Assemble(Parent &parent, int regSrc, unsigned offset, bool init = true,
+           bool last = false)
+      : ParentValue(parent), RegSrc(regSrc), Offset(offset), INIT(init),
+        LAST(last) {}
+
+  decltype(auto) data() { return ParentValue.data(); }
+
+  int GetValidRow() const { return ParentValue.GetValidRow(); }
+  int GetValidCol() const { return ParentValue.GetValidCol(); }
+
+  int RegSrc;
+  unsigned Offset; // uimm11; caller ensures <= 2047
+  bool INIT;
+  bool LAST;
+
+private:
+  Parent &ParentValue;
+};
+
+} // namespace range
+
+// Range wrappers count as Local tile-shaped operands for binding purposes.
+template <typename Parent, unsigned SC>
+struct is_tile<range::Subview<Parent, SC>> : std::true_type {
+  static constexpr SLayout layout_enum = Parent::SFractal;
+};
+template <typename Parent, unsigned SC>
+struct is_tile<range::Assemble<Parent, SC>> : std::true_type {
+  static constexpr SLayout layout_enum = Parent::SFractal;
 };
 
 // Equal bit-width is required: the reinterpret must not change the number of

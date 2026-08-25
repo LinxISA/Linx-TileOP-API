@@ -26,6 +26,8 @@ using M16Partial = CubeTileM16<float, 8, 32>;
 using M32 = CubeTileM32<float, 32, 32>;
 using N8 = CubeTileN8<float, 32, 16>;
 using M16S4 = CubeTileM16<__int4x2, 16, 32>;
+using NarrowRow = Tile<Location::Vec, float, 2, 1,
+                        BLayout::RowMajor, 2, 1>;
 static_assert(M16::CubeCellBytes == 128);
 static_assert(M16::CubeRequiredBytes == 2048);
 static_assert(M16Partial::CubeRequiredBytes == 2048);
@@ -34,6 +36,9 @@ static_assert(M32::CubeRequiredBytes == 4096);
 static_assert(N8::CubeRequiredBytes == 2048);
 static_assert(M16S4::CubeElementBits == 4);
 static_assert(M16S4::CubeCellCols == 16);
+static_assert(NarrowRow::StorageBytes == 128);
+static_assert(NarrowRow::LogicalTileBytes == 128);
+static_assert(NarrowRow::TilesizeCode == __tilesize_128B);
 static_assert(M16::CubeStorageIndex(1, 2) == 34);
 static_assert(N8::CubeStorageIndex(5, 9) == 293);
 static_assert(SharedMatrixLeft<float, 16, 16>::BFractal == BLayout::RowMajor);

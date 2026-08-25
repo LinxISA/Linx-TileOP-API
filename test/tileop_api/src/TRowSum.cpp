@@ -41,6 +41,23 @@ template <size_t row, size_t col, typename T> void test_cm(T *dst, T *src) {
   TSTORE(res, d1);
 }
 
+void test_narrow_rm(float *dst, float *src) {
+  using gm_shape_in = global_tensor<float, RowMajor<2, 1>>;
+  using gm_shape_out = global_tensor<float, RowMajor<2, 1>>;
+  using tile_shape_in = Tile<Location::Vec, float, 2, 1,
+                             BLayout::RowMajor>;
+  using tile_shape_out = Tile<Location::Vec, float, 2, 1,
+                              BLayout::RowMajor, 2, 1>;
+
+  gm_shape_in input(src);
+  gm_shape_out output(dst);
+  tile_shape_in source;
+  tile_shape_out result;
+  TLOAD(source, input);
+  TROWSUM(result, source);
+  TSTORE(output, result);
+}
+
 int main() {
   const size_t row = 32;
   const size_t col = 32;
