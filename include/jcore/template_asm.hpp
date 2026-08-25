@@ -152,7 +152,7 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 0, 27, %D1\n"
+    "BSTART.TEPL 27, %D1\n"
     "B.DATR %D2, RNONE\n"
     "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
     "B.DIM %5, 0, ->lb0\n"
@@ -246,7 +246,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void THISTOGRAM(tile_shape_out &dst, tile_shape_in &src, tile_shape_in &Idx, int ByteId) {
 #define THISTOGRAM_ASM(BYTE_NAME)                                      \
   asm volatile(                                                        \
-    "BSTART.TEPL 3, 8, %D1\n"                                     \
+    "BSTART.TEPL 104, %D1\n"                                     \
     "B.DATR %D2," BYTE_NAME "\n"                                       \
     "B.DIM %3, 0, ->LB0\n"                                         \
     "B.DIM %4, 0, ->LB1\n"                                         \
@@ -6344,7 +6344,7 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, ScaleMtx &scale_mtx,
 template <is_tile_data_v tile_shape>
 void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 0, %D1\n"
+    "BSTART.TEPL 0, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6365,7 +6365,7 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 1, %D1\n"
+    "BSTART.TEPL 1, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6388,7 +6388,7 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   const size_t valid_col = src0.GetValidCol();
   const size_t valid_row = src0.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 0, 2, %D1\n"
+    "BSTART.TEPL 2, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6409,7 +6409,7 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 3, %D1\n"
+    "BSTART.TEPL 3, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6430,7 +6430,7 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 4, %D1\n"
+    "BSTART.TEPL 4, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6459,7 +6459,7 @@ void TFMOD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 6, %D1\n"
+    "BSTART.TEPL 6, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6480,7 +6480,7 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 7, %D1\n"
+    "BSTART.TEPL 7, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6501,7 +6501,7 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 8, %D1\n"
+    "BSTART.TEPL 8, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6522,7 +6522,7 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 9, %D1\n"
+    "BSTART.TEPL 9, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6543,7 +6543,7 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 10, %D1\n"
+    "BSTART.TEPL 10, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6564,7 +6564,7 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 11, %D1\n"
+    "BSTART.TEPL 11, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6585,7 +6585,7 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 12, %D1\n"
+    "BSTART.TEPL 12, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6614,7 +6614,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
                 "TCMP output shape must match input shape");
   if constexpr (Mode == CmpMode::EQ) {
     asm volatile(
-      "BSTART.TEPL 0, 13, %D[TCode]\n"
+      "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, cmode0\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -6632,7 +6632,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     );
   } else if constexpr (Mode == CmpMode::NE) {
     asm volatile(
-      "BSTART.TEPL 0, 13, %D[TCode]\n"
+      "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, cmode1\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -6650,7 +6650,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     );
   } else if constexpr (Mode == CmpMode::LT) {
     asm volatile(
-      "BSTART.TEPL 0, 13, %D[TCode]\n"
+      "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, cmode2\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -6668,7 +6668,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     );
   } else if constexpr (Mode == CmpMode::GT) {
     asm volatile(
-      "BSTART.TEPL 0, 13, %D[TCode]\n"
+      "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, cmode3\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -6686,7 +6686,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     );
   } else if constexpr (Mode == CmpMode::LE) {
     asm volatile(
-      "BSTART.TEPL 0, 13, %D[TCode]\n"
+      "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, cmode4\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -6704,7 +6704,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     );
   } else if constexpr (Mode == CmpMode::GE) {
     asm volatile(
-      "BSTART.TEPL 0, 13, %D[TCode]\n"
+      "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, cmode5\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -6741,7 +6741,7 @@ void TPRELU(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TSEL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 0, 26, %D1\n"
+    "BSTART.TEPL 26, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6762,7 +6762,7 @@ void TSEL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TABS(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 0, 15, %D1\n"
+    "BSTART.TEPL 15, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6782,7 +6782,7 @@ void TABS(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TNOT(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 0, 16, %D1\n"
+    "BSTART.TEPL 16, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6802,7 +6802,7 @@ void TNOT(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TNEG(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 0, 17, %D1\n"
+    "BSTART.TEPL 17, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6822,7 +6822,7 @@ void TNEG(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TEXP(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 0, 18, %D1\n"
+    "BSTART.TEPL 18, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6842,7 +6842,7 @@ void TEXP(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TLOG(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 0, 19, %D1\n"
+    "BSTART.TEPL 19, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6864,7 +6864,7 @@ void TRECIP(tile_shape &dst, tile_shape &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 0, 20, %D1\n"
+    "BSTART.TEPL 20, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6884,7 +6884,7 @@ void TRECIP(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TSQRT(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 0, 21, %D1\n"
+    "BSTART.TEPL 21, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6904,7 +6904,7 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TRSQRT(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 0, 22, %D1\n"
+    "BSTART.TEPL 22, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6924,7 +6924,7 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
 template <is_tile_data_v tile_shape>
 void TRELU(tile_shape &dst, tile_shape &src) {
   asm volatile(
-    "BSTART.TEPL 0, 23, %D1\n"
+    "BSTART.TEPL 23, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6974,7 +6974,7 @@ void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 1, 0, %D1\n"
+    "BSTART.TEPL 32, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -6999,7 +6999,7 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 1, %D1\n"
+    "BSTART.TEPL 33, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7026,7 +7026,7 @@ void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 1, 2, %D1\n"
+    "BSTART.TEPL 34, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7051,7 +7051,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 3, %D1\n"
+    "BSTART.TEPL 35, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7076,7 +7076,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 4, %D1\n"
+    "BSTART.TEPL 36, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7109,7 +7109,7 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 6, %D1\n"
+    "BSTART.TEPL 38, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7134,7 +7134,7 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 7, %D1\n"
+    "BSTART.TEPL 39, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7159,7 +7159,7 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 8, %D1\n"
+    "BSTART.TEPL 40, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7184,7 +7184,7 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 9, %D1\n"
+    "BSTART.TEPL 41, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7209,7 +7209,7 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 10, %D1\n"
+    "BSTART.TEPL 42, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7234,7 +7234,7 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 11, %D1\n"
+    "BSTART.TEPL 43, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7259,7 +7259,7 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 12, %D1\n"
+    "BSTART.TEPL 44, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7293,7 +7293,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   volatile typename tile_shape_in::DType sv = s;
   if constexpr (Mode == CmpMode::EQ) {
     asm volatile(
-      "BSTART.TEPL 1, 13, %D[TCode]\n"
+      "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, cmode0\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7312,7 +7312,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     );
   } else if constexpr (Mode == CmpMode::NE) {
     asm volatile(
-      "BSTART.TEPL 1, 13, %D[TCode]\n"
+      "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, cmode1\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7331,7 +7331,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     );
   } else if constexpr (Mode == CmpMode::LT) {
     asm volatile(
-      "BSTART.TEPL 1, 13, %D[TCode]\n"
+      "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, cmode2\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7350,7 +7350,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     );
   } else if constexpr (Mode == CmpMode::GT) {
     asm volatile(
-      "BSTART.TEPL 1, 13, %D[TCode]\n"
+      "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, cmode3\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7369,7 +7369,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     );
   } else if constexpr (Mode == CmpMode::LE) {
     asm volatile(
-      "BSTART.TEPL 1, 13, %D[TCode]\n"
+      "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, cmode4\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7388,7 +7388,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     );
   } else if constexpr (Mode == CmpMode::GE) {
     asm volatile(
-      "BSTART.TEPL 1, 13, %D[TCode]\n"
+      "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, cmode5\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7454,7 +7454,7 @@ void TSELS(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 26, %D1\n"
+    "BSTART.TEPL 58, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7480,7 +7480,7 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
   // register so B.IOR [zero],[] still matches an instruction.
   volatile typename tile_shape::DType sv = s;
   asm volatile(
-    "BSTART.TEPL 1, 27, %D1\n"
+    "BSTART.TEPL 59, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7504,7 +7504,7 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
 template <is_tile_data_v tile_shape>
 void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2) {
   asm volatile(
-    "BSTART.TEPL 0, 28, %D1\n"
+    "BSTART.TEPL 28, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7533,7 +7533,7 @@ void TEXTRACT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t
   volatile int32_t irv = indexRow;
   volatile int32_t icv = indexCol;
   asm volatile(
-    "BSTART.TEPL 3, 2, %D1\n"
+    "BSTART.TEPL 98, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7560,7 +7560,7 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
   volatile int32_t irv = indexRow;
   volatile int32_t icv = indexCol;
   asm volatile(
-    "BSTART.TEPL 3, 3, %D1\n"
+    "BSTART.TEPL 99, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7592,7 +7592,7 @@ void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0,
   volatile uint32_t posM_v = posM & 0xffffu;
   volatile uint32_t posK_v = posK & 0xffffu;
   asm volatile(
-    "BSTART.TEPL 3, 4, %D1\n"
+    "BSTART.TEPL 100, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7614,7 +7614,7 @@ void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0,
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TFILLPAD(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 3, 5, %D1\n"
+    "BSTART.TEPL 101, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7656,7 +7656,7 @@ void TCI(tile_shape &dst, T s) {
   volatile typename tile_shape::DType startValue = s;
   volatile uint32_t directionValue = descending;
   asm volatile(
-    "BSTART.TEPL 3, 6, %D[DataType]\n"
+    "BSTART.TEPL 102, %D[DataType]\n"
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
     "B.IOR [%[Start],%[Direction]],[]\n"
@@ -7675,7 +7675,7 @@ void TCI(tile_shape &dst, T s) {
 template <is_tile_data_v tile_shape>
 void TTRI(tile_shape &dst) {
   asm volatile(
-    "BSTART.TEPL 3, 7, %D1\n"
+    "BSTART.TEPL 103, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -7740,7 +7740,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
   volatile int32_t zp = zeroPoint;
   if constexpr (Mode == RoundMode::RNE && Saturate) {
     asm volatile(
-      "BSTART.TEPL 3, 10, %D[SType]\n"
+      "BSTART.TEPL 106, %D[SType]\n"
       // LLVM currently names encoded RMode zero RNONE. PTO ISA 0.58.3 defines
       // that encoding as the operation default, which is RNE for TQUANT.
       "B.DATR %D[__pto_DstType], RNONE, sat\n"
@@ -7760,7 +7760,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     );
   } else if constexpr (Mode == RoundMode::RNE) {
     asm volatile(
-      "BSTART.TEPL 3, 10, %D[SType]\n"
+      "BSTART.TEPL 106, %D[SType]\n"
       "B.DATR %D[__pto_DstType], RNONE\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7778,7 +7778,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     );
   } else if constexpr (Saturate) {
     asm volatile(
-      "BSTART.TEPL 3, 10, %D[SType]\n"
+      "BSTART.TEPL 106, %D[SType]\n"
       PTO_RMODE_DATR_ASM(", sat\n")
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7797,7 +7797,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     );
   } else {
     asm volatile(
-      "BSTART.TEPL 3, 10, %D[SType]\n"
+      "BSTART.TEPL 106, %D[SType]\n"
       PTO_RMODE_DATR_ASM("\n")
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7855,7 +7855,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
   volatile int32_t zp = zeroPoint;
   if constexpr (Mode == RoundMode::RNE) {
     asm volatile(
-      "BSTART.TEPL 3, 11, %D[SType]\n"
+      "BSTART.TEPL 107, %D[SType]\n"
       "B.DATR FP32, RNONE\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7874,7 +7874,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     );
   } else {
     asm volatile(
-      "BSTART.TEPL 3, 11, %D[SType]\n"
+      "BSTART.TEPL 107, %D[SType]\n"
       PTO_RMODE_DATR_ASM("\n")
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -7962,7 +7962,7 @@ void TSORT(ValueDstTile &valueDst, IndexDstTile &indexDst,
   // B.IOR binder still carries a real GPR (B.IOR [zero],[] does not match).
   volatile uint32_t descendingValue = descending ? 1u : 0u;
   asm volatile(
-    "BSTART.TEPL 3, 12, %D[DataType]\n"
+    "BSTART.TEPL 108, %D[DataType]\n"
     "B.DIM %[SortWidth], 0, ->lb0\n"
     "B.IOR [%[Descending]], []\n"
     "B.IOT %[Source], mask=1111, ->%[ValueDst]<%Z[ValueTileSize]>\n"
@@ -8036,7 +8036,7 @@ void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right,
   // not match).
   volatile uint32_t descendingValue = descending ? 1u : 0u;
   asm volatile(
-    "BSTART.TEPL 3, 13, %D[DataType]\n"
+    "BSTART.TEPL 109, %D[DataType]\n"
     "B.IOR [%[Descending]], []\n"
     "B.IOT %[Left], %[Right], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
     : [Dst] "=&Tr"(dst.data())
@@ -8051,7 +8051,7 @@ void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right,
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TTRANS(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 3, 14, %D1\n"
+    "BSTART.TEPL 110, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8071,7 +8071,7 @@ void TTRANS(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in, is_tile_data_v tile_shape_off>
 void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
   asm volatile(
-    "BSTART.TEPL 3, 15, %D1\n"
+    "BSTART.TEPL 111, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8093,7 +8093,7 @@ void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in, is_tile_data_v tile_shape_off>
 void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
   asm volatile(
-    "BSTART.TEPL 3, 16, %D1\n"
+    "BSTART.TEPL 112, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8115,7 +8115,7 @@ void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
 template <is_tile_data_v tile_shape>
 void TPARTADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 3, 17, %D1\n"
+    "BSTART.TEPL 113, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8136,7 +8136,7 @@ void TPARTADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TPARTMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 3, 18, %D1\n"
+    "BSTART.TEPL 114, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8157,7 +8157,7 @@ void TPARTMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TPARTMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 3, 19, %D1\n"
+    "BSTART.TEPL 115, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8178,7 +8178,7 @@ void TPARTMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape>
 void TPARTMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   asm volatile(
-    "BSTART.TEPL 3, 20, %D1\n"
+    "BSTART.TEPL 116, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8203,7 +8203,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 2, 0, %D1\n"
+    "BSTART.TEPL 64, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8223,7 +8223,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 1, %D1\n"
+    "BSTART.TEPL 65, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8243,7 +8243,7 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 2, %D1\n"
+    "BSTART.TEPL 66, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8263,7 +8263,7 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 3, %D1\n"
+    "BSTART.TEPL 67, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8283,7 +8283,7 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 4, %D1\n"
+    "BSTART.TEPL 68, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8303,7 +8303,7 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 12, %D1\n"
+    "BSTART.TEPL 76, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8323,7 +8323,7 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 13, %D1\n"
+    "BSTART.TEPL 77, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8343,7 +8343,7 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 16, %D1\n"
+    "BSTART.TEPL 80, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8363,7 +8363,7 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 17, %D1\n"
+    "BSTART.TEPL 81, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8383,7 +8383,7 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 18, %D1\n"
+    "BSTART.TEPL 82, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8403,7 +8403,7 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 19, %D1\n"
+    "BSTART.TEPL 83, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8423,7 +8423,7 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 20, %D1\n"
+    "BSTART.TEPL 84, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8443,7 +8443,7 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 28, %D1\n"
+    "BSTART.TEPL 92, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8463,7 +8463,7 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
-    "BSTART.TEPL 2, 29, %D1\n"
+    "BSTART.TEPL 93, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8492,7 +8492,7 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDADD: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 5, %D1\n"
+    "BSTART.TEPL 69, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8522,7 +8522,7 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDSUB: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 6, %D1\n"
+    "BSTART.TEPL 70, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8554,7 +8554,7 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
   const size_t valid_col = src0.GetValidCol();
   const size_t valid_row = src0.GetValidRow();
   asm volatile(
-    "BSTART.TEPL 2, 7, %D1\n"
+    "BSTART.TEPL 71, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8584,7 +8584,7 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDDIV: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 8, %D1\n"
+    "BSTART.TEPL 72, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8614,7 +8614,7 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDMAX: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 9, %D1\n"
+    "BSTART.TEPL 73, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8644,7 +8644,7 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDMIN: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 10, %D1\n"
+    "BSTART.TEPL 74, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8674,7 +8674,7 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
                              typename tile_shape_out::DType>::value,
                 "TROWEXPANDEXPDIF: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 11, %D1\n"
+    "BSTART.TEPL 75, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8704,7 +8704,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDADD: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 21, %D1\n"
+    "BSTART.TEPL 85, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8734,7 +8734,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDSUB: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 22, %D1\n"
+    "BSTART.TEPL 86, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8764,7 +8764,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDMUL: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 23, %D1\n"
+    "BSTART.TEPL 87, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8794,7 +8794,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDDIV: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 24, %D1\n"
+    "BSTART.TEPL 88, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8824,7 +8824,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDMAX: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 25, %D1\n"
+    "BSTART.TEPL 89, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8854,7 +8854,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDMIN: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 26, %D1\n"
+    "BSTART.TEPL 90, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8884,7 +8884,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
                              typename tile_shape_out::DType>::value,
                 "TCOLEXPANDEXPDIF: src0/dst dtype must match");
   asm volatile(
-    "BSTART.TEPL 2, 27, %D1\n"
+    "BSTART.TEPL 91, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -8924,7 +8924,7 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   static_assert(tile_shape_in0::Rows == tile_shape_out::Rows,
                 "TCONCAT: src0/dst row count must match");
   asm volatile(
-    "BSTART.TEPL 3, 0, %D1\n"
+    "BSTART.TEPL 96, %D1\n"
     "B.DIM %2, 0, ->lb0\n"
     "B.DIM %3, 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"

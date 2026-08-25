@@ -289,7 +289,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertNotRegex(self.header, r'"[^"\n]*mask=15(?:\D|$)')
         self.assertNotIn("mask=%c[PEMask]", self.header)
         self.assertNotRegex(
-            self.header, r'"BSTART\.TEPL\s+\d+,\s*%[cD]'
+            self.header, r'"BSTART\.TEPL\s+\d+,\s*\d+,\s*%[cD]'
         )
         # Only the CUBE transport selectors may carry a ".normal" suffix on
         # B.DATR; any other B.DATR ... .normal is the old spelling.
