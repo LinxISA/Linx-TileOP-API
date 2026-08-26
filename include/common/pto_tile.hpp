@@ -1882,6 +1882,10 @@ public:
       requires(is_shared_tile_v<Parent>) {
     return ParentValue.handle();
   }
+  unsigned long &handle_ref()
+      requires(is_shared_tile_v<Parent>) {
+    return ParentValue.handle_ref();
+  }
 
   int GetValidRow() const { return ParentValue.GetValidRow(); }
   int GetValidCol() const { return ParentValue.GetValidCol(); }
@@ -1954,6 +1958,10 @@ public:
   unsigned long handle()
       requires(is_shared_tile_v<Parent>) {
     return ParentValue.handle();
+  }
+  unsigned long &handle_ref()
+      requires(is_shared_tile_v<Parent>) {
+    return ParentValue.handle_ref();
   }
 
   int GetValidRow() const { return ParentValue.GetValidRow(); }

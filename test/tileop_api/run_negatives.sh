@@ -16,6 +16,7 @@ if [[ -n "${LINX_SYSROOT:-}" ]]; then
 fi
 CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose old_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b bad_transpose_d group_shape group_k group_n group_dynamic"
 TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_small size_large"
+RANGE_CASES="subview_dest assemble_source"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -42,6 +43,19 @@ done
 for c in $TS_CASES; do
   if "$CXX" "${FLAGS[@]}" -DSHOULD_FAIL_$c src/TStoreSharedNegatives.cpp \
        -o "$OUT/neg_ts_$c.o" >/dev/null 2>&1; then
+    echo "FAIL (compiled but should not): $c"; FAIL=$((FAIL+1))
+  else
+    echo "PASS (rejected): $c"; PASS=$((PASS+1))
+  fi
+done
+for c in $RANGE_CASES; do
+  if [[ "$c" == subview_dest ]]; then
+    define=SHOULD_FAIL_SUBVIEW_DEST
+  else
+    define=SHOULD_FAIL_ASSEMBLE_SOURCE
+  fi
+  if "$CXX" "${FLAGS[@]}" -D"$define" src/RangeNegatives.cpp \
+       -o "$OUT/neg_range_$c.o" >/dev/null 2>&1; then
     echo "FAIL (compiled but should not): $c"; FAIL=$((FAIL+1))
   else
     echo "PASS (rejected): $c"; PASS=$((PASS+1))
