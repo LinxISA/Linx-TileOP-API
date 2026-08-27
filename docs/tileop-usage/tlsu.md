@@ -50,6 +50,24 @@ B.IOT mask=1111, last, ->t0<3>
 B.IOR [a3,a4], []       ; [base, byte-row-stride]
 ```
 
+### Range modifiers (B.SUBVIEW / B.ASSEMBLE)
+
+PTO-ISA 0.58.4 range modifiers extend the TLOAD/TSTORE block with a range
+descriptor attached to the destination (`B.ASSEMBLE`) or source (`B.SUBVIEW`)
+binder. Wrap the operand with `pto::range::Assemble` or `pto::range::Subview`
+to emit the corresponding line; see
+[range-modifiers.md](range-modifiers.md) for the full field contract, the
+RegSrc base-register binding, and the compile-time rejection matrix.
+
+```cpp
+using Dst = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
+
+Dst d;
+auto as = range::Assemble<Dst, 12, /*INIT*/ true, /*LAST*/ false,
+                          /*Off*/ 0, /*RegSrc*/ 0>(d, base_addr);
+TLOAD(as, gm);  // ... -> %[d0]<tsize> / B.ASSEMBLE 1, 0, r0, 0, 12
+```
+
 ### Shared store (TSTORE / TSTORE.SPART)
 
 Storing a **Shared** Tile to GM uses TLSU Function 1 (full, `PE_MASK=1111`)
