@@ -83,6 +83,9 @@ jobs:
             toolchain/output/linx_blockisa_llvm_musl/lib
             toolchain/output/linx_blockisa_llvm_musl/include
           key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-v1
+          restore-keys: |
+            llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-
+            llvm-
 
       - name: Initialize component sources
         working-directory: toolchain
@@ -105,14 +108,28 @@ jobs:
           echo "Toolchain SHA: $(git -C toolchain rev-parse HEAD)"
           echo "LLVM SHA: $(git -C toolchain/src/llvm-project rev-parse HEAD)"
 
+      - name: Prepare restored cache for incremental LLVM build
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          echo "Exact LLVM cache miss; reusing the nearest compatible build tree."
+          rm -f toolchain/stamps/build-llvm-musl
+
       - name: Build latest toolchain
         working-directory: toolchain
         env:
           ENABLE_CCACHE: on
           THREADS: '4'
         run: |
+          set -o pipefail
           export PATH="/usr/lib/ccache:$PATH"
-          make WITH_TARGET=linx64v5-linux-musl
+          if ! make WITH_TARGET=linx64v5-linux-musl; then
+            echo "Incremental build failed; retrying once from a clean LLVM build tree."
+            rm -rf \
+              build/build-llvm-musl \
+              output/linx_blockisa_llvm_musl \
+              stamps/build-llvm-musl
+            make WITH_TARGET=linx64v5-linux-musl
+          fi
 
       - name: Save LLVM build cache
         if: steps.cache-llvm.outputs.cache-hit != 'true'
