@@ -72,8 +72,8 @@ jobs:
           echo "sha=${LLVM_SOURCE_SHA}" >> "$GITHUB_OUTPUT"
           echo "Resolved latest LLVM ${LLVM_REF} -> ${LLVM_SOURCE_SHA}"
 
-      - name: Restore LLVM build cache
-        id: cache-llvm
+      - name: Restore complete v2 toolchain cache
+        id: cache-llvm-v2
         uses: actions/cache/restore@v4
         with:
           path: |
@@ -84,8 +84,19 @@ jobs:
           key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
           restore-keys: |
             llvm-${{ runner.os }}-tileop-required-gate-v2-
-            llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-
-            llvm-
+
+      - name: Restore legacy exact-SHA LLVM cache
+        id: cache-llvm-legacy
+        if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            toolchain/build/build-llvm-musl
+            toolchain/stamps/build-llvm-musl
+            toolchain/output/linx_blockisa_llvm_musl/bin
+            toolchain/output/linx_blockisa_llvm_musl/lib
+            toolchain/output/linx_blockisa_llvm_musl/include
+          key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-v1
 
       - name: Initialize component sources
         working-directory: toolchain
@@ -111,28 +122,28 @@ jobs:
       - name: Restore, incrementally update, or build toolchain
         working-directory: toolchain
         env:
-          CACHE_HIT: ${{ steps.cache-llvm.outputs.cache-hit }}
-          CACHE_MATCHED_KEY: ${{ steps.cache-llvm.outputs.cache-matched-key }}
+          V2_CACHE_HIT: ${{ steps.cache-llvm-v2.outputs.cache-hit }}
+          V2_CACHE_MATCHED_KEY: ${{ steps.cache-llvm-v2.outputs.cache-matched-key }}
+          LEGACY_CACHE_HIT: ${{ steps.cache-llvm-legacy.outputs.cache-hit }}
           EXACT_V2_KEY: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
-          LEGACY_EXACT_KEY: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-v1
           ENABLE_CCACHE: on
           THREADS: '4'
         run: |
           set -euo pipefail
           export PATH="/usr/lib/ccache:$PATH"
 
-          if [ "${CACHE_HIT}" = "true" ]; then
+          if [ "${V2_CACHE_HIT}" = "true" ]; then
             echo "Exact complete toolchain cache hit: ${EXACT_V2_KEY}"
             echo "Skipping toolchain build."
             exit 0
           fi
 
-          if [ "${CACHE_MATCHED_KEY}" = "${LEGACY_EXACT_KEY}" ] && \
+          if [ "${LEGACY_CACHE_HIT}" = "true" ] && \
              [ -x output/linx_blockisa_llvm_musl/bin/clang ]; then
             echo "Reusing the legacy exact-SHA LLVM cache."
             mkdir -p stamps
             touch stamps/build-llvm-musl
-          elif [[ "${CACHE_MATCHED_KEY}" == llvm-${{ runner.os }}-tileop-required-gate-v2-* ]] && \
+          elif [[ "${V2_CACHE_MATCHED_KEY}" == llvm-${{ runner.os }}-tileop-required-gate-v2-* ]] && \
                [ -f build/build-llvm-musl/CMakeCache.txt ]; then
             echo "Updating the nearest v2 LLVM build tree incrementally."
             if cmake -S src/llvm-project/llvm -B build/build-llvm-musl && \
@@ -163,7 +174,7 @@ jobs:
           fi
 
       - name: Save LLVM build cache
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
