@@ -47,6 +47,31 @@ __attribute__((noinline)) void assemble_size0_tload(
   TLOAD(as, src); // -> B.ASSEMBLE 0, 1, 2, 2047, 0
 }
 
+// The factory derives the INIT parent size from Dst for the common case.
+__attribute__((noinline)) void assemble_factory_tload(
+    GMDst &src, Dst &d) {
+  auto as = range::assemble(d, 0);
+  TLOAD(as, src);
+}
+
+__attribute__((noinline)) void assemble_factory_custom_tload(
+    GMDst &src, Dst &d) {
+  auto as = range::assemble_last_at<2047>(d, 2);
+  TLOAD(as, src);
+}
+
+__attribute__((noinline)) void assemble_factory_init_last_tload(
+    GMDst &src, Dst &d) {
+  auto as = range::assemble_init_last(d, 0);
+  TLOAD(as, src);
+}
+
+__attribute__((noinline)) void assemble_factory_middle_tload(
+    GMDst &src, Dst &d) {
+  auto as = range::assemble_middle(d, 0);
+  TLOAD(as, src);
+}
+
 void use(void *) {}
 int main() {
   float src_buf[4 * 8];
@@ -55,6 +80,10 @@ int main() {
   assemble_dest_tload(gs, d);
   assemble_regsrc23_tload(gs, d);
   assemble_size0_tload(gs, d);
+  assemble_factory_tload(gs, d);
+  assemble_factory_custom_tload(gs, d);
+  assemble_factory_init_last_tload(gs, d);
+  assemble_factory_middle_tload(gs, d);
   use(src_buf);
   return 0;
 }

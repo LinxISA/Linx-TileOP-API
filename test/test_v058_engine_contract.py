@@ -154,6 +154,24 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         )
         self.assertIn(expected, carrier)
 
+    def test_range_modifiers_expose_simple_factories(self) -> None:
+        tile_header = PTO_TILE.read_text(encoding="utf-8")
+        tile = (ROOT / "test" / "tileop_api" / "src" /
+                "RangeSubview.cpp").read_text(encoding="utf-8")
+        assemble = (ROOT / "test" / "tileop_api" / "src" /
+                    "RangeAssemble.cpp").read_text(encoding="utf-8")
+        self.assertIn("auto sv = range::subview(s, 0);", tile)
+        self.assertIn("auto sv = range::subview_at<2047, 23>(s, 23);", tile)
+        self.assertIn("auto as = range::assemble(d, 0);", assemble)
+        self.assertIn("auto as = range::assemble_last_at<2047>(d, 2);", assemble)
+        self.assertIn("auto as = range::assemble_init_last(d, 0);", assemble)
+        self.assertIn("auto as = range::assemble_middle(d, 0);", assemble)
+        self.assertIn("auto subview(Parent &parent", tile_header)
+        self.assertIn("auto assemble(Parent &parent", tile_header)
+        self.assertIn("auto assemble_last(Parent &parent", tile_header)
+        self.assertIn("auto subview_at(Parent &parent", tile_header)
+        self.assertIn("auto assemble_last_at(Parent &parent", tile_header)
+
     # --- PE mask: 4 binary digits ---
 
     def test_pe_masks_are_four_binary_digits(self) -> None:

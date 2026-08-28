@@ -25,7 +25,7 @@ ACTIVE_FIXTURES=(
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs
   TAdd_mask TAdd TAdds TAnd TLoad TStore TCvt TDiv TDivs TExp TMax TMaxs
   TMov TMul TMuls TOr TRecip TRem TRowMax TRowSum TSqrt TSub TSubs TTrans
-  RangeSubview RangeAssemble SharedRange
+  RangeSubview RangeAssemble SharedRange TileRegion
 )
 
 # These fixtures have intentionally minimal hosted mains. They exercise scalar,

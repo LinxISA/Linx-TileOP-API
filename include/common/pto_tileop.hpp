@@ -8,6 +8,10 @@
 #include "common/tile_tensor_impl.hpp"
 #include "common/debug_utils.hpp"
 
+#ifdef __linx
+#include "common/pto_tile_region_inline_asm.hpp"
+#endif
+
 // Returns the current PE ID (0..3).
 // Aligned with website manual get_thread_idx(). Lowered to SSR_GET reading
 // the read-only PEID SSR (0x0802).

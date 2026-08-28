@@ -1,5 +1,8 @@
 # TCVT
 
+The partitioned examples below use `std::move`; include `<utility>` when using
+`TASSEMBLY` in a standalone translation unit.
+
 `TCVT` is a TileOP C++ interface for the PTO ISA v0.58.3 `TCVT` operation.
 
 ## 接口身份
@@ -100,5 +103,54 @@ C++ 模板实例化阶段或 Tile legality/allocation preflight 阶段被拒绝�
 
 ## 使用示例
 
-完整调用形式和类型约束请参阅 `template_asm.hpp` 中的定义以及对应的主题指南（若存在）。
-本页的接口摘要只用于导航，不将宏展开或底层 inline-asm 实现伪装成公共 overload。
+普通 Tile 转换使用标准的 Tile destination：
+
+```cpp
+using Src = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using Dst = TileLeft<__bf16, 32, 16>;
+
+Src src;
+Dst dst;
+TCVT(dst, src);
+```
+
+当转换结果属于一个分区组装结果时，destination 可以使用
+`TileArrayOutputRef`。该写法把 `TCVT` 的结果直接写入对应 slot：
+
+```cpp
+using Parent = TileLeft<__bf16, 32, 64>;
+using Fragment = TileLeft<__bf16, 32, 16>;
+using Input = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+
+TileArray<Fragment, 1, 4> fragments;
+Input input;
+
+for (int j = 0; j < 4; ++j) {
+  auto slot = fragments[0][j];
+  TCVT(slot, input);
+}
+
+Parent result = TASSEMBLY<Parent>(std::move(fragments));
+```
+
+`TPARTVIEW` 可用于取得 source parent 的 fragment view，再将该 view 传给
+支持 region 快速路径的 TileOP：
+
+```cpp
+using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
+using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+
+Parent parent;
+auto parts = TPARTVIEW<Fragment, 1, 4>(parent);
+auto part = parts[0][j];
+Tile<Location::Vec, float, 32, 16, BLayout::RowMajor> scaled;
+TMULS(scaled, part, 0.125f);
+```
+
+在当前 Linx inline-asm 实现中，上述 region overload 会在对应 binder 后
+附加 `B.SUBVIEW`；`TCVT(TileArrayOutputRef, Tile)` 会在 destination binder
+后附加 `B.ASSEMBLE`。`INIT/LAST` 和 parent size code 由 slot ordinal 与
+TileArray 覆盖关系推导，调用者不需要手动编码这些字段。
+
+完整的 partition/assembly 约束和生命周期说明见
+[Tile partition and assembly views](../../tile-arrays.md)。

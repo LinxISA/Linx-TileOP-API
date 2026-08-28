@@ -37,6 +37,20 @@ __attribute__((noinline)) void subview_size12_tstore(
   TSTORE(dst, sv); // -> B.SUBVIEW 0, r23, 2047, 12
 }
 
+// The factory derives the common size-code from Src and hides the carrier
+// type. Explicit size/offset/register settings remain available when needed.
+__attribute__((noinline)) void subview_factory_tstore(
+    GMDst &dst, Src &s) {
+  auto sv = range::subview(s, 0);
+  TSTORE(dst, sv);
+}
+
+__attribute__((noinline)) void subview_factory_custom_tstore(
+    GMDst &dst, Src &s) {
+  auto sv = range::subview_at<2047, 23>(s, 23);
+  TSTORE(dst, sv);
+}
+
 void use(void *) {}
 int main() {
   float src_buf[4 * 8];
@@ -46,6 +60,8 @@ int main() {
   Src s;
   subview_source_tstore(gd, s);
   subview_size12_tstore(gd, s);
+  subview_factory_tstore(gd, s);
+  subview_factory_custom_tstore(gd, s);
   use(src_buf);
   return 0;
 }
