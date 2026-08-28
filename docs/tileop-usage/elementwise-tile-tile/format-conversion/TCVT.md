@@ -153,4 +153,4 @@ TMULS(scaled, part, 0.125f);
 TileArray 覆盖关系推导，调用者不需要手动编码这些字段。
 
 完整的 partition/assembly 约束和生命周期说明见
-[Tile partition and assembly views](../../tile-arrays.md)。
+[Shape、valid region 与 SizeCode](../../concepts/tile-shape-and-valid-region.md)。
