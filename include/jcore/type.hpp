@@ -81,7 +81,7 @@ template<> struct type_traits<__uint4x2>      : public type_traits_base<__type_u
 // SizeCode is a 4-bit code encoding the per-PE tile size (PTO-ISA ADR 0069,
 // commit 1e91bf9). There is no 4-PE (whole-core) multiplier: the developer's
 // byte count is the size that flows directly into the encoded SizeCode.
-//   B.IOT (Local) destination: 1..10 = 128 B..64 KB per PE
+//   B.IOT (Local) destination: 1..12 = 128 B..256 KB per PE
 //   B.IOS (Shared) destination: 1..12 = 128 B..256 KB per PE
 //   0 is the source-only encoding; 13..15 reserved.
 enum __tilesize_code {
@@ -149,10 +149,10 @@ private:
 public:
   static constexpr int TilesizeCode = mapBytesToEnum(PETileBytes);
   static constexpr int Regsize = PETileBytes;
-  // B.IOT (Local) destination capacity: 1..10 (128 B..64 KB per PE).
+  // B.IOT (Local) destination capacity: 1..12 (128 B..256 KB per PE).
   static constexpr bool IsValidActiveSize =
-      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_64KB;
-  // B.IOS (Shared) destination capacity: 1..12 (128 B..256 KB per PE).
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_256KB;
+  // B.IOS (Shared) destination capacity: 1..12 (128 B..256 KB).
   static constexpr bool IsValidSharedActiveSize =
       TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_256KB;
 };
@@ -192,7 +192,7 @@ public:
   static constexpr int TilesizeCode = mapBytesToEnum(LogicalBytes);
   static constexpr int Regsize = 4096;
   static constexpr bool IsValidActiveSize =
-      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_64KB;
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_256KB;
   static constexpr bool IsValidSharedActiveSize =
       TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_256KB;
 };

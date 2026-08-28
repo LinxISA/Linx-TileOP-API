@@ -134,6 +134,7 @@ struct FixpAttr {
   bool MaxAbsEn = false;
   bool TransA = false;
   bool TransB = false;
+  bool CScaleEn = false;
 
   static constexpr FixpAttr keep_acc(
       FixpReluMode ReluMode = FixpReluMode::None) {
@@ -170,6 +171,12 @@ struct FixpAttr {
     return Attr;
   }
 
+  constexpr FixpAttr cscale_enable(bool Enable = true) const {
+    FixpAttr Attr = *this;
+    Attr.CScaleEn = Enable;
+    return Attr;
+  }
+
   constexpr uint32_t encoding() const {
     return (static_cast<uint32_t>(PreQuant) << 26) |
            (static_cast<uint32_t>(Relu) << 23) |
@@ -179,7 +186,8 @@ struct FixpAttr {
            (static_cast<uint32_t>(RowMaxInit) << 16) |
            (static_cast<uint32_t>(MaxAbsEn) << 15) |
            (static_cast<uint32_t>(TransB) << 8) |
-           (static_cast<uint32_t>(TransA) << 7) | 0x2023;
+           (static_cast<uint32_t>(TransA) << 7) |
+           (static_cast<uint32_t>(CScaleEn) << 9) | 0x2023;
   }
 
   constexpr bool operator==(const FixpAttr &) const = default;
@@ -855,8 +863,9 @@ public:
     return capacity;
   }
   static constexpr int StorageBytes =
-      IsCubeLayout ? round_capacity(CubeRequiredBytes) :
-      (Rows * Cols * type_traits<DType>::bits + 7) / 8;
+      round_capacity(IsCubeLayout
+                         ? CubeRequiredBytes
+                         : (Rows * Cols * type_traits<DType>::bits + 7) / 8);
   static constexpr int CubeStorageIndex(int row, int column) {
     const int cell_elements = CubeCellRows * CubeCellCols;
     if constexpr (BFractal_ == BLayout::CubeN8) {
@@ -927,9 +936,11 @@ public:
       LogicalTileBytes == 8192 ? __tilesize_8KB :
       LogicalTileBytes == 16384 ? __tilesize_16KB :
       LogicalTileBytes == 32768 ? __tilesize_32KB :
-      LogicalTileBytes == 65536 ? __tilesize_64KB : __tilesize_unknown;
+      LogicalTileBytes == 65536 ? __tilesize_64KB :
+      LogicalTileBytes == 131072 ? __tilesize_128KB :
+      LogicalTileBytes == 262144 ? __tilesize_256KB : __tilesize_unknown;
   static constexpr bool IsValidActiveSize =
-      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_64KB;
+      TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_256KB;
 
   // constructor for static shape
   Tile() { };
@@ -1248,12 +1259,30 @@ public:
   static constexpr Location Role = LocalTile::Loc;
   static constexpr int Rows = LocalTile::Rows;
   static constexpr int Cols = LocalTile::Cols;
+  static constexpr int RowStride = LocalTile::RowStride;
+  static constexpr int ColStride = LocalTile::ColStride;
   static constexpr int ValidRow = LocalTile::ValidRow;
   static constexpr int ValidCol = LocalTile::ValidCol;
   static constexpr BLayout BFractal = LocalTile::BFractal;
   static constexpr SLayout SFractal = LocalTile::SFractal;
   static constexpr int SFractalSize = LocalTile::SFractalSize;
   static constexpr PadValue PadVal = LocalTile::PadVal;
+  static constexpr CompactMode Compact = LocalTile::Compact;
+  static constexpr bool IsCubeLayout = LocalTile::IsCubeLayout;
+  using TileDType = typename LocalTile::TileDType;
+  static constexpr int LogicalTileBytes = LocalTile::LogicalTileBytes;
+  static constexpr int TilesizeCode = LocalTile::TilesizeCode;
+  static constexpr bool IsValidActiveSize = LocalTile::IsValidActiveSize;
+  static constexpr bool isRowMajor = LocalTile::isRowMajor;
+  static constexpr bool isBoxedLayout = LocalTile::isBoxedLayout;
+  static constexpr bool isInnerRowMajor = LocalTile::isInnerRowMajor;
+  static constexpr bool isInnerColMajor = LocalTile::isInnerColMajor;
+  static constexpr int InnerRows = LocalTile::InnerRows;
+  static constexpr int InnerCols = LocalTile::InnerCols;
+  static constexpr int InnerNumel = LocalTile::InnerNumel;
+  static constexpr int Numel = LocalTile::Numel;
+  static constexpr int byteSize = LocalTile::byteSize;
+  static constexpr int kBytes = LocalTile::kBytes;
 
   SharedTile()
       : RowMaskInternal(ValidRow == DYNAMIC ? 0 : ValidRow),
@@ -1402,7 +1431,7 @@ template <int GroupN> constexpr uint8_t group_n_code() {
 template <FixpAttr Attr_, typename QuantTile_ = NoOperand,
           typename ReluTile_ = NoOperand, typename RowMaxIn_ = NoOperand,
           typename RowMaxOut_ = NoOperand,
-          typename GroupMaxOut_ = NoOperand>
+          typename GroupMaxOut_ = NoOperand, typename CScaleTile_ = NoOperand>
 struct Options {
   static constexpr FixpAttr Attr = Attr_;
   using QuantTile = QuantTile_;
@@ -1410,6 +1439,7 @@ struct Options {
   using RowMaxIn = RowMaxIn_;
   using RowMaxOut = RowMaxOut_;
   using GroupMaxOut = GroupMaxOut_;
+  using CScaleTile = CScaleTile_;
 
   uint64_t QuantDescriptor = 0;
   uint64_t LReluDescriptor = 0;
@@ -1418,28 +1448,40 @@ struct Options {
   RowMaxIn *RowIn = nullptr;
   RowMaxOut *RowOut = nullptr;
   GroupMaxOut *GroupOut = nullptr;
+  CScaleTile *CScale = nullptr;
 
   constexpr Options() = default;
 
   constexpr Options(uint64_t QuantDescriptor, uint64_t LReluDescriptor,
                     QuantTile *Quant, ReluTile *Relu, RowMaxIn *RowIn,
-                    RowMaxOut *RowOut, GroupMaxOut *GroupOut)
+                    RowMaxOut *RowOut, GroupMaxOut *GroupOut,
+                    CScaleTile *CScale = nullptr)
       : QuantDescriptor(QuantDescriptor), LReluDescriptor(LReluDescriptor),
         Quant(Quant), Relu(Relu), RowIn(RowIn), RowOut(RowOut),
-        GroupOut(GroupOut) {}
+        GroupOut(GroupOut), CScale(CScale) {}
 
   template <bool Enable = true> constexpr auto transpose_a() const {
     constexpr FixpAttr NewAttr = Attr.transpose_a(Enable);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
   }
 
   template <bool Enable = true> constexpr auto transpose_b() const {
     constexpr FixpAttr NewAttr = Attr.transpose_b(Enable);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
+  }
+
+  template <bool Enable = true> constexpr auto cscale_enable() const {
+    constexpr FixpAttr NewAttr = Attr.cscale_enable(Enable);
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
   }
 
   constexpr auto relu() const {
@@ -1447,8 +1489,9 @@ struct Options {
                   "FPATR config ReLU mode was already selected");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::Relu);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
   }
 
   constexpr auto lrelu(uint64_t Descriptor) const {
@@ -1456,8 +1499,9 @@ struct Options {
                   "FPATR config ReLU mode was already selected");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::LRelu);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, Descriptor, Quant, Relu,
-                                RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, Descriptor, Quant,
+                                            Relu, RowIn, RowOut, GroupOut,
+                                            CScale);
   }
 
   template <is_local_tile_v Tile>
@@ -1468,8 +1512,9 @@ struct Options {
                   "FPATR config PReLU Tile was already supplied");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::PRelu);
     return Options<NewAttr, QuantTile, Tile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant,
-                                &Parameter, RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, &Parameter, RowIn, RowOut,
+                                            GroupOut, CScale);
   }
 
   template <is_local_tile_v Tile>
@@ -1481,8 +1526,9 @@ struct Options {
                   "FPATR config RowMax operands were already supplied");
     constexpr FixpAttr NewAttr = with_row_max(Attr, false);
     return Options<NewAttr, QuantTile, ReluTile, NoOperand, Tile,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                nullptr, &Output, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, nullptr, &Output,
+                                            GroupOut, CScale);
   }
 
   template <is_local_tile_v InputTile, is_local_tile_v OutputTile>
@@ -1494,8 +1540,9 @@ struct Options {
                   "FPATR config RowMax operands were already supplied");
     constexpr FixpAttr NewAttr = with_row_max(Attr, true);
     return Options<NewAttr, QuantTile, ReluTile, InputTile, OutputTile,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                &Input, &Output, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, &Input, &Output,
+                                            GroupOut, CScale);
   }
 
   template <int GroupN, is_local_tile_v Tile>
@@ -1506,8 +1553,9 @@ struct Options {
                   "FPATR config GroupMax output was already supplied");
     constexpr FixpAttr NewAttr =
         with_group_max(Attr, group_n_code<GroupN>());
-    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut, Tile>(
-        QuantDescriptor, LReluDescriptor, Quant, Relu, RowIn, RowOut, &Output);
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut, Tile,
+                   CScaleTile>(QuantDescriptor, LReluDescriptor, Quant, Relu,
+                               RowIn, RowOut, &Output, CScale);
   }
 
   constexpr auto max_abs() const {
@@ -1515,8 +1563,19 @@ struct Options {
                   "FPATR config max_abs requires RowMax or GroupMax");
     constexpr FixpAttr NewAttr = with_max_abs(Attr);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                   GroupMaxOut>(QuantDescriptor, LReluDescriptor, Quant, Relu,
-                                RowIn, RowOut, GroupOut);
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
+  }
+
+  template <is_local_tile_v Tile>
+  constexpr auto cscale(Tile &Scale) const {
+    static_assert(std::is_same_v<CScaleTile, NoOperand>,
+                  "FPATR CScale tile was already supplied");
+    constexpr FixpAttr NewAttr = Attr.cscale_enable();
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut, Tile>(QuantDescriptor, LReluDescriptor, Quant,
+                                      Relu, RowIn, RowOut, GroupOut, &Scale);
   }
 };
 
@@ -1571,9 +1630,10 @@ template <is_local_tile_v Tile> constexpr auto s8(Tile &QuantParameter) {
 
 template <typename T> struct is_options : std::false_type {};
 template <FixpAttr Attr, typename QuantTile, typename ReluTile,
-          typename RowMaxIn, typename RowMaxOut, typename GroupMaxOut>
+          typename RowMaxIn, typename RowMaxOut, typename GroupMaxOut,
+          typename CScaleTile>
 struct is_options<Options<Attr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
-                          GroupMaxOut>> : std::true_type {};
+                          GroupMaxOut, CScaleTile>> : std::true_type {};
 
 template <typename T>
 concept is_options_v = is_options<std::remove_cv_t<T>>::value;
@@ -1741,6 +1801,205 @@ template <typename NewDType, typename SourceTile>
 struct is_tile<ReinterpretedTileView<NewDType, SourceTile>> : std::true_type {
   static constexpr SLayout layout_enum = SourceTile::SFractal;
 };
+
+// ---- Range modifiers (PTO-ISA 0.58.4, ADR-0098) --------------------------
+//
+// B.SUBVIEW / B.ASSEMBLE attach to the immediately preceding B.IOT/B.IOS
+// binder and carry a range descriptor (RegSrc + uimm11 offset + parent size).
+// These wrappers model source (Subview) and destination (Assemble) range
+// carriers without creating a second Tile register namespace: they forward
+// the parent's shape/dtype/storage and expose the modifier runtime fields.
+namespace range {
+
+constexpr bool is_valid_parent_size_code(unsigned code) {
+  return code <= 12; // 0 is legal on non-INIT modifiers; 13..15 reserved
+}
+constexpr bool is_valid_subview_size_code(unsigned code) {
+  return code >= 1 && code <= 12;
+}
+constexpr bool is_valid_uimm11(unsigned u) { return u <= 2047; }
+
+/// Source-side range carrier. Forwards every tile-shaped static member of
+/// Parent so it can be bound as a Local operand; the B.SUBVIEW line is
+/// emitted after the source binder by the consuming operation.
+///
+/// uimm11 Offset and RegSrc must be compile-time constants: the B.SUBVIEW
+/// Modifier slots are inline-asm "i" constraints, so callers cannot thread
+/// runtime values into a range descriptor (PTO-ISA 0.58.4 ADR-0098 models
+/// the range descriptor as a static part of the binder contract). RegSrc is
+/// the absolute GPR selector 0..23 for the base-address register (defaults
+/// to a0/R2, the conventional base register).
+template <typename Parent, unsigned SubviewSizeCode_, unsigned Offset_ = 0,
+          unsigned RegSrc_ = 2>
+class Subview {
+  static_assert(is_valid_subview_size_code(SubviewSizeCode_),
+                "B.SUBVIEW SubviewSizeCode must be 1..12 (128B..256KB per PE)");
+  static_assert(is_valid_uimm11(Offset_),
+                "B.SUBVIEW uimm11 offset must be 0..2047");
+  static_assert(RegSrc_ <= 23,
+                "B.SUBVIEW RegSrc must be an absolute GPR selector 0..23");
+public:
+  using DType = typename Parent::DType;
+  using ParentTile = Parent;
+  using TileDType = typename Parent::TileDType;
+
+  static constexpr unsigned SubviewSizeCode = SubviewSizeCode_;
+  static constexpr unsigned Offset = Offset_;
+  static constexpr unsigned RegSrc = RegSrc_;
+  static constexpr Location Loc = Parent::Loc;
+  static constexpr int Rows = Parent::Rows;
+  static constexpr int Cols = Parent::Cols;
+  static constexpr int RowStride = Parent::RowStride;
+  static constexpr int ColStride = Parent::ColStride;
+  static constexpr int ValidRow = Parent::ValidRow;
+  static constexpr int ValidCol = Parent::ValidCol;
+  static constexpr BLayout BFractal = Parent::BFractal;
+  static constexpr SLayout SFractal = Parent::SFractal;
+  static constexpr int SFractalSize = Parent::SFractalSize;
+  static constexpr bool isRowMajor = Parent::isRowMajor;
+  static constexpr bool isBoxedLayout = Parent::isBoxedLayout;
+  static constexpr bool isInnerRowMajor = Parent::isInnerRowMajor;
+  static constexpr bool isInnerColMajor = Parent::isInnerColMajor;
+  static constexpr int InnerRows = Parent::InnerRows;
+  static constexpr int InnerCols = Parent::InnerCols;
+  static constexpr int Numel = Parent::Numel;
+  static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
+  static constexpr int TilesizeCode = Parent::TilesizeCode;
+  static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
+
+  Subview(Parent &parent, uintptr_t range_base = 0)
+      : ParentValue(parent), RangeBaseValue(range_base) {}
+
+  // A range carrier over an ordinary Local Tile binds through data(); a
+  // carrier over a SharedTile binds through handle() (Shared uses the B.IOS
+  // binder with the compiler's dedicated S register constraint, and has no
+  // conventional data()).
+  decltype(auto) data()
+      requires(!is_shared_tile_v<Parent>) {
+    return ParentValue.data();
+  }
+  unsigned long handle()
+      requires(is_shared_tile_v<Parent>) {
+    return ParentValue.handle();
+  }
+  unsigned long &handle_ref()
+      requires(is_shared_tile_v<Parent>) {
+    return ParentValue.handle_ref();
+  }
+
+  int GetValidRow() const { return ParentValue.GetValidRow(); }
+  int GetValidCol() const { return ParentValue.GetValidCol(); }
+  uintptr_t GetRangeBase() const { return RangeBaseValue; }
+
+private:
+  Parent &ParentValue;
+  uintptr_t RangeBaseValue;
+};
+
+/// Destination-side range carrier. Capable of the multi-PE Shared
+/// destination requirement (operation enforces it); carries INIT/LAST and
+/// ParentSizeCode. INIT/LAST/Offset/RegSrc are compile-time constants for
+/// the same inline-asm "i" constraint reason as Subview: the range
+/// descriptor is a static part of the destination binder contract. RegSrc
+/// is the absolute GPR selector 0..23 for the base-address register
+/// (defaults to a0/R2, the conventional base register).
+template <typename Parent, unsigned ParentSizeCode_, bool INIT_ = true,
+          bool LAST_ = false, unsigned Offset_ = 0, unsigned RegSrc_ = 2>
+class Assemble {
+  static_assert(is_valid_parent_size_code(ParentSizeCode_),
+                "B.ASSEMBLE ParentSizeCode must be 0..12; 13..15 reserved");
+  static_assert(!((INIT_ == false) && (ParentSizeCode_ != 0)),
+                "B.ASSEMBLE: non-INIT modifier requires ParentSizeCode=0");
+  static_assert(!((INIT_ != false) && (ParentSizeCode_ == 0)),
+                "B.ASSEMBLE: INIT modifier requires ParentSizeCode 1..12");
+  static_assert(is_valid_uimm11(Offset_),
+                "B.ASSEMBLE uimm11 offset must be 0..2047");
+  static_assert(RegSrc_ <= 23,
+                "B.ASSEMBLE RegSrc must be an absolute GPR selector 0..23");
+public:
+  using DType = typename Parent::DType;
+  using ParentTile = Parent;
+  using TileDType = typename Parent::TileDType;
+
+  static constexpr unsigned ParentSizeCode = ParentSizeCode_;
+  static constexpr bool INIT = INIT_;
+  static constexpr bool LAST = LAST_;
+  static constexpr unsigned Offset = Offset_;
+  static constexpr unsigned RegSrc = RegSrc_;
+  static constexpr Location Loc = Parent::Loc;
+  static constexpr int Rows = Parent::Rows;
+  static constexpr int Cols = Parent::Cols;
+  static constexpr int RowStride = Parent::RowStride;
+  static constexpr int ColStride = Parent::ColStride;
+  static constexpr int ValidRow = Parent::ValidRow;
+  static constexpr int ValidCol = Parent::ValidCol;
+  static constexpr BLayout BFractal = Parent::BFractal;
+  static constexpr SLayout SFractal = Parent::SFractal;
+  static constexpr int SFractalSize = Parent::SFractalSize;
+  static constexpr bool isRowMajor = Parent::isRowMajor;
+  static constexpr bool isBoxedLayout = Parent::isBoxedLayout;
+  static constexpr bool isInnerRowMajor = Parent::isInnerRowMajor;
+  static constexpr bool isInnerColMajor = Parent::isInnerColMajor;
+  static constexpr int InnerRows = Parent::InnerRows;
+  static constexpr int InnerCols = Parent::InnerCols;
+  static constexpr int Numel = Parent::Numel;
+  static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
+  static constexpr int TilesizeCode = Parent::TilesizeCode;
+  static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
+
+  Assemble(Parent &parent, uintptr_t range_base = 0)
+      : ParentValue(parent), RangeBaseValue(range_base) {}
+
+  // Local binds through data(); SharedTile binds through handle() (B.IOS).
+  decltype(auto) data()
+      requires(!is_shared_tile_v<Parent>) {
+    return ParentValue.data();
+  }
+  unsigned long handle()
+      requires(is_shared_tile_v<Parent>) {
+    return ParentValue.handle();
+  }
+  unsigned long &handle_ref()
+      requires(is_shared_tile_v<Parent>) {
+    return ParentValue.handle_ref();
+  }
+
+  int GetValidRow() const { return ParentValue.GetValidRow(); }
+  int GetValidCol() const { return ParentValue.GetValidCol(); }
+  uintptr_t GetRangeBase() const { return RangeBaseValue; }
+
+private:
+  Parent &ParentValue;
+  uintptr_t RangeBaseValue;
+};
+
+} // namespace range
+
+// Range wrappers count as Local tile-shaped operands for binding purposes.
+template <typename Parent, unsigned SC, auto... Rest>
+struct is_tile<range::Subview<Parent, SC, Rest...>> : std::true_type {
+  static constexpr SLayout layout_enum = Parent::SFractal;
+};
+template <typename Parent, unsigned SC, auto... Rest>
+struct is_tile<range::Assemble<Parent, SC, Rest...>> : std::true_type {
+  static constexpr SLayout layout_enum = Parent::SFractal;
+};
+
+// Range-modifier traits: a Subview is a source-side range carrier and an
+// Assemble is a destination-side range carrier.
+template <typename T> struct is_subview : std::false_type {};
+template <typename Parent, unsigned SC, auto... Rest>
+struct is_subview<range::Subview<Parent, SC, Rest...>> : std::true_type {};
+template <typename T> struct is_assemble : std::false_type {};
+template <typename Parent, unsigned SC, auto... Rest>
+struct is_assemble<range::Assemble<Parent, SC, Rest...>> : std::true_type {};
+
+template <typename T>
+concept is_subview_v = is_subview<T>::value;
+template <typename T>
+concept is_assemble_v = is_assemble<T>::value;
+template <typename T>
+concept is_range_v = is_subview<T>::value || is_assemble<T>::value;
 
 // Equal bit-width is required: the reinterpret must not change the number of
 // logical elements, physical bytes or TileSizeCode.

@@ -100,6 +100,32 @@ C/Bias/FullAcc 类型固定为 FP32。缺失、额外或非 E8M0 scale 均在编
 
 `FixpPreQuantMode` 的取值及其输出数据类型（PTO ISA 0.58.3 `B.FPATR` 表）：
 
+### FP32 accumulator C scaling（PTO ISA 0.58.4）
+
+`CScaleEn` 只适用于 `TMATMUL_ACC`/`TMATMUL_MX_ACC` 的 FP32 accumulator
+路径。使用 `fixp::Options::cscale(scale)` 同时设置 `B.FPATR.CScaleEn=1`
+并绑定一个 Local `U8 CUBE_M32` tile：
+
+```cpp
+using CScale = Tile<Location::Vec, uint8_t, 32, 32,
+                    BLayout::CubeM32, 32, 1>;
+
+void matmul_acc_scaled(D &d, D &c, A &a, B &b, CScale &scale) {
+  TMATMUL_ACC(d, c, a, b, fixp::keep_acc().cscale(scale));
+}
+```
+
+该 source 按 ISA 顺序位于 `C,A,B`（MX ACC 为 `C,A,ScaleA,B,ScaleB`）之后，
+其它 postprocess source 之前。编译期会检查：
+
+- accumulator `C` 必须是 FP32；
+- scale 必须是 Local `U8`、`CUBE_M32`；
+- scale 的 valid shape 必须是 `M x 1`；
+- 非 ACC 操作、非 FP32 ACC、Shared scale 和其它 dtype/layout/shape 会被拒绝。
+
+`FixpAttr::cscale_enable()` 只适合底层属性编码测试；实际 TileOP 操作应使用
+`.cscale(scale)`，否则没有对应的 CScale source binder。
+
 | 模式 | 值 | dst dtype |
 | --- | ---: | --- |
 | `None` | 0 | 保留派生 AccType：浮点→FP32，有符号整数→S32，无符号整数→U32 |
@@ -416,7 +442,7 @@ PTO ISA 0.58.3 在 `B.FPATR` 低位增加 `TransA` 与 `TransB`。TileOP 通过
 TileOP 固定生成：
 
 ```asm
-BSTART.TMATMUL AType
+BSTART.CUBE TMATMUL, AType
 B.DATR BType, rmode0
 B.FPATR PreQuant, Relu, GroupNCode,
          RowMaxEn, GroupMaxEn, RowMaxInit, MaxAbsEn

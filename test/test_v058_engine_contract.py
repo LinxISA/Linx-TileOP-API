@@ -102,13 +102,13 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         for row in self.contract.get("cube_ops", []):
             if row["name"].startswith("TGEMV"):
                 continue
-            self.assertIn('"BSTART." OPCODE', self.header, row["name"])
+            self.assertIn('"BSTART.CUBE " OPCODE', self.header, row["name"])
             break
         for row in self.contract.get("tlsu_ops", []):
             if row["name"] in {"TPREFETCH", "MGATHER_CAS"}:
                 continue
             spelling = row["name"].replace("_", ".")
-            self.assertIn(f"BSTART.{spelling}", self.header, row["name"])
+            self.assertIn(f"BSTART.TLSU {spelling}", self.header, row["name"])
 
     # --- inline-asm ABI: Tr + %Z + %D ---
 
@@ -130,8 +130,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_jcore_uses_current_block_carriers(self) -> None:
         # TEPL remains the raw VEC/SFU carrier; TLSU/CUBE use exact named starts.
         self.assertIn("BSTART.TEPL", self.header)
-        self.assertIn("BSTART.TLOAD", self.header)
-        self.assertIn('"BSTART." OPCODE', self.header)
+        self.assertIn("BSTART.TLSU TLOAD", self.header)
+        self.assertIn('"BSTART.CUBE " OPCODE', self.header)
         # TGEMV enters through the TLSU/CUBE surface too.
         self.assertIn("TGEMV", self.header)
 
@@ -243,7 +243,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_matrix_dtype_and_effective_shape_contract_is_centralized(self) -> None:
         tile = PTO_TILE.read_text(encoding="utf-8")
         self.assertIn(
-            '"B.DATR %D[DataTypeB], rmode0, Zero\\n"', self.header
+            '"B.DATR %D[DataTypeB], RNONE, NOSAT\\n"', self.header
         )
         self.assertIn("matrix_accumulator_type_code", tile)
         self.assertIn("MatrixNumericClass::Unsigned", tile)
@@ -277,22 +277,33 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_mc_gate_requires_canonical_cube_layout_names(self) -> None:
         gate = (ROOT / "test" / "tileop_api" /
                 "verify_pto0583_asm.sh").read_text()
-        self.assertIn("ND2M32, DTYPE_NONE, Null", gate)
-        self.assertIn("N82ND, DTYPE_NONE, Null", gate)
+        self.assertIn(r"ND2M32\.normal", gate)
+        self.assertIn(r"N82ND\.normal", gate)
         self.assertIn("missing canonical $description", gate)
 
     def test_active_inline_asm_uses_exact_pto0583_surface(self) -> None:
-        self.assertNotRegex(self.header, r'"[^"\n]*BSTART\.(?:TLSU|CUBE)')
+        # CUBE transport (TLOAD_CUBE/TSTORE_CUBE) legitimately uses the
+        # canonical TLSU carrier ("BSTART.TLSU TLOAD/TSTORE") and the
+        # ".normal" CUBE selectors (ND2M16/ND2M32/ND2N8/M162ND/M322ND/
+        # N82ND); ordinary non-CUBE code must keep the exact 0.58.3 surface.
         self.assertNotRegex(self.header, r'"[^"\n]*mask=15(?:\D|$)')
         self.assertNotIn("mask=%c[PEMask]", self.header)
         self.assertNotRegex(
-            self.header, r'"BSTART\.TEPL\s+\d+,\s*%[cD]'
+            self.header, r'"BSTART\.TEPL\s+\d+,\s*\d+,\s*%[cD]'
         )
-        self.assertNotRegex(self.header, r'"B\.DATR[^"\n]*\.normal')
+        # Only the CUBE transport selectors may carry a ".normal" suffix on
+        # B.DATR; any other B.DATR ... .normal is the old spelling.
+        self.assertNotRegex(
+            self.header,
+            r'"B\.DATR (?!ND2M(?:16|32)|ND2N8|M(?:16|32)2ND|N82ND)[^"\n]*\.normal',
+        )
+        self.assertIn('"BSTART.TLSU TLOAD, %D[DataType]\\n"', self.header)
+        self.assertIn('"BSTART.TLSU TSTORE, %D[DataType]\\n"', self.header)
+        self.assertIn('"B.DATR ND2M32.normal, Zero\\n"', self.header)
         self.assertNotIn(
             '"B.DATR %c[DataTypeB], byte0, Zero\\n"', self.header
         )
-        self.assertIn('"BSTART." OPCODE " %D[DataTypeA]\\n"', self.header)
+        self.assertIn('"BSTART.CUBE " OPCODE ", %D[DataTypeA]\\n"', self.header)
 
     def test_pe_mode_rejects_unassigned_masks(self) -> None:
         type_header = (ROOT / "include" / "jcore" / "type.hpp").read_text(
@@ -326,10 +337,10 @@ int main() { return sizeof(Bad); }
 
     def test_shared_tmov_uses_unique_source_forms_and_shared_registers(self) -> None:
         for source_form in (
-            "BSTART.TMOV.L2S.INSERT",
-            "BSTART.TMOV.L2S.PUBLISH",
-            "BSTART.TMOV.S2L.BROADCAST",
-            "BSTART.TMOV.S2L.EXTRACT",
+            "BSTART.TLSU TMOV.L2S.INSERT",
+            "BSTART.TLSU TMOV.L2S.PUBLISH",
+            "BSTART.TLSU TMOV.S2L.BROADCAST",
+            "BSTART.TLSU TMOV.S2L.EXTRACT",
         ):
             self.assertIn(source_form, self.header, source_form)
         self.assertRegex(self.header, r'\[Shared\]\s+"=Sr"')
@@ -382,7 +393,10 @@ int main() { return sizeof(Bad); }
     def test_tquant_tdequant_use_datr_and_ior(self) -> None:
         # TQUANT/TDEQUANT: B.DATR carries named dtype/RMode and optional sat,
         # and B.IOR carries multiplier+zero-point.
-        self.assertRegex(self.header, r"B\.DATR %D\[DType\], rmode[0-7]")
+        self.assertRegex(
+            self.header,
+            r"B\.DATR %D\[__pto_DstType\], (?:RTZ|RTM|RTP|RNA|RTO|RHB)",
+        )
         self.assertRegex(self.header, r"B\.IOR \[%\[Mult\], %\[ZP\]\]")
 
     # --- docs and harness sanity ---

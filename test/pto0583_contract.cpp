@@ -26,6 +26,8 @@ using M16Partial = CubeTileM16<float, 8, 32>;
 using M32 = CubeTileM32<float, 32, 32>;
 using N8 = CubeTileN8<float, 32, 16>;
 using M16S4 = CubeTileM16<__int4x2, 16, 32>;
+using NarrowRow = Tile<Location::Vec, float, 2, 1,
+                        BLayout::RowMajor, 2, 1>;
 static_assert(M16::CubeCellBytes == 128);
 static_assert(M16::CubeRequiredBytes == 2048);
 static_assert(M16Partial::CubeRequiredBytes == 2048);
@@ -34,16 +36,27 @@ static_assert(M32::CubeRequiredBytes == 4096);
 static_assert(N8::CubeRequiredBytes == 2048);
 static_assert(M16S4::CubeElementBits == 4);
 static_assert(M16S4::CubeCellCols == 16);
+static_assert(NarrowRow::StorageBytes == 128);
+static_assert(NarrowRow::LogicalTileBytes == 128);
+static_assert(NarrowRow::TilesizeCode == __tilesize_128B);
 static_assert(M16::CubeStorageIndex(1, 2) == 34);
 static_assert(N8::CubeStorageIndex(5, 9) == 293);
 static_assert(SharedMatrixLeft<float, 16, 16>::BFractal == BLayout::RowMajor);
 static_assert(SharedMatrixRight<float, 16, 16>::BFractal == BLayout::RowMajor);
 using Local64K = Tile<Location::Vec, uint8_t, 256, 256,
                       BLayout::RowMajor>;
+using Local128K = Tile<Location::Vec, uint8_t, 512, 256,
+                       BLayout::RowMajor>;
+using Local256K = Tile<Location::Vec, uint8_t, 1024, 256,
+                       BLayout::RowMajor>;
 using Shared256K = Tile<Location::Vec, uint8_t, 512, 512,
                         BLayout::RowMajor>;
 static_assert(Local64K::TilesizeCode == __tilesize_64KB);
 static_assert(Local64K::IsValidActiveSize);
+static_assert(Local128K::TilesizeCode == __tilesize_128KB);
+static_assert(Local128K::IsValidActiveSize);
+static_assert(Local256K::TilesizeCode == __tilesize_256KB);
+static_assert(Local256K::IsValidActiveSize);
 static_assert(tile_type_traits<typename Shared256K::TileDType>::
                   IsValidSharedActiveSize);
 #ifdef __linx
@@ -62,6 +75,15 @@ static_assert(tile_type_traits<typename Shared256K::TileDType>::TilesizeCode ==
 constexpr FixpAttr transposed = FixpAttr::keep_acc().transpose_a().transpose_b();
 static_assert(transposed.TransA && transposed.TransB);
 static_assert(transposed.encoding() == 0x000021a3u);
+constexpr FixpAttr cscaled = FixpAttr::keep_acc().cscale_enable();
+static_assert(cscaled.CScaleEn);
+static_assert(cscaled.encoding() == 0x00002223u);
+using CScaleTile = Tile<Location::Vec, uint8_t, 32, 32, BLayout::CubeM32,
+                        32, 1>;
+using CScaleOptions = decltype(
+    fixp::keep_acc().cscale(std::declval<CScaleTile &>()));
+static_assert(CScaleOptions::Attr.CScaleEn);
+static_assert(std::is_same_v<typename CScaleOptions::CScaleTile, CScaleTile>);
 constexpr auto transposed_options =
     fixp::keep_acc().transpose_a().transpose_b();
 static_assert(transposed_options.Attr.TransA && transposed_options.Attr.TransB);

@@ -9,8 +9,9 @@ GMOV=13` and reserves `9..12,14..31` (functions 9..12 carry the Shared TMOV
 Local-to-Shared / Shared-to-Local semantics).
 
 This header emits the block forms using the current assembler spelling;
-PTO-ISA v0.58 canonicalizes them to named block starts (`BSTART.TLOAD`,
-`BSTART.TSTORE`, `BSTART.TMOV`, `BSTART.MGATHER.*`, `BSTART.GMOV`).
+PTO-ISA v0.58 canonicalizes them under the TLSU carrier (`BSTART.TLSU TLOAD`,
+`BSTART.TLSU TSTORE`, `BSTART.TLSU TMOV`, `BSTART.TLSU MGATHER.*`,
+`BSTART.TLSU GMOV`).
 
 ## Prefetch
 
@@ -41,7 +42,7 @@ the tensor object with `GetStride`; it never passes the layout template's
 Per the v0.58 contract the TLOAD/TSTORE block layout is:
 
 ```asm
-BSTART.TLOAD F32
+BSTART.TLSU TLOAD, F32
 B.DIM a0, 0, ->lb0      ; LB0 = valid columns
 B.DIM a1, 0, ->lb1      ; LB1 = valid rows
 B.DIM zero, a2, ->lb2   ; LB2 = physical columns
@@ -101,7 +102,7 @@ in `B.IOR.RegSrc1`. SizeCode is capacity; it is independent of logical M/N/K.
 ### MGATHER_CAS (atomic compare-and-swap)
 
 `MGATHER_CAS` atomically compares-and-swaps GM elements at byte displacements
-(TLSU function 8; canonical `BSTART.MGATHER.CAS`). Each lane reads
+(TLSU function 8; canonical `BSTART.TLSU MGATHER.CAS`). Each lane reads
 `base + displacement`, compares with `expected`, stores `replacement` on
 match, and publishes the observed old value to `observedOld`.
 

@@ -44,7 +44,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1);
 - `dst` and `src0/src1` must share the same `Rows/Cols` and inner shape;
   all three operands must be VEC (`Location::Vec`) ordinary Local Tiles.
 - The mode is a template NTTP; each instantiation emits
-  `B.DATR Zero, <mode-mnemonic>` (the assembler matches the mnemonic, e.g.
+  `B.DATR Zero, cmode<0..5>` (the assembler matches the numeric mode, e.g.
   `eq`/`gt`, not a numeric immediate) followed by the canonical `B.IOT`
   bundle.
 - Executed by VEC through the `BSTART.VEC TCMP` carrier
@@ -110,12 +110,12 @@ Each `TCMP<Mode>` / `TCMPS<Mode>` bundle carries exactly one `B.DATR` whose
 only non-zero field is `CMode` (padding is `Zero`):
 
 ```asm
-B.DATR Zero, eq      ; CMode=0
-B.DATR Zero, ne      ; CMode=1
-B.DATR Zero, lt      ; CMode=2
-B.DATR Zero, gt      ; CMode=3
-B.DATR Zero, le      ; CMode=4
-B.DATR Zero, ge      ; CMode=5
+B.DATR Zero, cmode0  ; CMode=0
+B.DATR Zero, cmode1  ; CMode=1
+B.DATR Zero, cmode2  ; CMode=2
+B.DATR Zero, cmode3  ; CMode=3
+B.DATR Zero, cmode4  ; CMode=4
+B.DATR Zero, cmode5  ; CMode=5
 ```
 
 The encodings are verified by `llvm-objdump`:

@@ -20,11 +20,12 @@ fi
 ACTIVE_FIXTURES=(
   DynamicShape DynamicTlsuStride CubeCellTransport SharedTranspose
   SharedTransposeNonSquare MatrixIntegerDtypes MXScaleVariants SharedMatmul
-  TMatmulAccFullOptions TMatmulAllOptions TGEMVAllOptions TGEMVOperandOrder
+  TMatmulAccFullOptions TMatmulAccCScale TMatmulAllOptions TGEMVAllOptions TGEMVOperandOrder
   PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs
   TAdd_mask TAdd TAdds TAnd TLoad TStore TCvt TDiv TDivs TExp TMax TMaxs
   TMov TMul TMuls TOr TRecip TRem TRowMax TRowSum TSqrt TSub TSubs TTrans
+  RangeSubview RangeAssemble SharedRange
 )
 
 # These fixtures have intentionally minimal hosted mains. They exercise scalar,

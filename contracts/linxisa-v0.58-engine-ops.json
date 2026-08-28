@@ -3,73 +3,73 @@
     {
       "engine": "CUBE",
       "function": 0,
-      "mnemonic": "BSTART.TMATMUL",
+      "mnemonic": "BSTART.CUBE TMATMUL",
       "name": "TMATMUL"
     },
     {
       "engine": "CUBE",
       "function": 1,
-      "mnemonic": "BSTART.TMATMUL.BIAS",
+      "mnemonic": "BSTART.CUBE TMATMUL.BIAS",
       "name": "TMATMUL_BIAS"
     },
     {
       "engine": "CUBE",
       "function": 2,
-      "mnemonic": "BSTART.TMATMUL.ACC",
+      "mnemonic": "BSTART.CUBE TMATMUL.ACC",
       "name": "TMATMUL_ACC"
     },
     {
       "engine": "CUBE",
       "function": 4,
-      "mnemonic": "BSTART.TMATMULMX",
+      "mnemonic": "BSTART.CUBE TMATMULMX",
       "name": "TMATMUL_MX"
     },
     {
       "engine": "CUBE",
       "function": 5,
-      "mnemonic": "BSTART.TMATMULMX.BIAS",
+      "mnemonic": "BSTART.CUBE TMATMULMX.BIAS",
       "name": "TMATMUL_MX_BIAS"
     },
     {
       "engine": "CUBE",
       "function": 6,
-      "mnemonic": "BSTART.TMATMULMX.ACC",
+      "mnemonic": "BSTART.CUBE TMATMULMX.ACC",
       "name": "TMATMUL_MX_ACC"
     },
     {
       "engine": "CUBE",
       "function": 16,
-      "mnemonic": "BSTART.TGEMV",
+      "mnemonic": "BSTART.CUBE TGEMV",
       "name": "TGEMV"
     },
     {
       "engine": "CUBE",
       "function": 17,
-      "mnemonic": "BSTART.TGEMV.BIAS",
+      "mnemonic": "BSTART.CUBE TGEMV.BIAS",
       "name": "TGEMV_BIAS"
     },
     {
       "engine": "CUBE",
       "function": 18,
-      "mnemonic": "BSTART.TGEMV.ACC",
+      "mnemonic": "BSTART.CUBE TGEMV.ACC",
       "name": "TGEMV_ACC"
     },
     {
       "engine": "CUBE",
       "function": 20,
-      "mnemonic": "BSTART.TGEMVMX",
+      "mnemonic": "BSTART.CUBE TGEMVMX",
       "name": "TGEMV_MX"
     },
     {
       "engine": "CUBE",
       "function": 21,
-      "mnemonic": "BSTART.TGEMVMX.BIAS",
+      "mnemonic": "BSTART.CUBE TGEMVMX.BIAS",
       "name": "TGEMV_MX_BIAS"
     },
     {
       "engine": "CUBE",
       "function": 22,
-      "mnemonic": "BSTART.TGEMVMX.ACC",
+      "mnemonic": "BSTART.CUBE TGEMVMX.ACC",
       "name": "TGEMV_MX_ACC"
     }
   ],
@@ -833,61 +833,61 @@
     {
       "engine": "TLSU",
       "function": 0,
-      "mnemonic": "BSTART.TLOAD",
+      "mnemonic": "BSTART.TLSU TLOAD",
       "name": "TLOAD"
     },
     {
       "engine": "TLSU",
       "function": 1,
-      "mnemonic": "BSTART.TSTORE",
+      "mnemonic": "BSTART.TLSU TSTORE",
       "name": "TSTORE"
     },
     {
       "engine": "TLSU",
       "function": 2,
-      "mnemonic": "BSTART.TMOV",
+      "mnemonic": "BSTART.TLSU TMOV",
       "name": "TMOV"
     },
     {
       "engine": "TLSU",
       "function": 3,
-      "mnemonic": "BSTART.TPREFETCH",
+      "mnemonic": "BSTART.TLSU TPREFETCH",
       "name": "TPREFETCH"
     },
     {
       "engine": "TLSU",
       "function": 4,
-      "mnemonic": "BSTART.MGATHER",
+      "mnemonic": "BSTART.TLSU MGATHER",
       "name": "MGATHER"
     },
     {
       "engine": "TLSU",
       "function": 5,
-      "mnemonic": "BSTART.MSCATTER",
+      "mnemonic": "BSTART.TLSU MSCATTER",
       "name": "MSCATTER"
     },
     {
       "engine": "TLSU",
       "function": 6,
-      "mnemonic": "BSTART.MGATHER.MASK",
+      "mnemonic": "BSTART.TLSU MGATHER.MASK",
       "name": "MGATHER_MASK"
     },
     {
       "engine": "TLSU",
       "function": 7,
-      "mnemonic": "BSTART.MSCATTER.MASK",
+      "mnemonic": "BSTART.TLSU MSCATTER.MASK",
       "name": "MSCATTER_MASK"
     },
     {
       "engine": "TLSU",
       "function": 8,
-      "mnemonic": "BSTART.MGATHER.CAS",
+      "mnemonic": "BSTART.TLSU MGATHER.CAS",
       "name": "MGATHER_CAS"
     },
     {
       "engine": "TLSU",
       "function": 13,
-      "mnemonic": "BSTART.GMOV",
+      "mnemonic": "BSTART.TLSU GMOV",
       "name": "GMOV"
     }
   ]
