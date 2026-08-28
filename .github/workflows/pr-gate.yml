@@ -72,8 +72,22 @@ jobs:
           echo "sha=${LLVM_SOURCE_SHA}" >> "$GITHUB_OUTPUT"
           echo "Resolved latest LLVM ${LLVM_REF} -> ${LLVM_SOURCE_SHA}"
 
-      - name: Restore LLVM build cache
-        id: cache-llvm
+      - name: Restore complete v2 toolchain cache
+        id: cache-llvm-v2
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            toolchain/src
+            toolchain/build
+            toolchain/stamps
+            toolchain/output/linx_blockisa_llvm_musl
+          key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+          restore-keys: |
+            llvm-${{ runner.os }}-tileop-required-gate-v2-
+
+      - name: Restore legacy exact-SHA LLVM cache
+        id: cache-llvm-legacy
+        if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
         uses: actions/cache/restore@v4
         with:
           path: |
@@ -105,26 +119,71 @@ jobs:
           echo "Toolchain SHA: $(git -C toolchain rev-parse HEAD)"
           echo "LLVM SHA: $(git -C toolchain/src/llvm-project rev-parse HEAD)"
 
-      - name: Build latest toolchain
+      - name: Restore, incrementally update, or build toolchain
         working-directory: toolchain
         env:
+          V2_CACHE_HIT: ${{ steps.cache-llvm-v2.outputs.cache-hit }}
+          V2_CACHE_MATCHED_KEY: ${{ steps.cache-llvm-v2.outputs.cache-matched-key }}
+          LEGACY_CACHE_HIT: ${{ steps.cache-llvm-legacy.outputs.cache-hit }}
+          EXACT_V2_KEY: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
           ENABLE_CCACHE: on
           THREADS: '4'
         run: |
+          set -euo pipefail
           export PATH="/usr/lib/ccache:$PATH"
-          make WITH_TARGET=linx64v5-linux-musl
+
+          if [ "${V2_CACHE_HIT}" = "true" ]; then
+            echo "Exact complete toolchain cache hit: ${EXACT_V2_KEY}"
+            echo "Skipping toolchain build."
+            exit 0
+          fi
+
+          if [ "${LEGACY_CACHE_HIT}" = "true" ] && \
+             [ -x output/linx_blockisa_llvm_musl/bin/clang ]; then
+            echo "Reusing the legacy exact-SHA LLVM cache."
+            mkdir -p stamps
+            touch stamps/check-write-permission
+            touch stamps/build-llvm-musl
+          elif [[ "${V2_CACHE_MATCHED_KEY}" == llvm-${{ runner.os }}-tileop-required-gate-v2-* ]] && \
+               [ -f build/build-llvm-musl/CMakeCache.txt ]; then
+            echo "Updating the nearest v2 LLVM build tree incrementally."
+            if cmake -S src/llvm-project/llvm -B build/build-llvm-musl && \
+               cmake --build build/build-llvm-musl --parallel "${THREADS}" && \
+               cmake --install build/build-llvm-musl; then
+              cd output/linx_blockisa_llvm_musl/bin
+              ln -s -f clang linx64v5-linux-musl-clang
+              ln -s -f clang++ linx64v5-linux-musl-clang++
+              cd ../../..
+              mkdir -p stamps
+              touch stamps/build-llvm-musl
+            else
+              echo "Incremental LLVM update failed; falling back to a clean build."
+              rm -rf build/build-llvm-musl output/linx_blockisa_llvm_musl stamps
+            fi
+          else
+            echo "No reusable LLVM build tree found; performing a clean build."
+            rm -f stamps/build-llvm-musl
+          fi
+
+          if ! make WITH_TARGET=linx64v5-linux-musl; then
+            echo "Cached/incremental toolchain completion failed; retrying once cleanly."
+            rm -rf \
+              build/build-llvm-musl \
+              output/linx_blockisa_llvm_musl \
+              stamps
+            make WITH_TARGET=linx64v5-linux-musl
+          fi
 
       - name: Save LLVM build cache
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
-            toolchain/build/build-llvm-musl
-            toolchain/stamps/build-llvm-musl
-            toolchain/output/linx_blockisa_llvm_musl/bin
-            toolchain/output/linx_blockisa_llvm_musl/lib
-            toolchain/output/linx_blockisa_llvm_musl/include
-          key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-v1
+            toolchain/src
+            toolchain/build
+            toolchain/stamps
+            toolchain/output/linx_blockisa_llvm_musl
+          key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
 
       - name: Run TileOP contract checks
         working-directory: toolchain/src/Linx-TileOP-API

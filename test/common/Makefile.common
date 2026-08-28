@@ -47,9 +47,9 @@ CXX = $(COMPILER_DIR)/clang++
 LINK = $(COMPILER_DIR)/clang++
 DUMP = $(COMPILER_DIR)/llvm-objdump
 COPY = $(COMPILER_DIR)/llvm-objcopy
-CC_O = --target=$(LINX_TARGET) -c -fenable-matrix -O2
+CC_O = --target=$(LINX_TARGET) -c -mlxbc -fenable-matrix -O2
 CC_VER ?= -std=c++20
-CC_LINK += --target=$(LINX_TARGET)
+CC_LINK += --target=$(LINX_TARGET) -mlxbc
 ifneq ($(strip $(LINX_SYSROOT)),)
 CC_O += --sysroot=$(LINX_SYSROOT) -nostdinc++ \
         -isystem $(LINX_SYSROOT)/include/c++/v1

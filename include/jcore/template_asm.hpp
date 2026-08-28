@@ -212,7 +212,6 @@ inline void TMOV(Tile &dst, const Tile &src) {
   const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TLSU TMOV, %D[DataType]\n"
-    "B.DATR NORM, DTYPE_NONE, Zero\n"
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM %[ValidRow], 0, ->lb1\n"
     "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
@@ -6708,7 +6707,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   if constexpr (Mode == CmpMode::EQ) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
-      "B.DATR Zero, cmode0\n"
+      "B.DATR Zero, EQ\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6726,7 +6725,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   } else if constexpr (Mode == CmpMode::NE) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
-      "B.DATR Zero, cmode1\n"
+      "B.DATR Zero, NE\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6744,7 +6743,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   } else if constexpr (Mode == CmpMode::LT) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
-      "B.DATR Zero, cmode2\n"
+      "B.DATR Zero, LT\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6762,7 +6761,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   } else if constexpr (Mode == CmpMode::GT) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
-      "B.DATR Zero, cmode3\n"
+      "B.DATR Zero, GT\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6780,7 +6779,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   } else if constexpr (Mode == CmpMode::LE) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
-      "B.DATR Zero, cmode4\n"
+      "B.DATR Zero, LE\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -6798,7 +6797,7 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   } else if constexpr (Mode == CmpMode::GE) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
-      "B.DATR Zero, cmode5\n"
+      "B.DATR Zero, GE\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -7387,7 +7386,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   if constexpr (Mode == CmpMode::EQ) {
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
-      "B.DATR Zero, cmode0\n"
+      "B.DATR Zero, EQ\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -7406,7 +7405,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   } else if constexpr (Mode == CmpMode::NE) {
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
-      "B.DATR Zero, cmode1\n"
+      "B.DATR Zero, NE\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -7425,7 +7424,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   } else if constexpr (Mode == CmpMode::LT) {
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
-      "B.DATR Zero, cmode2\n"
+      "B.DATR Zero, LT\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -7444,7 +7443,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   } else if constexpr (Mode == CmpMode::GT) {
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
-      "B.DATR Zero, cmode3\n"
+      "B.DATR Zero, GT\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -7463,7 +7462,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   } else if constexpr (Mode == CmpMode::LE) {
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
-      "B.DATR Zero, cmode4\n"
+      "B.DATR Zero, LE\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -7482,7 +7481,7 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
   } else if constexpr (Mode == CmpMode::GE) {
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
-      "B.DATR Zero, cmode5\n"
+      "B.DATR Zero, GE\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
