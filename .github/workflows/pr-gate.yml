@@ -1,14 +1,17 @@
-name: PR Gate with pinned Linx LLVM
+name: Linx TileOP required gate
 
 on:
   pull_request:
     branches:
       - linx
-      - main
+  merge_group:
+  push:
+    branches:
+      - linx
   workflow_dispatch:
 
 concurrency:
-  group: tileop-pr-gate-${{ github.event.pull_request.number || github.ref }}
+  group: tileop-required-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -16,21 +19,20 @@ permissions:
 
 jobs:
   gate:
-    name: Build toolchain and validate TileOP API
+    name: Build latest Linx LLVM and validate TileOP API
     runs-on: ubuntu-latest
     timeout-minutes: 240
 
     env:
       LLVM_REPO: https://github.com/LinxISA/llvm-project.git
       LLVM_REF: dev-llvm15_56
-      LLVM_SHA: 3434ea3ab5428e08691a5112ebfad916b0c4942a
       TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
       TOOLCHAIN_REF: e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156
       TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
       LINX_TARGET: linx64v5-unknown-linux-musl
 
     steps:
-      - name: Checkout PR code
+      - name: Checkout candidate TileOP code
         uses: actions/checkout@v4
         with:
           path: tileop-api
@@ -57,16 +59,18 @@ jobs:
       - name: Configure git for component clones
         run: git config --global --add safe.directory '*'
 
-      - name: Resolve LLVM source SHA
+      - name: Resolve latest LLVM branch SHA
         id: llvm-source
+        shell: bash
         run: |
-          LLVM_SOURCE_SHA="$(git ls-remote "${LLVM_REPO}" "refs/heads/${LLVM_REF}" | awk '{print $1}')"
-          if [ "${LLVM_SOURCE_SHA}" != "${LLVM_SHA}" ]; then
-            echo "ERROR: failed to resolve pinned LLVM commit ${LLVM_SHA}" >&2
+          set -euo pipefail
+          LLVM_SOURCE_SHA="$({ git ls-remote "${LLVM_REPO}" "refs/heads/${LLVM_REF}" || true; } | awk 'NR == 1 {print $1}')"
+          if [ -z "${LLVM_SOURCE_SHA}" ]; then
+            echo "ERROR: failed to resolve ${LLVM_REPO} refs/heads/${LLVM_REF}" >&2
             exit 1
           fi
           echo "sha=${LLVM_SOURCE_SHA}" >> "$GITHUB_OUTPUT"
-          echo "Resolved LLVM ${LLVM_REF} -> ${LLVM_SOURCE_SHA}"
+          echo "Resolved latest LLVM ${LLVM_REF} -> ${LLVM_SOURCE_SHA}"
 
       - name: Restore LLVM build cache
         id: cache-llvm
@@ -78,16 +82,18 @@ jobs:
             toolchain/output/linx_blockisa_llvm_musl/bin
             toolchain/output/linx_blockisa_llvm_musl/lib
             toolchain/output/linx_blockisa_llvm_musl/include
-          key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-pr-gate-v1
+          key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-v1
 
       - name: Initialize component sources
         working-directory: toolchain
+        env:
+          LLVM_SOURCE_SHA: ${{ steps.llvm-source.outputs.sha }}
         run: |
           make init-src
-          git -C src/llvm-project fetch origin "${LLVM_SHA}"
-          git -C src/llvm-project checkout --detach "${LLVM_SHA}"
+          git -C src/llvm-project fetch origin "${LLVM_SOURCE_SHA}"
+          git -C src/llvm-project checkout --detach "${LLVM_SOURCE_SHA}"
 
-      - name: Replace TileOP source with PR content
+      - name: Replace TileOP source with candidate content
         run: |
           rsync -a --delete \
             --exclude .git \
@@ -95,10 +101,9 @@ jobs:
 
       - name: Show resolved source revisions
         run: |
-          echo "TileOP PR SHA: $(git -C tileop-api rev-parse HEAD)"
+          echo "TileOP candidate SHA: $(git -C tileop-api rev-parse HEAD)"
           echo "Toolchain SHA: $(git -C toolchain rev-parse HEAD)"
           echo "LLVM SHA: $(git -C toolchain/src/llvm-project rev-parse HEAD)"
-          echo "LLVM branch: $(git -C toolchain/src/llvm-project branch --show-current)"
 
       - name: Build latest toolchain
         working-directory: toolchain
@@ -109,7 +114,7 @@ jobs:
           export PATH="/usr/lib/ccache:$PATH"
           make WITH_TARGET=linx64v5-linux-musl
 
-      - name: Save LLVM cache
+      - name: Save LLVM build cache
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
@@ -119,9 +124,9 @@ jobs:
             toolchain/output/linx_blockisa_llvm_musl/bin
             toolchain/output/linx_blockisa_llvm_musl/lib
             toolchain/output/linx_blockisa_llvm_musl/include
-          key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-pr-gate-v1
+          key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-v1
 
-      - name: Run TileOP make check
+      - name: Run TileOP contract checks
         working-directory: toolchain/src/Linx-TileOP-API
         env:
           CC: gcc
@@ -130,7 +135,7 @@ jobs:
           export PATH="${TOOLCHAIN_INSTALL_DIR}/bin:$PATH"
           make check
 
-      - name: Run target compile and validation scripts
+      - name: Run Linx target gate
         working-directory: toolchain/src/Linx-TileOP-API/test/tileop_api
         env:
           TC_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin

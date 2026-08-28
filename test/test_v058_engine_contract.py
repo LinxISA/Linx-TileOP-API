@@ -135,6 +135,25 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         # TGEMV enters through the TLSU/CUBE surface too.
         self.assertIn("TGEMV", self.header)
 
+    def test_tcvt_emits_dimensions_before_terminating_iot(self) -> None:
+        tcvt = re.search(
+            r'(?s)template <is_tile_data_v tile_shape_out, '
+            r'is_tile_data_v tile_shape_in>\n'
+            r'void TCVT_T\(.*?\n}\n\n#define DEFINE_TMOV_LAYOUT',
+            self.header,
+        )
+        self.assertIsNotNone(tcvt)
+        carrier = tcvt.group(0)
+        expected = (
+            '"BSTART.TEPL 27, %D1\\n"\n'
+            '    "B.DATR %D2, RNONE\\n"\n'
+            '    "B.DIM %5, 0, ->lb0\\n"\n'
+            '    "B.DIM %6, 0, ->lb1\\n"\n'
+            '    "B.DIM zero, %c7, ->lb2\\n"\n'
+            '    "B.IOT %3, mask=1111, last, ->%0<%Z4>\\n"'
+        )
+        self.assertIn(expected, carrier)
+
     # --- PE mask: 4 binary digits ---
 
     def test_pe_masks_are_four_binary_digits(self) -> None:
@@ -152,7 +171,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_tlsu_load_store_stride_is_expressed_in_bytes(self) -> None:
         self.assertIn("GetStrideBytes", self.header)
-        tlsu_doc = (ROOT / "docs" / "tileop-usage" / "tlsu.md").read_text(encoding="utf-8")
+        tlsu_doc = (ROOT / "docs" / "tileop-usage" / "tlsu" / "load-store-move" / "TLOAD.md").read_text(encoding="utf-8")
         self.assertIn("row stride in **bytes**", tlsu_doc)
 
     def test_fpatr_carries_shared_transpose_controls(self) -> None:
@@ -402,7 +421,7 @@ int main() { return sizeof(Bad); }
     # --- docs and harness sanity ---
 
     def test_generated_engine_document_is_fresh(self) -> None:
-        generated = ROOT / "docs" / "tileop-usage" / "engines.md"
+        generated = ROOT / "docs" / "tileop-usage" / "generated" / "engines.md"
         self.assertTrue(generated.is_file())
         self.assertIn("**VEC**, **TLSU**, **CUBE**, and **SFU**", generated.read_text())
 
