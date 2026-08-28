@@ -101,12 +101,3 @@ C++ 模板实例化阶段或 Tile legality/allocation preflight 阶段被拒绝�
 
 完整调用形式和类型约束请参阅 `template_asm.hpp` 中的定义以及对应的主题指南（若存在）。
 本页的接口摘要只用于导航，不将宏展开或底层 inline-asm 实现伪装成公共 overload。
-
-## 验证映射
-
-相关实现和测试位于：
-
-```text
-/Users/lulu/Developer/LinxISA/latest-tileop-api/include/jcore/template_asm.hpp
-/Users/lulu/Developer/LinxISA/latest-tileop-api/test/tileop_api/
-```
