@@ -10,6 +10,7 @@ trap 'rm -rf "$OUT"' EXIT
 
 FLAGS=(
   --target="$LINX_TARGET"
+  -mlxbc
   --sysroot="$LINX_SYSROOT"
   -nostdinc++
   -isystem "$LINX_SYSROOT/include/c++/v1"

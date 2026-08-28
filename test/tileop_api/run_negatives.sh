@@ -8,7 +8,7 @@ LINX_TARGET=${LINX_TARGET:-linx64-unknown-linux-musl}
 CXX="$TC_DIR/clang++"
 OUT=$(mktemp -d "${TMPDIR:-/tmp}/tileop-negatives.XXXXXX")
 trap 'rm -rf "$OUT"' EXIT
-FLAGS=(--target="$LINX_TARGET" -c -fenable-matrix -O2 -std=c++20 -D__linx
+FLAGS=(--target="$LINX_TARGET" -c -mlxbc -fenable-matrix -O2 -std=c++20 -D__linx
        -DENABLE_TENSOR_INSTR -I../../include)
 if [[ -n "${LINX_SYSROOT:-}" ]]; then
   FLAGS+=(--sysroot="$LINX_SYSROOT" -nostdinc++

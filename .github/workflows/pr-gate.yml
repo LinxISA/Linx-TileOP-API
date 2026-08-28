@@ -1,4 +1,4 @@
-name: PR Gate with latest dev-llvm15_56
+name: PR Gate with pinned Linx LLVM
 
 on:
   pull_request:
@@ -23,8 +23,9 @@ jobs:
     env:
       LLVM_REPO: https://github.com/LinxISA/llvm-project.git
       LLVM_REF: dev-llvm15_56
+      LLVM_SHA: 3434ea3ab5428e08691a5112ebfad916b0c4942a
       TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
-      TOOLCHAIN_REF: main
+      TOOLCHAIN_REF: e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156
       TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
       LINX_TARGET: linx64v5-unknown-linux-musl
 
@@ -60,8 +61,8 @@ jobs:
         id: llvm-source
         run: |
           LLVM_SOURCE_SHA="$(git ls-remote "${LLVM_REPO}" "refs/heads/${LLVM_REF}" | awk '{print $1}')"
-          if [ -z "${LLVM_SOURCE_SHA}" ]; then
-            echo "ERROR: failed to resolve ${LLVM_REPO} ${LLVM_REF}" >&2
+          if [ "${LLVM_SOURCE_SHA}" != "${LLVM_SHA}" ]; then
+            echo "ERROR: failed to resolve pinned LLVM commit ${LLVM_SHA}" >&2
             exit 1
           fi
           echo "sha=${LLVM_SOURCE_SHA}" >> "$GITHUB_OUTPUT"
@@ -81,7 +82,10 @@ jobs:
 
       - name: Initialize component sources
         working-directory: toolchain
-        run: make init-src
+        run: |
+          make init-src
+          git -C src/llvm-project fetch origin "${LLVM_SHA}"
+          git -C src/llvm-project checkout --detach "${LLVM_SHA}"
 
       - name: Replace TileOP source with PR content
         run: |
@@ -120,8 +124,8 @@ jobs:
       - name: Run TileOP make check
         working-directory: toolchain/src/Linx-TileOP-API
         env:
-          CC: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang
-          CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
+          CC: gcc
+          CXX: g++
         run: |
           export PATH="${TOOLCHAIN_INSTALL_DIR}/bin:$PATH"
           make check
