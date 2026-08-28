@@ -23,6 +23,7 @@ which mirrors the PTO ISA 0.58.3 tile-operation catalog
 | Quantization and image-to-column (`TQUANT`, `TDEQUANT`, `TIMG2COL`) | [quant-and-im2col.md](quant-and-im2col.md) |
 | Tile datatype reinterpret view | [reinterpret-tile.md](reinterpret-tile.md) |
 | B.SUBVIEW / B.ASSEMBLE range modifiers | [range-modifiers.md](range-modifiers.md) |
+| Experimental compiler-semantic aligned Tile arrays | [tile-arrays.md](tile-arrays.md) |
 
 The generated engine index and checked-in machine contract are the navigation roots. New public
 operations must first exist in LinxISA, then be projected into `contracts/`, implemented in the
