@@ -1,0 +1,159 @@
+# LinxISA / PTO ISA v0.58.3 execution engines
+
+The architectural engine classes are exactly **VEC**, **TLSU**, **CUBE**, and **SFU**.
+VEC contains elementwise operations only. SFU contains reductions, broadcasts, transforms,
+sorting, and other operations that require more complex hardware. TEPL remains the unique
+compiled carrier identity. `BSTART.VEC` and `BSTART.SFU` are engine-specific assembly aliases;
+the inline wrappers retain `BSTART.TEPL` for source compatibility with the preceding toolchain.
+
+The table is projected from the pinned LinxISA authority recorded in
+[`contracts/linxisa-v0.58-engine-ops.json`](../../contracts/linxisa-v0.58-engine-ops.json).
+
+## VEC
+
+| API / operation | Canonical assembly | Logical selector | Classification |
+| --- | --- | ---: | --- |
+| `TADD` | `BSTART.VEC TADD` | 0 | elementwise-tile-tile |
+| `TSUB` | `BSTART.VEC TSUB` | 1 | elementwise-tile-tile |
+| `TMUL` | `BSTART.VEC TMUL` | 2 | elementwise-tile-tile |
+| `TAND` | `BSTART.VEC TAND` | 6 | elementwise-tile-tile |
+| `TOR` | `BSTART.VEC TOR` | 7 | elementwise-tile-tile |
+| `TXOR` | `BSTART.VEC TXOR` | 8 | elementwise-tile-tile |
+| `TSHL` | `BSTART.VEC TSHL` | 9 | elementwise-tile-tile |
+| `TSHR` | `BSTART.VEC TSHR` | 10 | elementwise-tile-tile |
+| `TMAX` | `BSTART.VEC TMAX` | 11 | elementwise-tile-tile |
+| `TMIN` | `BSTART.VEC TMIN` | 12 | elementwise-tile-tile |
+| `TCMP` | `BSTART.VEC TCMP` | 13 | elementwise-tile-tile |
+| `TABS` | `BSTART.VEC TABS` | 15 | elementwise-tile-tile |
+| `TNOT` | `BSTART.VEC TNOT` | 16 | elementwise-tile-tile |
+| `TNEG` | `BSTART.VEC TNEG` | 17 | elementwise-tile-tile |
+| `TRELU` | `BSTART.VEC TRELU` | 23 | elementwise-tile-tile |
+| `TSEL` | `BSTART.VEC TSEL` | 26 | elementwise-tile-tile |
+| `TCVT` | `BSTART.VEC TCVT` | 27 | elementwise-tile-tile |
+| `TFMA` | `BSTART.VEC TFMA` | 28 | elementwise-tile-tile |
+| `TADDS` | `BSTART.VEC TADDS` | 32 | tile-scalar-and-immediate |
+| `TSUBS` | `BSTART.VEC TSUBS` | 33 | tile-scalar-and-immediate |
+| `TMULS` | `BSTART.VEC TMULS` | 34 | tile-scalar-and-immediate |
+| `TANDS` | `BSTART.VEC TANDS` | 38 | tile-scalar-and-immediate |
+| `TORS` | `BSTART.VEC TORS` | 39 | tile-scalar-and-immediate |
+| `TXORS` | `BSTART.VEC TXORS` | 40 | tile-scalar-and-immediate |
+| `TSHLS` | `BSTART.VEC TSHLS` | 41 | tile-scalar-and-immediate |
+| `TSHRS` | `BSTART.VEC TSHRS` | 42 | tile-scalar-and-immediate |
+| `TMAXS` | `BSTART.VEC TMAXS` | 43 | tile-scalar-and-immediate |
+| `TMINS` | `BSTART.VEC TMINS` | 44 | tile-scalar-and-immediate |
+| `TCMPS` | `BSTART.VEC TCMPS` | 45 | tile-scalar-and-immediate |
+| `TSELS` | `BSTART.VEC TSELS` | 58 | tile-scalar-and-immediate |
+| `TEXPANDS` | `BSTART.VEC TEXPANDS` | 59 | tile-scalar-and-immediate |
+
+## SFU
+
+| API / operation | Canonical assembly | Logical selector | Classification |
+| --- | --- | ---: | --- |
+| `TDIV` | `BSTART.SFU TDIV` | 3 | elementwise-tile-tile |
+| `TREM` | `BSTART.SFU TREM` | 4 | elementwise-tile-tile |
+| `TEXP` | `BSTART.SFU TEXP` | 18 | elementwise-tile-tile |
+| `TLOG` | `BSTART.SFU TLOG` | 19 | elementwise-tile-tile |
+| `TRECIP` | `BSTART.SFU TRECIP` | 20 | elementwise-tile-tile |
+| `TSQRT` | `BSTART.SFU TSQRT` | 21 | elementwise-tile-tile |
+| `TRSQRT` | `BSTART.SFU TRSQRT` | 22 | elementwise-tile-tile |
+| `TDIVS` | `BSTART.SFU TDIVS` | 35 | tile-scalar-and-immediate |
+| `TREMS` | `BSTART.SFU TREMS` | 36 | tile-scalar-and-immediate |
+| `TROWSUM` | `BSTART.SFU TROWSUM` | 64 | reduce-and-expand |
+| `TROWMAX` | `BSTART.SFU TROWMAX` | 65 | reduce-and-expand |
+| `TROWMIN` | `BSTART.SFU TROWMIN` | 66 | reduce-and-expand |
+| `TROWPROD` | `BSTART.SFU TROWPROD` | 67 | reduce-and-expand |
+| `TROWEXPAND` | `BSTART.SFU TROWEXPAND` | 68 | reduce-and-expand |
+| `TROWEXPANDADD` | `BSTART.SFU TROWEXPANDADD` | 69 | reduce-and-expand |
+| `TROWEXPANDSUB` | `BSTART.SFU TROWEXPANDSUB` | 70 | reduce-and-expand |
+| `TROWEXPANDMUL` | `BSTART.SFU TROWEXPANDMUL` | 71 | reduce-and-expand |
+| `TROWEXPANDDIV` | `BSTART.SFU TROWEXPANDDIV` | 72 | reduce-and-expand |
+| `TROWEXPANDMAX` | `BSTART.SFU TROWEXPANDMAX` | 73 | reduce-and-expand |
+| `TROWEXPANDMIN` | `BSTART.SFU TROWEXPANDMIN` | 74 | reduce-and-expand |
+| `TROWEXPANDEXPDIF` | `BSTART.SFU TROWEXPANDEXPDIF` | 75 | reduce-and-expand |
+| `TROWARGMAX` | `BSTART.SFU TROWARGMAX` | 76 | reduce-and-expand |
+| `TROWARGMIN` | `BSTART.SFU TROWARGMIN` | 77 | reduce-and-expand |
+| `TCOLSUM` | `BSTART.SFU TCOLSUM` | 80 | reduce-and-expand |
+| `TCOLMAX` | `BSTART.SFU TCOLMAX` | 81 | reduce-and-expand |
+| `TCOLMIN` | `BSTART.SFU TCOLMIN` | 82 | reduce-and-expand |
+| `TCOLPROD` | `BSTART.SFU TCOLPROD` | 83 | reduce-and-expand |
+| `TCOLEXPAND` | `BSTART.SFU TCOLEXPAND` | 84 | reduce-and-expand |
+| `TCOLEXPANDADD` | `BSTART.SFU TCOLEXPANDADD` | 85 | reduce-and-expand |
+| `TCOLEXPANDSUB` | `BSTART.SFU TCOLEXPANDSUB` | 86 | reduce-and-expand |
+| `TCOLEXPANDMUL` | `BSTART.SFU TCOLEXPANDMUL` | 87 | reduce-and-expand |
+| `TCOLEXPANDDIV` | `BSTART.SFU TCOLEXPANDDIV` | 88 | reduce-and-expand |
+| `TCOLEXPANDMAX` | `BSTART.SFU TCOLEXPANDMAX` | 89 | reduce-and-expand |
+| `TCOLEXPANDMIN` | `BSTART.SFU TCOLEXPANDMIN` | 90 | reduce-and-expand |
+| `TCOLEXPANDEXPDIF` | `BSTART.SFU TCOLEXPANDEXPDIF` | 91 | reduce-and-expand |
+| `TCOLARGMAX` | `BSTART.SFU TCOLARGMAX` | 92 | reduce-and-expand |
+| `TCOLARGMIN` | `BSTART.SFU TCOLARGMIN` | 93 | reduce-and-expand |
+| `TCONCAT` | `BSTART.SFU TCONCAT` | 96 | layout-and-rearrangement |
+| `TEXTRACT` | `BSTART.SFU TEXTRACT` | 98 | layout-and-rearrangement |
+| `TINSERT` | `BSTART.SFU TINSERT` | 99 | layout-and-rearrangement |
+| `TIMG2COL` | `BSTART.SFU TIMG2COL` | 100 | layout-and-rearrangement |
+| `TFILLPAD` | `BSTART.SFU TFILLPAD` | 101 | layout-and-rearrangement |
+| `TCI` | `BSTART.SFU TCI` | 102 | irregular-and-complex |
+| `TTRI` | `BSTART.SFU TTRI` | 103 | irregular-and-complex |
+| `THISTOGRAM` | `BSTART.SFU THISTOGRAM` | 104 | irregular-and-complex |
+| `TQUANT` | `BSTART.SFU TQUANT` | 106 | irregular-and-complex |
+| `TDEQUANT` | `BSTART.SFU TDEQUANT` | 107 | irregular-and-complex |
+| `TSORT` | `BSTART.SFU TSORT` | 108 | irregular-and-complex |
+| `TMRGSORT` | `BSTART.SFU TMRGSORT` | 109 | irregular-and-complex |
+| `TTRANS` | `BSTART.SFU TTRANS` | 110 | layout-and-rearrangement |
+| `TGATHER` | `BSTART.SFU TGATHER` | 111 | irregular-and-complex |
+| `TSCATTER` | `BSTART.SFU TSCATTER` | 112 | irregular-and-complex |
+| `TPARTADD` | `BSTART.SFU TPARTADD` | 113 | irregular-and-complex |
+| `TPARTMUL` | `BSTART.SFU TPARTMUL` | 114 | irregular-and-complex |
+| `TPARTMAX` | `BSTART.SFU TPARTMAX` | 115 | irregular-and-complex |
+| `TPARTMIN` | `BSTART.SFU TPARTMIN` | 116 | irregular-and-complex |
+
+## TLSU
+
+| Operation | Canonical block start | Function |
+| --- | --- | ---: |
+| `TLOAD` | `BSTART.TLSU TLOAD` | 0 |
+| `TSTORE` | `BSTART.TLSU TSTORE` | 1 |
+| `TMOV` | `BSTART.TLSU TMOV` | 2 |
+| `TPREFETCH` | `BSTART.TLSU TPREFETCH` | 3 |
+| `MGATHER` | `BSTART.TLSU MGATHER` | 4 |
+| `MSCATTER` | `BSTART.TLSU MSCATTER` | 5 |
+| `MGATHER_MASK` | `BSTART.TLSU MGATHER.MASK` | 6 |
+| `MSCATTER_MASK` | `BSTART.TLSU MSCATTER.MASK` | 7 |
+| `MGATHER_CAS` | `BSTART.TLSU MGATHER.CAS` | 8 |
+| `GMOV` | `BSTART.TLSU GMOV` | 13 |
+
+## CUBE
+
+| Operation | Canonical block start | Function |
+| --- | --- | ---: |
+| `TMATMUL` | `BSTART.CUBE TMATMUL` | 0 |
+| `TMATMUL_BIAS` | `BSTART.CUBE TMATMUL.BIAS` | 1 |
+| `TMATMUL_ACC` | `BSTART.CUBE TMATMUL.ACC` | 2 |
+| `TMATMUL_MX` | `BSTART.CUBE TMATMULMX` | 4 |
+| `TMATMUL_MX_BIAS` | `BSTART.CUBE TMATMULMX.BIAS` | 5 |
+| `TMATMUL_MX_ACC` | `BSTART.CUBE TMATMULMX.ACC` | 6 |
+| `TGEMV` | `BSTART.CUBE TGEMV` | 16 |
+| `TGEMV_BIAS` | `BSTART.CUBE TGEMV.BIAS` | 17 |
+| `TGEMV_ACC` | `BSTART.CUBE TGEMV.ACC` | 18 |
+| `TGEMV_MX` | `BSTART.CUBE TGEMVMX` | 20 |
+| `TGEMV_MX_BIAS` | `BSTART.CUBE TGEMVMX.BIAS` | 21 |
+| `TGEMV_MX_ACC` | `BSTART.CUBE TGEMVMX.ACC` | 22 |
+
+## Classification semantics
+
+PTO ISA 0.58.3 decouples the execution engine from the operation
+classification (ADR 0057). Operations in the `elementwise-tile-tile`
+and `tile-scalar-and-immediate` classes run elementwise on VEC, but a
+few elementwise-class operations (`TEXP`, `TLOG`, `TRECIP`, `TSQRT`,
+`TRSQRT`) are executed by SFU. `reduce-and-expand`, `layout-and-
+rearrangement`, and `irregular-and-complex` classes are SFU-executed.
+All TLSU and CUBE operations are executed by their own engine class.
+The `BSTART.VEC` / `BSTART.SFU` spellings are canonical aliases of
+the unique `BSTART.TEPL` compiled carrier (ADR 0057).
+
+## Removed from earlier versions
+
+Pre-0.58 versions additionally shipped several tile operations
+that the active catalog removed (for example the ACC-style
+post-processing helpers). None of the removed operations are
+emitted by this library; the canonical list of retired names is
+recorded in the contract under `deleted_tile_names`.

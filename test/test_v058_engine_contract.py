@@ -171,7 +171,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_tlsu_load_store_stride_is_expressed_in_bytes(self) -> None:
         self.assertIn("GetStrideBytes", self.header)
-        tlsu_doc = (ROOT / "docs" / "tileop-usage" / "tlsu.md").read_text(encoding="utf-8")
+        tlsu_doc = (ROOT / "docs" / "tileop-usage" / "tlsu" / "load-store-move" / "TLOAD.md").read_text(encoding="utf-8")
         self.assertIn("row stride in **bytes**", tlsu_doc)
 
     def test_fpatr_carries_shared_transpose_controls(self) -> None:
@@ -421,7 +421,7 @@ int main() { return sizeof(Bad); }
     # --- docs and harness sanity ---
 
     def test_generated_engine_document_is_fresh(self) -> None:
-        generated = ROOT / "docs" / "tileop-usage" / "engines.md"
+        generated = ROOT / "docs" / "tileop-usage" / "generated" / "engines.md"
         self.assertTrue(generated.is_file())
         self.assertIn("**VEC**, **TLSU**, **CUBE**, and **SFU**", generated.read_text())
 
