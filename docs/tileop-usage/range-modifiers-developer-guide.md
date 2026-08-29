@@ -34,9 +34,20 @@ modifier 必须紧跟同一 bundle 中对应的 `B.IOT` 或 `B.IOS` binder。调
 
 ## 推荐写法
 
+先记住一个简单规则：
+
+```text
+Subview  = source 侧的范围描述
+Assemble = destination 侧的范围描述
+```
+
+二者都不是数据副本。它们只是把“哪个 Tile、使用哪个基地址寄存器、使用
+哪个范围参数”打包成一个可以传给 TileOP 的对象。
+
 ### Source：`range::subview`
 
-普通场景使用 factory。range size code 从 parent Tile 的 `TilesizeCode` 推导：
+普通场景使用 factory。range size code 从 parent Tile 的 `TilesizeCode` 推导，
+开发者只需要填写原始 Tile 和运行时基地址：
 
 ```cpp
 #include <common/pto_tileop.hpp>
@@ -52,8 +63,18 @@ void store_subview(GM &gm, TileT &tile, uintptr_t base_addr) {
 }
 ```
 
-该代码的语义是：使用 `base_addr` 作为 `RegSrc` 对应寄存器的运行时值，并在
-source binder 后生成类似下面的 modifier：
+各个参数的含义如下：
+
+| 参数 | 如何填写 | 含义 |
+| --- | --- | --- |
+| `tile` | 要写回的 Local/Shared Tile | 被描述的 source Tile，不会被复制 |
+| `base_addr` | 运行时地址值，例如 GM buffer 地址 | 写入默认 `RegSrc=2` 对应的 base register |
+| `SubviewSizeCode` | 通常不填写 | 由 `tile::TilesizeCode` 自动推导，表示 source range capacity |
+| `Offset` | 默认是 `0` | 编码到 `B.SUBVIEW` 的 `uimm11` 立即数，范围 `0..2047` |
+| `RegSrc` | 默认是 `2` | 编码使用的绝对 GPR 编号，范围 `0..23` |
+
+因此这段代码表示：使用 `tile` 作为 source，使用 `base_addr` 作为 `r2` 的值，
+在 source binder 后附加一个 offset 为 `0`、size code 自动推导的 `B.SUBVIEW`：
 
 ```asm
 B.SUBVIEW 0, r2, 0, <TileT::TilesizeCode>
@@ -62,9 +83,19 @@ B.SUBVIEW 0, r2, 0, <TileT::TilesizeCode>
 `range::subview` 默认使用 `RegSrc=2`。这里的 `base_addr` 是基地址寄存器的值，
 不是直接编码到指令中的立即数。
 
+`base_addr` 和 `Offset` 不要混淆：
+
+```text
+最终范围地址 = GPR[RegSrc] + ZeroExtend(Offset)
+```
+
+也就是说，`base_addr` 是运行时传入的地址，`Offset` 是编译期写入指令的
+小立即数。
+
 ### Destination：`range::assemble`
 
-普通 destination 使用 `range::assemble`：
+普通 destination 使用 `range::assemble`。它的参数填写方式与 `subview` 类似，
+区别是它描述 destination，而不是 source：
 
 ```cpp
 void load_assembled(GM &gm, TileT &tile, uintptr_t base_addr) {
@@ -73,8 +104,8 @@ void load_assembled(GM &gm, TileT &tile, uintptr_t base_addr) {
 }
 ```
 
-默认形式等价于 `INIT=1, LAST=0`。它用于一次 assembly session 的第一个
-destination fragment。对应的 modifier 形式类似：
+默认形式等价于 `INIT=1, LAST=0`。这表示当前写入是一次 assembly session
+的第一个 fragment。对应的 modifier 形式类似：
 
 ```asm
 B.ASSEMBLE 1, 0, r2, 0, <TileT::TilesizeCode>
@@ -102,10 +133,41 @@ multiple fragments: INIT -> MIDDLE* -> LAST
 非 `INIT` 形式的 `ParentSizeCode` 按 ISA 合同编码为 `0`，不要手动把 parent
 size code 传给 `assemble_middle` 或 `assemble_last`。
 
+实际填写时按写入顺序选择 helper：
+
+```cpp
+// 只有一个 fragment：
+auto only = range::assemble_init_last(tile, base_addr);
+TLOAD(only, gm);
+
+// 多个 fragment：
+auto first = range::assemble(tile, base_addr);
+TLOAD(first, gm0);
+
+auto middle = range::assemble_middle(tile, base_addr);
+TLOAD(middle, gm1);
+
+auto last = range::assemble_last(tile, base_addr);
+TLOAD(last, gm2);
+```
+
+这里的 `first/middle/last/only` 只是示例变量名。真正重要的是它们对应的
+`INIT/LAST` 状态，以及调用顺序：
+
+```text
+一个 fragment： assemble_init_last
+两个 fragment： assemble -> assemble_last
+三个及以上：  assemble -> assemble_middle* -> assemble_last
+```
+
+`assemble()`、`assemble_init_last()` 的 INIT 形式会携带 parent size code；
+`assemble_middle()`、`assemble_last()` 的非 INIT 形式使用 size code `0`。
+
 ## Offset 与 base register
 
 range descriptor 中的 `Offset` 和 `RegSrc` 是编译期字段；基地址值是运行时参数。
-当需要指定 offset 或 base register 时，使用 `_at` helper：
+当需要指定 offset 或 base register 时，使用 `_at` helper。注意模板参数是
+编译期 descriptor 字段，括号中的 `base_addr` 仍然是运行时基地址：
 
 ```cpp
 auto source = range::subview_at<128, 23>(tile, base_addr);
@@ -119,9 +181,26 @@ subview_at<Offset, RegSrc>(parent, range_base)
 assemble_at<Offset, RegSrc>(parent, range_base)
 ```
 
-其中 `Offset` 的合法范围是 `0..2047`，`RegSrc` 的合法范围是 `0..23`。
+其中：
 
-需要同时指定 source size code 时使用：
+- `Offset` 是加到 `GPR[RegSrc]` 上的 byte offset，合法范围是 `0..2047`；
+- `RegSrc` 是绝对 GPR 编号，合法范围是 `0..23`；
+- `base_addr` 是要放入该 GPR 的运行时值。
+
+例如：
+
+```cpp
+auto view = range::subview_at<128, 23>(tile, base_addr);
+```
+
+表示：使用 `r23 = base_addr`，再加上立即数 offset `128`，生成：
+
+```asm
+B.SUBVIEW 0, r23, 128, <TileSizeCode>
+```
+
+只有在 Tile 的默认 capacity 不符合目标 contract 时，才需要同时指定 source
+size code：
 
 ```cpp
 auto source = range::subview_sized_at<12, 2047, 23>(tile, base_addr);
@@ -133,6 +212,7 @@ auto source = range::subview_sized_at<12, 2047, 23>(tile, base_addr);
 subview_sized_at<SubviewSizeCode, Offset, RegSrc>(parent, range_base)
 ```
 
+`SubviewSizeCode` 表示 source binder 的容量编码，不是矩阵的逻辑行数或列数。
 除非确实需要覆盖默认 size code，否则不要使用 sized helper。
 
 ## 显式 carrier 类型
@@ -243,12 +323,3 @@ rg 'B\\.SUBVIEW|B\\.ASSEMBLE' kernel.s
 3. source/destination 角色没有反用；
 4. assembly lifecycle 与 slot 写入顺序一致；
 5. `RegSrc` 对应的 runtime base value 已正确绑定。
-
-## 相关实现位置
-
-- `include/common/pto_tile.hpp`：`range::Subview`、`range::Assemble` 和 factory；
-- `include/common/pto_tile_region.hpp`：`TPARTVIEW`、`TileArray`、`TASSEMBLY`；
-- `include/common/pto_tile_region_inline_asm.hpp`：Tile region inline-asm 快速路径；
-- `docs/tileop-usage/range-modifiers.md`：ISA 编码与 modifier 合同；
-- `test/tileop_api/src/RangeSubview.cpp`：source-side 回归测例；
-- `test/tileop_api/src/RangeAssemble.cpp`：destination-side 回归测例。
