@@ -19,7 +19,9 @@ check:
 	bash -n test/tileop_api/compile.all test/tileop_api/run_negatives.sh \
 		test/tileop_api/verify_pto0583_asm.sh \
 		test/tileop_api/verify_target_cxx_frontend.sh
-	git diff --check
+	@if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+		git diff --check; \
+	fi
 
 install:
 	@echo "Installing $(LIBNAME) to Clang toolchain at $(INSTALL_DIR)"

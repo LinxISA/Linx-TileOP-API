@@ -1,0 +1,226 @@
+name: Linx TileOP required gate
+
+on:
+  pull_request:
+    branches:
+      - linx
+  merge_group:
+  push:
+    branches:
+      - linx
+  workflow_dispatch:
+
+concurrency:
+  group: tileop-required-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Build latest Linx LLVM and validate TileOP API
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    env:
+      LLVM_REPO: https://github.com/LinxISA/llvm-project.git
+      LLVM_REF: dev-llvm15_56
+      TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
+      TOOLCHAIN_REF: e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156
+      TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
+      LINX_TARGET: linx64v5-unknown-linux-musl
+
+    steps:
+      - name: Checkout candidate TileOP code
+        uses: actions/checkout@v4
+        with:
+          path: tileop-api
+
+      - name: Checkout toolchain build repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TOOLCHAIN_REPO }}
+          ref: ${{ env.TOOLCHAIN_REF }}
+          path: toolchain
+
+      - name: Install host build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git make cmake ninja-build gcc g++ python3 autoconf m4 \
+            pkg-config ccache rsync
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Configure git for component clones
+        run: git config --global --add safe.directory '*'
+
+      - name: Resolve latest LLVM branch SHA
+        id: llvm-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          LLVM_SOURCE_SHA="$({ git ls-remote "${LLVM_REPO}" "refs/heads/${LLVM_REF}" || true; } | awk 'NR == 1 {print $1}')"
+          if [ -z "${LLVM_SOURCE_SHA}" ]; then
+            echo "ERROR: failed to resolve ${LLVM_REPO} refs/heads/${LLVM_REF}" >&2
+            exit 1
+          fi
+          echo "sha=${LLVM_SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Resolved latest LLVM ${LLVM_REF} -> ${LLVM_SOURCE_SHA}"
+
+      - name: Restore complete v2 toolchain cache
+        id: cache-llvm-v2
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            toolchain/src
+            toolchain/build
+            toolchain/stamps
+            toolchain/output/linx_blockisa_llvm_musl
+          key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+          restore-keys: |
+            llvm-${{ runner.os }}-tileop-required-gate-v2-
+
+      - name: Restore legacy exact-SHA LLVM cache
+        id: cache-llvm-legacy
+        if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            toolchain/build/build-llvm-musl
+            toolchain/stamps/build-llvm-musl
+            toolchain/output/linx_blockisa_llvm_musl/bin
+            toolchain/output/linx_blockisa_llvm_musl/lib
+            toolchain/output/linx_blockisa_llvm_musl/include
+          key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-v1
+
+      - name: Initialize component sources
+        working-directory: toolchain
+        env:
+          LLVM_SOURCE_SHA: ${{ steps.llvm-source.outputs.sha }}
+        run: |
+          make init-src
+          git -C src/llvm-project fetch origin "${LLVM_SOURCE_SHA}"
+          git -C src/llvm-project checkout --detach "${LLVM_SOURCE_SHA}"
+
+      - name: Replace TileOP source with candidate content
+        run: |
+          rsync -a --delete \
+            --exclude .git \
+            tileop-api/ toolchain/src/Linx-TileOP-API/
+
+      - name: Show resolved source revisions
+        run: |
+          echo "TileOP candidate SHA: $(git -C tileop-api rev-parse HEAD)"
+          echo "Toolchain SHA: $(git -C toolchain rev-parse HEAD)"
+          echo "LLVM SHA: $(git -C toolchain/src/llvm-project rev-parse HEAD)"
+
+      - name: Restore, incrementally update, or build toolchain
+        working-directory: toolchain
+        env:
+          V2_CACHE_HIT: ${{ steps.cache-llvm-v2.outputs.cache-hit }}
+          V2_CACHE_MATCHED_KEY: ${{ steps.cache-llvm-v2.outputs.cache-matched-key }}
+          LEGACY_CACHE_HIT: ${{ steps.cache-llvm-legacy.outputs.cache-hit }}
+          EXACT_V2_KEY: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+          ENABLE_CCACHE: on
+          THREADS: '4'
+        run: |
+          set -euo pipefail
+          export PATH="/usr/lib/ccache:$PATH"
+
+          if [ "${V2_CACHE_HIT}" = "true" ]; then
+            echo "Exact complete toolchain cache hit: ${EXACT_V2_KEY}"
+            echo "Skipping toolchain build."
+            exit 0
+          fi
+
+          if [ "${LEGACY_CACHE_HIT}" = "true" ] && \
+             [ -x output/linx_blockisa_llvm_musl/bin/clang ]; then
+            echo "Reusing the legacy exact-SHA LLVM cache."
+            mkdir -p stamps
+            touch stamps/check-write-permission
+            touch stamps/build-llvm-musl
+          elif [[ "${V2_CACHE_MATCHED_KEY}" == llvm-${{ runner.os }}-tileop-required-gate-v2-* ]] && \
+               [ -f build/build-llvm-musl/CMakeCache.txt ]; then
+            echo "Updating the nearest v2 LLVM build tree incrementally."
+            if cmake -S src/llvm-project/llvm -B build/build-llvm-musl && \
+               cmake --build build/build-llvm-musl --parallel "${THREADS}" && \
+               cmake --install build/build-llvm-musl; then
+              cd output/linx_blockisa_llvm_musl/bin
+              ln -s -f clang linx64v5-linux-musl-clang
+              ln -s -f clang++ linx64v5-linux-musl-clang++
+              cd ../../..
+              mkdir -p stamps
+              touch stamps/build-llvm-musl
+            else
+              echo "Incremental LLVM update failed; falling back to a clean build."
+              rm -rf build/build-llvm-musl output/linx_blockisa_llvm_musl stamps
+            fi
+          else
+            echo "No reusable LLVM build tree found; performing a clean build."
+            rm -f stamps/build-llvm-musl
+          fi
+
+          if ! make WITH_TARGET=linx64v5-linux-musl; then
+            echo "Cached/incremental toolchain completion failed; retrying once cleanly."
+            rm -rf \
+              build/build-llvm-musl \
+              output/linx_blockisa_llvm_musl \
+              stamps
+            make WITH_TARGET=linx64v5-linux-musl
+          fi
+
+      - name: Save LLVM build cache
+        if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            toolchain/src
+            toolchain/build
+            toolchain/stamps
+            toolchain/output/linx_blockisa_llvm_musl
+          key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+
+      - name: Run TileOP contract checks
+        working-directory: toolchain/src/Linx-TileOP-API
+        env:
+          CC: gcc
+          CXX: g++
+        run: |
+          export PATH="${TOOLCHAIN_INSTALL_DIR}/bin:$PATH"
+          make check
+
+      - name: Run Linx target gate
+        working-directory: toolchain/src/Linx-TileOP-API/test/tileop_api
+        env:
+          TC_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
+          COMPILER_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
+          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot/usr
+          LINX_TARGET: ${{ env.LINX_TARGET }}
+          PLAT: linx
+        run: |
+          export PATH="${TOOLCHAIN_INSTALL_DIR}/bin:$PATH"
+          bash ./compile.all
+          bash ./run_negatives.sh
+          bash ./verify_pto0583_asm.sh
+          bash ./verify_target_cxx_frontend.sh
+
+      - name: Upload build log on failure
+        if: failure() && hashFiles('toolchain/build.log') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-build-log
+          path: toolchain/build.log
+          retention-days: 14
+
+      - name: Print build log tail on failure
+        if: failure()
+        run: |
+          if [ -f toolchain/build.log ]; then
+            echo "===== toolchain/build.log (last 300 lines) ====="
+            tail -n 300 toolchain/build.log
+          fi

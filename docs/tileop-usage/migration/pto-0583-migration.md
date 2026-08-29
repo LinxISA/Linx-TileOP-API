@@ -26,7 +26,9 @@ content hashes.
   overloads require assigned MX inputs and E8M0 scale shapes.
 - `CubeTileM16`, `CubeTileM32`, `CubeTileN8`, and the accumulator aliases
   model persistent 128-byte CELL storage. `TLOAD_CUBE` and `TSTORE_CUBE`
-  provide the assigned GM conversion boundary.
+  provide the explicit GM conversion boundary. The unified `TLOAD` and
+  `TSTORE` entry points now dispatch to that conversion automatically for
+  CUBE Tiles while retaining the explicit names for diagnostic and expert use.
 - Matrix ACC forms retain explicit C input and an early-clobbered D output;
   the compiler must allocate distinct Local Tile indices.
 
@@ -50,25 +52,38 @@ disassembler, SizeCode/PEMode, layout, DTYPE_NONE, and FPATR contracts. It
 must fail on a compiler that silently renders the required CUBE conversion
 dtype as FP64.
 
-## 使用要求
+## Unified GM transport entry points
 
-迁移前应使用目标版本的头文件、编译器和 PTO-SPEC，并重新检查 Tile location、SizeCode、PE mask、`B.IOR` stride 和 CUBE 属性。不要将旧版本的 wrapper 或汇编约束直接套用到当前 API。
-
-## 默认值
-
-迁移后的默认值以当前版本的 C++ 重载和 contract 为准；尤其要检查 omitted dimension、FPATR、SizeCode、stride 单位以及默认 scale/post-process 选项。显式零值不能自动视为字段省略。
-
-## 异常和边界行为
-
-旧 compiler、非法 SizeCode/PEMode、错误 stride 单位、未分配 scale Tile、类型不匹配或旧版已删除的操作可能在编译、汇编或运行前检查阶段失败。边界、fault 和部分发布行为以当前版本具体操作规范为准。
-
-## 使用示例
+New kernel code can use `TLOAD` and `TSTORE` for both ordinary and CUBE Local
+Tiles. The wrapper selects the transport from the Tile layout:
 
 ```cpp
-// 使用当前版本头文件中的 API，并按对应操作页面核对 Options。
-TMATMUL(dst, lhs, rhs);
+using A = CubeTileM32<float, 32, 32>;
+using B = CubeTileN8<float, 32, 32>;
+using C = CubeAccumulatorM32<float, 32, 32>;
+using GM = global_tensor<float, RowMajor<32, 32>>;
+
+void matmul_step(GM &ga, GM &gb, GM &gc, A &a, B &b, C &c) {
+  TLOAD(a, ga);       // dispatches to ND2M32 CUBE transport
+  TLOAD(b, gb);       // dispatches to ND2N8 CUBE transport
+  TMATMUL(c, a, b);
+  TSTORE(gc, c);      // dispatches to M322ND CUBE transport
+}
 ```
 
-## 完整语义
+For a non-CUBE Tile, the same spelling remains the normal `B.IOT` transport:
 
-版本迁移的完整权威信息请参阅 [PTO-SPEC v0.58.4.1 tile 文档](https://github.com/PTO-ISA/pto-spec/tree/v0.58.4.1/docs/tile) 和当前仓库的具体操作页面。
+```cpp
+using TileT = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor>;
+using GM = global_tensor<float, RowMajor<32, 32>>;
+
+void vector_step(GM &gm, TileT &tile) {
+  TLOAD(tile, gm);
+  TSTORE(gm, tile);
+}
+```
+
+`TLOAD_CUBE` and `TSTORE_CUBE` remain available when the layout conversion must
+be explicit in source code, diagnostics, or compatibility tests. The unified
+entry points do not remove the CUBE checks or conversion descriptors; they only
+select the existing implementation based on `Tile::IsCubeLayout`.

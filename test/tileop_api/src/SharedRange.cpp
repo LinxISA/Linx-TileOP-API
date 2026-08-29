@@ -10,14 +10,15 @@ using Local = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
 using Shared = SharedTile<Local>;
 using GM = global_tensor<float, RowMajor<4, 8>>;
 
-__attribute__((noinline)) void shared_source_subview(GM &dst, Shared &src) {
-  range::Subview<Shared, 12, 2047, 23> view(src, 23);
+__attribute__((noinline)) void shared_source_subview(GM &dst, Local &local) {
+  auto src = TMOV_L2S_PUBLISH(local);
+  range::Subview<Shared, 1, 0, 0> view(src, 0);
   TSTORE(dst, view);
 }
 
-__attribute__((noinline)) void shared_destination_assemble(GM &src,
-                                                            Shared &dst) {
-  range::Assemble<Shared, 12, true, false, 0, 0> assembled(dst, 0);
+__attribute__((noinline)) void shared_destination_assemble(GM &src) {
+  Shared dst;
+  range::Assemble<Shared, 1, true, true, 0, 0> assembled(dst, 0);
   TLOAD(assembled, src);
 }
 
@@ -28,9 +29,9 @@ int main() {
   float dst_buf[4 * 8];
   GM src(src_buf);
   GM dst(dst_buf);
-  Shared shared;
-  shared_source_subview(dst, shared);
-  shared_destination_assemble(src, shared);
+  Local local;
+  shared_source_subview(dst, local);
+  shared_destination_assemble(src);
   use(src_buf);
   return 0;
 }

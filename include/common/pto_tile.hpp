@@ -1863,6 +1863,7 @@ public:
   static constexpr int InnerRows = Parent::InnerRows;
   static constexpr int InnerCols = Parent::InnerCols;
   static constexpr int Numel = Parent::Numel;
+  static constexpr bool IsCubeLayout = Parent::IsCubeLayout;
   static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
   static constexpr int TilesizeCode = Parent::TilesizeCode;
   static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
@@ -1943,6 +1944,7 @@ public:
   static constexpr int InnerRows = Parent::InnerRows;
   static constexpr int InnerCols = Parent::InnerCols;
   static constexpr int Numel = Parent::Numel;
+  static constexpr bool IsCubeLayout = Parent::IsCubeLayout;
   static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
   static constexpr int TilesizeCode = Parent::TilesizeCode;
   static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
@@ -1972,6 +1974,81 @@ private:
   Parent &ParentValue;
   uintptr_t RangeBaseValue;
 };
+
+// Ergonomic range factories. The common case derives the modifier size from
+// the wrapped tile and keeps the descriptor details out of the call site.
+template <typename Parent>
+auto subview(Parent &parent, uintptr_t range_base = 0)
+    -> Subview<Parent, Parent::TilesizeCode> {
+  return {parent, range_base};
+}
+
+template <unsigned SubviewSizeCode_, typename Parent>
+auto subview_sized(Parent &parent, uintptr_t range_base = 0)
+    -> Subview<Parent, SubviewSizeCode_> {
+  return {parent, range_base};
+}
+
+template <typename Parent>
+auto assemble(Parent &parent, uintptr_t range_base = 0)
+    -> Assemble<Parent, Parent::TilesizeCode> {
+  return {parent, range_base};
+}
+
+template <typename Parent>
+auto assemble_last(Parent &parent, uintptr_t range_base = 0)
+    -> Assemble<Parent, 0, false, true> {
+  return {parent, range_base};
+}
+
+template <typename Parent>
+auto assemble_init_last(Parent &parent, uintptr_t range_base = 0)
+    -> Assemble<Parent, Parent::TilesizeCode, true, true> {
+  return {parent, range_base};
+}
+
+template <typename Parent>
+auto assemble_middle(Parent &parent, uintptr_t range_base = 0)
+    -> Assemble<Parent, 0, false, false> {
+  return {parent, range_base};
+}
+
+template <unsigned Offset_, unsigned RegSrc_ = 2, typename Parent>
+auto subview_at(Parent &parent, uintptr_t range_base = 0)
+    -> Subview<Parent, Parent::TilesizeCode, Offset_, RegSrc_> {
+  return {parent, range_base};
+}
+
+template <unsigned SubviewSizeCode_, unsigned Offset_,
+          unsigned RegSrc_ = 2, typename Parent>
+auto subview_sized_at(Parent &parent, uintptr_t range_base = 0)
+    -> Subview<Parent, SubviewSizeCode_, Offset_, RegSrc_> {
+  return {parent, range_base};
+}
+
+template <unsigned Offset_, unsigned RegSrc_ = 2, typename Parent>
+auto assemble_at(Parent &parent, uintptr_t range_base = 0)
+    -> Assemble<Parent, Parent::TilesizeCode, true, false, Offset_, RegSrc_> {
+  return {parent, range_base};
+}
+
+template <unsigned Offset_, unsigned RegSrc_ = 2, typename Parent>
+auto assemble_init_last_at(Parent &parent, uintptr_t range_base = 0)
+    -> Assemble<Parent, Parent::TilesizeCode, true, true, Offset_, RegSrc_> {
+  return {parent, range_base};
+}
+
+template <unsigned Offset_, unsigned RegSrc_ = 2, typename Parent>
+auto assemble_middle_at(Parent &parent, uintptr_t range_base = 0)
+    -> Assemble<Parent, 0, false, false, Offset_, RegSrc_> {
+  return {parent, range_base};
+}
+
+template <unsigned Offset_, unsigned RegSrc_ = 2, typename Parent>
+auto assemble_last_at(Parent &parent, uintptr_t range_base = 0)
+    -> Assemble<Parent, 0, false, true, Offset_, RegSrc_> {
+  return {parent, range_base};
+}
 
 } // namespace range
 

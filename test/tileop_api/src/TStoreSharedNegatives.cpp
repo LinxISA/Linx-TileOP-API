@@ -9,8 +9,7 @@ using GM = global_tensor<float, RowMajor<8, 256>>;
 using GM16 = global_tensor<int16_t, RowMajor<8, 256>>;
 // ColMajor (non-NORM) source
 using TCol = Tile<Location::Vec, float, 8, 256, BLayout::ColMajor>;
-// 32B (too small) and 512 KiB (too large) sources
-using T32 = Tile<Location::Vec, float, 1, 8, BLayout::RowMajor>;
+// 512 KiB is above the largest assigned Shared SizeCode.
 using T512K = Tile<Location::Vec, float, 512, 256, BLayout::RowMajor>;
 using GM512K = global_tensor<float, RowMajor<512, 256>>;
 
@@ -34,9 +33,6 @@ void n(GM &g, T &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<16>(g, sh); }
 #endif
 #if defined(SHOULD_FAIL_mask3)
 void n(GM &g, T &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<3>(g, sh); }
-#endif
-#if defined(SHOULD_FAIL_size_small)
-void n(GM &g, T32 &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE(g, sh); }
 #endif
 #if defined(SHOULD_FAIL_size_large)
 void n(GM512K &g, T512K &t) { auto sh = TMOV_L2S_INSERT(t); TSTORE_PART<12>(g, sh); }
