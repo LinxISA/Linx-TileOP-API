@@ -70,22 +70,19 @@ auto destination = range::assemble_last(tile, base_addr);
 TLOAD(destination, gm);
 ```
 
-When a source byte offset is needed, use `subview<Offset>`. Omitting the runtime
-base selects `zero`; passing a base lets the compiler allocate its GPR. The
-size is still derived from the tile:
+The unified source factory takes an optional byte length and optional byte offset:
 
 ```cpp
-auto zero_based = range::subview<2047>(tile);
-auto runtime_based = range::subview<2047>(tile, base_addr);
+auto full_tile = range::subview(tile);                    // default length, offset 0
+auto sized = range::subview<128>(tile, base_addr);   // 128 B, offset 0
+auto shifted = range::subview<128, 0>(tile, base_addr);
 auto destination = range::assemble_at<0, 0>(tile, base_addr);
 ```
 
-For the less common non-default size-code case, use the explicitly named
-helper rather than positional lifecycle booleans:
-
-```cpp
-auto source = range::subview_sized_at<1, 2047>(tile, base_addr);
-```
+`LengthBytes` must be one of `128`, `256`, `512`, `1*1024`, ..., `256*1024`, and
+must not exceed `tile::LogicalTileBytes`. The factory converts it to the ISA
+`SubviewSizeCode` automatically and rejects invalid or oversized values at compile time.
+The low-level `subview_sized_at` helper remains available for direct ISA contract tests.
 
 The explicit carrier forms documented below remain supported for code that
 needs every descriptor field visible in the type.
@@ -102,13 +99,15 @@ class Subview;
 ```
 
 `Subview` 是底层 carrier 类型。普通 kernel 应优先使用统一的
-`range::subview<Offset = 0>(tile [, base_addr])` factory；`RegSrc` 仅用于固定
-ABI 或编码测试，运行时 base 的高层接口不会暴露寄存器编号。
+`range::subview<LengthBytes = tile capacity, Offset = 0>(tile [, base_addr])`
+factory；调用者填写字节长度而不是 ISA 编码。`RegSrc` 仅用于固定 ABI 或编码测试，
+运行时 base 的高层接口不会暴露寄存器编号。
 
-- `SubviewSizeCode` must be `1..12`.
+- `SubviewSizeCode` must be `1..12`; the high-level factory derives it from
+  the requested byte length.
 - `Offset` (the `uimm11` adder) is a compile-time constant `0..2047`.
-- `RegSrc` is the absolute GPR selector `0..23` (`a0`/R2 by default), with a
-  **base address supplied at construction** — see below.
+- `RegSrc` is the low-level absolute GPR selector `0..23`; high-level factories
+  use `zero` or compiler allocation and do not expose this field.
 
 ```cpp
 using Src = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
@@ -130,8 +129,9 @@ The high-level API does not expose `RegSrc`:
 ```cpp
 range::subview(s);                    // zero base
 range::subview(s, base_addr);         // compiler-allocated GPR
-range::subview<128>(s);               // zero + 128
-range::subview<128>(s, base_addr);    // runtime base + 128
+range::subview<128>(s);              // 8 KiB, zero + offset 0
+range::subview<128>(s, base_addr);     // 8 KiB, runtime base + offset 0
+range::subview<128, 0>(s, base_addr); // 128 B + offset 0
 ```
 
 Explicit register selection is retained only for fixed ABI and encoding tests:

@@ -1822,6 +1822,28 @@ constexpr bool is_valid_subview_size_code(unsigned code) {
   return code >= 1 && code <= 12;
 }
 constexpr bool is_valid_uimm11(unsigned u) { return u <= 2047; }
+constexpr unsigned subview_size_code_for_bytes(std::size_t bytes) {
+  switch (bytes) {
+  case 128: return __tilesize_128B;
+  case 256: return __tilesize_256B;
+  case 512: return __tilesize_512B;
+  case 1024: return __tilesize_1KB;
+  case 2048: return __tilesize_2KB;
+  case 4096: return __tilesize_4KB;
+  case 8192: return __tilesize_8KB;
+  case 16384: return __tilesize_16KB;
+  case 32768: return __tilesize_32KB;
+  case 65536: return __tilesize_64KB;
+  case 131072: return __tilesize_128KB;
+  case 262144: return __tilesize_256KB;
+  default: return 0;
+  }
+}
+constexpr std::size_t subview_bytes_for_size_code(unsigned code) {
+  return is_valid_subview_size_code(code)
+             ? (static_cast<std::size_t>(128) << (code - 1))
+             : 0;
+}
 
 /// Source-side range carrier. Forwards every tile-shaped static member of
 /// Parent so it can be bound as a Local operand; the B.SUBVIEW line is
@@ -1838,6 +1860,10 @@ class Subview {
                 "B.SUBVIEW SubviewSizeCode must be 1..12 (128B..256KB per PE)");
   static_assert(is_valid_uimm11(Offset_),
                 "B.SUBVIEW uimm11 offset must be 0..2047");
+  static_assert(
+      subview_bytes_for_size_code(SubviewSizeCode_) <=
+          Parent::LogicalTileBytes,
+      "B.SUBVIEW length cannot exceed the parent Tile capacity");
   static_assert(
       RegSrc_ <= 23 || RegSrc_ == AutoRegSrc,
       "B.SUBVIEW RegSrc must be an absolute GPR selector 0..23 or AutoRegSrc");
@@ -1980,15 +2006,35 @@ private:
 
 // Ergonomic range factories. The common case derives the modifier size from
 // the wrapped tile and keeps the descriptor details out of the call site.
-template <unsigned Offset_ = 0, typename Parent>
+template <std::size_t LengthBytes_ = 0, unsigned Offset_ = 0,
+          typename Parent>
 auto subview(Parent &parent)
-    -> Subview<Parent, Parent::TilesizeCode, Offset_, 0> {
+    -> Subview<Parent,
+               subview_size_code_for_bytes(
+                   LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_),
+               Offset_, 0> {
+  constexpr std::size_t LengthBytes =
+      LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_;
+  static_assert(LengthBytes <= Parent::LogicalTileBytes,
+                "B.SUBVIEW length cannot exceed the parent Tile capacity");
+  static_assert(subview_size_code_for_bytes(LengthBytes) != 0,
+                "B.SUBVIEW length must be 128 B..256 KiB and a supported capacity");
   return {parent, 0};
 }
 
-template <unsigned Offset_ = 0, typename Parent>
+template <std::size_t LengthBytes_ = 0, unsigned Offset_ = 0,
+          typename Parent>
 auto subview(Parent &parent, uintptr_t range_base)
-    -> Subview<Parent, Parent::TilesizeCode, Offset_, AutoRegSrc> {
+    -> Subview<Parent,
+               subview_size_code_for_bytes(
+                   LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_),
+               Offset_, AutoRegSrc> {
+  constexpr std::size_t LengthBytes =
+      LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_;
+  static_assert(LengthBytes <= Parent::LogicalTileBytes,
+                "B.SUBVIEW length cannot exceed the parent Tile capacity");
+  static_assert(subview_size_code_for_bytes(LengthBytes) != 0,
+                "B.SUBVIEW length must be 128 B..256 KiB and a supported capacity");
   return {parent, range_base};
 }
 
@@ -2031,14 +2077,14 @@ auto assemble_middle(Parent &parent, uintptr_t range_base = 0)
 // Compatibility aliases for callers using the earlier *_at spelling.
 template <unsigned Offset_, typename Parent>
 auto subview_at(Parent &parent)
-    -> decltype(subview<Offset_>(parent)) {
-  return subview<Offset_>(parent);
+    -> decltype(subview<0, Offset_>(parent)) {
+  return subview<0, Offset_>(parent);
 }
 
 template <unsigned Offset_, typename Parent>
 auto subview_at(Parent &parent, uintptr_t range_base)
-    -> decltype(subview<Offset_>(parent, range_base)) {
-  return subview<Offset_>(parent, range_base);
+    -> decltype(subview<0, Offset_>(parent, range_base)) {
+  return subview<0, Offset_>(parent, range_base);
 }
 
 template <unsigned SubviewSizeCode_, unsigned Offset_, typename Parent>

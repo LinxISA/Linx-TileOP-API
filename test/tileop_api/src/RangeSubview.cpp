@@ -20,8 +20,10 @@
 using namespace pto;
 
 using Src = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
+using MaxSrc = Tile<Location::Vec, float, 256, 256, BLayout::RowMajor>;
 using GMSrc = global_tensor<float, RowMajor<4, 8>>;
 using GMDst = global_tensor<float, RowMajor<4, 8>>;
+using MaxGMDst = global_tensor<float, RowMajor<256, 256>>;
 
 // Local source subview: store the subviewed source to GM.
 __attribute__((noinline)) void subview_source_tstore(
@@ -32,8 +34,8 @@ __attribute__((noinline)) void subview_source_tstore(
 
 // SubviewSizeCode 12 boundary, max uimm11 offset, RegSrc=23 (r23).
 __attribute__((noinline)) void subview_size12_tstore(
-    GMDst &dst, Src &s) {
-  range::Subview<Src, 12, /*Off*/ 2047, /*RegSrc*/ 23> sv(s, 23);
+    MaxGMDst &dst, MaxSrc &s) {
+  range::Subview<MaxSrc, 12, /*Off*/ 2047, /*RegSrc*/ 23> sv(s, 23);
   TSTORE(dst, sv); // -> B.SUBVIEW 0, r23, 2047, 12
 }
 
@@ -53,13 +55,13 @@ __attribute__((noinline)) void subview_factory_runtime_tstore(
 
 __attribute__((noinline)) void subview_factory_zero_offset_tstore(
     GMDst &dst, Src &s) {
-  auto sv = range::subview<2047>(s);
+  auto sv = range::subview<128, 2047>(s);
   TSTORE(dst, sv); // -> B.SUBVIEW 0, zero, 2047, 1
 }
 
 __attribute__((noinline)) void subview_factory_runtime_offset_tstore(
     GMDst &dst, Src &s, uintptr_t base) {
-  auto sv = range::subview<2047>(s, base);
+  auto sv = range::subview<128, 2047>(s, base);
   TSTORE(dst, sv); // -> B.SUBVIEW 0, <allocated-gpr>, 2047, 1
 }
 
@@ -74,11 +76,15 @@ void use(void *) {}
 int main() {
   float src_buf[4 * 8];
   float dst_buf[4 * 8];
+  float max_src_buf[256 * 256];
+  float max_dst_buf[256 * 256];
   GMSrc gs(src_buf);
   GMDst gd(dst_buf);
+  MaxGMDst max_gd(max_dst_buf);
   Src s;
+  MaxSrc max_s;
   subview_source_tstore(gd, s);
-  subview_size12_tstore(gd, s);
+  subview_size12_tstore(max_gd, max_s);
   subview_factory_zero_tstore(gd, s);
   subview_factory_runtime_tstore(gd, s, 64);
   subview_factory_zero_offset_tstore(gd, s);

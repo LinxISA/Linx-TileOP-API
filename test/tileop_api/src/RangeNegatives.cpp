@@ -19,4 +19,11 @@ void assemble_cannot_be_tstore_source(GM &dst, Local &src) {
 }
 #endif
 
+#if defined(SHOULD_FAIL_SUBVIEW_LENGTH)
+void subview_length_cannot_exceed_parent(GM &dst, Local &src) {
+  auto view = range::subview<256>(src);
+  TSTORE(dst, view);
+}
+#endif
+
 int main() { return 0; }

@@ -185,13 +185,15 @@ auto source3 = range::subview<128>(tile, base_addr);
 | --- | --- | --- |
 | `subview(tile)` | `zero` | `0` |
 | `subview(tile, base_addr)` | 编译器自动分配 | `0` |
-| `subview<Offset>(tile)` | `zero` | `Offset` |
-| `subview<Offset>(tile, base_addr)` | 编译器自动分配 | `Offset` |
+| `subview<LengthBytes>(tile)` | `zero` | `0` |
+| `subview<LengthBytes>(tile, base_addr)` | 编译器自动分配 | `0` |
+| `subview<LengthBytes, Offset>(tile)` | `zero` | `Offset` |
+| `subview<LengthBytes, Offset>(tile, base_addr)` | 编译器自动分配 | `Offset` |
 
 例如：
 
 ```cpp
-auto view = range::subview<128>(tile, base_addr);
+auto view = range::subview<128, 0>(tile, base_addr);
 ```
 
 可能生成：
@@ -202,21 +204,40 @@ B.SUBVIEW 0, r7, 128, <TileSizeCode>
 
 这里的 `r7` 只是示例，实际寄存器由编译器决定。开发者不应依赖其编号。
 
-只有在 Tile 默认 capacity 不符合目标 contract 时，才覆盖 source size code：
+长度参数是字节数，不是 `SubviewSizeCode`。支持的长度和编码如下：
+
+| `LengthBytes` | `SubviewSizeCode` |
+| ---: | ---: |
+| `128` | `1` (`__tilesize_128B`) |
+| `256` | `2` (`__tilesize_256B`) |
+| `512` | `3` (`__tilesize_512B`) |
+| `1 * 1024` | `4` (`__tilesize_1KB`) |
+| `2 * 1024` | `5` (`__tilesize_2KB`) |
+| `4 * 1024` | `6` (`__tilesize_4KB`) |
+| `8 * 1024` | `7` (`__tilesize_8KB`) |
+| `16 * 1024` | `8` (`__tilesize_16KB`) |
+| `32 * 1024` | `9` (`__tilesize_32KB`) |
+| `64 * 1024` | `10` (`__tilesize_64KB`) |
+| `128 * 1024` | `11` (`__tilesize_128KB`) |
+| `256 * 1024` | `12` (`__tilesize_256KB`) |
+
+例如：
 
 ```cpp
-auto zero_based = range::subview_sized_at<12, 2047>(tile);
-auto runtime_based = range::subview_sized_at<12, 2047>(tile, base_addr);
+auto zero_based = range::subview<128>(tile);
+auto runtime_based = range::subview<128>(tile, base_addr);
+auto offset_based = range::subview<128, 0>(tile, base_addr);
 ```
 
-模板参数顺序为：
+如果省略 `LengthBytes`，默认使用 `Parent::LogicalTileBytes`：
 
-```text
-subview_sized_at<SubviewSizeCode, Offset>(parent [, range_base])
+```cpp
+auto full_tile = range::subview(tile);
 ```
 
-`SubviewSizeCode` 表示 source binder 的容量编码，不是矩阵行数、列数或分片编号。
-除非确实需要覆盖默认 size code，否则不要使用 sized helper。
+`LengthBytes` 必须是上表中的容量，并且不能大于 `Parent::LogicalTileBytes`。
+任一条件不满足都会在编译期触发 `static_assert`。`subview_sized_at` 仍保留给
+需要直接验证 ISA size code 的底层测试；普通 kernel 不应使用它。
 
 如固定 ABI 或 ISA 编码测试必须选择具体寄存器，可使用底层专家接口：
 
