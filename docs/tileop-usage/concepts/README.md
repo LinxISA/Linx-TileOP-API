@@ -8,3 +8,6 @@
 Tile partition/assembly 的高层 C++ 接口在上述 shape/valid-region 章节说明；
 `B.SUBVIEW/B.ASSEMBLE` 的 ISA 编码和 modifier 生命周期见
 [range-modifiers](../range-modifiers.md)。
+
+开发者使用示例见
+[B.SUBVIEW / B.ASSEMBLE Developer Guide](../range-modifiers-developer-guide.md)。

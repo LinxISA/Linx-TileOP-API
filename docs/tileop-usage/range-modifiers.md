@@ -85,6 +85,9 @@ auto source = range::subview_sized_at<1, 2047, 23>(tile, base_addr);
 The explicit carrier forms documented below remain supported for code that
 needs every descriptor field visible in the type.
 
+For a developer-oriented guide with complete lifecycle, Local/Shared, validation,
+and generated-assembly examples, see [B.SUBVIEW / B.ASSEMBLE Developer Guide](range-modifiers-developer-guide.md).
+
 ## `range::Subview` — source-side range carrier
 
 ```cpp

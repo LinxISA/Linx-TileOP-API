@@ -1,0 +1,254 @@
+# B.SUBVIEW / B.ASSEMBLE Developer Guide
+
+本文面向 TileOP kernel 开发者，介绍当前可用的新版 range modifier C++ 接口。
+这些接口将 PTO ISA 的 `B.SUBVIEW` 和 `B.ASSEMBLE` 封装为可传递的 range
+carrier，避免在业务代码中直接拼接 ISA 字段。
+
+## 适用范围
+
+当前接口适用于以下场景：
+
+- source Tile 需要绑定一个 `B.SUBVIEW` 区域；
+- destination Tile 需要绑定一个 `B.ASSEMBLE` 区域；
+- 需要在多个操作或多个 kernel 阶段复用相同的 range 描述；
+- 需要让 `SubviewSizeCode`、`ParentSizeCode`、`INIT`、`LAST` 和 `RegSrc`
+  在编译期固定。
+
+当前实现通过 inline asm 生成 range modifier。它不是 LLVM intrinsic lowering，
+但保持了后续切换到 compiler lowering 时的 C++ 调用形式。
+
+## 接口与 ISA 的对应关系
+
+| C++ 接口 | ISA modifier | 操作数角色 |
+| --- | --- | --- |
+| `range::subview` / `range::Subview` | `B.SUBVIEW` | source |
+| `range::assemble` / `range::Assemble` | `B.ASSEMBLE` | destination |
+
+modifier 必须紧跟同一 bundle 中对应的 `B.IOT` 或 `B.IOS` binder。调用者只需
+把 carrier 传给消费该 Tile 的 TileOP；TileOP wrapper 负责发出 modifier。
+
+不要混淆以下两层接口：
+
+- `range::subview/assemble`：封装单个 Tile binder 的 ISA range modifier；
+- `TPARTVIEW/TASSEMBLY`：对 parent Tile 做连续分区和组装的高层 Tile region API。
+
+## 推荐写法
+
+### Source：`range::subview`
+
+普通场景使用 factory。range size code 从 parent Tile 的 `TilesizeCode` 推导：
+
+```cpp
+#include <common/pto_tileop.hpp>
+
+using namespace pto;
+
+using TileT = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
+using GM = global_tensor<float, RowMajor<4, 8>>;
+
+void store_subview(GM &gm, TileT &tile, uintptr_t base_addr) {
+  auto view = range::subview(tile, base_addr);
+  TSTORE(gm, view);
+}
+```
+
+该代码的语义是：使用 `base_addr` 作为 `RegSrc` 对应寄存器的运行时值，并在
+source binder 后生成类似下面的 modifier：
+
+```asm
+B.SUBVIEW 0, r2, 0, <TileT::TilesizeCode>
+```
+
+`range::subview` 默认使用 `RegSrc=2`。这里的 `base_addr` 是基地址寄存器的值，
+不是直接编码到指令中的立即数。
+
+### Destination：`range::assemble`
+
+普通 destination 使用 `range::assemble`：
+
+```cpp
+void load_assembled(GM &gm, TileT &tile, uintptr_t base_addr) {
+  auto destination = range::assemble(tile, base_addr);
+  TLOAD(destination, gm);
+}
+```
+
+默认形式等价于 `INIT=1, LAST=0`。它用于一次 assembly session 的第一个
+destination fragment。对应的 modifier 形式类似：
+
+```asm
+B.ASSEMBLE 1, 0, r2, 0, <TileT::TilesizeCode>
+```
+
+## 生命周期 helper
+
+`B.ASSEMBLE` 的生命周期不要通过裸的布尔模板参数表达，优先使用命名 helper：
+
+```cpp
+auto first = range::assemble(tile, base_addr);          // INIT=1, LAST=0
+auto only = range::assemble_init_last(tile, base_addr);  // INIT=1, LAST=1
+auto middle = range::assemble_middle(tile, base_addr);  // INIT=0, LAST=0
+auto last = range::assemble_last(tile, base_addr);      // INIT=0, LAST=1
+```
+
+这些 carrier 应分别传给对应的 destination TileOP。生命周期必须与实际写入
+顺序匹配：
+
+```text
+single fragment: INIT_LAST
+multiple fragments: INIT -> MIDDLE* -> LAST
+```
+
+非 `INIT` 形式的 `ParentSizeCode` 按 ISA 合同编码为 `0`，不要手动把 parent
+size code 传给 `assemble_middle` 或 `assemble_last`。
+
+## Offset 与 base register
+
+range descriptor 中的 `Offset` 和 `RegSrc` 是编译期字段；基地址值是运行时参数。
+当需要指定 offset 或 base register 时，使用 `_at` helper：
+
+```cpp
+auto source = range::subview_at<128, 23>(tile, base_addr);
+auto destination = range::assemble_at<128, 23>(tile, base_addr);
+```
+
+模板参数含义为：
+
+```text
+subview_at<Offset, RegSrc>(parent, range_base)
+assemble_at<Offset, RegSrc>(parent, range_base)
+```
+
+其中 `Offset` 的合法范围是 `0..2047`，`RegSrc` 的合法范围是 `0..23`。
+
+需要同时指定 source size code 时使用：
+
+```cpp
+auto source = range::subview_sized_at<12, 2047, 23>(tile, base_addr);
+```
+
+其模板参数顺序为：
+
+```text
+subview_sized_at<SubviewSizeCode, Offset, RegSrc>(parent, range_base)
+```
+
+除非确实需要覆盖默认 size code，否则不要使用 sized helper。
+
+## 显式 carrier 类型
+
+factory 无法表达特殊的 descriptor 组合时，可以直接使用 carrier 类型：
+
+```cpp
+using SourceView = range::Subview<TileT, 1, 0, 0>;
+using DestinationView = range::Assemble<TileT, 1, true, false, 0, 0>;
+
+SourceView source_view(tile, base_addr);
+DestinationView destination_view(tile, base_addr);
+
+TSTORE(gm, source_view);
+TLOAD(destination_view, gm);
+```
+
+显式 carrier 适合测试边界、固定 ABI 或需要在类型系统中暴露完整 descriptor
+的代码。普通 kernel 代码应优先使用 factory 和生命周期 helper。
+
+## Local 与 Shared
+
+Local Tile carrier 通过 `B.IOT` 绑定，Shared Tile carrier 通过 `B.IOS` 绑定：
+
+```cpp
+using LocalTile = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
+using SharedTileT = SharedTile<LocalTile>;
+using GM = global_tensor<float, RowMajor<4, 8>>;
+
+void shared_source(GM &gm, SharedTileT &shared, uintptr_t base_addr) {
+  auto view = range::subview(shared, base_addr);
+  TSTORE(gm, view);  // B.IOS ... / B.SUBVIEW ...
+}
+
+void shared_destination(GM &gm, SharedTileT &shared, uintptr_t base_addr) {
+  auto destination = range::assemble(shared, base_addr);
+  TLOAD(destination, gm);  // B.IOS ... / B.ASSEMBLE ...
+}
+```
+
+Shared carrier 使用 Shared handle，不提供 Local Tile 的普通 `data()` 语义。
+不要把 `Subview` 用在 destination，也不要把 `Assemble` 用在 source；这两种
+角色错误应在编译期被拒绝。
+
+## 约束与失败方式
+
+以下字段会在模板实例化阶段检查：
+
+- `SubviewSizeCode`：`1..12`；
+- `ParentSizeCode`：`0..12`；
+- `INIT=1` 时 parent size code 必须为 `1..12`；
+- `INIT=0` 时 parent size code 必须为 `0`；
+- `Offset`：`0..2047`；
+- `RegSrc`：`0..23`。
+
+典型非法写法：
+
+```cpp
+range::Subview<TileT, 0>(tile, 0);             // size code 0 非法
+range::Subview<TileT, 13>(tile, 0);            // 13..15 保留
+range::Subview<TileT, 1, 2048>(tile, 0);       // offset 溢出
+range::Subview<TileT, 1, 0, 24>(tile, 0);      // RegSrc 溢出
+range::Assemble<TileT, 0, true>(tile, 0);      // INIT 需要 parent size
+range::Assemble<TileT, 12, false>(tile, 0);    // 非 INIT 必须使用 size 0
+```
+
+此外，range modifier 不会改变 wrapped Tile 的 dtype、layout、shape、valid
+region、PE mask 或 Tile size contract。若这些属性本身不满足消费该 TileOP 的
+要求，错误仍由对应 TileOP 的约束报告。
+
+## 与 Tile region API 配合
+
+`TPARTVIEW` 和 `TASSEMBLY` 适合 parent Tile 的连续分区场景：
+
+```cpp
+using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
+using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+
+Parent parent;
+auto parts = TPARTVIEW<Fragment, 1, 4>(parent);
+auto fragment = parts[0][j];
+
+TileArray<Fragment, 1, 4> fragments;
+auto slot = fragments[0][j];
+```
+
+这类 region API 会根据 fragment ordinal 管理连续区域和 assembly slot；开发者
+不需要手动创建 `range::Subview` 或 `range::Assemble`。两种 API 可以在同一
+kernel 中共存，但用途不同：range carrier 面向单个 binder，Tile region API
+面向 parent/fragment 生命周期。
+
+## 生成代码检查
+
+开发新接口或修改 wrapper 时，建议同时检查语法和生成汇编：
+
+```bash
+clang++ --target=linx64v5-unknown-linux-musl \
+  -mlxbc -fenable-matrix -O2 -std=c++20 \
+  -Iinclude -D__linx -S kernel.cpp -o kernel.s
+
+rg 'B\\.SUBVIEW|B\\.ASSEMBLE' kernel.s
+```
+
+确认事项：
+
+1. `B.SUBVIEW` 位于 source binder 之后；
+2. `B.ASSEMBLE` 位于 destination binder 之后；
+3. source/destination 角色没有反用；
+4. assembly lifecycle 与 slot 写入顺序一致；
+5. `RegSrc` 对应的 runtime base value 已正确绑定。
+
+## 相关实现位置
+
+- `include/common/pto_tile.hpp`：`range::Subview`、`range::Assemble` 和 factory；
+- `include/common/pto_tile_region.hpp`：`TPARTVIEW`、`TileArray`、`TASSEMBLY`；
+- `include/common/pto_tile_region_inline_asm.hpp`：Tile region inline-asm 快速路径；
+- `docs/tileop-usage/range-modifiers.md`：ISA 编码与 modifier 合同；
+- `test/tileop_api/src/RangeSubview.cpp`：source-side 回归测例；
+- `test/tileop_api/src/RangeAssemble.cpp`：destination-side 回归测例。
