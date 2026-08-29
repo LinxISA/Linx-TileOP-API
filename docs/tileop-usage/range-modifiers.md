@@ -209,3 +209,19 @@ SizeCode `1..12`) rather than the Local `B.IOT` `1..10` range.
   TSTORE source are rejected).
 - Range modifiers do not change the PE-mask contract, the Tile size code,
   or the logical shape of the bound operand.
+
+## 使用要求
+
+`range::Subview` 只能作为 source-side range carrier，`range::Assemble` 只能作为 destination-side range carrier，并且必须传给支持该 carrier 的 `TLOAD`/`TSTORE` 重载。范围参数在编译期指定，base address 在构造时提供。
+
+## 默认值
+
+`Subview` 的 `Offset` 默认为 `0`、`RegSrc` 默认为 `2`；`Assemble` 的 `INIT` 默认为 `true`、`LAST` 默认为 `false`、`Offset` 默认为 `0`、`RegSrc` 默认为 `2`。省略参数使用这些模板默认值，不等同于任意显式编码的零值。
+
+## 异常和边界行为
+
+`SubviewSizeCode` 必须为 `1..12`，`ParentSizeCode` 必须符合 INIT 规则，`Offset` 必须为 `0..2047`，`RegSrc` 必须为 `0..23`。越界值、role mismatch、错误 location、非法 PE mask 或不连续的 binder group 会在模板实例化、汇编或执行前被拒绝。范围 modifier 不改变逻辑 shape、Tile size code 或 PE-mask 语义。
+
+## 完整语义
+
+范围修饰符的完整编码、约束和边界行为请参阅 [PTO-SPEC v0.58.4.1 tile 文档](https://github.com/PTO-ISA/pto-spec/tree/v0.58.4.1/docs/tile)。

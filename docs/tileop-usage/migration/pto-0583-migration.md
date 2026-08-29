@@ -49,3 +49,26 @@ the explicit hosted subset and rejects ELFs that do not carry the exact PTO
 disassembler, SizeCode/PEMode, layout, DTYPE_NONE, and FPATR contracts. It
 must fail on a compiler that silently renders the required CUBE conversion
 dtype as FP64.
+
+## 使用要求
+
+迁移前应使用目标版本的头文件、编译器和 PTO-SPEC，并重新检查 Tile location、SizeCode、PE mask、`B.IOR` stride 和 CUBE 属性。不要将旧版本的 wrapper 或汇编约束直接套用到当前 API。
+
+## 默认值
+
+迁移后的默认值以当前版本的 C++ 重载和 contract 为准；尤其要检查 omitted dimension、FPATR、SizeCode、stride 单位以及默认 scale/post-process 选项。显式零值不能自动视为字段省略。
+
+## 异常和边界行为
+
+旧 compiler、非法 SizeCode/PEMode、错误 stride 单位、未分配 scale Tile、类型不匹配或旧版已删除的操作可能在编译、汇编或运行前检查阶段失败。边界、fault 和部分发布行为以当前版本具体操作规范为准。
+
+## 使用示例
+
+```cpp
+// 使用当前版本头文件中的 API，并按对应操作页面核对 Options。
+TMATMUL(dst, lhs, rhs);
+```
+
+## 完整语义
+
+版本迁移的完整权威信息请参阅 [PTO-SPEC v0.58.4.1 tile 文档](https://github.com/PTO-ISA/pto-spec/tree/v0.58.4.1/docs/tile) 和当前仓库的具体操作页面。

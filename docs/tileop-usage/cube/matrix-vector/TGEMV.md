@@ -1,103 +1,91 @@
 # TGEMV
 
-`TGEMV` is a TileOP C++ interface for the PTO ISA v0.58.3 `TGEMV` operation. See the [existing topic guide](../../concepts/README.md) for compatibility and operation-specific examples.
-
-## 接口身份
-
-| 项目 | 内容 |
-| --- | --- |
-| API 名称 | `TGEMV` |
-| ISA 操作 | `TGEMV` |
-| 执行引擎 | `CUBE` |
-| 指令分类 | `cube` |
-| 编码 carrier | `TEPL` |
-| Logical selector | `16` (`0x10`) |
-| Function | `16` |
-| Mode | `4` |
-| C++ 定义位置 | `include/jcore/template_asm.hpp:5745` |
+TGEMV multiplies the matrix and vector into a newly published destination.
 
 ## C++ 接口
 
+当前 API 中可用的调用形式：
+
 ```cpp
-TGEMV(...);  // see matrix-postprocess.md for the complete options overload set
+template <
+    is_tile_data_v tile_shape_d,
+    is_local_tile_v tile_shape_mtx,
+    is_local_tile_v tile_shape_vec,
+    fixp::is_options_v Options>
+PTO_SHARED_INLINE void TGEMV(
+    tile_shape_d &d,
+    tile_shape_mtx &mtx,
+    tile_shape_vec &vec,
+    const Options &options);
+PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape_vec &vec);
 ```
 
-上面的签名是该操作族的接口摘要。完整的模板重载、默认参数和辅助类型以
-`template_asm.hpp` 为准；本页面不把宏展开或底层 inline-asm 实现伪装成新的公共接口。
+## 使用要求
 
-## 功能语义
+- Tile 类型必须满足接口模板约束；
+- 数据类型、形状、有效区域、布局、容量和存储位置必须满足该操作要求；
+- 输入 Tile 必须已初始化，输出 Tile 必须具有足够容量；
+- 参数顺序必须与接口声明一致，不要添加接口未声明的操作数。
 
-`TGEMV` 在所有合法操作数和 Tile 描述符完成检查后，对有效区域执行 `TGEMV`
-对应的 PTO 操作。有效区域之外的物理位置不应被当作输入数据；具体 padding、数值
-状态和 alias 行为由 PTO-SPEC 的当前 contract 定义。
+## 约束
 
-## 操作数与结果
+除通用 Tile 约束外，必须满足 PTO-SPEC 对本操作规定的操作数角色、数据类型组合、形状、布局、有效区域、容量、存储位置、PE mask 以及 alias 规则。对于需要 Shared Tile、标量、索引、scale、bias 或选项对象的重载，只能使用接口声明的参数形式；不能通过省略参数来伪造另一种操作数组合。
 
-- 所有 Tile 参数必须满足其 C++ 类型、dtype、shape、layout、capacity 和 location 约束。
-- 输出 Tile 是由接口签名指定的新目标或目标参数；输入 Tile 的角色和顺序不得交换。
-- 除接口显式声明的 scalar、descriptor 或 Shared Tile 外，不得推断额外操作数。
-- `PE_MASK`、valid region 和 Tile SizeCode 必须符合 [通用约束](../../concepts/tile-constraints.md)。
+## 默认值
 
-## 分类与执行引擎
+未显式传入的可选参数使用该 C++ 重载和 PTO-SPEC contract 规定的默认值。默认选项、维度、布局、padding、scale mask 和属性字段可能与显式编码的零值不同；调用者不得把“省略”与“传入零值”自动等同。
 
-```text
-Instruction class: cube
-Execution engine: CUBE
-```
+## 异常和边界行为
 
-执行引擎与分类是两个独立属性；不得仅根据分类推断 engine。
+类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，可能在编译期或运行前检查阶段被拒绝。有效区域为空、部分有效区域、边界坐标、padding、数值溢出、NaN/无穷值、输入输出 alias、内存 fault 以及 `PE_MASK=0000` 的行为均以该操作的 PTO-SPEC contract 为准；失败时不应假定已经产生部分输出或其他副作用。
 
-## 汇编与编码
+## 结果说明
 
-```asm
-TGEMV <bundle operands>
-```
-
-| Operation | Carrier | Selector | Function | Mode |
-| --- | --- | ---: | ---: | ---: |
-| `TGEMV` | `TEPL` | `16` (`0x10`) | `16` | `4` |
-
-`TGEMV` 是 selector-encoded block operation，不是独立 standalone opcode。
+成功调用后，`TGEMV` 按操作语义更新输出 Tile。padding、输入持久性、边界行为及数值状态影响请以 PTO-SPEC 为准；未明确声明的副作用不应被假定。
 
 ## Bundle composition
 
+开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
+
 ```asm
-BSTART.CUBE TGEMV, DataType
-; operation-defined descriptor fields, dimensions, scalar inputs, and Tile bindings
-; are emitted according to this operation's C++ overload and PTO contract
-BSTOP
+BSTART.TGEMV AType
+B.DATR      BType, RMode, Sat (optional; BType defaults to AType)
+B.FPATR     PreQuantMode, ReluMode, GroupNCode, RowMaxEn, GroupMaxEn, RowMaxInit, MaxAbsEn, TransA, TransB, CScaleEn (exactly one)
+B.DIM       LB0 M (optional, default 1; TGEMV permits only M=1)
+B.DIM       LB1 N (optional, default 1)
+B.DIM       LB2 K (optional, default 1)
+B.IOT       ordered Local mathematical sources: A CUBE_M16/M32 primary, B CUBE_N8 primary
+B.IOT       D matching A's CUBE_M16/M32 layout, optional RowMaxOut, optional GroupMaxOut destinations
+B.IOT/B.IOR postprocess operands selected by B.FPATR
+BSTOP       or the next BSTART completion boundary
 ```
-
-实际 binder 数量、source/destination 角色、`last` 位置以及属性字段必须以
-`template_asm.hpp` 和 PTO-SPEC contract 为准；本页不添加接口未声明的 binder。
-
-## 默认值与零值编码
-
-操作未显式提供的字段使用 PTO-SPEC 规定的默认值。显式编码的零值与省略字段可能
-具有不同的 bundle 描述语义；调用者不得将二者自动等同。
-
-## 合法性约束
-
-必须满足以下边界：
-
-1. 操作数类型和数量与 C++ overload 及 PTO contract 一致；
-2. dtype、layout、shape、valid region 和物理容量合法；
-3. Local/Shared location、PE mask 和 Tile SizeCode 合法；
-4. 不存在未声明的 `B.IOT`、`B.IOS`、`B.IOR` 或 `B.DIM`；
-5. 合法性检查失败时不得产生部分架构状态变化。
-
-## 状态效果与内存效果
-
-成功执行后，只发布 PTO contract 声明的目标 Tile、descriptor、definedness、padding
-和 numeric-status 变化。没有明确声明的 GM、Shared 或同步副作用不得由 API 使用者假定。
-
-## 异常与错误边界
-
-不支持的 dtype、layout、shape、容量、location、PE mask、属性组合或 bundle 结构应在
-C++ 模板实例化阶段或 Tile legality/allocation preflight 阶段被拒绝。拒绝必须发生在
-部分目标写入和状态发布之前。
 
 ## 使用示例
 
-完整调用形式和类型约束请参阅 `template_asm.hpp` 中的定义以及对应的主题指南（若存在）。
-本页的接口摘要只用于导航，不将宏展开或底层 inline-asm 实现伪装成公共 overload。
+```cpp
+#include <common/pto_tileop.hpp>
+
+using namespace pto;
+using Vec = CubeTileM16<float, 1, 64>;
+using Matrix = CubeTileN8<float, 64, 32>;
+using Result = CubeAccumulatorM16<float, 1, 32>;
+using GMVec = global_tensor<float, RowMajor<1, 64>>;
+using GMMatrix = global_tensor<float, RowMajor<64, 32>>;
+using GMResult = global_tensor<float, RowMajor<1, 32>>;
+
+void gemv(float *out, const float *matrix_data, const float *vector_data) {
+  GMMatrix matrix_gm(matrix_data); GMVec vector_gm(vector_data); GMResult out_gm(out);
+  Matrix matrix; Vec vec; Result result;
+  TLOAD_CUBE(matrix, matrix_gm);
+  TLOAD_CUBE(vec, vector_gm);
+  // result[1x32] = vec[1x64] * matrix[64x32]。
+  TGEMV(result, matrix, vec);
+  TSTORE_CUBE(out_gm, result);
+}
+```
+
+涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。
+
+## 完整语义
+
+完整语义、约束、默认值、异常和边界行为请参阅 [`TGEMV.md`](https://github.com/PTO-ISA/pto-spec/blob/v0.58.4.1/docs/tile/matrix-and-matrix-vector/matrix-vector/TGEMV.md)。
