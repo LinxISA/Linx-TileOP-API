@@ -37,18 +37,37 @@ __attribute__((noinline)) void subview_size12_tstore(
   TSTORE(dst, sv); // -> B.SUBVIEW 0, r23, 2047, 12
 }
 
-// The factory derives the common size-code from Src and hides the carrier
-// type. Explicit size/offset/register settings remain available when needed.
-__attribute__((noinline)) void subview_factory_tstore(
+// The no-base factory uses the zero register.
+__attribute__((noinline)) void subview_factory_zero_tstore(
     GMDst &dst, Src &s) {
-  auto sv = range::subview(s, 0);
-  TSTORE(dst, sv);
+  auto sv = range::subview(s);
+  TSTORE(dst, sv); // -> B.SUBVIEW 0, zero, 0, 1
 }
 
-__attribute__((noinline)) void subview_factory_custom_tstore(
+// A runtime base value uses a compiler-allocated GPR.
+__attribute__((noinline)) void subview_factory_runtime_tstore(
+    GMDst &dst, Src &s, uintptr_t base) {
+  auto sv = range::subview(s, base);
+  TSTORE(dst, sv); // -> B.SUBVIEW 0, <allocated-gpr>, 0, 1
+}
+
+__attribute__((noinline)) void subview_factory_zero_offset_tstore(
     GMDst &dst, Src &s) {
-  auto sv = range::subview_at<2047, 23>(s, 23);
-  TSTORE(dst, sv);
+  auto sv = range::subview<2047>(s);
+  TSTORE(dst, sv); // -> B.SUBVIEW 0, zero, 2047, 1
+}
+
+__attribute__((noinline)) void subview_factory_runtime_offset_tstore(
+    GMDst &dst, Src &s, uintptr_t base) {
+  auto sv = range::subview<2047>(s, base);
+  TSTORE(dst, sv); // -> B.SUBVIEW 0, <allocated-gpr>, 2047, 1
+}
+
+// Explicit register selection remains a low-level ABI/testing interface.
+__attribute__((noinline)) void subview_factory_explicit_reg_tstore(
+    GMDst &dst, Src &s) {
+  auto sv = range::subview_at_reg<2047, 23>(s, 23);
+  TSTORE(dst, sv); // -> B.SUBVIEW 0, r23, 2047, 1
 }
 
 void use(void *) {}
@@ -60,8 +79,11 @@ int main() {
   Src s;
   subview_source_tstore(gd, s);
   subview_size12_tstore(gd, s);
-  subview_factory_tstore(gd, s);
-  subview_factory_custom_tstore(gd, s);
+  subview_factory_zero_tstore(gd, s);
+  subview_factory_runtime_tstore(gd, s, 64);
+  subview_factory_zero_offset_tstore(gd, s);
+  subview_factory_runtime_offset_tstore(gd, s, 64);
+  subview_factory_explicit_reg_tstore(gd, s);
   use(src_buf);
   return 0;
 }

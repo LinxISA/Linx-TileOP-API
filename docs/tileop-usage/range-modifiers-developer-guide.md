@@ -11,8 +11,8 @@ carrier，避免在业务代码中直接拼接 ISA 字段。
 - source Tile 需要绑定一个 `B.SUBVIEW` 区域；
 - destination Tile 需要绑定一个 `B.ASSEMBLE` 区域；
 - 需要在多个操作或多个 kernel 阶段复用相同的 range 描述；
-- 需要让 `SubviewSizeCode`、`ParentSizeCode`、`INIT`、`LAST` 和 `RegSrc`
-  在编译期固定。
+- 需要让 `SubviewSizeCode`、`ParentSizeCode`、`INIT` 和 `LAST` 在编译期固定；
+  高层 source API 不要求开发者填写 `RegSrc`。
 
 当前实现通过 inline asm 生成 range modifier。它不是 LLVM intrinsic lowering，
 但保持了后续切换到 compiler lowering 时的 C++ 调用形式。
@@ -46,21 +46,37 @@ Assemble = destination 侧的范围描述
 
 ### Source：`range::subview`
 
-普通场景使用 factory。range size code 从 parent Tile 的 `TilesizeCode` 推导，
-开发者只需要填写原始 Tile 和运行时基地址：
+普通场景只需要表达“是否有运行时基地址”，不需要选择具体 GPR。range size code
+仍然从 parent Tile 的 `TilesizeCode` 自动推导。
+
+无运行时基地址时：
 
 ```cpp
-#include <common/pto_tileop.hpp>
+void store_subview(GM &gm, TileT &tile) {
+  auto view = range::subview(tile);
+  TSTORE(gm, view);
+}
+```
 
-using namespace pto;
+对应：
 
-using TileT = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
-using GM = global_tensor<float, RowMajor<4, 8>>;
+```asm
+B.SUBVIEW 0, zero, 0, <TileT::TilesizeCode>
+```
 
+有运行时基地址时：
+
+```cpp
 void store_subview(GM &gm, TileT &tile, uintptr_t base_addr) {
   auto view = range::subview(tile, base_addr);
   TSTORE(gm, view);
 }
+```
+
+编译器为 `base_addr` 分配一个可用 GPR，并把同一个寄存器写入 `B.SUBVIEW`：
+
+```asm
+B.SUBVIEW 0, <allocated-gpr>, 0, <TileT::TilesizeCode>
 ```
 
 各个参数的含义如下：
@@ -68,20 +84,9 @@ void store_subview(GM &gm, TileT &tile, uintptr_t base_addr) {
 | 参数 | 如何填写 | 含义 |
 | --- | --- | --- |
 | `tile` | 要写回的 Local/Shared Tile | 被描述的 source Tile，不会被复制 |
-| `base_addr` | 运行时地址值，例如 GM buffer 地址 | 写入默认 `RegSrc=2` 对应的 base register |
+| `base_addr` | 可选的运行时地址值 | 不填时使用 `zero`；填写时由编译器自动分配 GPR |
 | `SubviewSizeCode` | 通常不填写 | 由 `tile::TilesizeCode` 自动推导，表示 source range capacity |
 | `Offset` | 默认是 `0` | 编码到 `B.SUBVIEW` 的 `uimm11` 立即数，范围 `0..2047` |
-| `RegSrc` | 默认是 `2` | 编码使用的绝对 GPR 编号，范围 `0..23` |
-
-因此这段代码表示：使用 `tile` 作为 source，使用 `base_addr` 作为 `r2` 的值，
-在 source binder 后附加一个 offset 为 `0`、size code 自动推导的 `B.SUBVIEW`：
-
-```asm
-B.SUBVIEW 0, r2, 0, <TileT::TilesizeCode>
-```
-
-`range::subview` 默认使用 `RegSrc=2`。这里的 `base_addr` 是基地址寄存器的值，
-不是直接编码到指令中的立即数。
 
 `base_addr` 和 `Offset` 不要混淆：
 
@@ -89,8 +94,8 @@ B.SUBVIEW 0, r2, 0, <TileT::TilesizeCode>
 最终范围地址 = GPR[RegSrc] + ZeroExtend(Offset)
 ```
 
-也就是说，`base_addr` 是运行时传入的地址，`Offset` 是编译期写入指令的
-小立即数。
+不填写 `base_addr` 时，`GPR[RegSrc]` 是 `zero`；填写后，`base_addr` 是运行时
+输入值，具体使用哪个 GPR 由编译器决定。`Offset` 始终是编译期立即数。
 
 ### Destination：`range::assemble`
 
@@ -165,55 +170,65 @@ TLOAD(last, gm2);
 
 ## Offset 与 base register
 
-range descriptor 中的 `Offset` 和 `RegSrc` 是编译期字段；基地址值是运行时参数。
-当需要指定 offset 或 base register 时，使用 `_at` helper。注意模板参数是
-编译期 descriptor 字段，括号中的 `base_addr` 仍然是运行时基地址：
+高层 source API 不暴露寄存器编号，按是否传入 `base_addr` 分为四种写法：
 
 ```cpp
-auto source = range::subview_at<128, 23>(tile, base_addr);
-auto destination = range::assemble_at<128, 23>(tile, base_addr);
+auto source0 = range::subview(tile);
+auto source1 = range::subview(tile, base_addr);
+auto source2 = range::subview<128>(tile);
+auto source3 = range::subview<128>(tile, base_addr);
 ```
 
-模板参数含义为：
+对应关系：
 
-```text
-subview_at<Offset, RegSrc>(parent, range_base)
-assemble_at<Offset, RegSrc>(parent, range_base)
-```
-
-其中：
-
-- `Offset` 是加到 `GPR[RegSrc]` 上的 byte offset，合法范围是 `0..2047`；
-- `RegSrc` 是绝对 GPR 编号，合法范围是 `0..23`；
-- `base_addr` 是要放入该 GPR 的运行时值。
+| 接口 | 基址寄存器 | `uimm11` |
+| --- | --- | --- |
+| `subview(tile)` | `zero` | `0` |
+| `subview(tile, base_addr)` | 编译器自动分配 | `0` |
+| `subview<Offset>(tile)` | `zero` | `Offset` |
+| `subview<Offset>(tile, base_addr)` | 编译器自动分配 | `Offset` |
 
 例如：
 
 ```cpp
-auto view = range::subview_at<128, 23>(tile, base_addr);
+auto view = range::subview<128>(tile, base_addr);
 ```
 
-表示：使用 `r23 = base_addr`，再加上立即数 offset `128`，生成：
+可能生成：
 
 ```asm
-B.SUBVIEW 0, r23, 128, <TileSizeCode>
+B.SUBVIEW 0, r7, 128, <TileSizeCode>
 ```
 
-只有在 Tile 的默认 capacity 不符合目标 contract 时，才需要同时指定 source
-size code：
+这里的 `r7` 只是示例，实际寄存器由编译器决定。开发者不应依赖其编号。
+
+只有在 Tile 默认 capacity 不符合目标 contract 时，才覆盖 source size code：
 
 ```cpp
-auto source = range::subview_sized_at<12, 2047, 23>(tile, base_addr);
+auto zero_based = range::subview_sized_at<12, 2047>(tile);
+auto runtime_based = range::subview_sized_at<12, 2047>(tile, base_addr);
 ```
 
-其模板参数顺序为：
+模板参数顺序为：
 
 ```text
-subview_sized_at<SubviewSizeCode, Offset, RegSrc>(parent, range_base)
+subview_sized_at<SubviewSizeCode, Offset>(parent [, range_base])
 ```
 
-`SubviewSizeCode` 表示 source binder 的容量编码，不是矩阵的逻辑行数或列数。
+`SubviewSizeCode` 表示 source binder 的容量编码，不是矩阵行数、列数或分片编号。
 除非确实需要覆盖默认 size code，否则不要使用 sized helper。
+
+如固定 ABI 或 ISA 编码测试必须选择具体寄存器，可使用底层专家接口：
+
+```cpp
+auto source = range::subview_at_reg<128, 23>(tile, base_addr);
+auto sized = range::subview_sized_at_reg<12, 128, 23>(tile, base_addr);
+```
+
+普通 kernel 不应使用 `_reg` 接口。
+
+Destination `assemble` 目前仍使用原有 descriptor helper；其 `Offset`、`RegSrc`
+和 lifecycle 填写方式见前面的 assemble 章节。
 
 ## 显式 carrier 类型
 
@@ -266,7 +281,8 @@ Shared carrier 使用 Shared handle，不提供 Local Tile 的普通 `data()` �
 - `INIT=1` 时 parent size code 必须为 `1..12`；
 - `INIT=0` 时 parent size code 必须为 `0`；
 - `Offset`：`0..2047`；
-- `RegSrc`：`0..23`。
+- 高层 `subview` 的基址寄存器由是否传入 `base_addr` 决定；运行时 base 由编译器
+  分配寄存器。显式 `RegSrc` 仅适用于底层 carrier 和 `_reg` 测试接口。
 
 典型非法写法：
 
@@ -274,7 +290,7 @@ Shared carrier 使用 Shared handle，不提供 Local Tile 的普通 `data()` �
 range::Subview<TileT, 0>(tile, 0);             // size code 0 非法
 range::Subview<TileT, 13>(tile, 0);            // 13..15 保留
 range::Subview<TileT, 1, 2048>(tile, 0);       // offset 溢出
-range::Subview<TileT, 1, 0, 24>(tile, 0);      // RegSrc 溢出
+range::Subview<TileT, 1, 0, 25>(tile, 0);      // RegSrc outside ISA range
 range::Assemble<TileT, 0, true>(tile, 0);      // INIT 需要 parent size
 range::Assemble<TileT, 12, false>(tile, 0);    // 非 INIT 必须使用 size 0
 ```

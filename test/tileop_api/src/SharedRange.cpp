@@ -12,7 +12,14 @@ using GM = global_tensor<float, RowMajor<4, 8>>;
 
 __attribute__((noinline)) void shared_source_subview(GM &dst, Local &local) {
   auto src = TMOV_L2S_PUBLISH(local);
-  range::Subview<Shared, 1, 0, 0> view(src, 0);
+  auto view = range::subview(src);
+  TSTORE(dst, view);
+}
+
+__attribute__((noinline)) void shared_source_subview_runtime(
+    GM &dst, Local &local, uintptr_t base) {
+  auto src = TMOV_L2S_PUBLISH(local);
+  auto view = range::subview(src, base);
   TSTORE(dst, view);
 }
 
@@ -31,6 +38,7 @@ int main() {
   GM dst(dst_buf);
   Local local;
   shared_source_subview(dst, local);
+  shared_source_subview_runtime(dst, local, 128);
   shared_destination_assemble(src);
   use(src_buf);
   return 0;

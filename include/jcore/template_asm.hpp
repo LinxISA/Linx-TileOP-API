@@ -1965,6 +1965,28 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       static_assert(tile_type_traits<typename ParentTile::TileDType>::
                         IsValidSharedActiveSize,
                     "Shared B.SUBVIEW source size must be 128 B..256 KB");
+      if constexpr (tile_shape::RegSrc == range::AutoRegSrc) {
+        const uintptr_t range_base =
+            static_cast<uintptr_t>(src.GetRangeBase());
+        asm volatile(
+          "BSTART.TLSU TSTORE, %D[SrcType]\n"
+          "B.DIM %[VCOL], 0, ->lb0\n"
+          "B.DIM %[VROW], 0, ->lb1\n"
+          "B.DIM zero, %c[COL], ->lb2\n"
+          "B.IOS %S[s0], mask=1111\n"
+          "B.SUBVIEW %c[SrcSelect], %[RegSrc], %c[Off], %c[SubSize]\n"
+          "B.IOR [%[d0],%[GmStride]], []\n"
+          :
+          : [d0]"r"(dst.data()), [s0]"Sr"(src.handle()),
+            [SrcType]"i"(type_traits<typename ParentTile::DType>::TypeCode),
+            [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+            [COL]"i"(ParentTile::Cols),
+            [GmStride]"r"(dst.GetStrideBytes(3)),
+            [SrcSelect]"i"(0), [RegSrc]"r"(range_base),
+            [Off]"i"(tile_shape::Offset),
+            [SubSize]"i"(tile_shape::SubviewSizeCode)
+          : "memory");
+      } else {
       #define PTO_SHARED_RANGE_SUBVIEW_CASE(N) \
         if constexpr (tile_shape::RegSrc == N) { \
           register uintptr_t range_base asm("r" #N) = \
@@ -2001,9 +2023,32 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       PTO_SHARED_RANGE_SUBVIEW_CASE(20) else PTO_SHARED_RANGE_SUBVIEW_CASE(21) else
       PTO_SHARED_RANGE_SUBVIEW_CASE(22) else PTO_SHARED_RANGE_SUBVIEW_CASE(23)
       #undef PTO_SHARED_RANGE_SUBVIEW_CASE
+      }
     } else {
     // Source wraps a B.SUBVIEW range modifier attached to the B.IOT source
     // binder (PTO-ISA 0.58.4 ADR-0098).
+    if constexpr (tile_shape::RegSrc == range::AutoRegSrc) {
+      const uintptr_t range_base =
+          static_cast<uintptr_t>(src.GetRangeBase());
+      asm volatile(
+        "BSTART.TLSU TSTORE, %D[SrcType]\n"
+        "B.DIM %[VCOL], 0, ->lb0\n"
+        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[COL], ->lb2\n"
+        "B.IOT %[s0], mask=1111, last\n"
+        "B.SUBVIEW %c[SrcSelect], %[RegSrc], %c[Off], %c[SubSize]\n"
+        "B.IOR [%[d0],%[GmStride]], []\n"
+        :
+        : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
+          [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
+          [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+          [COL]"i"(tile_shape::Cols),
+          [GmStride]"r"(dst.GetStrideBytes(3)),
+          [SrcSelect]"i"(0), [RegSrc]"r"(range_base),
+          [Off]"i"(tile_shape::Offset),
+          [SubSize]"i"(tile_shape::SubviewSizeCode)
+        : "memory");
+    } else {
     #define PTO_RANGE_SUBVIEW_CASE(N) \
       if constexpr (tile_shape::RegSrc == N) { \
         register uintptr_t range_base asm("r" #N) = \
@@ -2041,6 +2086,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
     PTO_RANGE_SUBVIEW_CASE(20) else PTO_RANGE_SUBVIEW_CASE(21) else
     PTO_RANGE_SUBVIEW_CASE(22) else PTO_RANGE_SUBVIEW_CASE(23)
     #undef PTO_RANGE_SUBVIEW_CASE
+    }
     }
   } else {
   asm volatile(

@@ -1811,6 +1811,10 @@ struct is_tile<ReinterpretedTileView<NewDType, SourceTile>> : std::true_type {
 // the parent's shape/dtype/storage and expose the modifier runtime fields.
 namespace range {
 
+// RegSrc=24 is an internal marker for a runtime base register selected by
+// the compiler. It is not an encodable ISA register selector.
+inline constexpr unsigned AutoRegSrc = 24;
+
 constexpr bool is_valid_parent_size_code(unsigned code) {
   return code <= 12; // 0 is legal on non-INIT modifiers; 13..15 reserved
 }
@@ -1823,12 +1827,10 @@ constexpr bool is_valid_uimm11(unsigned u) { return u <= 2047; }
 /// Parent so it can be bound as a Local operand; the B.SUBVIEW line is
 /// emitted after the source binder by the consuming operation.
 ///
-/// uimm11 Offset and RegSrc must be compile-time constants: the B.SUBVIEW
-/// Modifier slots are inline-asm "i" constraints, so callers cannot thread
-/// runtime values into a range descriptor (PTO-ISA 0.58.4 ADR-0098 models
-/// the range descriptor as a static part of the binder contract). RegSrc is
-/// the absolute GPR selector 0..23 for the base-address register (defaults
-/// to a0/R2, the conventional base register).
+/// uimm11 Offset is a compile-time constant. High-level factories either use
+/// the zero register or mark RegSrc as AutoRegSrc so inline asm can allocate a
+/// GPR for the runtime base value. Explicit RegSrc 0..23 remains available to
+/// the low-level carrier and *_reg helpers for fixed ABI and encoding tests.
 template <typename Parent, unsigned SubviewSizeCode_, unsigned Offset_ = 0,
           unsigned RegSrc_ = 2>
 class Subview {
@@ -1836,8 +1838,9 @@ class Subview {
                 "B.SUBVIEW SubviewSizeCode must be 1..12 (128B..256KB per PE)");
   static_assert(is_valid_uimm11(Offset_),
                 "B.SUBVIEW uimm11 offset must be 0..2047");
-  static_assert(RegSrc_ <= 23,
-                "B.SUBVIEW RegSrc must be an absolute GPR selector 0..23");
+  static_assert(
+      RegSrc_ <= 23 || RegSrc_ == AutoRegSrc,
+      "B.SUBVIEW RegSrc must be an absolute GPR selector 0..23 or AutoRegSrc");
 public:
   using DType = typename Parent::DType;
   using ParentTile = Parent;
@@ -1977,15 +1980,27 @@ private:
 
 // Ergonomic range factories. The common case derives the modifier size from
 // the wrapped tile and keeps the descriptor details out of the call site.
-template <typename Parent>
-auto subview(Parent &parent, uintptr_t range_base = 0)
-    -> Subview<Parent, Parent::TilesizeCode> {
+template <unsigned Offset_ = 0, typename Parent>
+auto subview(Parent &parent)
+    -> Subview<Parent, Parent::TilesizeCode, Offset_, 0> {
+  return {parent, 0};
+}
+
+template <unsigned Offset_ = 0, typename Parent>
+auto subview(Parent &parent, uintptr_t range_base)
+    -> Subview<Parent, Parent::TilesizeCode, Offset_, AutoRegSrc> {
   return {parent, range_base};
 }
 
 template <unsigned SubviewSizeCode_, typename Parent>
-auto subview_sized(Parent &parent, uintptr_t range_base = 0)
-    -> Subview<Parent, SubviewSizeCode_> {
+auto subview_sized(Parent &parent)
+    -> Subview<Parent, SubviewSizeCode_, 0, 0> {
+  return {parent, 0};
+}
+
+template <unsigned SubviewSizeCode_, typename Parent>
+auto subview_sized(Parent &parent, uintptr_t range_base)
+    -> Subview<Parent, SubviewSizeCode_, 0, AutoRegSrc> {
   return {parent, range_base};
 }
 
@@ -2013,15 +2028,40 @@ auto assemble_middle(Parent &parent, uintptr_t range_base = 0)
   return {parent, range_base};
 }
 
-template <unsigned Offset_, unsigned RegSrc_ = 2, typename Parent>
-auto subview_at(Parent &parent, uintptr_t range_base = 0)
+// Compatibility aliases for callers using the earlier *_at spelling.
+template <unsigned Offset_, typename Parent>
+auto subview_at(Parent &parent)
+    -> decltype(subview<Offset_>(parent)) {
+  return subview<Offset_>(parent);
+}
+
+template <unsigned Offset_, typename Parent>
+auto subview_at(Parent &parent, uintptr_t range_base)
+    -> decltype(subview<Offset_>(parent, range_base)) {
+  return subview<Offset_>(parent, range_base);
+}
+
+template <unsigned SubviewSizeCode_, unsigned Offset_, typename Parent>
+auto subview_sized_at(Parent &parent)
+    -> Subview<Parent, SubviewSizeCode_, Offset_, 0> {
+  return {parent, 0};
+}
+
+template <unsigned SubviewSizeCode_, unsigned Offset_, typename Parent>
+auto subview_sized_at(Parent &parent, uintptr_t range_base)
+    -> Subview<Parent, SubviewSizeCode_, Offset_, AutoRegSrc> {
+  return {parent, range_base};
+}
+
+template <unsigned Offset_, unsigned RegSrc_, typename Parent>
+auto subview_at_reg(Parent &parent, uintptr_t range_base = 0)
     -> Subview<Parent, Parent::TilesizeCode, Offset_, RegSrc_> {
   return {parent, range_base};
 }
 
-template <unsigned SubviewSizeCode_, unsigned Offset_,
-          unsigned RegSrc_ = 2, typename Parent>
-auto subview_sized_at(Parent &parent, uintptr_t range_base = 0)
+template <unsigned SubviewSizeCode_, unsigned Offset_, unsigned RegSrc_,
+          typename Parent>
+auto subview_sized_at_reg(Parent &parent, uintptr_t range_base = 0)
     -> Subview<Parent, SubviewSizeCode_, Offset_, RegSrc_> {
   return {parent, range_base};
 }

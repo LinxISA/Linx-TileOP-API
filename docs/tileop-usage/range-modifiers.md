@@ -52,8 +52,11 @@ using GM = global_tensor<float, RowMajor<4, 8>>;
 TileT tile;
 GM gm;
 
-auto source = range::subview(tile, base_addr);
-TSTORE(gm, source);
+auto zero_based_source = range::subview(tile);
+TSTORE(gm, zero_based_source);
+
+auto runtime_based_source = range::subview(tile, base_addr);
+TSTORE(gm, runtime_based_source);
 
 auto destination = range::assemble(tile, base_addr);
 TLOAD(destination, gm);
@@ -67,11 +70,13 @@ auto destination = range::assemble_last(tile, base_addr);
 TLOAD(destination, gm);
 ```
 
-When only the byte offset or base register differs from the default, use the
-named `*_at` helpers. The size is still derived from the tile:
+When a source byte offset is needed, use `subview<Offset>`. Omitting the runtime
+base selects `zero`; passing a base lets the compiler allocate its GPR. The
+size is still derived from the tile:
 
 ```cpp
-auto source = range::subview_at<2047, 23>(tile, base_addr);
+auto zero_based = range::subview<2047>(tile);
+auto runtime_based = range::subview<2047>(tile, base_addr);
 auto destination = range::assemble_at<0, 0>(tile, base_addr);
 ```
 
@@ -79,7 +84,7 @@ For the less common non-default size-code case, use the explicitly named
 helper rather than positional lifecycle booleans:
 
 ```cpp
-auto source = range::subview_sized_at<1, 2047, 23>(tile, base_addr);
+auto source = range::subview_sized_at<1, 2047>(tile, base_addr);
 ```
 
 The explicit carrier forms documented below remain supported for code that
@@ -96,6 +101,10 @@ template <typename Parent, unsigned SubviewSizeCode, unsigned Offset = 0,
 class Subview;
 ```
 
+`Subview` 是底层 carrier 类型。普通 kernel 应优先使用统一的
+`range::subview<Offset = 0>(tile [, base_addr])` factory；`RegSrc` 仅用于固定
+ABI 或编码测试，运行时 base 的高层接口不会暴露寄存器编号。
+
 - `SubviewSizeCode` must be `1..12`.
 - `Offset` (the `uimm11` adder) is a compile-time constant `0..2047`.
 - `RegSrc` is the absolute GPR selector `0..23` (`a0`/R2 by default), with a
@@ -107,24 +116,30 @@ using GM = global_tensor<float, RowMajor<4, 8>>;
 
 Src s;
 GM gm;
-auto sv = range::subview(s, 0);
-TSTORE(gm, sv);  // emits B.SUBVIEW 0, r0, 0, 1 after the source B.IOT
+auto zero_based = range::subview(s);
+TSTORE(gm, zero_based);  // B.SUBVIEW 0, zero, 0, 1
+
+auto runtime_based = range::subview(s, base_addr);
+TSTORE(gm, runtime_based); // compiler selects the encoded GPR
 ```
 
-### RegSrc selects the base register
+### Base-register selection
 
-The wrapper template parameter `RegSrc` fixes **which** GPR the descriptor
-uses. The construction argument is the runtime base-address value that must
-sit in that GPR:
+The high-level API does not expose `RegSrc`:
 
 ```cpp
-auto sv = range::subview_sized_at<12, 2047, 23>(s, base_addr);
-TSTORE(gm, sv);  // B.SUBVIEW 0, r23, 2047, 12, base_addr in r23
+range::subview(s);                    // zero base
+range::subview(s, base_addr);         // compiler-allocated GPR
+range::subview<128>(s);               // zero + 128
+range::subview<128>(s, base_addr);    // runtime base + 128
 ```
 
-The consuming operation binds the base value into the selected GPR with a
-local-register inline-asm slot, then emits the canonical line. `RegSrc` is
-statically enumerable `0..23`; each value expands to its own `rN` asm form.
+Explicit register selection is retained only for fixed ABI and encoding tests:
+
+```cpp
+auto sv = range::subview_sized_at_reg<12, 2047, 23>(s, base_addr);
+TSTORE(gm, sv);  // B.SUBVIEW 0, r23, 2047, 12
+```
 
 ## `range::Assemble` — destination-side range carrier
 
@@ -206,7 +221,7 @@ The wrapper rejects at template-instantiation time:
 range::Subview<Src, 0, 0>(s, 0);       // SubviewSizeCode 0 reserved
 range::Subview<Src, 13, 0>(s, 0);      // 13..15 reserved
 range::Subview<Src, 1, 2048>(s, 0);    // uimm11 > 2047
-range::Subview<Src, 1, 0, 24>(s, 0);   // RegSrc outside 0..23
+range::Subview<Src, 1, 0, 25>(s, 0);   // RegSrc outside 0..23
 
 range::Assemble<Dst, 0, true>(d, 0);   // INIT=1 requires size 1..12
 range::Assemble<Dst, 12, false>(d, 0); // non-INIT requires size 0
