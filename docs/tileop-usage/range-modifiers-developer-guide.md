@@ -12,7 +12,7 @@ carrier，避免在业务代码中直接拼接 ISA 字段。
 - destination Tile 需要绑定一个 `B.ASSEMBLE` 区域；
 - 需要在多个操作或多个 kernel 阶段复用相同的 range 描述；
 - 需要让 `SubviewSizeCode`、`ParentSizeCode`、`INIT` 和 `LAST` 在编译期固定；
-  高层 source API 不要求开发者填写 `RegSrc`。
+  高层 source/destination API 都不要求开发者填写 `RegSrc`。
 
 当前实现通过 inline asm 生成 range modifier。它不是 LLVM intrinsic lowering，
 但保持了后续切换到 compiler lowering 时的 C++ 调用形式。
@@ -67,13 +67,13 @@ B.SUBVIEW 0, zero, 0, <TileT::TilesizeCode>
 有运行时基地址时：
 
 ```cpp
-void store_subview(GM &gm, TileT &tile, uintptr_t base_addr) {
-  auto view = range::subview(tile, base_addr);
+void store_subview(GM &gm, TileT &tile, uintptr_t base_units) {
+  auto view = range::subview(tile, base_units);
   TSTORE(gm, view);
 }
 ```
 
-编译器为 `base_addr` 分配一个可用 GPR，并把同一个寄存器写入 `B.SUBVIEW`：
+编译器为 `base_units` 分配一个可用 GPR，并把同一个寄存器写入 `B.SUBVIEW`：
 
 ```asm
 B.SUBVIEW 0, <allocated-gpr>, 0, <TileT::TilesizeCode>
@@ -84,27 +84,27 @@ B.SUBVIEW 0, <allocated-gpr>, 0, <TileT::TilesizeCode>
 | 参数 | 如何填写 | 含义 |
 | --- | --- | --- |
 | `tile` | 要写回的 Local/Shared Tile | 被描述的 source Tile，不会被复制 |
-| `base_addr` | 可选的运行时地址值 | 不填时使用 `zero`；填写时由编译器自动分配 GPR |
-| `SubviewSizeCode` | 通常不填写 | 由 `tile::TilesizeCode` 自动推导，表示 source range capacity |
-| `Offset` | 默认是 `0` | 编码到 `B.SUBVIEW` 的 `uimm11` 立即数，范围 `0..2047` |
+| `base_units` | 可选的运行时 128B 单位基址值 | 不填时使用 `zero`；填写时由编译器自动分配 GPR；寄存器值按 128B 计数 |
+| `LengthBytes` | 可省略 | 实际范围长度；省略时使用 parent Tile 容量，自动转换为 `SubviewSizeCode` |
+| `OffsetUnits` | 默认是 `0` | 编码到 `B.SUBVIEW` 的 `uimm11` 立即数，单位为 128B，范围 `0..2047` |
 
-`base_addr` 和 `Offset` 不要混淆：
+`base_units` 和 `OffsetUnits` 不要混淆：
 
 ```text
-最终范围地址 = GPR[RegSrc] + ZeroExtend(Offset)
+最终范围字节地址 = (GPR[RegSrc] + ZeroExtend(OffsetUnits)) * 128B
 ```
 
-不填写 `base_addr` 时，`GPR[RegSrc]` 是 `zero`；填写后，`base_addr` 是运行时
-输入值，具体使用哪个 GPR 由编译器决定。`Offset` 始终是编译期立即数。
+不填写 `base_units` 时，`GPR[RegSrc]` 是 `zero`；填写后，`base_units` 是运行时
+输入值，具体使用哪个 GPR 由编译器决定。`OffsetUnits` 始终是编译期的 128B 单位立即数。
 
 ### Destination：`range::assemble`
 
-普通 destination 使用 `range::assemble`。它的参数填写方式与 `subview` 类似，
-区别是它描述 destination，而不是 source：
+普通 destination 使用 `range::assemble`。它与 `subview` 使用完全相同的
+`LengthBytes`、`OffsetUnits` 和 `base_units` 语义，区别只是它描述 destination：
 
 ```cpp
-void load_assembled(GM &gm, TileT &tile, uintptr_t base_addr) {
-  auto destination = range::assemble(tile, base_addr);
+void load_assembled(GM &gm, TileT &tile, uintptr_t base_units) {
+  auto destination = range::assemble<128, 3>(tile, base_units);
   TLOAD(destination, gm);
 }
 ```
@@ -113,18 +113,27 @@ void load_assembled(GM &gm, TileT &tile, uintptr_t base_addr) {
 的第一个 fragment。对应的 modifier 形式类似：
 
 ```asm
-B.ASSEMBLE 1, 0, r2, 0, <TileT::TilesizeCode>
+B.ASSEMBLE 1, 0, <compiler-gpr>, 3, 1
 ```
+
+这里 `LengthBytes=128` 自动转换成 `ParentSizeCode=1`；`OffsetUnits=3`
+表示 `384B`；`base_units` 也是 128B 单位数。最终范围字节地址仍为：
+
+```text
+(base_units + OffsetUnits) * 128B
+```
+
+不传 `base_units` 时使用 `zero`；传入后由编译器选择 GPR，接口不暴露寄存器编号。
 
 ## 生命周期 helper
 
 `B.ASSEMBLE` 的生命周期不要通过裸的布尔模板参数表达，优先使用命名 helper：
 
 ```cpp
-auto first = range::assemble(tile, base_addr);          // INIT=1, LAST=0
-auto only = range::assemble_init_last(tile, base_addr);  // INIT=1, LAST=1
-auto middle = range::assemble_middle(tile, base_addr);  // INIT=0, LAST=0
-auto last = range::assemble_last(tile, base_addr);      // INIT=0, LAST=1
+auto first = range::assemble(tile, base_units);          // INIT=1, LAST=0
+auto only = range::assemble_init_last(tile, base_units);  // INIT=1, LAST=1
+auto middle = range::assemble_middle(tile, base_units);  // INIT=0, LAST=0
+auto last = range::assemble_last(tile, base_units);      // INIT=0, LAST=1
 ```
 
 这些 carrier 应分别传给对应的 destination TileOP。生命周期必须与实际写入
@@ -142,17 +151,17 @@ size code 传给 `assemble_middle` 或 `assemble_last`。
 
 ```cpp
 // 只有一个 fragment：
-auto only = range::assemble_init_last(tile, base_addr);
+auto only = range::assemble_init_last(tile, base_units);
 TLOAD(only, gm);
 
 // 多个 fragment：
-auto first = range::assemble(tile, base_addr);
+auto first = range::assemble(tile, base_units);
 TLOAD(first, gm0);
 
-auto middle = range::assemble_middle(tile, base_addr);
+auto middle = range::assemble_middle(tile, base_units);
 TLOAD(middle, gm1);
 
-auto last = range::assemble_last(tile, base_addr);
+auto last = range::assemble_last(tile, base_units);
 TLOAD(last, gm2);
 ```
 
@@ -168,15 +177,19 @@ TLOAD(last, gm2);
 `assemble()`、`assemble_init_last()` 的 INIT 形式会携带 parent size code；
 `assemble_middle()`、`assemble_last()` 的非 INIT 形式使用 size code `0`。
 
-## Offset 与 base register
+## 长度、OffsetUnits 与 base_units
 
-高层 source API 不暴露寄存器编号，按是否传入 `base_addr` 分为四种写法：
+SUBVIEW 和 ASSEMBLE 的高层 API 都不暴露寄存器编号。两者统一采用以下写法：
 
 ```cpp
 auto source0 = range::subview(tile);
-auto source1 = range::subview(tile, base_addr);
+auto source1 = range::subview(tile, base_units);
 auto source2 = range::subview<128>(tile);
-auto source3 = range::subview<128>(tile, base_addr);
+auto source3 = range::subview<128>(tile, base_units);
+auto destination0 = range::assemble(tile);
+auto destination1 = range::assemble(tile, base_units);
+auto destination2 = range::assemble<128, 3>(tile);
+auto destination3 = range::assemble<128, 3>(tile, base_units);
 ```
 
 对应关系：
@@ -184,27 +197,33 @@ auto source3 = range::subview<128>(tile, base_addr);
 | 接口 | 基址寄存器 | `uimm11` |
 | --- | --- | --- |
 | `subview(tile)` | `zero` | `0` |
-| `subview(tile, base_addr)` | 编译器自动分配 | `0` |
+| `subview(tile, base_units)` | 编译器自动分配（值为 128B 单位数） | `0` |
 | `subview<LengthBytes>(tile)` | `zero` | `0` |
-| `subview<LengthBytes>(tile, base_addr)` | 编译器自动分配 | `0` |
-| `subview<LengthBytes, Offset>(tile)` | `zero` | `Offset` |
-| `subview<LengthBytes, Offset>(tile, base_addr)` | 编译器自动分配 | `Offset` |
+| `subview<LengthBytes>(tile, base_units)` | 编译器自动分配（值为 128B 单位数） | `0` |
+| `subview<LengthBytes, OffsetUnits>(tile)` | `zero` | `OffsetUnits` |
+| `subview<LengthBytes, OffsetUnits>(tile, base_units)` | 编译器自动分配（值为 128B 单位数） | `OffsetUnits` |
+| `assemble(tile)` | `zero` | `0` |
+| `assemble(tile, base_units)` | 编译器自动分配（值为 128B 单位数） | `0` |
+| `assemble<LengthBytes, OffsetUnits>(tile)` | `zero` | `OffsetUnits` |
+| `assemble<LengthBytes, OffsetUnits>(tile, base_units)` | 编译器自动分配（值为 128B 单位数） | `OffsetUnits` |
 
 例如：
 
 ```cpp
-auto view = range::subview<128, 0>(tile, base_addr);
+auto view = range::subview<128, 3>(tile, base_units);
 ```
 
 可能生成：
 
 ```asm
-B.SUBVIEW 0, r7, 128, <TileSizeCode>
+B.SUBVIEW 0, <compiler-gpr>, 3, <TileSizeCode>
 ```
 
-这里的 `r7` 只是示例，实际寄存器由编译器决定。开发者不应依赖其编号。
+编译器分配的 GPR 中保存运行时 128B 单位基址；`3` 表示额外偏移
+`3 * 128B = 384B`。开发者不应依赖实际寄存器编号。
 
-长度参数是字节数，不是 `SubviewSizeCode`。支持的长度和编码如下：
+长度参数是字节数，不是 `SubviewSizeCode` 或 `ParentSizeCode`。SUBVIEW 和
+INIT ASSEMBLE 使用同一张转换表：
 
 | `LengthBytes` | `SubviewSizeCode` |
 | ---: | ---: |
@@ -225,31 +244,33 @@ B.SUBVIEW 0, r7, 128, <TileSizeCode>
 
 ```cpp
 auto zero_based = range::subview<128>(tile);
-auto runtime_based = range::subview<128>(tile, base_addr);
-auto offset_based = range::subview<128, 0>(tile, base_addr);
+auto runtime_based = range::subview<128>(tile, base_units);
+auto offset_based = range::subview<128, 3>(tile, base_units);
 ```
 
-如果省略 `LengthBytes`，默认使用 `Parent::LogicalTileBytes`：
+如果省略 `LengthBytes`，SUBVIEW 和 ASSEMBLE 都默认使用
+`Parent::LogicalTileBytes`：
 
 ```cpp
 auto full_tile = range::subview(tile);
+auto full_destination = range::assemble(tile);
 ```
 
 `LengthBytes` 必须是上表中的容量，并且不能大于 `Parent::LogicalTileBytes`。
-任一条件不满足都会在编译期触发 `static_assert`。`subview_sized_at` 仍保留给
-需要直接验证 ISA size code 的底层测试；普通 kernel 不应使用它。
+任一条件不满足都会在编译期触发 `static_assert`。MIDDLE/LAST 的
+`ParentSizeCode` 按 ISA 合同固定为 `0`，但仍接受同样的长度参数并执行容量检查。
+`subview_sized_at` 仍保留给需要直接验证 ISA size code 的底层测试。
 
 如固定 ABI 或 ISA 编码测试必须选择具体寄存器，可使用底层专家接口：
 
 ```cpp
-auto source = range::subview_at_reg<128, 23>(tile, base_addr);
-auto sized = range::subview_sized_at_reg<12, 128, 23>(tile, base_addr);
+auto source = range::subview_at_reg<3, 23>(tile, base_units);
+auto sized = range::subview_sized_at_reg<12, 3, 23>(tile, base_units);
+auto destination = range::assemble_at_reg<3, 23>(tile, base_units);
+auto last = range::assemble_last_at_reg<3, 23>(tile, base_units);
 ```
 
 普通 kernel 不应使用 `_reg` 接口。
-
-Destination `assemble` 目前仍使用原有 descriptor helper；其 `Offset`、`RegSrc`
-和 lifecycle 填写方式见前面的 assemble 章节。
 
 ## 显式 carrier 类型
 
@@ -259,8 +280,8 @@ factory 无法表达特殊的 descriptor 组合时，可以直接使用 carrier 
 using SourceView = range::Subview<TileT, 1, 0, 0>;
 using DestinationView = range::Assemble<TileT, 1, true, false, 0, 0>;
 
-SourceView source_view(tile, base_addr);
-DestinationView destination_view(tile, base_addr);
+SourceView source_view(tile, base_units);
+DestinationView destination_view(tile, base_units);
 
 TSTORE(gm, source_view);
 TLOAD(destination_view, gm);
@@ -278,13 +299,13 @@ using LocalTile = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
 using SharedTileT = SharedTile<LocalTile>;
 using GM = global_tensor<float, RowMajor<4, 8>>;
 
-void shared_source(GM &gm, SharedTileT &shared, uintptr_t base_addr) {
-  auto view = range::subview(shared, base_addr);
+void shared_source(GM &gm, SharedTileT &shared, uintptr_t base_units) {
+  auto view = range::subview(shared, base_units);
   TSTORE(gm, view);  // B.IOS ... / B.SUBVIEW ...
 }
 
-void shared_destination(GM &gm, SharedTileT &shared, uintptr_t base_addr) {
-  auto destination = range::assemble(shared, base_addr);
+void shared_destination(GM &gm, SharedTileT &shared, uintptr_t base_units) {
+  auto destination = range::assemble(shared, base_units);
   TLOAD(destination, gm);  // B.IOS ... / B.ASSEMBLE ...
 }
 ```
@@ -301,8 +322,8 @@ Shared carrier 使用 Shared handle，不提供 Local Tile 的普通 `data()` �
 - `ParentSizeCode`：`0..12`；
 - `INIT=1` 时 parent size code 必须为 `1..12`；
 - `INIT=0` 时 parent size code 必须为 `0`；
-- `Offset`：`0..2047`；
-- 高层 `subview` 的基址寄存器由是否传入 `base_addr` 决定；运行时 base 由编译器
+- `OffsetUnits`：`0..2047`；
+- 高层 `subview` 的基址寄存器由是否传入 `base_units` 决定；运行时 base 由编译器
   分配寄存器。显式 `RegSrc` 仅适用于底层 carrier 和 `_reg` 测试接口。
 
 典型非法写法：
@@ -425,8 +446,8 @@ uintptr_t GetRangeBase() const;
 Parent &parent() const;
 ```
 
-`GetRangeBase()` 返回 fragment 相对于 Parent 起始位置的 byte offset，不是新的
-GM 地址。当前 inline-asm 路径在 fragment 被 TileOP 消费时，将这个 offset 放入
+`GetRangeBase()` 返回 fragment 相对于 Parent 起始位置的 128B 单位偏移，不是新的
+GM 地址。例如返回 `16` 表示 `16 * 128B = 2048B`。当前 inline-asm 路径在 fragment 被 TileOP 消费时，将这个 offset 放入
 范围基地址寄存器，并在 source binder 后生成 `B.SUBVIEW`。例如：
 
 ```cpp
@@ -438,10 +459,11 @@ TMULS(result, fragment, scale);
 
 ```asm
 B.IOT <parent-source>, ...
-B.SUBVIEW 0, r2, 0, <Fragment::TilesizeCode>
+B.SUBVIEW 0, <compiler-gpr>, 0, <Fragment::TilesizeCode>
 ```
 
-其中 `r2` 携带 fragment 的运行时 offset。`SubTileView` 不是普通拥有存储的 Tile，
+其中编译器分配的 GPR 携带 fragment 的运行时 offset（单位为 128B）。
+`SubTileView` 不是普通拥有存储的 Tile，
 不要对它调用需要独立 Tile 存储的接口，也不要手动释放它。
 
 ### `TileArray`

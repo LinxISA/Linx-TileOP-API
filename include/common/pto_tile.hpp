@@ -1814,6 +1814,7 @@ namespace range {
 // RegSrc=24 is an internal marker for a runtime base register selected by
 // the compiler. It is not an encodable ISA register selector.
 inline constexpr unsigned AutoRegSrc = 24;
+inline constexpr std::size_t RangeAddressUnitBytes = 128;
 
 constexpr bool is_valid_parent_size_code(unsigned code) {
   return code <= 12; // 0 is legal on non-INIT modifiers; 13..15 reserved
@@ -1849,16 +1850,17 @@ constexpr std::size_t subview_bytes_for_size_code(unsigned code) {
 /// Parent so it can be bound as a Local operand; the B.SUBVIEW line is
 /// emitted after the source binder by the consuming operation.
 ///
-/// uimm11 Offset is a compile-time constant. High-level factories either use
-/// the zero register or mark RegSrc as AutoRegSrc so inline asm can allocate a
-/// GPR for the runtime base value. Explicit RegSrc 0..23 remains available to
-/// the low-level carrier and *_reg helpers for fixed ABI and encoding tests.
-template <typename Parent, unsigned SubviewSizeCode_, unsigned Offset_ = 0,
+/// uimm11 Offset is a compile-time count of 128-byte range units. High-level
+/// factories either use the zero register or mark RegSrc as AutoRegSrc so
+/// inline asm can allocate a GPR for the runtime base-unit value. Explicit
+/// RegSrc 0..23 remains available to the low-level carrier and *_reg helpers
+/// for fixed ABI and encoding tests.
+template <typename Parent, unsigned SubviewSizeCode_, unsigned OffsetUnits_ = 0,
           unsigned RegSrc_ = 2>
 class Subview {
   static_assert(is_valid_subview_size_code(SubviewSizeCode_),
                 "B.SUBVIEW SubviewSizeCode must be 1..12 (128B..256KB per PE)");
-  static_assert(is_valid_uimm11(Offset_),
+  static_assert(is_valid_uimm11(OffsetUnits_),
                 "B.SUBVIEW uimm11 offset must be 0..2047");
   static_assert(
       subview_bytes_for_size_code(SubviewSizeCode_) <=
@@ -1873,7 +1875,8 @@ public:
   using TileDType = typename Parent::TileDType;
 
   static constexpr unsigned SubviewSizeCode = SubviewSizeCode_;
-  static constexpr unsigned Offset = Offset_;
+  static constexpr unsigned OffsetUnits = OffsetUnits_;
+  static constexpr unsigned Offset = OffsetUnits;
   static constexpr unsigned RegSrc = RegSrc_;
   static constexpr Location Loc = Parent::Loc;
   static constexpr int Rows = Parent::Rows;
@@ -1928,13 +1931,15 @@ private:
 
 /// Destination-side range carrier. Capable of the multi-PE Shared
 /// destination requirement (operation enforces it); carries INIT/LAST and
-/// ParentSizeCode. INIT/LAST/Offset/RegSrc are compile-time constants for
+/// ParentSizeCode. INIT/LAST/OffsetUnits/RegSrc are compile-time constants for
 /// the same inline-asm "i" constraint reason as Subview: the range
-/// descriptor is a static part of the destination binder contract. RegSrc
-/// is the absolute GPR selector 0..23 for the base-address register
-/// (defaults to a0/R2, the conventional base register).
+/// descriptor is a static part of the destination binder contract. The
+/// runtime base and compile-time offset are both counts of 128-byte units.
+/// High-level factories hide RegSrc; explicit selectors remain available to
+/// the low-level carrier and *_reg helpers for ABI and encoding tests.
 template <typename Parent, unsigned ParentSizeCode_, bool INIT_ = true,
-          bool LAST_ = false, unsigned Offset_ = 0, unsigned RegSrc_ = 2>
+          bool LAST_ = false, unsigned OffsetUnits_ = 0,
+          unsigned RegSrc_ = 2>
 class Assemble {
   static_assert(is_valid_parent_size_code(ParentSizeCode_),
                 "B.ASSEMBLE ParentSizeCode must be 0..12; 13..15 reserved");
@@ -1942,10 +1947,15 @@ class Assemble {
                 "B.ASSEMBLE: non-INIT modifier requires ParentSizeCode=0");
   static_assert(!((INIT_ != false) && (ParentSizeCode_ == 0)),
                 "B.ASSEMBLE: INIT modifier requires ParentSizeCode 1..12");
-  static_assert(is_valid_uimm11(Offset_),
+  static_assert(is_valid_uimm11(OffsetUnits_),
                 "B.ASSEMBLE uimm11 offset must be 0..2047");
-  static_assert(RegSrc_ <= 23,
-                "B.ASSEMBLE RegSrc must be an absolute GPR selector 0..23");
+  static_assert(
+      !INIT_ || subview_bytes_for_size_code(ParentSizeCode_) <=
+                    Parent::LogicalTileBytes,
+      "B.ASSEMBLE length cannot exceed the parent Tile capacity");
+  static_assert(
+      RegSrc_ <= 23 || RegSrc_ == AutoRegSrc,
+      "B.ASSEMBLE RegSrc must be an absolute GPR selector 0..23 or AutoRegSrc");
 public:
   using DType = typename Parent::DType;
   using ParentTile = Parent;
@@ -1954,7 +1964,8 @@ public:
   static constexpr unsigned ParentSizeCode = ParentSizeCode_;
   static constexpr bool INIT = INIT_;
   static constexpr bool LAST = LAST_;
-  static constexpr unsigned Offset = Offset_;
+  static constexpr unsigned OffsetUnits = OffsetUnits_;
+  static constexpr unsigned Offset = OffsetUnits;
   static constexpr unsigned RegSrc = RegSrc_;
   static constexpr Location Loc = Parent::Loc;
   static constexpr int Rows = Parent::Rows;
@@ -2006,13 +2017,13 @@ private:
 
 // Ergonomic range factories. The common case derives the modifier size from
 // the wrapped tile and keeps the descriptor details out of the call site.
-template <std::size_t LengthBytes_ = 0, unsigned Offset_ = 0,
+template <std::size_t LengthBytes_ = 0, unsigned OffsetUnits_ = 0,
           typename Parent>
 auto subview(Parent &parent)
     -> Subview<Parent,
                subview_size_code_for_bytes(
                    LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_),
-               Offset_, 0> {
+               OffsetUnits_, 0> {
   constexpr std::size_t LengthBytes =
       LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_;
   static_assert(LengthBytes <= Parent::LogicalTileBytes,
@@ -2022,20 +2033,20 @@ auto subview(Parent &parent)
   return {parent, 0};
 }
 
-template <std::size_t LengthBytes_ = 0, unsigned Offset_ = 0,
+template <std::size_t LengthBytes_ = 0, unsigned OffsetUnits_ = 0,
           typename Parent>
-auto subview(Parent &parent, uintptr_t range_base)
+auto subview(Parent &parent, uintptr_t range_base_units)
     -> Subview<Parent,
                subview_size_code_for_bytes(
                    LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_),
-               Offset_, AutoRegSrc> {
+               OffsetUnits_, AutoRegSrc> {
   constexpr std::size_t LengthBytes =
       LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_;
   static_assert(LengthBytes <= Parent::LogicalTileBytes,
                 "B.SUBVIEW length cannot exceed the parent Tile capacity");
   static_assert(subview_size_code_for_bytes(LengthBytes) != 0,
                 "B.SUBVIEW length must be 128 B..256 KiB and a supported capacity");
-  return {parent, range_base};
+  return {parent, range_base_units};
 }
 
 template <unsigned SubviewSizeCode_, typename Parent>
@@ -2050,29 +2061,52 @@ auto subview_sized(Parent &parent, uintptr_t range_base)
   return {parent, range_base};
 }
 
-template <typename Parent>
-auto assemble(Parent &parent, uintptr_t range_base = 0)
-    -> Assemble<Parent, Parent::TilesizeCode> {
-  return {parent, range_base};
+template <std::size_t LengthBytes_, typename Parent>
+constexpr std::size_t assemble_length_bytes() {
+  constexpr std::size_t LengthBytes =
+      LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_;
+  static_assert(LengthBytes <= Parent::LogicalTileBytes,
+                "B.ASSEMBLE length cannot exceed the parent Tile capacity");
+  static_assert(subview_size_code_for_bytes(LengthBytes) != 0,
+                "B.ASSEMBLE length must be 128 B..256 KiB and a supported capacity");
+  return LengthBytes;
 }
 
-template <typename Parent>
-auto assemble_last(Parent &parent, uintptr_t range_base = 0)
-    -> Assemble<Parent, 0, false, true> {
-  return {parent, range_base};
-}
+#define PTO_DEFINE_ASSEMBLE_FACTORY(Name, Init, Last)                         \
+  template <std::size_t LengthBytes_ = 0, unsigned OffsetUnits_ = 0,          \
+            typename Parent>                                                  \
+  auto Name(Parent &parent)                                                    \
+      -> Assemble<Parent,                                                      \
+                  Init ? subview_size_code_for_bytes(                          \
+                             assemble_length_bytes<LengthBytes_, Parent>())    \
+                       : 0,                                                    \
+                  Init, Last, OffsetUnits_, 0> {                               \
+    constexpr std::size_t CheckedLength =                                     \
+        assemble_length_bytes<LengthBytes_, Parent>();                         \
+    (void)CheckedLength;                                                        \
+    return {parent, 0};                                                        \
+  }                                                                            \
+                                                                               \
+  template <std::size_t LengthBytes_ = 0, unsigned OffsetUnits_ = 0,          \
+            typename Parent>                                                  \
+  auto Name(Parent &parent, uintptr_t range_base_units)                        \
+      -> Assemble<Parent,                                                      \
+                  Init ? subview_size_code_for_bytes(                          \
+                             assemble_length_bytes<LengthBytes_, Parent>())    \
+                       : 0,                                                    \
+                  Init, Last, OffsetUnits_, AutoRegSrc> {                      \
+    constexpr std::size_t CheckedLength =                                     \
+        assemble_length_bytes<LengthBytes_, Parent>();                         \
+    (void)CheckedLength;                                                        \
+    return {parent, range_base_units};                                         \
+  }
 
-template <typename Parent>
-auto assemble_init_last(Parent &parent, uintptr_t range_base = 0)
-    -> Assemble<Parent, Parent::TilesizeCode, true, true> {
-  return {parent, range_base};
-}
+PTO_DEFINE_ASSEMBLE_FACTORY(assemble, true, false)
+PTO_DEFINE_ASSEMBLE_FACTORY(assemble_init_last, true, true)
+PTO_DEFINE_ASSEMBLE_FACTORY(assemble_middle, false, false)
+PTO_DEFINE_ASSEMBLE_FACTORY(assemble_last, false, true)
 
-template <typename Parent>
-auto assemble_middle(Parent &parent, uintptr_t range_base = 0)
-    -> Assemble<Parent, 0, false, false> {
-  return {parent, range_base};
-}
+#undef PTO_DEFINE_ASSEMBLE_FACTORY
 
 // Compatibility aliases for callers using the earlier *_at spelling.
 template <unsigned Offset_, typename Parent>
@@ -2112,28 +2146,62 @@ auto subview_sized_at_reg(Parent &parent, uintptr_t range_base = 0)
   return {parent, range_base};
 }
 
-template <unsigned Offset_, unsigned RegSrc_ = 2, typename Parent>
-auto assemble_at(Parent &parent, uintptr_t range_base = 0)
-    -> Assemble<Parent, Parent::TilesizeCode, true, false, Offset_, RegSrc_> {
-  return {parent, range_base};
+template <unsigned OffsetUnits_, typename Parent>
+auto assemble_at(Parent &parent)
+    -> decltype(assemble<0, OffsetUnits_>(parent)) {
+  return assemble<0, OffsetUnits_>(parent);
 }
 
-template <unsigned Offset_, unsigned RegSrc_ = 2, typename Parent>
-auto assemble_init_last_at(Parent &parent, uintptr_t range_base = 0)
-    -> Assemble<Parent, Parent::TilesizeCode, true, true, Offset_, RegSrc_> {
-  return {parent, range_base};
+template <unsigned OffsetUnits_, typename Parent>
+auto assemble_at(Parent &parent, uintptr_t range_base_units)
+    -> decltype(assemble<0, OffsetUnits_>(parent, range_base_units)) {
+  return assemble<0, OffsetUnits_>(parent, range_base_units);
 }
 
-template <unsigned Offset_, unsigned RegSrc_ = 2, typename Parent>
-auto assemble_middle_at(Parent &parent, uintptr_t range_base = 0)
-    -> Assemble<Parent, 0, false, false, Offset_, RegSrc_> {
-  return {parent, range_base};
+#define PTO_DEFINE_ASSEMBLE_AT_ALIAS(Name)                                    \
+  template <unsigned OffsetUnits_, typename Parent>                           \
+  auto Name##_at(Parent &parent)                                               \
+      -> decltype(Name<0, OffsetUnits_>(parent)) {                             \
+    return Name<0, OffsetUnits_>(parent);                                      \
+  }                                                                            \
+                                                                               \
+  template <unsigned OffsetUnits_, typename Parent>                           \
+  auto Name##_at(Parent &parent, uintptr_t range_base_units)                   \
+      -> decltype(Name<0, OffsetUnits_>(parent, range_base_units)) {           \
+    return Name<0, OffsetUnits_>(parent, range_base_units);                    \
+  }
+
+PTO_DEFINE_ASSEMBLE_AT_ALIAS(assemble_init_last)
+PTO_DEFINE_ASSEMBLE_AT_ALIAS(assemble_middle)
+PTO_DEFINE_ASSEMBLE_AT_ALIAS(assemble_last)
+
+#undef PTO_DEFINE_ASSEMBLE_AT_ALIAS
+
+template <unsigned OffsetUnits_, unsigned RegSrc_, typename Parent>
+auto assemble_at_reg(Parent &parent, uintptr_t range_base_units = 0)
+    -> Assemble<Parent, Parent::TilesizeCode, true, false, OffsetUnits_,
+                RegSrc_> {
+  return {parent, range_base_units};
 }
 
-template <unsigned Offset_, unsigned RegSrc_ = 2, typename Parent>
-auto assemble_last_at(Parent &parent, uintptr_t range_base = 0)
-    -> Assemble<Parent, 0, false, true, Offset_, RegSrc_> {
-  return {parent, range_base};
+template <unsigned OffsetUnits_, unsigned RegSrc_, typename Parent>
+auto assemble_init_last_at_reg(Parent &parent,
+                               uintptr_t range_base_units = 0)
+    -> Assemble<Parent, Parent::TilesizeCode, true, true, OffsetUnits_,
+                RegSrc_> {
+  return {parent, range_base_units};
+}
+
+template <unsigned OffsetUnits_, unsigned RegSrc_, typename Parent>
+auto assemble_middle_at_reg(Parent &parent, uintptr_t range_base_units = 0)
+    -> Assemble<Parent, 0, false, false, OffsetUnits_, RegSrc_> {
+  return {parent, range_base_units};
+}
+
+template <unsigned OffsetUnits_, unsigned RegSrc_, typename Parent>
+auto assemble_last_at_reg(Parent &parent, uintptr_t range_base_units = 0)
+    -> Assemble<Parent, 0, false, true, OffsetUnits_, RegSrc_> {
+  return {parent, range_base_units};
 }
 
 } // namespace range

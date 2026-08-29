@@ -11,6 +11,11 @@ TileOP 通过 `BSTART`、`B.DIM`、`B.DATR`、`B.IOR`、`B.IOT`、`B.IOS` 和 `B
 
 一个 bundle 必须具有合法的开始和结束边界，binder 顺序、`last` 标记、Tile 位置、PE mask 和属性字段必须符合具体操作 contract。省略的可选字段采用操作规范默认值；显式零值可能具有不同含义。非法 binder、未定义输入、容量不足或不匹配的 engine/Tile 位置会在执行前失败，且不应假定产生部分结果。
 
+`B.SUBVIEW` 和 `B.ASSEMBLE` 必须紧跟它们修饰的 `B.IOT` 或 `B.IOS` binder。
+在 C++ 中应通过 `range::subview` 或 `range::assemble` 传递 carrier，让 wrapper
+维护这个顺序。两类接口的 `base_units` 和 `OffsetUnits` 都以 128B 为单位；
+高层接口使用 `zero` 或编译器自动分配的 GPR，不要求开发者暴露寄存器编号。
+
 ## 使用示例
 
 ```cpp

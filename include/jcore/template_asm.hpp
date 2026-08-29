@@ -1785,6 +1785,31 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       static_assert(tile_type_traits<typename ParentTile::TileDType>::
                         IsValidSharedActiveSize,
                     "Shared B.ASSEMBLE destination size must be 128 B..256 KB");
+      if constexpr (tile_shape::RegSrc == range::AutoRegSrc) {
+        const uintptr_t range_base =
+            static_cast<uintptr_t>(dst.GetRangeBase());
+        asm volatile(
+          "BSTART.TLSU TLOAD, %D[SrcType]\n"
+          "B.DIM %[VCOL], 0, ->lb0\n"
+          "B.DIM %[VROW], 0, ->lb1\n"
+          "B.DIM zero, %c[COL], ->lb2\n"
+          "B.IOS mask=1111, ->%S[d0]<%Z[TileSize]>\n"
+          "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+          "B.IOR [%[s0],%[GmStride]], []\n"
+          : [d0]"=Sr"(dst.handle_ref())
+          : [s0]"r"(src.data()),
+            [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+            [TileSize]"i"(tile_type_traits<typename ParentTile::TileDType>::TilesizeCode),
+            [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+            [COL]"i"(ParentTile::Cols),
+            [GmStride]"r"(src.GetStrideBytes(3)),
+            [Init]"i"(static_cast<int>(tile_shape::INIT)),
+            [Last]"i"(static_cast<int>(tile_shape::LAST)),
+            [RegSrc]"r"(range_base),
+            [Off]"i"(tile_shape::OffsetUnits),
+            [ParentSize]"i"(tile_shape::ParentSizeCode)
+          : "memory");
+      } else {
       #define PTO_SHARED_RANGE_ASSEMBLE_CASE(N) \
         if constexpr (tile_shape::RegSrc == N) { \
           register uintptr_t range_base asm("r" #N) = \
@@ -1807,7 +1832,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
               [Init]"i"(static_cast<int>(tile_shape::INIT)), \
               [Last]"i"(static_cast<int>(tile_shape::LAST)), \
               [RegSrc]"r"(range_base), \
-              [Off]"i"(tile_shape::Offset), \
+              [Off]"i"(tile_shape::OffsetUnits), \
               [ParentSize]"i"(tile_shape::ParentSizeCode) \
             : "memory"); \
         }
@@ -1824,10 +1849,36 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       PTO_SHARED_RANGE_ASSEMBLE_CASE(20) else PTO_SHARED_RANGE_ASSEMBLE_CASE(21) else
       PTO_SHARED_RANGE_ASSEMBLE_CASE(22) else PTO_SHARED_RANGE_ASSEMBLE_CASE(23)
       #undef PTO_SHARED_RANGE_ASSEMBLE_CASE
+      }
     } else {
     // Destination wraps a B.ASSEMBLE range modifier attached to the B.IOT
     // destination binder (PTO-ISA 0.58.4 ADR-0098). INIT/LAST/Offset are
     // compile-time wrapper parameters so they satisfy the "i" constraint.
+    if constexpr (tile_shape::RegSrc == range::AutoRegSrc) {
+      const uintptr_t range_base =
+          static_cast<uintptr_t>(dst.GetRangeBase());
+      asm volatile(
+        "BSTART.TLSU TLOAD, %D[SrcType]\n"
+        "B.DIM %[VCOL], 0, ->lb0\n"
+        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[COL], ->lb2\n"
+        "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
+        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+        "B.IOR [%[s0],%[GmStride]], []\n"
+        : [d0]"=Tr"(dst.data())
+        : [s0]"r"(src.data()),
+          [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+          [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+          [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+          [COL]"i"(tile_shape::Cols),
+          [GmStride]"r"(src.GetStrideBytes(3)),
+          [Init]"i"(static_cast<int>(tile_shape::INIT)),
+          [Last]"i"(static_cast<int>(tile_shape::LAST)),
+          [RegSrc]"r"(range_base),
+          [Off]"i"(tile_shape::OffsetUnits),
+          [ParentSize]"i"(tile_shape::ParentSizeCode)
+        : "memory");
+    } else {
     #define PTO_RANGE_ASSEMBLE_CASE(N) \
       if constexpr (tile_shape::RegSrc == N) { \
         register uintptr_t range_base asm("r" #N) = \
@@ -1850,7 +1901,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
             [Init]"i"(static_cast<int>(tile_shape::INIT)), \
             [Last]"i"(static_cast<int>(tile_shape::LAST)), \
             [RegSrc]"r"(range_base), \
-            [Off]"i"(tile_shape::Offset), \
+            [Off]"i"(tile_shape::OffsetUnits), \
             [ParentSize]"i"(tile_shape::ParentSizeCode) \
           : "memory"); \
       }
@@ -1867,6 +1918,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
     PTO_RANGE_ASSEMBLE_CASE(20) else PTO_RANGE_ASSEMBLE_CASE(21) else
     PTO_RANGE_ASSEMBLE_CASE(22) else PTO_RANGE_ASSEMBLE_CASE(23)
     #undef PTO_RANGE_ASSEMBLE_CASE
+    }
     }
   } else {
   asm volatile(
@@ -1983,7 +2035,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
             [COL]"i"(ParentTile::Cols),
             [GmStride]"r"(dst.GetStrideBytes(3)),
             [SrcSelect]"i"(0), [RegSrc]"r"(range_base),
-            [Off]"i"(tile_shape::Offset),
+            [Off]"i"(tile_shape::OffsetUnits),
             [SubSize]"i"(tile_shape::SubviewSizeCode)
           : "memory");
       } else {
@@ -2006,7 +2058,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
               [COL]"i"(ParentTile::Cols), \
               [GmStride]"r"(dst.GetStrideBytes(3)), \
               [SrcSelect]"i"(0), [RegSrc]"r"(range_base), \
-              [Off]"i"(tile_shape::Offset), \
+              [Off]"i"(tile_shape::OffsetUnits), \
               [SubSize]"i"(tile_shape::SubviewSizeCode) \
             : "memory"); \
         }
@@ -2045,7 +2097,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
           [COL]"i"(tile_shape::Cols),
           [GmStride]"r"(dst.GetStrideBytes(3)),
           [SrcSelect]"i"(0), [RegSrc]"r"(range_base),
-          [Off]"i"(tile_shape::Offset),
+          [Off]"i"(tile_shape::OffsetUnits),
           [SubSize]"i"(tile_shape::SubviewSizeCode)
         : "memory");
     } else {
@@ -2069,7 +2121,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
             [GmStride]"r"(dst.GetStrideBytes(3)), \
             [SrcSelect]"i"(0), \
             [RegSrc]"r"(range_base), \
-            [Off]"i"(tile_shape::Offset), \
+            [Off]"i"(tile_shape::OffsetUnits), \
             [SubSize]"i"(tile_shape::SubviewSizeCode) \
           : "memory"); \
       }

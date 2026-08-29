@@ -12,7 +12,7 @@
 //
 // Compile-time contract:
 //   - SubviewSizeCode must be 1..12 (128 B..256 KiB per PE).
-//   - uimm11 offset must be 0..2047 (wrapper-compile-time).
+//   - uimm11 offset units must be 0..2047; one unit is 128 B (wrapper-compile-time).
 //   - source roles only map to B.SUBVIEW (never B.ASSEMBLE).
 
 #include <common/pto_tileop.hpp>
@@ -32,11 +32,11 @@ __attribute__((noinline)) void subview_source_tstore(
   TSTORE(dst, sv); // -> B.SUBVIEW 0, r0, 0, 1
 }
 
-// SubviewSizeCode 12 boundary, max uimm11 offset, RegSrc=23 (r23).
+// SubviewSizeCode 12 boundary, max uimm11 offset-unit count, RegSrc=23 (r23).
 __attribute__((noinline)) void subview_size12_tstore(
     MaxGMDst &dst, MaxSrc &s) {
   range::Subview<MaxSrc, 12, /*Off*/ 2047, /*RegSrc*/ 23> sv(s, 23);
-  TSTORE(dst, sv); // -> B.SUBVIEW 0, r23, 2047, 12
+  TSTORE(dst, sv); // -> B.SUBVIEW 0, r23, 3, 12
 }
 
 // The no-base factory uses the zero register.
@@ -48,28 +48,28 @@ __attribute__((noinline)) void subview_factory_zero_tstore(
 
 // A runtime base value uses a compiler-allocated GPR.
 __attribute__((noinline)) void subview_factory_runtime_tstore(
-    GMDst &dst, Src &s, uintptr_t base) {
-  auto sv = range::subview(s, base);
+    GMDst &dst, Src &s, uintptr_t base_units) {
+  auto sv = range::subview(s, base_units);
   TSTORE(dst, sv); // -> B.SUBVIEW 0, <allocated-gpr>, 0, 1
 }
 
 __attribute__((noinline)) void subview_factory_zero_offset_tstore(
     GMDst &dst, Src &s) {
-  auto sv = range::subview<128, 2047>(s);
-  TSTORE(dst, sv); // -> B.SUBVIEW 0, zero, 2047, 1
+  auto sv = range::subview<128, 3>(s);
+  TSTORE(dst, sv); // -> B.SUBVIEW 0, zero, 3, 1
 }
 
 __attribute__((noinline)) void subview_factory_runtime_offset_tstore(
-    GMDst &dst, Src &s, uintptr_t base) {
-  auto sv = range::subview<128, 2047>(s, base);
-  TSTORE(dst, sv); // -> B.SUBVIEW 0, <allocated-gpr>, 2047, 1
+    GMDst &dst, Src &s, uintptr_t base_units) {
+  auto sv = range::subview<128, 3>(s, base_units);
+  TSTORE(dst, sv); // -> B.SUBVIEW 0, <allocated-gpr>, 3, 1
 }
 
 // Explicit register selection remains a low-level ABI/testing interface.
 __attribute__((noinline)) void subview_factory_explicit_reg_tstore(
     GMDst &dst, Src &s) {
-  auto sv = range::subview_at_reg<2047, 23>(s, 23);
-  TSTORE(dst, sv); // -> B.SUBVIEW 0, r23, 2047, 1
+  auto sv = range::subview_at_reg<3, 23>(s, 23);
+  TSTORE(dst, sv); // -> B.SUBVIEW 0, r23, 3, 1
 }
 
 void use(void *) {}

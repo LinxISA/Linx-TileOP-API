@@ -25,7 +25,14 @@ __attribute__((noinline)) void shared_source_subview_runtime(
 
 __attribute__((noinline)) void shared_destination_assemble(GM &src) {
   Shared dst;
-  range::Assemble<Shared, 1, true, true, 0, 0> assembled(dst, 0);
+  auto assembled = range::assemble_init_last(dst);
+  TLOAD(assembled, src);
+}
+
+__attribute__((noinline)) void shared_destination_assemble_runtime(
+    GM &src, uintptr_t base_units) {
+  Shared dst;
+  auto assembled = range::assemble_init_last<128, 3>(dst, base_units);
   TLOAD(assembled, src);
 }
 
@@ -40,6 +47,7 @@ int main() {
   shared_source_subview(dst, local);
   shared_source_subview_runtime(dst, local, 128);
   shared_destination_assemble(src);
+  shared_destination_assemble_runtime(src, 4);
   use(src_buf);
   return 0;
 }

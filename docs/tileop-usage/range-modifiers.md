@@ -9,8 +9,8 @@ B.SUBVIEW SrcSelect, RegSrc, uimm11, SubviewSizeCode    ; source side
 B.ASSEMBLE INIT, LAST, RegSrc, uimm11, ParentSizeCode   ; destination side
 ```
 
-The derived offset is `GPR[RegSrc] + ZeroExtend(uimm11) mod XLEN`, where
-`RegSrc` is an absolute GPR selector `0..23` and `uimm11` is `0..2047`.
+The derived byte address is `(GPR[RegSrc] + ZeroExtend(uimm11)) * 128 B mod XLEN`, where
+`RegSrc` is an absolute GPR selector `0..23`; both the selected GPR value and `uimm11` are counts of 128-byte units. `uimm11` is `0..2047`.
 
 The API exposes a small view-building layer, inspired by block-pointer APIs:
 create a range view once and pass it to the consuming operation. The ordinary
@@ -55,10 +55,10 @@ GM gm;
 auto zero_based_source = range::subview(tile);
 TSTORE(gm, zero_based_source);
 
-auto runtime_based_source = range::subview(tile, base_addr);
+auto runtime_based_source = range::subview(tile, base_units);
 TSTORE(gm, runtime_based_source);
 
-auto destination = range::assemble(tile, base_addr);
+auto destination = range::assemble(tile, base_units);
 TLOAD(destination, gm);
 ```
 
@@ -66,22 +66,24 @@ For a final assembled range, use the named lifecycle helper instead of
 encoding `INIT=false, LAST=true` as positional template booleans:
 
 ```cpp
-auto destination = range::assemble_last(tile, base_addr);
+auto destination = range::assemble_last(tile, base_units);
 TLOAD(destination, gm);
 ```
 
-The unified source factory takes an optional byte length and optional byte offset:
+The source and destination factories use the same range arguments: an optional
+byte length and an optional compile-time offset measured in 128-byte units:
 
 ```cpp
-auto full_tile = range::subview(tile);                    // default length, offset 0
-auto sized = range::subview<128>(tile, base_addr);   // 128 B, offset 0
-auto shifted = range::subview<128, 0>(tile, base_addr);
-auto destination = range::assemble_at<0, 0>(tile, base_addr);
+auto full_tile = range::subview(tile);                // default length, offset 0
+auto sized = range::subview<128>(tile, base_units);   // 128 B, offset 0
+auto shifted = range::subview<128, 3>(tile, base_units);
+auto destination = range::assemble<128, 3>(tile, base_units);
 ```
 
 `LengthBytes` must be one of `128`, `256`, `512`, `1*1024`, ..., `256*1024`, and
 must not exceed `tile::LogicalTileBytes`. The factory converts it to the ISA
-`SubviewSizeCode` automatically and rejects invalid or oversized values at compile time.
+`SubviewSizeCode` or INIT `ParentSizeCode` automatically and rejects invalid or
+oversized values at compile time.
 The low-level `subview_sized_at` helper remains available for direct ISA contract tests.
 
 The explicit carrier forms documented below remain supported for code that
@@ -93,19 +95,19 @@ and generated-assembly examples, see [B.SUBVIEW / B.ASSEMBLE Developer Guide](ra
 ## `range::Subview` — source-side range carrier
 
 ```cpp
-template <typename Parent, unsigned SubviewSizeCode, unsigned Offset = 0,
+template <typename Parent, unsigned SubviewSizeCode, unsigned OffsetUnits = 0,
           unsigned RegSrc = 2>
 class Subview;
 ```
 
 `Subview` 是底层 carrier 类型。普通 kernel 应优先使用统一的
-`range::subview<LengthBytes = tile capacity, Offset = 0>(tile [, base_addr])`
+`range::subview<LengthBytes = tile capacity, OffsetUnits = 0>(tile [, base_units])`
 factory；调用者填写字节长度而不是 ISA 编码。`RegSrc` 仅用于固定 ABI 或编码测试，
 运行时 base 的高层接口不会暴露寄存器编号。
 
 - `SubviewSizeCode` must be `1..12`; the high-level factory derives it from
   the requested byte length.
-- `Offset` (the `uimm11` adder) is a compile-time constant `0..2047`.
+- `OffsetUnits` (the `uimm11` 128-byte-unit adder) is a compile-time constant `0..2047`.
 - `RegSrc` is the low-level absolute GPR selector `0..23`; high-level factories
   use `zero` or compiler allocation and do not expose this field.
 
@@ -118,7 +120,7 @@ GM gm;
 auto zero_based = range::subview(s);
 TSTORE(gm, zero_based);  // B.SUBVIEW 0, zero, 0, 1
 
-auto runtime_based = range::subview(s, base_addr);
+auto runtime_based = range::subview(s, base_units);
 TSTORE(gm, runtime_based); // compiler selects the encoded GPR
 ```
 
@@ -128,16 +130,16 @@ The high-level API does not expose `RegSrc`:
 
 ```cpp
 range::subview(s);                    // zero base
-range::subview(s, base_addr);         // compiler-allocated GPR
-range::subview<128>(s);              // 8 KiB, zero + offset 0
-range::subview<128>(s, base_addr);     // 8 KiB, runtime base + offset 0
-range::subview<128, 0>(s, base_addr); // 128 B + offset 0
+range::subview(s, base_units);         // compiler-allocated GPR
+range::subview<128>(s);                 // 128 B, zero + offset 0
+range::subview<128>(s, base_units);     // 128 B, runtime base + offset 0
+range::subview<128, 3>(s, base_units);  // 128 B, runtime base + 384 B
 ```
 
 Explicit register selection is retained only for fixed ABI and encoding tests:
 
 ```cpp
-auto sv = range::subview_sized_at_reg<12, 2047, 23>(s, base_addr);
+auto sv = range::subview_sized_at_reg<12, 2047, 23>(s, base_units);
 TSTORE(gm, sv);  // B.SUBVIEW 0, r23, 2047, 12
 ```
 
@@ -145,28 +147,31 @@ TSTORE(gm, sv);  // B.SUBVIEW 0, r23, 2047, 12
 
 ```cpp
 template <typename Parent, unsigned ParentSizeCode, bool INIT = true,
-          bool LAST = false, unsigned Offset = 0, unsigned RegSrc = 2>
+          bool LAST = false, unsigned OffsetUnits = 0, unsigned RegSrc = 2>
 class Assemble;
 ```
 
 - `ParentSizeCode` `0..12`, with the INIT contract above.
 - `INIT`/`LAST` select the form (`INIT`, `INIT_LAST`, `MIDDLE`, `LAST`).
-- `Offset` `0..2047`; `RegSrc` `0..23` (default `a0`/R2), base value passed
-  to the constructor.
+- `OffsetUnits` is `0..2047` and is measured in 128-byte units.
+- `RegSrc` is a low-level field. Public factories use `zero` when no
+  `base_units` is supplied, or let the compiler allocate a GPR when it is.
+- INIT helpers derive `ParentSizeCode` from `LengthBytes`; MIDDLE/LAST encode
+  the ISA-required value `0`.
 
 ```cpp
 using Dst = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
 
 Dst d;
-auto as = range::assemble(d, base_addr);
-TLOAD(as, gm);  // B.IOT ..., last, ->d<...> / B.ASSEMBLE 1, 0, r0, 0, 12
+auto as = range::assemble<128, 3>(d, base_units);
+TLOAD(as, gm);  // B.ASSEMBLE 1, 0, <compiler-gpr>, 3, 1
 ```
 
 Non-INIT forms use `ParentSizeCode=0`:
 
 ```cpp
-auto as = range::assemble_last_at<2047>(d, base);
-TLOAD(as, gm);  // B.ASSEMBLE 0, 1, r2, 2047, 0
+auto as = range::assemble_last<128, 2047>(d);
+TLOAD(as, gm);  // B.ASSEMBLE 0, 1, zero, 2047, 0
 ```
 
 ## Forwarded members
@@ -197,7 +202,7 @@ B.DIM <vcol>, 0, ->lb0
 B.DIM <vrow>, 0, ->lb1
 B.DIM zero, <cols>, ->lb2
 B.IOT mask=1111, last, ->t<tsize>
-B.ASSEMBLE <INIT>, <LAST>, rN, <off>, <parent-size>
+B.ASSEMBLE <INIT>, <LAST>, <zero-or-compiler-gpr>, <OffsetUnits>, <ParentSizeCode>
 B.IOR [<src>,<stride>], []
 ```
 
@@ -209,7 +214,7 @@ B.DIM <vcol>, 0, ->lb0
 B.DIM <vrow>, 0, ->lb1
 B.DIM zero, <cols>, ->lb2
 B.IOT <src>, mask=1111, last
-B.SUBVIEW <SrcSelect>, rN, <off>, <subview-size>
+B.SUBVIEW <SrcSelect>, <zero-or-compiler-gpr>, <OffsetUnits>, <SubviewSizeCode>
 B.IOR [<dst>,<stride>], []
 ```
 
@@ -245,12 +250,12 @@ using Shared = SharedTile<Local>;
 using GM = global_tensor<float, RowMajor<4, 8>>;
 
 // Shared source emits B.IOS then B.SUBVIEW.
-range::Subview<Shared, 12, 2047, 23> view(src, 23);
-TSTORE(gm, view);  // B.IOS ... / B.SUBVIEW 0, r23, 2047, 12
+auto view = range::subview<128, 3>(src, base_units);
+TSTORE(gm, view);  // B.IOS ... / B.SUBVIEW 0, <compiler-gpr>, 3, 1
 
 // Shared destination emits B.IOS then B.ASSEMBLE.
-auto assembled = range::assemble(dst, 0);
-TLOAD(assembled, gm);  // B.IOS mask=1111, ->dst<tsize> / B.ASSEMBLE 1, 0, r0, 0, 12
+auto assembled = range::assemble<128, 3>(dst, base_units);
+TLOAD(assembled, gm);  // B.IOS ... / B.ASSEMBLE 1, 0, <compiler-gpr>, 3, 1
 ```
 
 Shared sizes follow the Shared `B.IOS` contract (`128 B..256 KiB`,
@@ -259,8 +264,8 @@ SizeCode `1..12`) rather than the Local `B.IOT` `1..10` range.
 ## Lineage and status
 
 - **Implemented**: Local source `Subview` over `TSTORE` and Local
-  destination `Assemble` over `TLOAD`, with the RegSrc base-value binding
-  above. LLVM MC round-trips every legal combination and rejects the
+  destination `Assemble` over `TLOAD`, with zero-base and compiler-allocated
+  runtime-base paths. LLVM MC round-trips every legal combination and rejects the
   illegal matrices (`v5-subview-assemble{-neg,-encoding}.s`).
 - **Implemented**: `SharedTile` range carriers through the Shared `B.IOS`
   binder (`TLOAD`/`TSTORE` Shared overloads with an `Assemble`/`Subview`

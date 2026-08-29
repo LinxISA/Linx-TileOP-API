@@ -12,15 +12,14 @@ inline void pto_region_unary(Out &dst,
                 "inline Tile region path requires RowMajor fragments");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
-  const uintptr_t offset = src.GetRangeBase();
-  register uintptr_t region_base asm("r2") = offset;
+  const uintptr_t region_base_units = src.GetRangeBase();
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[VC], 0, ->lb0\n"
       "B.DIM %[VR], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
-      "B.SUBVIEW 0, r2, 0, %c[SubviewSize]\n"
+      "B.SUBVIEW 0, %[Base], 0, %c[SubviewSize]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src] "Tr"(src.data()),
         [Type] "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -28,7 +27,7 @@ inline void pto_region_unary(Out &dst,
         [Cols] "i"(SubTile::Cols),
         [Size] "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         [SubviewSize] "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-        [Opcode] "i"(Opcode), [Base] "r"(region_base)
+        [Opcode] "i"(Opcode), [Base] "r"(region_base_units)
       : "memory");
 }
 
@@ -36,15 +35,14 @@ template <is_tile_data_v Out, typename Parent, typename SubTile>
 inline void TMULS(Out &dst, region::SubTileView<Parent, SubTile> &src,
                   typename SubTile::DType scalar) {
   volatile typename SubTile::DType value = scalar;
-  const uintptr_t offset = src.GetRangeBase();
-  register uintptr_t region_base asm("r2") = offset;
+  const uintptr_t region_base_units = src.GetRangeBase();
   asm volatile(
       "BSTART.TEPL 34, %D[Type]\n"
       "B.DIM %[VC], 0, ->lb0\n"
       "B.DIM %[VR], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
-      "B.SUBVIEW 0, r2, 0, %c[SubviewSize]\n"
+      "B.SUBVIEW 0, %[Base], 0, %c[SubviewSize]\n"
       "B.IOR [%[Scalar]],[]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src] "Tr"(src.data()),
@@ -53,7 +51,7 @@ inline void TMULS(Out &dst, region::SubTileView<Parent, SubTile> &src,
         [Cols] "i"(SubTile::Cols),
         [Size] "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         [SubviewSize] "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-        [Scalar] "r"(value), [Base] "r"(region_base)
+        [Scalar] "r"(value), [Base] "r"(region_base_units)
       : "memory");
 }
 
@@ -78,7 +76,6 @@ inline void pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst,
   static_assert(SubTile::Rows == In::Rows && SubTile::Cols == In::Cols,
                 "TCVT assembly slot requires matching physical shape");
   constexpr int encoded_parent_size = Init ? ParentSize : 0;
-  register uintptr_t assembly_base asm("r2") = 0;
 #define PTO_REGION_TCVT_ASSEMBLY_BODY                                       \
   "BSTART.TEPL 27, %D[SrcType]\n"                                         \
   "B.DATR %D[DstType], RNONE\n"                                           \
@@ -86,7 +83,7 @@ inline void pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst,
   "B.DIM %[VR], 0, ->lb1\n"                                                \
   "B.DIM zero, %c[Cols], ->lb2\n"                                         \
   "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[Size]>\n"                   \
-  "B.ASSEMBLE %c[Init], %c[Last], r2, 0, %c[ParentSize]\n"
+  "B.ASSEMBLE %c[Init], %c[Last], zero, 0, %c[ParentSize]\n"
 #define PTO_REGION_TCVT_ASSEMBLY_INPUTS                                    \
   [Src] "Tr"(src.data()),                                                  \
   [SrcType] "i"(type_traits<typename In::DType>::TypeCode),                \
@@ -95,7 +92,7 @@ inline void pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst,
   [Cols] "i"(SubTile::Cols),                                               \
   [Size] "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode), \
   [ParentSize] "i"(encoded_parent_size), [Init] "i"(Init),                \
-  [Last] "i"(Last), [Base] "r"(assembly_base)
+  [Last] "i"(Last)
   if constexpr (Init) {
     asm volatile(PTO_REGION_TCVT_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())

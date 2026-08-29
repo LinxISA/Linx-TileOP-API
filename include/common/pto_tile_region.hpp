@@ -86,9 +86,11 @@ public:
   int row() const { return row_; }
   int col() const { return col_; }
   std::uintptr_t GetRangeBase() const {
+    static_assert(SubTile::LogicalTileBytes % range::RangeAddressUnitBytes == 0,
+                  "Tile partition offsets must be representable in 128B units");
     return static_cast<std::uintptr_t>(
         (static_cast<std::size_t>(row_) * partition_cols_ + col_) *
-        SubTile::LogicalTileBytes);
+        (SubTile::LogicalTileBytes / range::RangeAddressUnitBytes));
   }
   int GetValidRow() const { return SubTile::ValidRow; }
   int GetValidCol() const { return SubTile::ValidCol; }

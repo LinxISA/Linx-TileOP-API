@@ -32,6 +32,22 @@ content hashes.
 - Matrix ACC forms retain explicit C input and an early-clobbered D output;
   the compiler must allocate distinct Local Tile indices.
 
+## Range modifier interface
+
+新版 `SUBVIEW/ASSEMBLE` 接口统一使用实际字节长度和 128B 单位地址参数：
+
+```cpp
+auto view = range::subview<4 * 1024, 2>(tile, base_units);
+auto destination = range::assemble<4 * 1024, 2>(tile, base_units);
+```
+
+`4 * 1024` 会自动转换为对应的 ISA `SizeCode`，`base_units` 与 `2` 都是
+128B 单位，`2` 即 `256B`。省略长度使用 Tile 默认容量，省略基址使用
+`zero`；运行时基址的寄存器由编译器分配。旧代码中直接填写
+`SubviewSizeCode`、`ParentSizeCode` 或 `RegSrc` 的 carrier/专家接口仍可用于
+兼容和编码测试，但普通 kernel 应迁移到上述 factory。ASSEMBLE 的
+`INIT/MIDDLE/LAST` 状态使用命名 lifecycle helper 表达。
+
 ## Compatibility boundary
 
 The source remains compatible with the preceding TEPL carrier spelling, but
