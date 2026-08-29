@@ -1770,6 +1770,7 @@ blkv_bf16x2_max(const BLKV_BF16X2_TYPE &src_l,
 
 // TLOAD: GM -> Local Tile (BSTART.TLSU TLOAD). dst[i,j] = src[r0+i, c0+j].
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
+  requires(!tile_shape::IsCubeLayout)
 void TLOAD(tile_shape &dst, gm_shape &src) {
   static_assert(!is_subview_v<tile_shape>,
                 "B.SUBVIEW is source-only and cannot wrap a TLOAD destination");
@@ -1949,6 +1950,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
 
 // TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
+  requires(!tile_shape::IsCubeLayout)
 void TSTORE(gm_shape &dst, tile_shape &src) {
   static_assert(!is_assemble_v<tile_shape>,
                 "B.ASSEMBLE is destination-only and cannot wrap a TSTORE source");
@@ -2184,6 +2186,22 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
         [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
       : "memory");
   }
+}
+
+// Unified transport entry points. CUBE Tiles require the explicit ND<->CELL
+// layout conversion implemented by TLOAD_CUBE/TSTORE_CUBE; dispatching from
+// the Tile layout keeps the common kernel spelling uniform without removing
+// the explicit expert interfaces.
+template <is_tile_data_v cube_shape, is_global_data_v gm_shape>
+  requires(cube_shape::IsCubeLayout)
+void TLOAD(cube_shape &dst, gm_shape &src) {
+  TLOAD_CUBE(dst, src);
+}
+
+template <is_global_data_v gm_shape, is_tile_data_v cube_shape>
+  requires(cube_shape::IsCubeLayout)
+void TSTORE(gm_shape &dst, const cube_shape &src) {
+  TSTORE_CUBE(dst, src);
 }
 
 // TSTORE: Shared Tile -> GM (PTO ISA 0.58.3 TLSU Function 1 Shared form).

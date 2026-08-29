@@ -1863,6 +1863,7 @@ public:
   static constexpr int InnerRows = Parent::InnerRows;
   static constexpr int InnerCols = Parent::InnerCols;
   static constexpr int Numel = Parent::Numel;
+  static constexpr bool IsCubeLayout = Parent::IsCubeLayout;
   static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
   static constexpr int TilesizeCode = Parent::TilesizeCode;
   static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
@@ -1943,6 +1944,7 @@ public:
   static constexpr int InnerRows = Parent::InnerRows;
   static constexpr int InnerCols = Parent::InnerCols;
   static constexpr int Numel = Parent::Numel;
+  static constexpr bool IsCubeLayout = Parent::IsCubeLayout;
   static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
   static constexpr int TilesizeCode = Parent::TilesizeCode;
   static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;

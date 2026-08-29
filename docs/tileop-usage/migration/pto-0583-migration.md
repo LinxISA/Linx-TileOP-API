@@ -26,7 +26,9 @@ content hashes.
   overloads require assigned MX inputs and E8M0 scale shapes.
 - `CubeTileM16`, `CubeTileM32`, `CubeTileN8`, and the accumulator aliases
   model persistent 128-byte CELL storage. `TLOAD_CUBE` and `TSTORE_CUBE`
-  provide the assigned GM conversion boundary.
+  provide the explicit GM conversion boundary. The unified `TLOAD` and
+  `TSTORE` entry points now dispatch to that conversion automatically for
+  CUBE Tiles while retaining the explicit names for diagnostic and expert use.
 - Matrix ACC forms retain explicit C input and an early-clobbered D output;
   the compiler must allocate distinct Local Tile indices.
 
@@ -49,3 +51,39 @@ the explicit hosted subset and rejects ELFs that do not carry the exact PTO
 disassembler, SizeCode/PEMode, layout, DTYPE_NONE, and FPATR contracts. It
 must fail on a compiler that silently renders the required CUBE conversion
 dtype as FP64.
+
+## Unified GM transport entry points
+
+New kernel code can use `TLOAD` and `TSTORE` for both ordinary and CUBE Local
+Tiles. The wrapper selects the transport from the Tile layout:
+
+```cpp
+using A = CubeTileM32<float, 32, 32>;
+using B = CubeTileN8<float, 32, 32>;
+using C = CubeAccumulatorM32<float, 32, 32>;
+using GM = global_tensor<float, RowMajor<32, 32>>;
+
+void matmul_step(GM &ga, GM &gb, GM &gc, A &a, B &b, C &c) {
+  TLOAD(a, ga);       // dispatches to ND2M32 CUBE transport
+  TLOAD(b, gb);       // dispatches to ND2N8 CUBE transport
+  TMATMUL(c, a, b);
+  TSTORE(gc, c);      // dispatches to M322ND CUBE transport
+}
+```
+
+For a non-CUBE Tile, the same spelling remains the normal `B.IOT` transport:
+
+```cpp
+using TileT = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor>;
+using GM = global_tensor<float, RowMajor<32, 32>>;
+
+void vector_step(GM &gm, TileT &tile) {
+  TLOAD(tile, gm);
+  TSTORE(gm, tile);
+}
+```
+
+`TLOAD_CUBE` and `TSTORE_CUBE` remain available when the layout conversion must
+be explicit in source code, diagnostics, or compatibility tests. The unified
+entry points do not remove the CUBE checks or conversion descriptors; they only
+select the existing implementation based on `Tile::IsCubeLayout`.

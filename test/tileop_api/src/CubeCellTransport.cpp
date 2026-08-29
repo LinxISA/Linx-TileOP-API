@@ -26,10 +26,10 @@ using GMD = global_tensor<float, RowMajor<16, 8>>;
 
 void cube_acc_roundtrip(GMA &ga, GMB &gb, GMD &gd, AAcc &a, BAcc &b,
                         CAcc &c, DAcc &d) {
-  TLOAD_CUBE(a, ga);
-  TLOAD_CUBE(b, gb);
+  TLOAD(a, ga);
+  TLOAD(b, gb);
   TMATMUL_ACC(d, c, a, b);
-  TSTORE_CUBE(gd, d);
+  TSTORE(gd, d);
 }
 
 int main() {
