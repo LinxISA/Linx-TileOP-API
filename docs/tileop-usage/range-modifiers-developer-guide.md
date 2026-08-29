@@ -304,6 +304,231 @@ auto slot = fragments[0][j];
 kernel 中共存，但用途不同：range carrier 面向单个 binder，Tile region API
 面向 parent/fragment 生命周期。
 
+## Tile region 接口逐项说明
+
+本节把 Tile region 相关的公开接口逐项列出。它们与前面的
+`range::subview/assemble` 不同：range carrier 直接描述一条 binder 的 ISA
+modifier，而 Tile region API 描述 parent Tile 与多个 fragment 之间的分区关系。
+
+### `TPARTVIEW`
+
+接口形式：
+
+```cpp
+template <typename SubTile, int Rows, int Cols, typename Parent>
+auto TPARTVIEW(Parent &parent)
+    -> BorrowedTileArray<Parent, SubTile, Rows, Cols>;
+```
+
+参数填写规则：
+
+| 参数 | 如何填写 | 含义 |
+| --- | --- | --- |
+| `parent` | 传入完整 Parent Tile | 被切分的 Tile，不会被复制 |
+| `SubTile` | 填写一个 fragment Tile 类型 | 每个分片的物理 shape、valid shape、dtype 和 layout |
+| `Rows` | 填分区行数 | Parent 在行方向分成多少个 fragment |
+| `Cols` | 填分区列数 | Parent 在列方向分成多少个 fragment |
+
+例如将 `32 x 64` 的 Tile 按列切成四个 `32 x 16` 的 fragment：
+
+```cpp
+using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
+using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+
+Parent parent;
+auto parts = TPARTVIEW<Fragment, 1, 4>(parent);
+```
+
+`Rows`、`Cols` 和 `SubTile` 必须在编译期确定。接口会检查分片是否完整覆盖
+Parent：
+
+```text
+Parent::Rows = Rows * SubTile::Rows
+Parent::Cols = Cols * SubTile::Cols
+Parent::LogicalTileBytes = Rows * Cols * SubTile::LogicalTileBytes
+```
+
+还会检查 dtype、location、layout、storage layout 和 valid region 是否匹配。
+例如，`32 x 64` 不能用四个 `32 x 20` 的 fragment 覆盖，因为总列数变成了
+`80`。
+
+### `BorrowedTileArray` / `SubTileView`
+
+`TPARTVIEW` 返回 `BorrowedTileArray<Parent, SubTile, Rows, Cols>`。它只保存
+Parent 的借用关系，不拥有独立 Tile 存储：
+
+```cpp
+auto parts = TPARTVIEW<Fragment, 1, 4>(parent);
+
+auto first = parts[0][0];
+auto third = parts[0][2];
+```
+
+`parts[row][col]` 的返回类型是：
+
+```cpp
+SubTileView<Parent, Fragment>
+```
+
+它表示 Parent 中第 `row` 行、第 `col` 列的 fragment。也可以使用命名的行访问：
+
+```cpp
+auto row = parts.row(0);
+auto fragment = row[1];
+```
+
+常用查询接口：
+
+```cpp
+int row() const;
+int col() const;
+int GetValidRow() const;
+int GetValidCol() const;
+uintptr_t GetRangeBase() const;
+Parent &parent() const;
+```
+
+`GetRangeBase()` 返回 fragment 相对于 Parent 起始位置的 byte offset，不是新的
+GM 地址。当前 inline-asm 路径在 fragment 被 TileOP 消费时，将这个 offset 放入
+范围基地址寄存器，并在 source binder 后生成 `B.SUBVIEW`。例如：
+
+```cpp
+auto fragment = parts[0][2];
+TMULS(result, fragment, scale);
+```
+
+逻辑上会产生：
+
+```asm
+B.IOT <parent-source>, ...
+B.SUBVIEW 0, r2, 0, <Fragment::TilesizeCode>
+```
+
+其中 `r2` 携带 fragment 的运行时 offset。`SubTileView` 不是普通拥有存储的 Tile，
+不要对它调用需要独立 Tile 存储的接口，也不要手动释放它。
+
+### `TileArray`
+
+`TileArray` 是组装阶段的 destination 容器：
+
+```cpp
+template <typename SubTile, int Rows, int Cols>
+class TileArray;
+```
+
+创建一个 `1 x 4` 的 fragment 输出数组：
+
+```cpp
+TileArray<Fragment, 1, 4> fragments;
+```
+
+通过下标取得 destination slot：
+
+```cpp
+auto slot0 = fragments[0][0];
+auto slot2 = fragments[0][2];
+```
+
+也可以先取得某一行：
+
+```cpp
+auto row = fragments.row(0);
+auto slot = row[1];
+```
+
+`TileArray` 的存储容量由下面的关系自动计算：
+
+```text
+ParentBytes = SubTile::LogicalTileBytes * Rows * Cols
+```
+
+因此 `TileArray` 的分片数量和 fragment 容量必须能形成一个合法的 parent
+SizeCode。`TileArray` 不可复制，但可以移动；完成所有 slot 写入后，必须用
+`std::move` 传给 `TASSEMBLY`。
+
+### `TileArrayOutputRef`
+
+`TileArrayOutputRef<SubTile>` 是 `TileArray` 返回的 destination proxy：
+
+```cpp
+using Slot = TileArrayOutputRef<Fragment>;
+Slot slot = fragments[0][0];
+```
+
+它不拥有存储，不能单独作为最终 Tile 使用。它的用途是作为写入型 TileOP 的
+destination，例如格式转换：
+
+```cpp
+InputFragment input;
+auto slot = fragments[0][col];
+TCVT(slot, input);
+```
+
+常用查询接口：
+
+```cpp
+int row() const;
+int col() const;
+int ordinal() const;     // row * Cols + col
+int slot_count() const; // Rows * Cols
+int GetValidRow() const;
+int GetValidCol() const;
+```
+
+`ordinal()` 表示 slot 在 assembly session 中的顺序。当前 inline-asm 实现根据
+slot 顺序生成 `B.ASSEMBLE` 的 `INIT`、`MIDDLE` 和 `LAST` 形式，因此 slot 应按
+从 `0` 到 `slot_count() - 1` 的顺序写入。
+
+### `TASSEMBLY`
+
+接口形式：
+
+```cpp
+template <typename Parent, typename SubTile, int Rows, int Cols>
+auto TASSEMBLY(TileArray<SubTile, Rows, Cols> &&array) -> Parent;
+```
+
+典型用法：
+
+```cpp
+using Parent = TileLeft<__bf16, 32, 64>;
+using Fragment = TileLeft<__bf16, 32, 16>;
+
+TileArray<Fragment, 1, 4> fragments;
+
+for (int col = 0; col < 4; ++col) {
+  auto slot = fragments[0][col];
+  TCVT(slot, input[col]);
+}
+
+Parent result = TASSEMBLY<Parent>(std::move(fragments));
+```
+
+`Parent` 是最终返回的完整 Tile；`SubTile`、`Rows` 和 `Cols` 必须与
+`TileArray` 一致。调用前应完成所有 slot 的写入，并保证：
+
+```text
+Parent 的物理 shape = Rows x Cols 个 SubTile 的物理 shape
+Parent 的容量       = Rows x Cols 个 SubTile 的容量
+```
+
+`TASSEMBLY` 本身负责构造并返回完整 Parent，不需要再手写独立的
+`B.ASSEMBLE`。在当前 inline-asm 路径中，写入 `TileArrayOutputRef` 的 TileOP
+（例如 `TCVT`）负责生成对应的 `B.ASSEMBLE`。
+
+### 两套接口的选择
+
+```text
+给一次 source TileOP 附加范围：range::subview
+给一次 destination TileOP 附加组装范围：range::assemble
+把一个 parent 切成多个 source fragment：TPARTVIEW
+把多个 destination fragment 合成 parent：TileArray + TASSEMBLY
+```
+
+不要把 `TPARTVIEW` 得到的 `SubTileView` 再包装成 `range::Subview`，也不要把
+`TileArrayOutputRef` 当作普通 Tile 使用。它们已经分别是 region source view 和
+region destination slot。
+
 ## 生成代码检查
 
 开发新接口或修改 wrapper 时，建议同时检查语法和生成汇编：
