@@ -1,17 +1,16 @@
-# LinxISA / PTO ISA v0.58.3 execution engines
+# LinxISA / PTO ISA v0.58.3 执行引擎
 
-The architectural engine classes are exactly **VEC**, **TLSU**, **CUBE**, and **SFU**.
-VEC contains elementwise operations only. SFU contains reductions, broadcasts, transforms,
-sorting, and other operations that require more complex hardware. TEPL remains the unique
-compiled carrier identity. `BSTART.VEC` and `BSTART.SFU` are engine-specific assembly aliases;
-the inline wrappers retain `BSTART.TEPL` for source compatibility with the preceding toolchain.
+架构定义的引擎类别只有 **VEC**、**TLSU**、**CUBE** 和 **SFU**。
+VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。
+TEPL 仍是唯一的编译 carrier 标识。`BSTART.VEC` 和 `BSTART.SFU` 是特定引擎的汇编别名；
+inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 
-The table is projected from the pinned LinxISA authority recorded in
-[`contracts/linxisa-v0.58-engine-ops.json`](../../contracts/linxisa-v0.58-engine-ops.json).
+下表根据固定版本的 LinxISA 权威数据生成，数据记录在
+[`contracts/linxisa-v0.58-engine-ops.json`](../../contracts/linxisa-v0.58-engine-ops.json) 中。
 
 ## VEC
 
-| API / operation | Canonical assembly | Logical selector | Classification |
+| API / 操作 | 规范汇编 | 逻辑 selector | 分类 |
 | --- | --- | ---: | --- |
 | `TADD` | `BSTART.VEC TADD` | 0 | elementwise-tile-tile |
 | `TSUB` | `BSTART.VEC TSUB` | 1 | elementwise-tile-tile |
@@ -47,7 +46,7 @@ The table is projected from the pinned LinxISA authority recorded in
 
 ## SFU
 
-| API / operation | Canonical assembly | Logical selector | Classification |
+| API / 操作 | 规范汇编 | 逻辑 selector | 分类 |
 | --- | --- | ---: | --- |
 | `TDIV` | `BSTART.SFU TDIV` | 3 | elementwise-tile-tile |
 | `TREM` | `BSTART.SFU TREM` | 4 | elementwise-tile-tile |
@@ -108,7 +107,7 @@ The table is projected from the pinned LinxISA authority recorded in
 
 ## TLSU
 
-| Operation | Canonical block start | Function |
+| 操作 | 规范 block 起始指令 | Function |
 | --- | --- | ---: |
 | `TLOAD` | `BSTART.TLSU TLOAD` | 0 |
 | `TSTORE` | `BSTART.TLSU TSTORE` | 1 |
@@ -123,7 +122,7 @@ The table is projected from the pinned LinxISA authority recorded in
 
 ## CUBE
 
-| Operation | Canonical block start | Function |
+| 操作 | 规范 block 起始指令 | Function |
 | --- | --- | ---: |
 | `TMATMUL` | `BSTART.CUBE TMATMUL` | 0 |
 | `TMATMUL_BIAS` | `BSTART.CUBE TMATMUL.BIAS` | 1 |
@@ -138,41 +137,30 @@ The table is projected from the pinned LinxISA authority recorded in
 | `TGEMV_MX_BIAS` | `BSTART.CUBE TGEMVMX.BIAS` | 21 |
 | `TGEMV_MX_ACC` | `BSTART.CUBE TGEMVMX.ACC` | 22 |
 
-## Classification semantics
+## 分类语义
 
-PTO ISA 0.58.3 decouples the execution engine from the operation
-classification (ADR 0057). Operations in the `elementwise-tile-tile`
-and `tile-scalar-and-immediate` classes run elementwise on VEC, but a
-few elementwise-class operations (`TEXP`, `TLOG`, `TRECIP`, `TSQRT`,
-`TRSQRT`) are executed by SFU. `reduce-and-expand`, `layout-and-
-rearrangement`, and `irregular-and-complex` classes are SFU-executed.
-All TLSU and CUBE operations are executed by their own engine class.
-The `BSTART.VEC` / `BSTART.SFU` spellings are canonical aliases of
-the unique `BSTART.TEPL` compiled carrier (ADR 0057).
+PTO ISA 0.58.3（ADR 0057）将执行引擎与操作分类解耦。`elementwise-tile-tile`
+和 `tile-scalar-and-immediate` 类别在 VEC 上执行逐元素操作，但其中的
+`TEXP`、`TLOG`、`TRECIP`、`TSQRT`、`TRSQRT` 由 SFU 执行。
+`reduce-and-expand`、`layout-and-rearrangement` 和 `irregular-and-complex` 类别由 SFU 执行。
+所有 TLSU 和 CUBE 操作均由对应的引擎类别执行。`BSTART.VEC` / `BSTART.SFU`
+拼写是唯一 `BSTART.TEPL` 编译 carrier 的规范别名（ADR 0057）。
 
-## 使用要求
+## 早期版本中移除的操作
 
-优先根据操作页面中的 C++ API 调用 TileOP；本页仅用于按执行引擎查找操作。不要仅凭分类名称推断执行引擎，具体 engine 和支持的 Tile location 以操作页面为准。
-
-## 约束、默认值、异常和边界行为
-
-每个 engine 都有自己的 Tile、PE participation、容量和 bundle 约束。省略的 bundle 字段采用具体操作 contract 的默认值；非法 engine、binder、Tile location、mask 或属性组合会在执行前被拒绝。操作的边界、padding、异常和结果语义不由本索引页定义。
+0.58 之前的版本还提供了一些已从当前目录移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。
+本库不会生成任何已移除的操作；废弃名称的规范列表记录在 contract 的 `deleted_tile_names` 字段中。
 
 ## 使用示例
 
 ```cpp
+#include <common/pto_tileop.hpp>
+
+using namespace pto;
+using TileT = Tile<Location::Vec, float, 8, 32>;
+
 // 例如从 VEC 操作页面调用 C++ wrapper。
-TADD(dst, lhs, rhs);
+void add(TileT &dst, TileT &lhs, TileT &rhs) {
+  TADD(dst, lhs, rhs);
+}
 ```
-
-## 完整语义
-
-各操作的完整语义请参阅其操作页面末尾的 PTO-SPEC 链接，规范总目录见 [PTO-SPEC tile 文档](https://github.com/PTO-ISA/pto-spec/tree/v0.58.4.1/docs/tile)。
-
-## Removed from earlier versions
-
-Pre-0.58 versions additionally shipped several tile operations
-that the active catalog removed (for example the ACC-style
-post-processing helpers). None of the removed operations are
-emitted by this library; the canonical list of retired names is
-recorded in the contract under `deleted_tile_names`.

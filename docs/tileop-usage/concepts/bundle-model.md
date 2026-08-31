@@ -23,6 +23,13 @@ TileOP 通过 `BSTART`、`B.DIM`、`B.DATR`、`B.IOR`、`B.IOT`、`B.IOS` 和 `B
 TADD(dst, lhs, rhs);
 ```
 
-## 完整语义
+## Bundle 字段与提交边界
 
-Bundle 字段和提交边界的完整语义请参阅 [PTO-SPEC tile 文档](https://github.com/PTO-ISA/pto-spec/tree/v0.58.4.1/docs/tile)。
+- Bundle 必须以一个合法的 `BSTART` 开始，并以 `BSTOP` 或下一个
+  `BSTART` 形成完成边界；不能跨 bundle 使用 binder 或 modifier。
+- `B.DIM`、`B.DATR`、`B.FPATR` 和 binder 的出现次数、顺序、字段适用性以及
+  默认值由具体操作页列出的 bundle 结构决定；未列出的字段不能自行添加。
+- 在操作数、descriptor、类型、shape、capacity、definedness、alias 和资源
+  检查全部通过前，不分配目标，也不产生 payload、status 或 memory effect。
+- 合法操作在其规定的提交点一次性发布目标及相关辅助输出；被拒绝的 bundle
+  不发布部分结果。`PE_MASK=0000` 若被该操作支持，则在上述检查和副作用前作为严格空操作处理。

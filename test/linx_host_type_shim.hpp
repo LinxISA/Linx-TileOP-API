@@ -11,6 +11,8 @@
 
 #define PTO_LINX_COMPAT_TYPES_PROVIDED 1
 
+inline unsigned __builtin_linx_get_thread_idx() { return 0; }
+
 // The production Linx compiler provides these scalar types and the tile_size
 // type modifier.  Define layout-compatible host substitutes so a normal C++
 // compiler can validate the public template surface without pretending to
@@ -19,9 +21,11 @@ using __fp32 = float;
 struct __tf32 { unsigned value; };
 struct __hf32 { unsigned value; };
 using __half = _Float16;
+struct __blkc_bf16 { unsigned short value; };
 struct __hif8 { unsigned char value; };
 struct __fp8_e4m3 { unsigned char value; };
 struct __fp8_e5m2 { unsigned char value; };
+struct __fp8_e6m2 { unsigned char value; };
 struct __fp6_e3m2 { unsigned char value; };
 struct __fp6_e2m3 { unsigned char value; };
 struct __fp4_e2m1x2 { unsigned char value; };
@@ -30,6 +34,17 @@ struct __fp8_e8m0 { unsigned char value; };
 struct __fp4_hif4x2 { unsigned char value; };
 struct __int4x2 { unsigned char value; };
 struct __uint4x2 { unsigned char value; };
+struct __fp16x2 { unsigned value; };
+struct __bf16x2 { unsigned value; };
+struct __uint16x2 { unsigned value; };
+struct __int16x2 { unsigned value; };
+struct __fp8_e4m3x4 { unsigned value; };
+struct __fp8_e5m2x4 { unsigned value; };
+struct __uint8x4 { unsigned value; };
+struct __int8x4 { unsigned value; };
+struct __fp8_e6m2x2 { unsigned short value; };
+struct __fp8_e4m3x2 { unsigned short value; };
+struct __fp8_e5m2x2 { unsigned short value; };
 
 #define tile_size(elements) [elements]
 

@@ -1,6 +1,6 @@
 # TQUANT
 
-TQUANT affine-quantizes a Local FP32 Tile into a new Local S8 or U8 Tile.
+`TQUANT` 对 Local FP32 Tile 执行仿射量化，生成新的 Local S8 或 U8 Tile。
 
 ## C++ 接口
 
@@ -19,6 +19,23 @@ void TQUANT(
     int32_t zeroPoint = 0);
 ```
 
+### 支持的数据类型
+
+支持源 Tile 类型 FP32；支持目标 Tile 类型 S8、U8。
+
+
+
+### 参数说明
+
+| 参数 | 说明 |
+| --- | --- |
+| `dst` | 输出 Tile；成功调用后写入操作结果。 |
+| `src` | 输入 Tile 或源数据。 |
+| `multiplier` | 量化或反量化使用的乘数。 |
+| `zeroPoint` | 量化使用的零点。 |
+
+
+
 ## 使用要求
 
 - Tile 类型必须满足接口模板约束；
@@ -28,21 +45,46 @@ void TQUANT(
 
 ## 约束
 
-除通用 Tile 约束外，必须满足 PTO-SPEC 对本操作规定的操作数角色、数据类型组合、形状、布局、有效区域、容量、存储位置、PE mask 以及 alias 规则。对于需要 Shared Tile、标量、索引、scale、bias 或选项对象的重载，只能使用接口声明的参数形式；不能通过省略参数来伪造另一种操作数组合。
+输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
+
+    操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
+
+### 有效区域与 padding
+
+| 项目 | 规则 |
+| --- | --- |
+| 有效元素 | 逐元素操作通常仅对输入和输出共同的有效区域定义结果；未明确规定的 padding 不应读取或依赖。 |
+| 物理容量 / SizeCode | 只决定容量，不重新定义逻辑 shape。 |
+| 输出 padding | 除非本操作明确规定填充值或传播规则，否则视为不可依赖。 |
+
+
 
 ## 默认值
 
-未显式传入的可选参数使用该 C++ 重载和 PTO-SPEC contract 规定的默认值。默认选项、维度、布局、padding、scale mask 和属性字段可能与显式编码的零值不同；调用者不得把“省略”与“传入零值”自动等同。
+ 以下是 C++ 声明中可直接省略的默认实参：
+
+| 参数 | 默认值 |
+| --- | --- |
+| `multiplier` | `1.0f` |
+| `zeroPoint` | `0` |
+
+### 编码字段和省略值
+
+- `LB0` 给出 `ValidCol`，必须存在且非零；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
+- 省略 `B.IOR` 时使用本操作规定的寄存器或控制默认值；显式编码为零表示实际的零值，不等同于省略该描述符。
+- 物理 padding 始终使用 `Null`。
+
+`fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
 
 ## 异常和边界行为
 
-类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，可能在编译期或运行前检查阶段被拒绝。有效区域为空、部分有效区域、边界坐标、padding、数值溢出、NaN/无穷值、输入输出 alias、内存 fault 以及 `PE_MASK=0000` 的行为均以该操作的 PTO-SPEC contract 为准；失败时不应假定已经产生部分输出或其他副作用。
+    类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，会在编译期或执行前检查阶段被拒绝。`PE_MASK=0000` 时操作不产生状态或内存影响；非法调用不会发布部分输出或部分副作用。padding、alias、NaN/无穷值及 fault 行为以本页已经列出的约束和边界说明为准，未明确声明的状态不可依赖。
 
 ## 结果说明
 
-成功调用后，`TQUANT` 按操作语义更新输出 Tile。padding、输入持久性、边界行为及数值状态影响请以 PTO-SPEC 为准；未明确声明的副作用不应被假定。
+    成功调用后，`TQUANT` 更新输出 Tile 的有效区域；输入 Tile 通常保持不变，输出 padding 和未明确声明的副作用不可依赖。若操作的约束或参数说明另有规定，以对应说明为准。
 
-## Bundle composition
+## Bundle 组成
 
 开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
 
@@ -71,7 +113,3 @@ TQUANT<RoundMode::RNE, true>(dst, src, 0.5f, 1);
 ```
 
 涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。
-
-## 完整语义
-
-完整语义、约束、默认值、异常和边界行为请参阅 [`TQUANT.md`](https://github.com/PTO-ISA/pto-spec/blob/v0.58.4.1/docs/tile/irregular-and-complex/format-conversion/TQUANT.md)。

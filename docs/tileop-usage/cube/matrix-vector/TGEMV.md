@@ -1,6 +1,6 @@
 # TGEMV
 
-TGEMV multiplies the matrix and vector into a newly published destination.
+`TGEMV` 将矩阵与向量相乘并发布新的目标。
 
 ## C++ 接口
 
@@ -20,6 +20,31 @@ PTO_SHARED_INLINE void TGEMV(
 PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape_vec &vec);
 ```
 
+### 支持的数据类型
+
+支持FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E2M1X2、E1M2X2、S4X2、U4X2、S16、S8、U16、U8类型。
+
+| 操作数角色 | 类型要求 |
+| --- | --- |
+| A / B 主输入 | 支持FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E2M1X2、E1M2X2、S4X2、U4X2、S16、S8、U16、U8类型。 A/B 必须属于该矩阵重载允许的数值类。 |
+| C / D（累加器或结果） | 类型由该数值类和重载确定；不能仅因列在支持列表中就任意组合。 |
+| Bias / Scale / 辅助输出 | 必须使用该重载规定的 dtype、shape 与 layout。 |
+
+### 参数说明
+
+| 参数 | 说明 |
+| --- | --- |
+| `d` | 输出 Tile；成功调用后写入操作结果。 |
+| `mtx` | 矩阵 Tile 操作数。 |
+| `vec` | 向量 Tile 操作数。 |
+| `options` | `fixp::Options` 选项对象；携带量化、激活、转置、缩放以及可选辅助输出配置。 |
+
+### 重载选择
+
+- **基础重载**：不传 `options`，使用该操作的默认后处理属性。
+- **带 `Options` 的重载**：需要量化、激活、转置、scale 或辅助输出时传入 `options`。它不是重复声明，而是在相同核心操作数上增加显式属性；仅可启用本操作支持的属性。详见 [fixp::Options 指南](../../options.md)。
+
+
 ## 使用要求
 
 - Tile 类型必须满足接口模板约束；
@@ -29,21 +54,42 @@ PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape_ve
 
 ## 约束
 
-除通用 Tile 约束外，必须满足 PTO-SPEC 对本操作规定的操作数角色、数据类型组合、形状、布局、有效区域、容量、存储位置、PE mask 以及 alias 规则。对于需要 Shared Tile、标量、索引、scale、bias 或选项对象的重载，只能使用接口声明的参数形式；不能通过省略参数来伪造另一种操作数组合。
+矩阵维度必须满足乘法关系（`M×K` 与 `K×N`，或对应 GEMV 形式）；A/B/D 的 CUBE layout、累加器类型和任何 scale/bias/options 必须构成该重载允许的组合。
+
+    操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
+
+### 有效区域与 padding
+
+| 项目 | 规则 |
+| --- | --- |
+| 有效元素 | M/N/K 的有效维度必须与矩阵乘法关系一致；padding 不应被当作数学输入。 |
+| 物理容量 / SizeCode | 只决定容量，不重新定义逻辑 shape。 |
+| 输出 padding | 除非本操作明确规定填充值或传播规则，否则视为不可依赖。 |
+
+
 
 ## 默认值
 
-未显式传入的可选参数使用该 C++ 重载和 PTO-SPEC contract 规定的默认值。默认选项、维度、布局、padding、scale mask 和属性字段可能与显式编码的零值不同；调用者不得把“省略”与“传入零值”自动等同。
+ 此页面列出的 C++ 形参没有默认实参；不要把省略某个操作数与传入零值视为等价。
+
+### 编码字段和省略值
+
+- 数据类型编码始终使用 `AType`；省略 `B.DATR` 时，`BType` 沿用 `AType`，舍入模式使用 `RNE`，并关闭饱和处理。
+- 省略 `LB0`、`LB1`、`LB2` 时，`M`、`N`、`K` 分别默认为 1，且 `TGEMV` 固定要求 `M=1`；显式给出的维度必须为正值。
+- 全零 `B.FPATR` 表示不启用转换、激活和归约；只有后处理模式需要时才提供 `B.IOR` 或辅助 `B.IOT` 操作数。
+- `TransA=0`、`TransB=0` 表示不转置；非零转置控制仅可用于规范允许的 `Shared` 主操作数。
+
+`fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
 
 ## 异常和边界行为
 
-类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，可能在编译期或运行前检查阶段被拒绝。有效区域为空、部分有效区域、边界坐标、padding、数值溢出、NaN/无穷值、输入输出 alias、内存 fault 以及 `PE_MASK=0000` 的行为均以该操作的 PTO-SPEC contract 为准；失败时不应假定已经产生部分输出或其他副作用。
+    类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，会在编译期或执行前检查阶段被拒绝。`PE_MASK=0000` 时操作不产生状态或内存影响；非法调用不会发布部分输出或部分副作用。padding、alias、NaN/无穷值及 fault 行为以本页已经列出的约束和边界说明为准，未明确声明的状态不可依赖。
 
 ## 结果说明
 
-成功调用后，`TGEMV` 按操作语义更新输出 Tile。padding、输入持久性、边界行为及数值状态影响请以 PTO-SPEC 为准；未明确声明的副作用不应被假定。
+    成功调用后，`TGEMV` 更新输出 Tile 的有效区域；输入 Tile 通常保持不变，输出 padding 和未明确声明的副作用不可依赖。若操作的约束或参数说明另有规定，以对应说明为准。
 
-## Bundle composition
+## Bundle 组成
 
 开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
 
@@ -85,7 +131,3 @@ void gemv(float *out, const float *matrix_data, const float *vector_data) {
 ```
 
 涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。
-
-## 完整语义
-
-完整语义、约束、默认值、异常和边界行为请参阅 [`TGEMV.md`](https://github.com/PTO-ISA/pto-spec/blob/v0.58.4.1/docs/tile/matrix-and-matrix-vector/matrix-vector/TGEMV.md)。

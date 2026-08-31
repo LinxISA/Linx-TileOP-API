@@ -12,14 +12,14 @@ canonical aliases.
 
 ## Documentation
 
-- [Execution engines and operations](docs/tileop-usage/engines.md)
-- [TLSU operations](docs/tileop-usage/tlsu.md)
-- [CUBE operations](docs/tileop-usage/cube.md)
-- [Tile and Shared-register constraints](docs/tileop-usage/constraints.md)
-- [Layout helpers](docs/tileop-usage/layout.md)
-- [Comparison operations](docs/tileop-usage/cmp.md)
-- [Sorting operations](docs/tileop-usage/sort.md)
-- [Fixed-point matrix wrappers](docs/tileop-usage/tmatmul-fixp.md)
+- [Execution engines and operations](docs/tileop-usage/generated/engines.md)
+- [TLSU operations](docs/tileop-usage/tlsu/load-store-move/TLOAD.md)
+- [CUBE operations](docs/tileop-usage/cube/matrix-matrix/TMATMUL.md)
+- [Tile and Shared-register constraints](docs/tileop-usage/concepts/tile-constraints.md)
+- [Layout helpers](docs/tileop-usage/layout-and-rearrangement/layout/TCONCAT.md)
+- [Comparison operations](docs/tileop-usage/elementwise-tile-tile/logical/TCMP.md)
+- [Sorting operations](docs/tileop-usage/irregular-and-complex/sorting/TSORT.md)
+- [Fixed-point matrix wrappers](docs/tileop-usage/options.md)
 
 ## Validation
 

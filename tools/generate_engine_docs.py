@@ -27,16 +27,15 @@ OUTPUT = ROOT / "docs" / "tileop-usage" / "generated" / "engines.md"
 def render() -> str:
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
     lines = [
-        "# LinxISA / PTO ISA v0.58.3 execution engines",
+        "# LinxISA / PTO ISA v0.58.3 执行引擎",
         "",
-        "The architectural engine classes are exactly **VEC**, **TLSU**, **CUBE**, and **SFU**.",
-        "VEC contains elementwise operations only. SFU contains reductions, broadcasts, transforms,",
-        "sorting, and other operations that require more complex hardware. TEPL remains the unique",
-        "compiled carrier identity. `BSTART.VEC` and `BSTART.SFU` are engine-specific assembly aliases;",
-        "the inline wrappers retain `BSTART.TEPL` for source compatibility with the preceding toolchain.",
+        "架构定义的引擎类别只有 **VEC**、**TLSU**、**CUBE** 和 **SFU**。",
+        "VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。",
+        "TEPL 仍是唯一的编译 carrier 标识。`BSTART.VEC` 和 `BSTART.SFU` 是特定引擎的汇编别名；",
+        "inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。",
         "",
-        "The table is projected from the pinned LinxISA authority recorded in",
-        "[`contracts/linxisa-v0.58-engine-ops.json`](../../contracts/linxisa-v0.58-engine-ops.json).",
+        "下表根据固定版本的 LinxISA 权威数据生成，数据记录在",
+        "[`contracts/linxisa-v0.58-engine-ops.json`](../../contracts/linxisa-v0.58-engine-ops.json) 中。",
         "",
     ]
 
@@ -46,7 +45,7 @@ def render() -> str:
             [
                 f"## {engine}",
                 "",
-                "| API / operation | Canonical assembly | Logical selector | Classification |",
+                "| API / 操作 | 规范汇编 | 逻辑 selector | 分类 |",
                 "| --- | --- | ---: | --- |",
             ]
         )
@@ -62,7 +61,7 @@ def render() -> str:
             [
                 f"## {engine}",
                 "",
-                "| Operation | Canonical block start | Function |",
+                "| 操作 | 规范 block 起始指令 | Function |",
                 "| --- | --- | ---: |",
             ]
         )
@@ -72,17 +71,14 @@ def render() -> str:
 
     lines.extend(
         [
-            "## Classification semantics",
+            "## 分类语义",
             "",
-            "PTO ISA 0.58.3 decouples the execution engine from the operation",
-            "classification (ADR 0057). Operations in the `elementwise-tile-tile`",
-            "and `tile-scalar-and-immediate` classes run elementwise on VEC, but a",
-            "few elementwise-class operations (`TEXP`, `TLOG`, `TRECIP`, `TSQRT`,",
-            "`TRSQRT`) are executed by SFU. `reduce-and-expand`, `layout-and-",
-            "rearrangement`, and `irregular-and-complex` classes are SFU-executed.",
-            "All TLSU and CUBE operations are executed by their own engine class.",
-            "The `BSTART.VEC` / `BSTART.SFU` spellings are canonical aliases of",
-            "the unique `BSTART.TEPL` compiled carrier (ADR 0057).",
+            "PTO ISA 0.58.3（ADR 0057）将执行引擎与操作分类解耦。`elementwise-tile-tile`",
+            "和 `tile-scalar-and-immediate` 类别在 VEC 上执行逐元素操作，但其中的",
+            "`TEXP`、`TLOG`、`TRECIP`、`TSQRT`、`TRSQRT` 由 SFU 执行。",
+            "`reduce-and-expand`、`layout-and-rearrangement` 和 `irregular-and-complex` 类别由 SFU 执行。",
+            "所有 TLSU 和 CUBE 操作均由对应的引擎类别执行。`BSTART.VEC` / `BSTART.SFU`",
+            "拼写是唯一 `BSTART.TEPL` 编译 carrier 的规范别名（ADR 0057）。",
             "",
         ]
     )
@@ -91,16 +87,32 @@ def render() -> str:
     if deleted:
         lines.extend(
             [
-                "## Removed from earlier versions",
+                "## 早期版本中移除的操作",
                 "",
-                "Pre-0.58 versions additionally shipped several tile operations",
-                "that the active catalog removed (for example the ACC-style",
-                "post-processing helpers). None of the removed operations are",
-                "emitted by this library; the canonical list of retired names is",
-                "recorded in the contract under `deleted_tile_names`.",
+                "0.58 之前的版本还提供了一些已从当前目录移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。",
+                "本库不会生成任何已移除的操作；废弃名称的规范列表记录在 contract 的 `deleted_tile_names` 字段中。",
                 "",
             ]
         )
+
+    lines.extend(
+        [
+            "## 使用示例",
+            "",
+            "```cpp",
+            "#include <common/pto_tileop.hpp>",
+            "",
+            "using namespace pto;",
+            "using TileT = Tile<Location::Vec, float, 8, 32>;",
+            "",
+            "// 例如从 VEC 操作页面调用 C++ wrapper。",
+            "void add(TileT &dst, TileT &lhs, TileT &rhs) {",
+            "  TADD(dst, lhs, rhs);",
+            "}",
+            "```",
+            "",
+        ]
+    )
 
     return "\n".join(lines)
 

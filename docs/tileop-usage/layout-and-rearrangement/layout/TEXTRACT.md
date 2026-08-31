@@ -1,6 +1,6 @@
 # TEXTRACT
 
-TEXTRACT is a selector-encoded Tile operation executed by SFU. It copies the rectangle beginning at the encoded row and column offsets into the destination; its current instruction contract owns the exact bundle form and publication boundary.
+`TEXTRACT` 从编码的行、列偏移起始位置，将矩形区域复制到目标 Tile。
 
 ## C++ 接口
 
@@ -11,6 +11,23 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TEXTRACT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t indexCol);
 ```
 
+### 支持的数据类型
+
+支持FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、E2M1X2、E1M2X2、S4X2、U4X2、S64、S32、S16、S8、U64、U32、U16、U8类型。
+
+
+
+### 参数说明
+
+| 参数 | 说明 |
+| --- | --- |
+| `dst` | 输出 Tile；成功调用后写入操作结果。 |
+| `src` | 输入 Tile 或源数据。 |
+| `indexRow` | 行索引 Tile；其元素选择对应的源或目标行。 |
+| `indexCol` | 列索引 Tile；其元素选择对应的源或目标列。 |
+
+
+
 ## 使用要求
 
 - Tile 类型必须满足接口模板约束；
@@ -20,21 +37,39 @@ void TEXTRACT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t
 
 ## 约束
 
-除通用 Tile 约束外，必须满足 PTO-SPEC 对本操作规定的操作数角色、数据类型组合、形状、布局、有效区域、容量、存储位置、PE mask 以及 alias 规则。对于需要 Shared Tile、标量、索引、scale、bias 或选项对象的重载，只能使用接口声明的参数形式；不能通过省略参数来伪造另一种操作数组合。
+输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
+
+    操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
+
+### 有效区域与 padding
+
+| 项目 | 规则 |
+| --- | --- |
+| 有效元素 | 输出 valid region 由布局、偏移或拼接描述符计算；物理 padding 不等于有效数据。 |
+| 物理容量 / SizeCode | 只决定容量，不重新定义逻辑 shape。 |
+| 输出 padding | 除非本操作明确规定填充值或传播规则，否则视为不可依赖。 |
+
+
 
 ## 默认值
 
-未显式传入的可选参数使用该 C++ 重载和 PTO-SPEC contract 规定的默认值。默认选项、维度、布局、padding、scale mask 和属性字段可能与显式编码的零值不同；调用者不得把“省略”与“传入零值”自动等同。
+ 此页面列出的 C++ 形参没有默认实参；不要把省略某个操作数与传入零值视为等价。
+
+### 编码字段和省略值
+
+- `B.IOR` 是必需描述符；未使用的选择器和字段必须编码为零。
+
+`fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
 
 ## 异常和边界行为
 
-类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，可能在编译期或运行前检查阶段被拒绝。有效区域为空、部分有效区域、边界坐标、padding、数值溢出、NaN/无穷值、输入输出 alias、内存 fault 以及 `PE_MASK=0000` 的行为均以该操作的 PTO-SPEC contract 为准；失败时不应假定已经产生部分输出或其他副作用。
+    类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，会在编译期或执行前检查阶段被拒绝。`PE_MASK=0000` 时操作不产生状态或内存影响；非法调用不会发布部分输出或部分副作用。padding、alias、NaN/无穷值及 fault 行为以本页已经列出的约束和边界说明为准，未明确声明的状态不可依赖。
 
 ## 结果说明
 
-成功调用后，`TEXTRACT` 按操作语义更新输出 Tile。padding、输入持久性、边界行为及数值状态影响请以 PTO-SPEC 为准；未明确声明的副作用不应被假定。
+    成功调用后，`TEXTRACT` 更新输出 Tile 的有效区域；输入 Tile 通常保持不变，输出 padding 和未明确声明的副作用不可依赖。若操作的约束或参数说明另有规定，以对应说明为准。
 
-## Bundle composition
+## Bundle 组成
 
 开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
 
@@ -67,7 +102,3 @@ TSTORE(dst_global, dst);
 ```
 
 涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。
-
-## 完整语义
-
-完整语义、约束、默认值、异常和边界行为请参阅 [`TEXTRACT.md`](https://github.com/PTO-ISA/pto-spec/blob/v0.58.4.1/docs/tile/layout-and-rearrangement/layout/TEXTRACT.md)。

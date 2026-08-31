@@ -1,8 +1,8 @@
 # PTO ISA 0.58.3 migration
 
 This API revision is derived from LinxISA authority commit
-`dd52a2e579d8058c0d8e33043e705122b340e73f`, which locks PTO-SPEC release
-`v0.58.3` at commit `e599a3d36ebfad43362ff591ea5e128816c684c7`.
+`dd52a2e579d8058c0d8e33043e705122b340e73f`, which locks the architectural
+standard release `v0.58.3` at commit `e599a3d36ebfad43362ff591ea5e128816c684c7`.
 The generated contract records both repositories' exact commits, trees, and
 content hashes.
 
