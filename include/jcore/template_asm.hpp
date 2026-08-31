@@ -134,15 +134,6 @@ void TADD_MUL_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
-  // PTO ISA 0.58.3 TileOperandsLegal_TCVT requires the source and destination to
-  // match on physical rows, physical columns, valid rows and valid columns.
-  // A destination declared with fewer physical rows/columns than the source
-  // (e.g. Tile<1,1024> with valid 2x512) would violate TileLogicalShapeMatch
-  // at runtime; reject it at compile time.
-  static_assert(tile_shape_out::Rows == tile_shape_in::Rows &&
-                    tile_shape_out::Cols == tile_shape_in::Cols,
-                "TCVT source and destination must have identical physical "
-                "Rows/Cols (PTO ISA 0.58.3 TileLogicalShapeMatch)");
   static_assert((tile_shape_out::ValidRow == DYNAMIC ||
                  tile_shape_out::Rows >= tile_shape_out::ValidRow) &&
                     (tile_shape_out::ValidCol == DYNAMIC ||
@@ -151,22 +142,65 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
                 "region (valid_rows <= rows, valid_columns <= columns)");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
-  asm volatile(
-    "BSTART.TEPL 27, %D1\n"
-    "B.DATR %D2, RNONE\n"
-    "B.DIM %5, 0, ->lb0\n"
-    "B.DIM %6, 0, ->lb1\n"
-    "B.DIM zero, %c7, ->lb2\n"
-    "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
-      "Tr"(src.data()),
-      "i"(tile_shape_out::TilesizeCode),
-      "r"(valid_col),
-      "r"(valid_row),
-      "i"(tile_shape_out::Cols)
-  );
+  constexpr bool IsCubeMSource =
+      tile_shape_in::BFractal == BLayout::CubeM16 ||
+      tile_shape_in::BFractal == BLayout::CubeM32;
+  if constexpr (IsCubeMSource) {
+    static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
+                  "TCVT CUBE_M16/M32 conversion must preserve the CUBE layout");
+    static_assert(tile_shape_out::ValidRow == tile_shape_in::ValidRow &&
+                      tile_shape_out::ValidCol == tile_shape_in::ValidCol,
+                  "TCVT CUBE_M16/M32 conversion must preserve the valid shape");
+    static_assert(tile_shape_out::Loc == Location::Left ||
+                      tile_shape_out::Loc == Location::Acc,
+                  "TCVT CUBE_M16/M32 destination must have Matrix location");
+    static_assert(tile_shape_in::Loc == Location::Left ||
+                      tile_shape_in::Loc == Location::Acc,
+                  "TCVT CUBE_M16/M32 source must have Matrix location");
+    static_assert(tile_shape_in::TilesizeCode >= __tilesize_128B &&
+                      tile_shape_in::TilesizeCode <= __tilesize_64KB,
+                  "TCVT CUBE_M16/M32 source TSize must be 128 B..64 KiB");
+    static_assert(tile_shape_out::TilesizeCode >= __tilesize_128B &&
+                      tile_shape_out::TilesizeCode <= __tilesize_64KB,
+                  "TCVT CUBE_M16/M32 destination TSize must be 128 B..64 KiB");
+    asm volatile(
+      "BSTART.TEPL 27, %D1\n"
+      "B.DATR %D2, RNONE\n"
+      "B.DIM %5, 0, ->lb0\n"
+      "B.DIM %6, 0, ->lb1\n"
+      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      : "=Tr"(dst.data())
+      : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        "Tr"(src.data()),
+        "i"(tile_shape_out::TilesizeCode),
+        "r"(valid_col),
+        "r"(valid_row)
+    );
+  } else {
+    static_assert(!tile_shape_out::IsCubeLayout,
+                  "TCVT to a CUBE layout requires a CUBE_M16/M32 source");
+    static_assert(tile_shape_out::Rows == tile_shape_in::Rows &&
+                      tile_shape_out::Cols == tile_shape_in::Cols,
+                  "ordinary TCVT source and destination must have identical "
+                  "physical Rows/Cols");
+    asm volatile(
+      "BSTART.TEPL 27, %D1\n"
+      "B.DATR %D2, RNONE\n"
+      "B.DIM %5, 0, ->lb0\n"
+      "B.DIM %6, 0, ->lb1\n"
+      "B.DIM zero, %c7, ->lb2\n"
+      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      : "=Tr"(dst.data())
+      : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        "Tr"(src.data()),
+        "i"(tile_shape_out::TilesizeCode),
+        "r"(valid_col),
+        "r"(valid_row),
+        "i"(tile_shape_out::Cols)
+    );
+  }
 }
 
 #define DEFINE_TMOV_LAYOUT(LAYOUT_NAME)                                          \

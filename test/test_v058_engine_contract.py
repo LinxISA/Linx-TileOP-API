@@ -144,15 +144,35 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(tcvt)
         carrier = tcvt.group(0)
-        expected = (
-            '"BSTART.TEPL 27, %D1\\n"\n'
-            '    "B.DATR %D2, RNONE\\n"\n'
-            '    "B.DIM %5, 0, ->lb0\\n"\n'
-            '    "B.DIM %6, 0, ->lb1\\n"\n'
-            '    "B.DIM zero, %c7, ->lb2\\n"\n'
-            '    "B.IOT %3, mask=1111, last, ->%0<%Z4>\\n"'
+        ordinary_branch = carrier.split('} else {', 1)[1]
+        for instruction in (
+                '"BSTART.TEPL 27, %D1\\n"',
+                '"B.DATR %D2, RNONE\\n"',
+                '"B.DIM %5, 0, ->lb0\\n"',
+                '"B.DIM %6, 0, ->lb1\\n"',
+                '"B.DIM zero, %c7, ->lb2\\n"',
+                '"B.IOT %3, mask=1111, last, ->%0<%Z4>\\n"'):
+            self.assertIn(instruction, ordinary_branch)
+
+    def test_tcvt_cube_layout_closure_uses_destination_tsize(self) -> None:
+        tcvt = re.search(
+            r'(?s)template <is_tile_data_v tile_shape_out, '
+            r'is_tile_data_v tile_shape_in>\n'
+            r'void TCVT_T\(.*?\n}\n\n#define DEFINE_TMOV_LAYOUT',
+            self.header,
         )
-        self.assertIn(expected, carrier)
+        self.assertIsNotNone(tcvt)
+        carrier = tcvt.group(0)
+        cube_branch = carrier.split('if constexpr (IsCubeMSource) {', 1)[1].split(
+            '} else {', 1)[0]
+        self.assertIn('tile_shape_in::BFractal == BLayout::CubeM16', carrier)
+        self.assertIn('tile_shape_in::BFractal == BLayout::CubeM32', carrier)
+        self.assertIn('tile_shape_out::TilesizeCode', cube_branch)
+        self.assertNotIn('->lb2', cube_branch)
+        cube_fixture = (ROOT / 'test' / 'tileop_api' / 'src' /
+                        'CubeTCvt.cpp').read_text(encoding='utf-8')
+        self.assertIn('TCVT(dst, src);', cube_fixture)
+        self.assertIn('__tilesize_1KB', cube_fixture)
 
     def test_range_modifiers_expose_simple_factories(self) -> None:
         tile_header = PTO_TILE.read_text(encoding="utf-8")

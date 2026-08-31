@@ -1,72 +1,119 @@
 # TCVT
 
-TCVT is a selector-encoded Tile operation executed by VEC. It converts every valid logical element to the separately selected destination type and layout; its current instruction contract owns the exact bundle form and publication boundary.
+`TCVT(dst, src)` converts every valid element of `src` to the destination element type described by `dst`. The C++ Tile types determine the source data type, destination data type, layout, valid shape, physical storage shape, and destination Tile capacity.
 
-## C++ 接口
-
-当前 API 中可用的调用形式：
+## C++ interface
 
 ```cpp
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TCVT(tile_shape_out &dst, tile_shape_in &src);
+template <is_tile_data_v DstTile, is_tile_data_v SrcTile>
+void TCVT(DstTile &dst, SrcTile &src);
 ```
 
-## 使用要求
+Developers provide typed source and destination Tiles. No ISA encoding value, Tile register number, or TSize code is passed manually.
 
-- Tile 类型必须满足接口模板约束；
-- 数据类型、形状、有效区域、布局、容量和存储位置必须满足该操作要求；
-- 输入 Tile 必须已初始化，输出 Tile 必须具有足够容量；
-- 参数顺序必须与接口声明一致，不要添加接口未声明的操作数。
+## Ordinary layouts
 
-## 约束
+For ordinary layouts such as `RowMajor` and `ColMajor`, source and destination must have:
 
-除通用 Tile 约束外，必须满足 PTO-SPEC 对本操作规定的操作数角色、数据类型组合、形状、布局、有效区域、容量、存储位置、PE mask 以及 alias 规则。对于需要 Shared Tile、标量、索引、scale、bias 或选项对象的重载，只能使用接口声明的参数形式；不能通过省略参数来伪造另一种操作数组合。
+- identical physical `Rows` and `Cols`;
+- a valid region contained by each physical Tile;
+- a legal source/destination dtype combination and Tile location;
+- enough destination capacity for the converted result.
 
-## 默认值
-
-未显式传入的可选参数使用该 C++ 重载和 PTO-SPEC contract 规定的默认值。默认选项、维度、布局、padding、scale mask 和属性字段可能与显式编码的零值不同；调用者不得把“省略”与“传入零值”自动等同。
-
-## 异常和边界行为
-
-类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，可能在编译期或运行前检查阶段被拒绝。有效区域为空、部分有效区域、边界坐标、padding、数值溢出、NaN/无穷值、输入输出 alias、内存 fault 以及 `PE_MASK=0000` 的行为均以该操作的 PTO-SPEC contract 为准；失败时不应假定已经产生部分输出或其他副作用。
-
-## 结果说明
-
-成功调用后，`TCVT` 按操作语义更新输出 Tile。padding、输入持久性、边界行为及数值状态影响请以 PTO-SPEC 为准；未明确声明的副作用不应被假定。
-
-## Bundle composition
-
-开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
-
-```asm
-BSTART.VEC TCVT, SrcDataType
-B.DATR      DstDataType, RMode, Sat, Canonicalize, Layout, PadValue (optional)
-B.DIM       rValidCol, 0, ->LB0
-B.DIM       rValidRow, 0, ->LB1  ; (optional)
-B.DIM       rCol, 0, ->LB2  ; (optional)
-B.IOT       SrcTile, mask=PE_MASK, last, ->DstTile<TSize>
-BSTOP
-```
-
-## 使用示例
+Example:
 
 ```cpp
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using GM = global_tensor<float, RowMajor<2, 1024>>;
-using InputTile = Tile<Location::Vec, float, 2, 1024, BLayout::RowMajor>;
-using OutputTile = Tile<Location::Vec, __half, 2, 1024, BLayout::RowMajor>;
-float src_data[2 * 1024] = {};
-GM src_global(src_data);
-InputTile src;
-OutputTile dst;
-TLOAD(src, src_global);
-TCVT(dst, src);
+
+using Src = Tile<Location::Vec, float, 2, 1024, BLayout::RowMajor>;
+using Dst = Tile<Location::Vec, __half, 2, 1024, BLayout::RowMajor>;
+
+void convert(Dst &dst, Src &src) {
+  TCVT(dst, src);
+}
 ```
 
-涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。
+## CUBE_M16 and CUBE_M32 conversion
 
-## 完整语义
+PTO-SPEC ADR-0110 closes the conversion rules for `CUBE_M16` and `CUBE_M32`. These layouts differ from ordinary TCVT in one important way: changing dtype can change the number of elements stored by each 128-byte CELL. Therefore, source and destination physical columns and TSize are derived independently from their own dtype.
 
-完整语义、约束、默认值、异常和边界行为请参阅 [`TCVT.md`](https://github.com/PTO-ISA/pto-spec/blob/v0.58.4.1/docs/tile/elementwise-tile-tile/format-conversion/TCVT.md)。
+The developer must preserve:
+
+- the same CUBE layout (`CUBE_M16` to `CUBE_M16`, or `CUBE_M32` to `CUBE_M32`);
+- the same logical valid rows and valid columns;
+- a Matrix Tile location;
+- Local Tile capacities in the ISA range `128 B` through `64 KiB`.
+
+The physical `Rows`, physical `Cols`, CELL count, required bytes, and `TilesizeCode` do **not** need to match between source and destination. `CubeTileM16` and `CubeTileM32` calculate them from the element type and declared shape.
+
+Example: the FP16 source uses `512 B`, while the FP32 destination needs `1 KiB`. Both represent the same valid `16 x 9` matrix.
+
+```cpp
+#include <common/pto_tileop.hpp>
+
+using namespace pto;
+
+using Src = CubeTileM16<__half, 16, 12, 16, 9>;
+using Dst = CubeTileM16<float, 16, 10, 16, 9>;
+
+static_assert(Src::ValidRow == Dst::ValidRow);
+static_assert(Src::ValidCol == Dst::ValidCol);
+static_assert(Src::TilesizeCode == __tilesize_512B);
+static_assert(Dst::TilesizeCode == __tilesize_1KB);
+
+void convert_cube(Dst &dst, Src &src) {
+  TCVT(dst, src);
+}
+```
+
+`CUBE_N8` conversion is not included in ADR-0110 and is rejected by the current API.
+
+## Mapping to the ISA bundle
+
+For an ordinary Tile, TileOP emits all three logical-dimension bindings:
+
+```asm
+BSTART.TEPL TCVT, SrcDataType
+B.DATR DstDataType, RNONE
+B.DIM rValidCol, 0, ->lb0
+B.DIM rValidRow, 0, ->lb1
+B.DIM zero, PhysicalCol, ->lb2
+B.IOT SrcTile, mask=1111, last, ->DstTile<DstTSize>
+```
+
+For `CUBE_M16` and `CUBE_M32`, ADR-0110 defines:
+
+- `LB0 = source ValidCol`;
+- `LB1 = source ValidRow`;
+- `LB2` is omitted;
+- the `B.IOT` destination TSize comes from the destination Tile type.
+
+```asm
+BSTART.TEPL TCVT, SrcDataType
+B.DATR DstDataType, RNONE
+B.DIM rValidCol, 0, ->lb0
+B.DIM rValidRow, 0, ->lb1
+B.IOT SrcTile, mask=1111, last, ->DstTile<DstTSize>
+```
+
+The current implementation uses extended inline assembly. An intrinsic is not required because the typed C++ operands already provide every field required by this bundle: source and destination Tile registers, dtype selectors, valid dimensions, layout checks, and destination TSize.
+
+## Compile-time diagnostics
+
+TileOP rejects calls when it can prove that:
+
+- a CUBE conversion changes between `CUBE_M16` and `CUBE_M32`;
+- source and destination valid shapes differ;
+- a CUBE operand is not in a Matrix Tile location;
+- source or destination Local TSize is outside `128 B..64 KiB`;
+- the destination is a CUBE layout but the source is not `CUBE_M16` or `CUBE_M32`;
+- either operand uses unsupported `CUBE_N8` conversion;
+- an ordinary conversion changes physical `Rows` or `Cols`.
+
+Other dtype legality, aliasing, numerical behavior, saturation, rounding, padding, and exception behavior follow the PTO-SPEC TCVT contract.
+
+## Specification
+
+See the PTO-SPEC `TCVT` operation and ADR-0110, introduced by PTO-SPEC issue #167 / PR #176.
