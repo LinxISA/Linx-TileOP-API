@@ -6945,24 +6945,29 @@ void TPRELU(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 }
 
 
-// TSEL: select between two tiles using mask
+// TSEL: select true_src where mask is set, otherwise preserve the prior dst.
+// PTO requires the false source to be bound explicitly.  Model the public
+// in-place API as two B.IOT bindings and keep dst read/write so the second
+// binding snapshots its old value before publishing the new destination.
 template <is_tile_data_v tile_shape>
-void TSEL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TSEL(tile_shape &dst, tile_shape &mask, tile_shape &true_src) {
   asm volatile(
-    "BSTART.TEPL 26, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "BSTART.TEPL 26, %D[DataType]\n"
+    "B.DIM %[ValidCol], 0, ->lb0\n"
+    "B.DIM %[ValidRow], 0, ->lb1\n"
+    "B.DIM zero, %c[Cols], ->lb2\n"
+    "B.IOT %[Mask], %[True], mask=1111\n"
+    "B.IOT %[Prior], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+    : [Dst] "=Tr"(dst.data())
+    : [Prior] "0"(dst.data()),
+      [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [ValidCol] "r"(mask.GetValidCol()),
+      [ValidRow] "r"(mask.GetValidRow()),
+      [Cols] "i"(tile_shape::Cols),
+      [Mask] "Tr"(mask.data()),
+      [True] "Tr"(true_src.data()),
+      [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
   );
 }
 
