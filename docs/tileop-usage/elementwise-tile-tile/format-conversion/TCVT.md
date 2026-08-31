@@ -16,6 +16,7 @@ Developers provide typed source and destination Tiles. No ISA encoding value, Ti
 For ordinary layouts such as `RowMajor` and `ColMajor`, source and destination must have:
 
 - identical physical `Rows` and `Cols`;
+- identical `ValidRow` and `ValidCol`;
 - a valid region contained by each physical Tile;
 - a legal source/destination dtype combination and Tile location;
 - enough destination capacity for the converted result.

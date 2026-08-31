@@ -17,7 +17,7 @@ fi
 CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose old_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b bad_transpose_d group_shape group_k group_n group_dynamic"
 TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_large"
 RANGE_CASES="subview_dest assemble_source subview_length"
-TCVT_CUBE_CASES="cube_layout cube_valid_shape cube_n8"
+TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -64,11 +64,12 @@ for c in $RANGE_CASES; do
     echo "PASS (rejected): $c"; PASS=$((PASS+1))
   fi
 done
-for c in $TCVT_CUBE_CASES; do
+for c in $TCVT_CASES; do
   case "$c" in
     cube_layout) define=SHOULD_FAIL_TCVT_CUBE_LAYOUT ;;
     cube_valid_shape) define=SHOULD_FAIL_TCVT_CUBE_VALID_SHAPE ;;
     cube_n8) define=SHOULD_FAIL_TCVT_CUBE_N8 ;;
+    valid_shape) define=SHOULD_FAIL_TCVT_VALID_SHAPE ;;
   esac
   if "$CXX" "${FLAGS[@]}" -D"$define" src/TCvtCubeNegatives.cpp \
        -o "$OUT/neg_tcvt_$c.o" >/dev/null 2>&1; then

@@ -184,6 +184,10 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
                       tile_shape_out::Cols == tile_shape_in::Cols,
                   "ordinary TCVT source and destination must have identical "
                   "physical Rows/Cols");
+    static_assert(tile_shape_out::ValidRow == tile_shape_in::ValidRow &&
+                      tile_shape_out::ValidCol == tile_shape_in::ValidCol,
+                  "ordinary TCVT source and destination must have identical "
+                  "ValidRow/ValidCol");
     asm volatile(
       "BSTART.TEPL 27, %D1\n"
       "B.DATR %D2, RNONE\n"
