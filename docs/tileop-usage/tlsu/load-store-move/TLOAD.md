@@ -26,6 +26,11 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src);
 
 除通用 Tile 约束外，必须满足 PTO-SPEC 对本操作规定的操作数角色、数据类型组合、形状、布局、有效区域、容量、存储位置、PE mask 以及 alias 规则。对于需要 Shared Tile、标量、索引、scale、bias 或选项对象的重载，只能使用接口声明的参数形式；不能通过省略参数来伪造另一种操作数组合。
 
+`B.IOR.RegSrc1` carries the GM row stride in **bytes**, not elements. The
+ordinary, Shared, and CUBE transport overloads therefore derive the encoded
+stride with `GetStrideBytes`; callers must not pre-scale or reinterpret that
+value in element units.
+
 ## 默认值
 
 未显式传入的可选参数使用该 C++ 重载和 PTO-SPEC contract 规定的默认值。默认选项、维度、布局、padding、scale mask 和属性字段可能与显式编码的零值不同；调用者不得把“省略”与“传入零值”自动等同。
