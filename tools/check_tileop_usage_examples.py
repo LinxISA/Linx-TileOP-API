@@ -22,7 +22,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC_ROOT = ROOT / "docs/tileop-usage"
-USAGE_SECTION = re.compile(r"^## 使用示例\s*$([\s\S]*?)(?=^## |\Z)", re.M)
+USAGE_SECTION = re.compile(
+    r"^## (?:\d+\.\s*)?使用示例\s*$([\s\S]*?)(?=^## |\Z)", re.M
+)
 CPP_BLOCK = re.compile(r"^```cpp\s*\n([\s\S]*?)^```\s*$", re.M)
 FIXED_REGISTER = re.compile(
     r'\bregister\s+([^;\n]*?)\s+asm\s*\('
