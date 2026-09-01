@@ -185,6 +185,18 @@ jobs:
             toolchain/output/linx_blockisa_llvm_musl
           key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
 
+      - name: Install candidate TileOP headers into the cached toolchain
+        run: |
+          set -euo pipefail
+          RESOURCE_DIR="$(${TOOLCHAIN_INSTALL_DIR}/bin/clang -print-resource-dir)"
+          mkdir -p "${RESOURCE_DIR}/include/tileop-api"
+          rsync -a --delete \
+            toolchain/src/Linx-TileOP-API/include/ \
+            "${RESOURCE_DIR}/include/tileop-api/"
+          cmp \
+            toolchain/src/Linx-TileOP-API/include/common/pto_tile.hpp \
+            "${RESOURCE_DIR}/include/tileop-api/common/pto_tile.hpp"
+
       - name: Run TileOP contract checks
         working-directory: toolchain/src/Linx-TileOP-API
         env:

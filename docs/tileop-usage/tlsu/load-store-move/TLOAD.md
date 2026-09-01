@@ -66,6 +66,11 @@ requires(cube_shape::IsCubeLayout) void TLOAD(cube_shape &dst, gm_shape &src);
 
 普通 Tile 使用常规 TLSU 传输；CUBE Tile 由统一 `TLOAD/TSTORE` 自动选择布局转换。需要在源码中显式表达该边界时，可使用 `TLOAD_CUBE/TSTORE_CUBE`。
 
+`B.IOR.RegSrc1` carries the GM row stride in **bytes**, not elements. The
+ordinary, Shared, and CUBE transport overloads therefore derive the encoded
+stride with `GetStrideBytes`; callers must not pre-scale or reinterpret that
+value in element units.
+
 ## 默认值
 
  此页面列出的 C++ 形参没有默认实参；不要把省略某个操作数与传入零值视为等价。

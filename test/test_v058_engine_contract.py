@@ -220,6 +220,21 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         tlsu_doc = (ROOT / "docs" / "tileop-usage" / "tlsu" / "load-store-move" / "TLOAD.md").read_text(encoding="utf-8")
         self.assertIn("row stride in **bytes**", tlsu_doc)
 
+    def test_tsel_binds_the_prior_destination_as_explicit_false_source(self) -> None:
+        start = self.header.index("void TSEL(")
+        end = self.header.index("// TABS:", start)
+        tsel = self.header[start:end]
+        self.assertIn('"B.IOT %[Mask], %[True], mask=1111\\n"', tsel)
+        self.assertIn(
+            '"B.IOT %[Prior], mask=1111, last, ->%[Dst]<%Z[TileSize]>\\n"',
+            tsel,
+        )
+        self.assertIn(': [Dst] "=Tr"(dst.data())', tsel)
+        self.assertIn('[Prior] "0"(dst.data())', tsel)
+        self.assertNotIn(
+            '"B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\\n"', tsel
+        )
+
     def test_fpatr_carries_shared_transpose_controls(self) -> None:
         tile = PTO_TILE.read_text(encoding="utf-8")
         self.assertIn("bool TransA = false", tile)
