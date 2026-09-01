@@ -11,6 +11,9 @@ B.ASSEMBLE INIT, LAST, RegSrc, uimm11, ParentSizeCode   ; destination side
 
 The derived byte address is `(GPR[RegSrc] + ZeroExtend(uimm11)) * 128 B mod XLEN`, where
 `RegSrc` is an absolute GPR selector `0..23`; both the selected GPR value and `uimm11` are counts of 128-byte units. `uimm11` is `0..2047`.
+The high-level TileArray path passes each slot's 128-byte-unit range base in a
+compiler-allocated GPR and uses `uimm11=0`; this preserves the ISA's
+`GPR[RegSrc] + uimm11` semantics without exposing register numbers.
 
 The API exposes a small view-building layer, inspired by block-pointer APIs:
 create a range view once and pass it to the consuming operation. The ordinary
@@ -88,6 +91,36 @@ The low-level `subview_sized_at` helper remains available for direct ISA contrac
 
 The explicit carrier forms documented below remain supported for code that
 needs every descriptor field visible in the type.
+
+## TileArray region API
+
+For a parent Tile split into fixed-size fragments, prefer the region API:
+
+```cpp
+using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
+using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+
+Parent parent;
+auto source = TPARTVIEW<Fragment, 1, 4>(parent)[0][2];
+
+TileArray<Fragment, 1, 4> destinations;
+TCVT(destinations[0][2], source_tile);
+Parent result = TASSEMBLY<Parent>(std::move(destinations));
+```
+
+`TPARTVIEW` returns a borrowed view and does not allocate another Tile register.
+`TileArray` owns the destination carrier. `TASSEMBLY` materializes the carrier as
+the requested parent Tile; it does not emit a second standalone instruction.
+When a producer writes a destination slot, the inline-asm wrapper emits the
+corresponding `B.ASSEMBLE` lifecycle form and the slot range. For slot `ordinal`,
+the range base is `ordinal * (FragmentBytes / 128)` and is supplied through a
+compiler-allocated GPR.
+
+`CubeTileM16` and `CubeTileM32` are supported by the Tile type and partition
+contract checks. The current region producer inline-asm path is intentionally
+limited to `RowMajor + NoneBox`; do not use `TCVT` or row-wise region producers
+with Cube fragments until the Cube binder/CELL ordering path is implemented and
+validated.
 
 For a developer-oriented guide with complete lifecycle, Local/Shared, validation,
 and generated-assembly examples, see [B.SUBVIEW / B.ASSEMBLE Developer Guide](range-modifiers-developer-guide.md).

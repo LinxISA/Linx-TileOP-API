@@ -24,7 +24,7 @@ ACTIVE_FIXTURES=(
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs
   TAdd_mask TAdd TAdds TAnd TLoad TStore TCvt TDiv TDivs TExp TMax TMaxs
   TMov TMul TMuls TOr TRecip TRem TRowMax TRowSum TSqrt TSub TSubs TTrans
-  RangeSubview RangeAssemble SharedRange TileRegion
+  RangeSubview RangeAssemble SharedRange TileRegion TileArrayCube TileArrayAssemblyOffsets
 )
 
 # Pre-v0.58 wrapper designs remain available to cpu_sim only and are not part

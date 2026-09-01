@@ -74,9 +74,9 @@ public:
   static constexpr int InnerRows = SubTile::InnerRows;
   static constexpr int InnerCols = SubTile::InnerCols;
   static constexpr int Numel = SubTile::Numel;
-  static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
-  static constexpr int TilesizeCode = Parent::TilesizeCode;
-  static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
+  static constexpr int LogicalTileBytes = SubTile::LogicalTileBytes;
+  static constexpr int TilesizeCode = SubTile::TilesizeCode;
+  static constexpr bool IsValidActiveSize = SubTile::IsValidActiveSize;
 
   SubTileView(Parent &parent, int row, int col, int partition_cols)
       : parent_(&parent), row_(row), col_(col),
@@ -148,6 +148,8 @@ class TileArrayOutputRef;
 template <typename SubTile, int Rows, int Cols>
 class TileArray {
 public:
+  static_assert(Rows > 0 && Cols > 0,
+                "TileArray extents must be positive");
   using SubTileType = SubTile;
   static constexpr int rows = Rows;
   static constexpr int cols = Cols;
@@ -157,6 +159,10 @@ public:
       SubTile::LogicalTileBytes * slot_count;
   static constexpr int ParentSizeCode =
       tile_size_code_for_bytes(ParentBytes);
+  static_assert((slot_count - 1) *
+                    (SubTile::LogicalTileBytes / range::RangeAddressUnitBytes) <=
+                2047,
+                "Tile assembly slot range exceeds the ISA uimm11 limit");
   static_assert(ParentSizeCode > 0,
                 "Tile assembly parent capacity needs a PTO SizeCode");
 
@@ -219,6 +225,13 @@ public:
   int col() const { return col_; }
   int ordinal() const { return row_ * array_cols_ + col_; }
   int slot_count() const { return slot_count_; }
+  std::uintptr_t range_base_units() const {
+    static_assert(SubTile::LogicalTileBytes % range::RangeAddressUnitBytes == 0,
+                  "Tile assembly offsets must be representable in 128B units");
+    return static_cast<std::uintptr_t>(
+        ordinal() * (SubTile::LogicalTileBytes /
+                     range::RangeAddressUnitBytes));
+  }
   static constexpr int Rows = SubTile::Rows;
   static constexpr int Cols = SubTile::Cols;
   static constexpr int ValidRow = SubTile::ValidRow;
@@ -314,6 +327,21 @@ auto TPARTVIEW(Parent &parent)
 
 template <typename Parent, typename SubTile, int Rows, int Cols>
 auto TASSEMBLY(region::TileArray<SubTile, Rows, Cols> &&array) -> Parent {
+  static_assert(std::is_same_v<typename Parent::DType,
+                               typename SubTile::DType>,
+                "TASSEMBLY parent and fragment dtypes must match");
+  static_assert(Parent::Loc == SubTile::Loc,
+                "TASSEMBLY parent and fragment locations must match");
+  static_assert(Parent::BFractal == SubTile::BFractal,
+                "TASSEMBLY parent and fragment layouts must match");
+  static_assert(Parent::SFractal == SubTile::SFractal,
+                "TASSEMBLY parent and fragment storage layouts must match");
+  static_assert(Parent::Rows == Rows * SubTile::Rows &&
+                    Parent::Cols == Cols * SubTile::Cols,
+                "TASSEMBLY parent and fragment shapes do not match");
+  static_assert(Parent::ValidRow == Rows * SubTile::ValidRow &&
+                    Parent::ValidCol == Cols * SubTile::ValidCol,
+                "TASSEMBLY parent and fragment valid shapes do not match");
   static_assert(Parent::LogicalTileBytes ==
                     SubTile::LogicalTileBytes * Rows * Cols,
                 "TASSEMBLY parent and fragment coverage do not match");

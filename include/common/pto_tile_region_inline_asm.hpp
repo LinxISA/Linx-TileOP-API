@@ -6,8 +6,8 @@
 namespace pto {
 
 template <int Opcode, typename Out, typename Parent, typename SubTile>
-inline void pto_region_unary(Out &dst,
-                             region::SubTileView<Parent, SubTile> &src) {
+inline void
+pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
   static_assert(SubTile::BFractal == BLayout::RowMajor,
                 "inline Tile region path requires RowMajor fragments");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
@@ -32,8 +32,9 @@ inline void pto_region_unary(Out &dst,
 }
 
 template <is_tile_data_v Out, typename Parent, typename SubTile>
-inline void TMULS(Out &dst, region::SubTileView<Parent, SubTile> &src,
-                  typename SubTile::DType scalar) {
+inline void TMULS(Out &dst,
+                             region::SubTileView<Parent, SubTile> &src,
+                             typename SubTile::DType scalar) {
   volatile typename SubTile::DType value = scalar;
   const uintptr_t region_base_units = src.GetRangeBase();
   asm volatile(
@@ -56,26 +57,30 @@ inline void TMULS(Out &dst, region::SubTileView<Parent, SubTile> &src,
 }
 
 template <is_tile_data_v Out, typename Parent, typename SubTile>
-inline void TROWMAX(Out &dst, region::SubTileView<Parent, SubTile> &src) {
+inline void TROWMAX(
+    Out &dst, region::SubTileView<Parent, SubTile> &src) {
   pto_region_unary<65>(dst, src);
 }
 
 template <is_tile_data_v Out, typename Parent, typename SubTile>
-inline void TROWSUM(Out &dst, region::SubTileView<Parent, SubTile> &src) {
+inline void TROWSUM(
+    Out &dst, region::SubTileView<Parent, SubTile> &src) {
   pto_region_unary<64>(dst, src);
 }
 
 template <is_tile_data_v Out, typename Parent, typename SubTile>
-inline void TEXP(Out &dst, region::SubTileView<Parent, SubTile> &src) {
+inline void TEXP(
+    Out &dst, region::SubTileView<Parent, SubTile> &src) {
   pto_region_unary<19>(dst, src);
 }
 
 template <int ParentSize, bool Init, bool Last, typename SubTile, typename In>
-inline void pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst,
-                                     In &src) {
+inline void
+pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   static_assert(SubTile::Rows == In::Rows && SubTile::Cols == In::Cols,
                 "TCVT assembly slot requires matching physical shape");
   constexpr int encoded_parent_size = Init ? ParentSize : 0;
+  const uintptr_t range_base_units = dst.range_base_units();
 #define PTO_REGION_TCVT_ASSEMBLY_BODY                                       \
   "BSTART.TEPL 27, %D[SrcType]\n"                                         \
   "B.DATR %D[DstType], RNONE\n"                                           \
@@ -83,7 +88,7 @@ inline void pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst,
   "B.DIM %[VR], 0, ->lb1\n"                                                \
   "B.DIM zero, %c[Cols], ->lb2\n"                                         \
   "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[Size]>\n"                   \
-  "B.ASSEMBLE %c[Init], %c[Last], zero, 0, %c[ParentSize]\n"
+  "B.ASSEMBLE %c[Init], %c[Last], %[Base], 0, %c[ParentSize]\n"
 #define PTO_REGION_TCVT_ASSEMBLY_INPUTS                                    \
   [Src] "Tr"(src.data()),                                                  \
   [SrcType] "i"(type_traits<typename In::DType>::TypeCode),                \
@@ -91,6 +96,7 @@ inline void pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst,
   [VC] "r"(src.GetValidCol()), [VR] "r"(src.GetValidRow()),               \
   [Cols] "i"(SubTile::Cols),                                               \
   [Size] "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode), \
+  [Base] "r"(range_base_units),                                             \
   [ParentSize] "i"(encoded_parent_size), [Init] "i"(Init),                \
   [Last] "i"(Last)
   if constexpr (Init) {
@@ -109,21 +115,20 @@ inline void pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst,
 }
 
 template <int ParentSize, typename SubTile, typename In>
-inline void pto_region_tcvt_phase(region::TileArrayOutputRef<SubTile> &dst,
-                                  In &src) {
-  const int ordinal = dst.ordinal();
+inline void
+pto_region_tcvt_phase(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   if (dst.slot_count() == 1)
     pto_region_tcvt_assemble<ParentSize, true, true>(dst, src);
-  else if (ordinal == 0)
+  else if (dst.ordinal() == 0)
     pto_region_tcvt_assemble<ParentSize, true, false>(dst, src);
-  else if (ordinal == dst.slot_count() - 1)
+  else if (dst.ordinal() == dst.slot_count() - 1)
     pto_region_tcvt_assemble<ParentSize, false, true>(dst, src);
   else
     pto_region_tcvt_assemble<ParentSize, false, false>(dst, src);
 }
 
 template <typename SubTile, typename In>
-inline void TCVT(region::TileArrayOutputRef<SubTile> &dst, In &src) {
+inline void TCVT(region::TileArrayOutputRef<SubTile> dst, In &src) {
   switch (dst.parent_size_code()) {
 #define PTO_REGION_PARENT_CASE(N)                                             \
   case N:                                                                     \

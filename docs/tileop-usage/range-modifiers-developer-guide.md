@@ -1,18 +1,22 @@
 # B.SUBVIEW / B.ASSEMBLE Developer Guide
 
-本文面向 TileOP kernel 开发者，介绍当前可用的新版 range modifier C++ 接口。
-这些接口将 PTO ISA 的 `B.SUBVIEW` 和 `B.ASSEMBLE` 封装为可传递的 range
-carrier，避免在业务代码中直接拼接 ISA 字段。
+本文面向 TileOP kernel 开发者，介绍当前可用的新版 TileArray region C++ 接口。
+推荐通过 `TPARTVIEW` 和 `TileArray`/`TASSEMBLY` 描述 parent Tile 的分区与组装，
+由 TileOP inline asm 将其附着到 binder 后的 `B.SUBVIEW`/`B.ASSEMBLE`。旧的
+`range::subview`/`range::assemble` 仅作为底层兼容与测试接口，不是新的业务代码主入口。
 
 ## 适用范围
 
-当前接口适用于以下场景：
+当前新版接口适用于以下场景：
 
 - source Tile 需要绑定一个 `B.SUBVIEW` 区域；
 - destination Tile 需要绑定一个 `B.ASSEMBLE` 区域；
 - 需要在多个操作或多个 kernel 阶段复用相同的 range 描述；
-- 需要让 `SubviewSizeCode`、`ParentSizeCode`、`INIT` 和 `LAST` 在编译期固定；
-  高层 source/destination API 都不要求开发者填写 `RegSrc`。
+- 需要把一个 parent Tile 划分为固定的 `Rows x Cols` 个 fragment；
+- 需要将多个 destination fragment 线性组装成一个 parent；
+- 需要让 `SubviewSizeCode`、`ParentSizeCode`、`INIT` 和 `LAST` 由类型和 slot
+  顺序推导；
+- 不希望在高层代码中填写 `RegSrc` 或物理寄存器编号。
 
 当前实现通过 inline asm 生成 range modifier。它不是 LLVM intrinsic lowering，
 但保持了后续切换到 compiler lowering 时的 C++ 调用形式。
@@ -21,16 +25,19 @@ carrier，避免在业务代码中直接拼接 ISA 字段。
 
 | C++ 接口 | ISA modifier | 操作数角色 |
 | --- | --- | --- |
-| `range::subview` / `range::Subview` | `B.SUBVIEW` | source |
-| `range::assemble` / `range::Assemble` | `B.ASSEMBLE` | destination |
+| `TPARTVIEW<SubTile, R, C>(parent)` 的 slot | `B.SUBVIEW` | source |
+| `TileArray<SubTile, R, C>` 的 destination slot | `B.ASSEMBLE` | destination |
+| `range::subview` / `range::Subview` | `B.SUBVIEW` | low-level source |
+| `range::assemble` / `range::Assemble` | `B.ASSEMBLE` | low-level destination |
 
 modifier 必须紧跟同一 bundle 中对应的 `B.IOT` 或 `B.IOS` binder。调用者只需
 把 carrier 传给消费该 Tile 的 TileOP；TileOP wrapper 负责发出 modifier。
 
 不要混淆以下两层接口：
 
-- `range::subview/assemble`：封装单个 Tile binder 的 ISA range modifier；
-- `TPARTVIEW/TASSEMBLY`：对 parent Tile 做连续分区和组装的高层 Tile region API。
+- `TPARTVIEW/TASSEMBLY`：开发者推荐使用的 parent Tile 分区/组装 API；
+- `range::subview/assemble`：封装单个 binder 的底层 ISA range modifier，主要供
+  兼容代码、底层实现和 MC 回归测试使用。
 
 ## 推荐写法
 
@@ -607,3 +614,71 @@ rg 'B\\.SUBVIEW|B\\.ASSEMBLE' kernel.s
 3. source/destination 角色没有反用；
 4. assembly lifecycle 与 slot 写入顺序一致；
 5. `RegSrc` 对应的 runtime base value 已正确绑定。
+
+## CubeM16 / CubeM32 支持边界
+
+`CubeM16` 和 `CubeM32` 是 Tile 的真实 layout 类型，不是 RowMajor/ColMajor 的
+别名。例如：
+
+```cpp
+using M16Parent = CubeTileM16<float, 16, 64>;
+using M16Fragment = CubeTileM16<float, 16, 16>;
+
+auto parts = TPARTVIEW<M16Fragment, 1, 4>(parent);
+auto fragment = parts[0][2];
+```
+
+```cpp
+using M32Parent = CubeTileM32<float, 32, 64>;
+using M32Fragment = CubeTileM32<float, 32, 16>;
+
+auto parts = TPARTVIEW<M32Fragment, 1, 4>(parent);
+auto fragment = parts[0][2];
+```
+
+TileArray 的 parent 和 fragment 必须匹配：
+
+- dtype 相同；
+- location 相同；
+- `BLayout` 相同，例如 `CubeM16 -> CubeM16` 或 `CubeM32 -> CubeM32`；
+- storage layout 相同；
+- physical shape 与 valid shape 完整覆盖；
+- 每个 fragment 的容量必须是 128 B 的整数倍。
+
+当前 TileOP region inline-asm producer 的已验证范围仍是
+`RowMajor + NoneBox`。因此上面的 M16/M32 类型示例目前用于类型和分区合同验证，
+不能据此宣称 `TROWMAX`、`TMULS`、`TEXP` 或所有 TileOP 已经支持 Cube region
+inline asm。Cube region 的 CELL 顺序、offset 和 producer 汇编需要单独完成并验证。
+
+### 当前 inline-asm 的 range 计算
+
+对于已支持的连续分区，slot 的线性 ordinal 为：
+
+```text
+ordinal = row * Cols + col
+offset_units = ordinal * (SubTile::LogicalTileBytes / 128)
+```
+
+其中 `offset_units` 的单位是 128 B。当前 region inline-asm 实现把这个值放入
+编译器分配的基址 GPR，并将指令的 `uimm11` 固定为 0，因此实际编码仍遵循
+`GPR[RegSrc] + uimm11` 的 ISA 定义；开发者不需要也不能填写寄存器编号。
+source `B.SUBVIEW` 和 destination `B.ASSEMBLE` 都必须使用对应 slot 的 range，
+不能把所有 slot 固定到 offset 0。`B.ASSEMBLE` 的 `INIT`、middle 和 `LAST` 由
+slot ordinal 推导；开发者不直接填写这些字段。
+
+### 完整组装示例
+
+```cpp
+using Parent = TileLeft<__bf16, 32, 64>;
+using Fragment = TileLeft<__bf16, 32, 16>;
+
+TileArray<Fragment, 1, 4> fragments;
+for (int col = 0; col < 4; ++col)
+  TCVT(fragments[0][col], input[col]);
+
+Parent result = TASSEMBLY<Parent>(std::move(fragments));
+```
+
+这个写法表达的是一个 parent 和四个 destination slot，不是四个独立的
+architectural Tile。每个 producer 必须把自己的 slot range 附加到对应的
+`B.ASSEMBLE`；`TASSEMBLY` 只消费完整的 TileArray 并返回 parent。
