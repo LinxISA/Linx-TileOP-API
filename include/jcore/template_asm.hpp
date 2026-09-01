@@ -2657,7 +2657,7 @@ namespace pto_matmul_detail {
 
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
   "BSTART.CUBE " OPCODE ", %D[DataTypeA]\n"                                      \
-  "B.DATR %D[DataTypeB], RNONE, NOSAT\n" EXTRA_ATTRS                     \
+  "B.DATR %D[DataTypeB], Zero, RNONE, NOSAT\n" EXTRA_ATTRS               \
   "B.DIM %[M], 0, ->lb0\n"                                                   \
   "B.DIM %[N], 0, ->lb1\n"                                                   \
   "B.DIM %[K], 0, ->lb2\n"
@@ -9526,7 +9526,11 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
 // TROWEXPAND: broadcast first element of each row
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
-  if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
+  static_assert(std::is_same<typename tile_shape_in::DType,
+                             typename tile_shape_out::DType>::value,
+                "TROWEXPAND: src/dst dtype must match");
+  if constexpr (tile_shape_out::ValidCol > 0 &&
+                tile_shape_out::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 68, %D1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -9536,9 +9540,9 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9552,9 +9556,9 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9792,7 +9796,11 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLEXPAND: broadcast first element of each col
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
-  if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
+  static_assert(std::is_same<typename tile_shape_in::DType,
+                             typename tile_shape_out::DType>::value,
+                "TCOLEXPAND: src/dst dtype must match");
+  if constexpr (tile_shape_out::ValidCol > 0 &&
+                tile_shape_out::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 84, %D1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -9802,9 +9810,9 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9818,9 +9826,9 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );

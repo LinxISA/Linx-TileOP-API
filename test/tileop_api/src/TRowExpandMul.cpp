@@ -28,6 +28,7 @@ void test_row_vector_src1(T *dst, T *s0, T *s1) {
   TLOAD(d0, g0);
   TLOAD(d1, g1);
 
+  TROWEXPAND(d_out, d1);
   TROWEXPANDMUL(d_out, d0, d1);
   TROWEXPANDADD(d_out, d0, d1);
   TROWEXPANDSUB(d_out, d0, d1);
@@ -57,6 +58,7 @@ void test_col_vector_src1(T *dst, T *s0, T *s1) {
   TLOAD(d0, g0);
   TLOAD(d1, g1);
 
+  TCOLEXPAND(d_out, d1);
   TCOLEXPANDMUL(d_out, d0, d1);
   TCOLEXPANDADD(d_out, d0, d1);
   TCOLEXPANDSUB(d_out, d0, d1);
