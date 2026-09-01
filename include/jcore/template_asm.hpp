@@ -7248,42 +7248,48 @@ void TPRELU(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 }
 
 
-// TSEL: select between two tiles using mask
+// TSEL: select true_src where mask is set, otherwise preserve the prior dst.
+// The false source is an explicit ISA operand, so keep dst live as an input
+// and bind it with a second B.IOT before publishing the destination.
 template <is_tile_data_v tile_shape>
-void TSEL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TSEL(tile_shape &dst, tile_shape &mask, tile_shape &true_src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
-    "BSTART.TEPL 26, %D1\n"
-    "B.DIM zero, %c2, ->lb0\n"
-    "B.DIM zero, %c3, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "BSTART.TEPL 26, %D2\n"
+    "B.DIM zero, %c3, ->lb0\n"
+    "B.DIM zero, %c4, ->lb1\n"
+    "B.DIM zero, %c5, ->lb2\n"
+    "B.IOT %6, %7, mask=1111\n"
+    "B.IOT %1, mask=1111, last, ->%0<%Z8>\n"
     ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "i"(tile_shape::ValidCol),
-      "i"(tile_shape::ValidRow),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+    : [Dst] "=Tr"(dst.data())
+    : [Prior] "0"(dst.data()),
+      [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [ValidCol] "i"(tile_shape::ValidCol),
+      [ValidRow] "i"(tile_shape::ValidRow),
+      [Cols] "i"(tile_shape::Cols),
+      [Mask] "Tr"(mask.data()),
+      [True] "Tr"(true_src.data()),
+      [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
   );
   } else {
   asm volatile(
-    "BSTART.TEPL 26, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "BSTART.TEPL 26, %D2\n"
+    "B.DIM %3, 0, ->lb0\n"
+    "B.DIM %4, 0, ->lb1\n"
+    "B.DIM zero, %c5, ->lb2\n"
+    "B.IOT %6, %7, mask=1111\n"
+    "B.IOT %1, mask=1111, last, ->%0<%Z8>\n"
     ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape::Cols),
-      "Tr"(src0.data()),
-      "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+    : [Dst] "=Tr"(dst.data())
+    : [Prior] "0"(dst.data()),
+      [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [ValidCol] "r"(mask.GetValidCol()),
+      [ValidRow] "r"(mask.GetValidRow()),
+      [Cols] "i"(tile_shape::Cols),
+      [Mask] "Tr"(mask.data()),
+      [True] "Tr"(true_src.data()),
+      [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
   );
   }
 }
