@@ -4428,14 +4428,34 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
         [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 
+#define PTO_MX_ACC_CSCALE \
+  ".if %c[CScaleEn]\n" \
+  "B.IOT %[CScaleOperand], mask=1111\n" \
+  ".endif\n"
+
+#define PTO_MX_ACC_OPTIONAL_EMIT(MASK, SRC, OUT, IOR, STORAGE) \
+  asm volatile(PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR) \
+      "B.IOT %[C], mask=1111\n" PTO_MX_##STORAGE##_SRC_##MASK \
+      PTO_MX_ACC_CSCALE PTO_FIXP_PPSRC_##SRC PTO_FIXP_OUT_##OUT \
+      PTO_FIXP_IOR_##IOR \
+      : PTO_FIXP_OUT_DECL_##OUT \
+      : [C] "Tr"(c.data()), [CScaleOperand] "Tr"(cscale.data()), \
+        PTO_MX_##STORAGE##_INPUTS_##MASK, PTO_PP_INPUTS_##SRC \
+        [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), \
+        PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), \
+        [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), \
+        [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), \
+        [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
+      : "memory")
+
 #define PTO_MX_OPT_PLAIN_L(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX",L,"","",NONE,M,S,O,I)
 #define PTO_MX_OPT_PLAIN_SB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX",SB,"","",NONE,M,S,O,I)
 #define PTO_MX_OPT_PLAIN_SA(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX",SA,"","",NONE,M,S,O,I)
 #define PTO_MX_OPT_PLAIN_SAB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX",SAB,"","",NONE,M,S,O,I)
-#define PTO_MX_OPT_ACC_L(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.ACC",L,"B.IOT %[C], mask=1111\n","",ACC,M,S,O,I)
-#define PTO_MX_OPT_ACC_SB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.ACC",SB,"B.IOT %[C], mask=1111\n","",ACC,M,S,O,I)
-#define PTO_MX_OPT_ACC_SA(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.ACC",SA,"B.IOT %[C], mask=1111\n","",ACC,M,S,O,I)
-#define PTO_MX_OPT_ACC_SAB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.ACC",SAB,"B.IOT %[C], mask=1111\n","",ACC,M,S,O,I)
+#define PTO_MX_OPT_ACC_L(M,S,O,I) PTO_MX_ACC_OPTIONAL_EMIT(M,S,O,I,L)
+#define PTO_MX_OPT_ACC_SB(M,S,O,I) PTO_MX_ACC_OPTIONAL_EMIT(M,S,O,I,SB)
+#define PTO_MX_OPT_ACC_SA(M,S,O,I) PTO_MX_ACC_OPTIONAL_EMIT(M,S,O,I,SA)
+#define PTO_MX_OPT_ACC_SAB(M,S,O,I) PTO_MX_ACC_OPTIONAL_EMIT(M,S,O,I,SAB)
 #define PTO_MX_OPT_BIAS_L(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",L,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
 #define PTO_MX_OPT_BIAS_SB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SB,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
 #define PTO_MX_OPT_BIAS_SA(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SA,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
