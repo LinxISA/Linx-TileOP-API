@@ -52,7 +52,7 @@ CC_VER ?= -std=c++20
 CC_LINK += --target=$(LINX_TARGET) -mlxbc
 ifneq ($(strip $(LINX_SYSROOT)),)
 CC_O += --sysroot=$(LINX_SYSROOT) -nostdinc++ \
-        -isystem $(LINX_SYSROOT)/include/c++/v1
+        -isystem $(LINX_SYSROOT)/usr/include/c++/v1
 CC_LINK += --sysroot=$(LINX_SYSROOT)
 endif
 # COMM_SRC_FILE += $(ROOT)/test/common/_start.s

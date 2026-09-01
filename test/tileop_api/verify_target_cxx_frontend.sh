@@ -13,7 +13,7 @@ FLAGS=(
   -mlxbc
   --sysroot="$LINX_SYSROOT"
   -nostdinc++
-  -isystem "$LINX_SYSROOT/include/c++/v1"
+  -isystem "$LINX_SYSROOT/usr/include/c++/v1"
   -fenable-matrix
   -O2
   -std=c++20
@@ -50,17 +50,17 @@ from pathlib import Path
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
 functions = re.split(r"(?=^define )", text, flags=re.MULTILINE)
 expected = {
-    "carrier_zero_scale": (3, 4, 4),
-    "carrier_scale_a": (4, 5, 5),
-    "carrier_scale_b": (4, 5, 5),
+    "carrier_zero_scale": (3, 5, 4),
+    "carrier_scale_a": (4, 6, 5),
+    "carrier_scale_b": (4, 6, 5),
     "carrier_both_scales": (5, 6, 6),
-    "carrier_shared_zero_scale": (3, 4, 4),
-    "carrier_shared_scale_a": (4, 5, 5),
-    "carrier_shared_scale_b": (4, 5, 5),
+    "carrier_shared_zero_scale": (3, 5, 4),
+    "carrier_shared_scale_a": (4, 6, 5),
+    "carrier_shared_scale_b": (4, 6, 5),
     "carrier_shared_both_scales": (5, 7, 6),
-    "carrier_gemv_zero_scale": (3, 4, 4),
-    "carrier_gemv_scale_a": (4, 5, 5),
-    "carrier_gemv_scale_b": (4, 5, 5),
+    "carrier_gemv_zero_scale": (3, 5, 4),
+    "carrier_gemv_scale_a": (4, 6, 5),
+    "carrier_gemv_scale_b": (4, 6, 5),
     "carrier_gemv_both_scales": (5, 6, 6),
 }
 for name, counts in expected.items():

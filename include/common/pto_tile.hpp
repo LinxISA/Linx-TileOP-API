@@ -1060,6 +1060,22 @@ using CubeTileM32 =
   Tile<Location::Left, Element_, Rows_, Cols_, BLayout::CubeM32,
        RowValid_, ColValid_>;
 
+// Vector operands may use the same persistent CUBE cell layouts as matrix
+// operands.  The layout conversion selector is determined solely by
+// BFractal (ND2M16/ND2M32 for loads and M162ND/M322ND for stores), so these
+// aliases intentionally share the Tile implementation with CubeTileM16/M32.
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using VecTileM16 =
+  Tile<Location::Vec, Element_, Rows_, Cols_, BLayout::CubeM16,
+       RowValid_, ColValid_>;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using VecTileM32 =
+  Tile<Location::Vec, Element_, Rows_, Cols_, BLayout::CubeM32,
+       RowValid_, ColValid_>;
+
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using CubeTileN8 =
