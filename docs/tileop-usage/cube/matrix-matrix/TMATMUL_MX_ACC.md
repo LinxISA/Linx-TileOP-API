@@ -157,18 +157,15 @@ BSTOP       or the next BSTART completion boundary
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using A = CubeTileM16<__fp8_e4m3, 16, 32>;
-using B = CubeTileN8<__half, 32, 16>;
+using A = CubeTileM16<__half, 16, 32>;
+using B = CubeTileN8<__fp8_e4m3, 32, 16>;
 using Acc = CubeAccumulatorM16<float, 16, 16>;
-using ScaleA = Tile<Location::Scaling, __fp8_e8m0, 16, 8,
-                     BLayout::RowMajor, 16, 1>;
 using ScaleB = Tile<Location::Scaling, __fp8_e8m0, 8, 16,
                      BLayout::RowMajor, 1, 16>;
 
-void matmul_mx_acc(Acc &d, Acc &c, A &a, ScaleA &scale_a, B &b,
-                   ScaleB &scale_b) {
-  // d = c + dequant(a, scale_a) * dequant(b, scale_b)。
-  TMATMUL_MX_ACC(d, c, a, scale_a, b, scale_b);
+void matmul_mx_acc(Acc &d, Acc &c, A &a, B &b, ScaleB &scale_b) {
+  // d = c + a * dequant(b, scale_b)。
+  TMATMUL_MX_ACC(d, c, a, b, scale_b);
 }
 ```
 

@@ -102,8 +102,10 @@ void scatter(float *base, const float *input, const uint16_t *offsets) {
   GM base_gm(base);
   Values src;
   ByteOffsets offset;
-  TLOAD(src, global_tensor<float, RowMajor<8, 32>>(input));
-  TLOAD(offset, global_tensor<uint16_t, RowMajor<8, 32>>(offsets));
+  global_tensor<float, RowMajor<8, 32>> input_gm(input);
+  global_tensor<uint16_t, RowMajor<8, 32>> offsets_gm(offsets);
+  TLOAD(src, input_gm);
+  TLOAD(offset, offsets_gm);
   // offset 中的每个元素是相对于 GM base 的字节位移。
   MSCATTER(base_gm, src, offset);
 }

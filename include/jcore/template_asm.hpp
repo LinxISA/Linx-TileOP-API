@@ -1084,6 +1084,7 @@ LINX_FOR_EACH_P2P_X4_DST(LINX_DEFINE_P2P_X4_CVT_TO)
 
 LINX_FOR_EACH_PACKED_DST(LINX_DEFINE_PACKED_CVT_TO)
 
+#ifndef PTO_LINX_HOST_CXX
 typedef __attribute__((address_space(6))) __fp4_e1m2x2
     __fp4_e1m2x2_as6;
 
@@ -1256,6 +1257,8 @@ LINX_CVT_INLINE void linx_cvt_packed(__bf16x2 &dst,
                            SIMPLE_STORAGE,
                            dst, src0, src1);
 }
+
+#endif  // PTO_LINX_HOST_CXX
 
 template <class Dst, class Src>
 LINX_CVT_INLINE Dst linx_cvt_as(const Src &src) {
@@ -6073,6 +6076,20 @@ PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx,
       quant_gpr, lrelu_gpr, M, N, K);
 }
 
+
+template <is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
+          is_local_tile_v tile_shape_vec, is_tile_data_v tile_shape_bias,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TGEMV_BIAS(tile_shape_d &d, tile_shape_mtx &mtx,
+                 tile_shape_vec &vec, tile_shape_bias &bias,
+                 const Options &options);
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_tile_v tile_shape_mtx, is_local_tile_v tile_shape_vec,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TGEMV_ACC(tile_shape_d &d, tile_shape_c &c,
+                 tile_shape_mtx &mtx, tile_shape_vec &vec,
+                 const Options &options);
 
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_local_tile_v tile_shape_mtx,
           is_local_tile_v tile_shape_vec,

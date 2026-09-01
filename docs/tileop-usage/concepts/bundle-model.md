@@ -19,6 +19,7 @@ TileOP 通过 `BSTART`、`B.DIM`、`B.DATR`、`B.IOR`、`B.IOT`、`B.IOS` 和 `B
 ## 使用示例
 
 ```cpp
+// tileop-doc: fragment -- illustrative call; operand declarations are omitted.
 // 推荐：直接调用具体操作的 C++ API。
 TADD(dst, lhs, rhs);
 ```

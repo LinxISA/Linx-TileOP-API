@@ -703,6 +703,13 @@ struct GlobalTensor {
     if constexpr (staticStride[4] == DYNAMIC) stride_.stride[4] = stride.stride[4];
   }
 
+  // Source descriptors are also commonly constructed from read-only buffers.
+  // Keep the descriptor representation mutable because the same type is used
+  // by store operations, while accepting const pointers at the API boundary.
+  inline GlobalTensor(const DType *data, const Shape &shape = defaultShape,
+                      const Stride &stride = defaultStride)
+      : GlobalTensor(const_cast<DType *>(data), shape, stride) {}
+
   inline int GetShape(const int dim) const
   {
     switch (dim) {
@@ -1178,6 +1185,9 @@ public:
             typename = std::enable_if_t<(Rows != DYNAMIC && Cols != DYNAMIC), T>>
   global_tensor(DType* data)
             : impl_(data), layout_(MLayout{}) {}
+
+  global_tensor(const DType* data)
+            : impl_(const_cast<DType*>(data)), layout_(MLayout{}) {}
 
   template <typename T = void,
             typename = std::enable_if_t<(Rows == DYNAMIC && Cols != DYNAMIC) || (Rows != DYNAMIC && Cols == DYNAMIC), T>>

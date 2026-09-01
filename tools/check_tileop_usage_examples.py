@@ -26,6 +26,7 @@ USAGE_SECTION = re.compile(
     r"^## (?:\d+\.\s*)?使用示例\s*$([\s\S]*?)(?=^## |\Z)", re.M
 )
 CPP_BLOCK = re.compile(r"^```cpp\s*\n([\s\S]*?)^```\s*$", re.M)
+FRAGMENT_MARKER = "tileop-doc: fragment"
 FIXED_REGISTER = re.compile(
     r'\bregister\s+([^;\n]*?)\s+asm\s*\('
     r'\s*"r"\s*#\s*[A-Za-z_]\w*\s*\)'
@@ -52,6 +53,8 @@ def examples() -> list[Example]:
         if not match:
             continue
         for number, block in enumerate(CPP_BLOCK.finditer(match.group(1)), 1):
+            if FRAGMENT_MARKER in block.group(1):
+                continue
             result.append(Example(document, number, block.group(1)))
     return result
 

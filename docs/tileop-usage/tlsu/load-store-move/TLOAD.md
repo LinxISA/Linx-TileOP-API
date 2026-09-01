@@ -44,7 +44,7 @@ requires(cube_shape::IsCubeLayout) void TLOAD(cube_shape &dst, gm_shape &src);
 
 ## 约束
 
-`TLOAD/TSTORE` 的 GM 行 stride 以**字节**计，而不是元素数；普通 Tile 与 CUBE Tile 分别走普通传输和布局转换路径。source/destination 的顺序不可互换。
+`TLOAD/TSTORE` 的 GM row stride in **bytes**，而不是元素数；普通 Tile 与 CUBE Tile 分别走普通传输和布局转换路径。source/destination 的顺序不可互换。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
@@ -65,6 +65,37 @@ requires(cube_shape::IsCubeLayout) void TLOAD(cube_shape &dst, gm_shape &src);
 | range / subview | base address 与 byte offset 分别传递 | 最终地址为 base 加操作的 range offset。 |
 
 普通 Tile 使用常规 TLSU 传输；CUBE Tile 由统一 `TLOAD/TSTORE` 自动选择布局转换。需要在源码中显式表达该边界时，可使用 `TLOAD_CUBE/TSTORE_CUBE`。
+
+### Vector CUBE layout
+
+Vector location 也支持持久化的 CUBE cell layout。推荐使用专用别名表达
+layout 意图：
+
+| 别名 | layout | `TLOAD` 转换选择器 | 适用的最大逻辑行数 |
+| --- | --- | --- | --- |
+| `VecTileM16<T, R, C>` | `BLayout::CubeM16` | `ND2M16` | 16 |
+| `VecTileM32<T, R, C>` | `BLayout::CubeM32` | `ND2M32` | 32 |
+
+这两个别名等价于 `Tile<Location::Vec, T, R, C, BLayout::CubeM16>` 或
+`BLayout::CubeM32`。它们使用 CUBE 的持久化 cell 存储，而不是普通
+`RowMajor` Vector Tile；对应的 `TSTORE` 选择器分别是 `M162ND` 和
+`M322ND`。加载和存储必须使用相同的 CUBE layout，不能在 M16 与 M32
+之间混用。
+
+```cpp
+using VecM16 = VecTileM16<float, 16, 32>;
+using VecM32 = VecTileM32<float, 32, 32>;
+using GM16 = global_tensor<float, RowMajor<16, 32>>;
+using GM32 = global_tensor<float, RowMajor<32, 32>>;
+
+void load_vector_cubes(float *data16, float *data32,
+                       VecM16 &m16, VecM32 &m32) {
+  GM16 src16(data16);
+  GM32 src32(data32);
+  TLOAD(m16, src16);  // ND2M16
+  TLOAD(m32, src32);  // ND2M32
+}
+```
 
 ## 默认值
 

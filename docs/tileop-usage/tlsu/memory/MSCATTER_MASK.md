@@ -115,9 +115,12 @@ void scatter_masked(float *base, const float *input, const uint16_t *offsets,
   Values src;
   ByteOffsets offset;
   Mask mask;
-  TLOAD(src, global_tensor<float, RowMajor<8, 32>>(input));
-  TLOAD(offset, global_tensor<uint16_t, RowMajor<8, 32>>(offsets));
-  TLOAD(mask, global_tensor<uint8_t, RowMajor<8, 32>>(enabled));
+  global_tensor<float, RowMajor<8, 32>> input_gm(input);
+  global_tensor<uint16_t, RowMajor<8, 32>> offsets_gm(offsets);
+  global_tensor<uint8_t, RowMajor<8, 32>> enabled_gm(enabled);
+  TLOAD(src, input_gm);
+  TLOAD(offset, offsets_gm);
+  TLOAD(mask, enabled_gm);
   MSCATTER_MASK(base_gm, src, offset, mask);
 }
 ```

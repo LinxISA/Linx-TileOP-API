@@ -3,6 +3,22 @@
 物理 Tile shape、valid region 和 SizeCode 是不同概念。valid rows/columns 不得超过物理
 rows/columns，SizeCode 表示容量而不是重新定义逻辑矩阵维度。
 
+## Vector 的 CUBE layout
+
+Vector location 的 Tile 可以使用 CUBE cell layout。`VecTileM16<T, R, C>` 和
+`VecTileM32<T, R, C>` 分别是以下类型的便捷别名：
+
+```cpp
+using VecTileM16 = Tile<Location::Vec, T, R, C, BLayout::CubeM16>;
+using VecTileM32 = Tile<Location::Vec, T, R, C, BLayout::CubeM32>;
+```
+
+`CubeM16` 的逻辑行数不能超过 16，`CubeM32` 的逻辑行数不能超过 32；
+`ValidRow`/`ValidCol` 仍然不能超过对应的物理 `Rows`/`Cols`。对 GM 进行
+加载和存储时，`TLOAD`/`TSTORE` 会分别选择 `ND2M16`/`M162ND` 或
+`ND2M32`/`M322ND`。普通 Vector Tile（例如 `BLayout::RowMajor`）不属于
+这一持久化 CUBE layout，并继续使用普通传输路径。
+
 ## 分区与组装
 
 对于需要按连续区域处理一个 parent Tile 的算法，可以使用 TileOP 的分区接口：

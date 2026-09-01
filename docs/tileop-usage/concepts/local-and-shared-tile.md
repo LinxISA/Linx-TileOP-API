@@ -14,6 +14,7 @@ Local 与 Shared 对 SizeCode、容量、PE mask、handle 生命周期和参与 
 ## 使用示例
 
 ```cpp
+// tileop-doc: fragment -- illustrative call; operand declarations are omitted.
 // 具体 Tile 类型必须与操作页面声明的 location 约束一致。
 TADD(local_dst, local_lhs, local_rhs);
 ```

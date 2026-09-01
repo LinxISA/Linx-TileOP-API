@@ -64,6 +64,37 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src);
 
 普通 Tile 使用常规 TLSU 传输；CUBE Tile 由统一 `TLOAD/TSTORE` 自动选择布局转换。需要在源码中显式表达该边界时，可使用 `TLOAD_CUBE/TSTORE_CUBE`。
 
+### Vector CUBE layout
+
+Vector location 也支持持久化的 CUBE cell layout。推荐使用专用别名表达
+layout 意图：
+
+| 别名 | layout | `TSTORE` 转换选择器 | 适用的最大逻辑行数 |
+| --- | --- | --- | --- |
+| `VecTileM16<T, R, C>` | `BLayout::CubeM16` | `M162ND` | 16 |
+| `VecTileM32<T, R, C>` | `BLayout::CubeM32` | `M322ND` | 32 |
+
+这两个别名等价于 `Tile<Location::Vec, T, R, C, BLayout::CubeM16>` 或
+`BLayout::CubeM32`。它们使用 CUBE 的持久化 cell 存储，而不是普通
+`RowMajor` Vector Tile；对应的 `TLOAD` 选择器分别是 `ND2M16` 和
+`ND2M32`。加载和存储必须使用相同的 CUBE layout，不能在 M16 与 M32
+之间混用。
+
+```cpp
+using VecM16 = VecTileM16<float, 16, 32>;
+using VecM32 = VecTileM32<float, 32, 32>;
+using GM16 = global_tensor<float, RowMajor<16, 32>>;
+using GM32 = global_tensor<float, RowMajor<32, 32>>;
+
+void store_vector_cubes(float *data16, float *data32,
+                        const VecM16 &m16, const VecM32 &m32) {
+  GM16 dst16(data16);
+  GM32 dst32(data32);
+  TSTORE(dst16, m16);  // M162ND
+  TSTORE(dst32, m32);  // M322ND
+}
+```
+
 ## 默认值
 
  此页面列出的 C++ 形参没有默认实参；不要把省略某个操作数与传入零值视为等价。

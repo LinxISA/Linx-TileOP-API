@@ -108,7 +108,8 @@ void gather(float *out, const float *base, const uint16_t *offsets) {
   GMOut out_gm(out);
   ByteOffsets offset;
   Values dst;
-  TLOAD(offset, global_tensor<uint16_t, RowMajor<8, 32>>(offsets));
+  global_tensor<uint16_t, RowMajor<8, 32>> offsets_gm(offsets);
+  TLOAD(offset, offsets_gm);
   // offset 中的每个元素是相对于 GM base 的字节位移。
   MGATHER(dst, base_gm, offset);
   TSTORE(out_gm, dst);

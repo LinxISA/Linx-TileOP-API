@@ -10,6 +10,7 @@
 #define PTO_TEST_LINX_HOST_TYPE_SHIM_HPP
 
 #define PTO_LINX_COMPAT_TYPES_PROVIDED 1
+#define PTO_LINX_HOST_CXX 1
 
 inline unsigned __builtin_linx_get_thread_idx() { return 0; }
 

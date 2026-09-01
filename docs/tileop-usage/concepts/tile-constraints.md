@@ -18,6 +18,7 @@
 ## 使用示例
 
 ```cpp
+// tileop-doc: fragment -- illustrative call; operand declarations are omitted.
 // dst、lhs、rhs 的 dtype/shape/layout/location 必须满足 TADD 页面约束。
 TADD(dst, lhs, rhs);
 ```

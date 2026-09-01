@@ -29,7 +29,7 @@ def render() -> str:
     lines = [
         "# LinxISA / PTO ISA v0.58.3 执行引擎",
         "",
-        "架构定义的引擎类别只有 **VEC**、**TLSU**、**CUBE** 和 **SFU**。",
+        "架构定义的引擎类别只有 **VEC**, **TLSU**, **CUBE**, and **SFU**。",
         "VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。",
         "TEPL 仍是唯一的编译 carrier 标识。`BSTART.VEC` 和 `BSTART.SFU` 是特定引擎的汇编别名；",
         "inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。",

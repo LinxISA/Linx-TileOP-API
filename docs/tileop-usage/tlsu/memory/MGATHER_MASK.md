@@ -117,8 +117,10 @@ void gather_masked(float *out, const float *base, const uint16_t *offsets,
   Values dst;
   ByteOffsets offset;
   Mask mask;
-  TLOAD(offset, global_tensor<uint16_t, RowMajor<8, 32>>(offsets));
-  TLOAD(mask, global_tensor<uint8_t, RowMajor<8, 32>>(enabled));
+  global_tensor<uint16_t, RowMajor<8, 32>> offsets_gm(offsets);
+  global_tensor<uint8_t, RowMajor<8, 32>> enabled_gm(enabled);
+  TLOAD(offset, offsets_gm);
+  TLOAD(mask, enabled_gm);
   MGATHER_MASK<Values, ByteOffsets, Mask, GM, TmaPadValue::Zero>(
       dst, base_gm, offset, mask);
   TSTORE(out_gm, dst);
