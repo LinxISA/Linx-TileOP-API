@@ -15,6 +15,10 @@ template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
 PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src);
 template <is_tile_data_v cube_shape, is_global_data_v gm_shape>
 requires(cube_shape::IsCubeLayout) void TLOAD(cube_shape &dst, gm_shape &src);
+
+// Explicit CUBE layout-conversion spelling.
+template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
+requires(cube_shape::IsCubeLayout) void TLOAD_CUBE(cube_shape &dst, gm_shape &src);
 ```
 
 ### 支持的数据类型
@@ -65,6 +69,23 @@ requires(cube_shape::IsCubeLayout) void TLOAD(cube_shape &dst, gm_shape &src);
 | range / subview | base address 与 byte offset 分别传递 | 最终地址为 base 加操作的 range offset。 |
 
 普通 Tile 使用常规 TLSU 传输；CUBE Tile 由统一 `TLOAD/TSTORE` 自动选择布局转换。需要在源码中显式表达该边界时，可使用 `TLOAD_CUBE/TSTORE_CUBE`。
+
+### CUBE load contract
+
+使用 `TLOAD_CUBE(dst, src)` 时，`dst` 必须是 Local CUBE Tile，`src` 必须是
+相同 dtype 的 `global_tensor`。Local CUBE capacity 必须在 `128 B..256 KiB`
+范围内，且足以容纳该 CUBE layout 的逻辑 tile。`LB0/LB1` 传递 runtime valid
+columns/rows，`LB2` 不参与 CUBE load；valid shape 不能超过 physical shape，
+加载 padding 固定为 `Zero`。
+
+`CubeM16`、`CubeM32` 和 `CubeN8` 分别使用 `ND2M16`、`ND2M32` 和 `ND2N8`；
+对应 store selector 是 `M162ND`、`M322ND` 和 `N82ND`。不能在这些 layout
+之间复用错误的转换选择器。
+
+`TLOAD_CUBE` 的两个 C++ 参数顺序是 `(cube_tile, global_tensor)`；它不是
+Shared load 的返回值形式，也不接受 iterator view 作为 GM 本体。普通 `TLOAD`
+在目标是 CUBE Tile 时会选择相同的转换路径，但需要显式表达转换边界时应使用
+上面的 `TLOAD_CUBE` 签名。
 
 ### Vector CUBE layout
 

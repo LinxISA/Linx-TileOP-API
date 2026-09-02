@@ -1,6 +1,6 @@
 # TMRGSORT
 
-`TMRGSORT` 稳定合并两个已排序的单行 Local 数据流。
+`TMRGSORT` 稳定合并两个已排序的单行 Local RowMajor 数据流。
 
 ## C++ 接口
 
@@ -17,8 +17,8 @@ void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right, bool descending = 
 
 | 操作数角色 | 类型要求 |
 | --- | --- |
-| 值输入 / 值输出 | 支持FP32、FP16类型。 |
-| 索引输出 | `U32`，保存组内原始位置。 |
+值输入 / 值输出 | 支持FP32、FP16 类型，三者 dtype 必须一致。
+| 索引输出 | 本接口没有索引输出；如需值和 U32 组内索引，使用 `TSORT`。 |
 
 ### 参数说明
 
@@ -40,7 +40,11 @@ void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right, bool descending = 
 
 ## 约束
 
-排序输出值与输入的有效区域对应；索引输出使用 U32 的组内原始位置。排序宽度、行组形状和 输入的已排序前提（仅 merge sort）必须满足该操作定义。
+三个 Tile 必须都是 Vector Local、非 boxed 的 RowMajor Tile，且物理行数均为
+`1`。两个 source 的 valid columns 必须非零；`dst` 的 valid columns 必须等于
+两者 valid columns 之和，且 `dst` 物理 columns 足以容纳该结果。物理 columns
+还必须是 2 的幂，且 `dst.Cols / 2 < combined_valid_columns`。输入各自必须已按
+相同方向排序；`TMRGSORT` 不会执行预排序。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
@@ -48,7 +52,7 @@ void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right, bool descending = 
 
 | 项目 | 规则 |
 | --- | --- |
-| 有效元素 | 仅在各独立行组的有效范围内排序或合并；索引以该有效行组为基准。 |
+| 有效元素 | 仅合并两个 source 的有效列，输出 valid shape 为 `1 x (L + R)`；padding 不参与合并。 |
 | 物理容量 / SizeCode | 只决定容量，不重新定义逻辑 shape。 |
 | 输出 padding | 除非本操作明确规定填充值或传播规则，否则视为不可依赖。 |
 

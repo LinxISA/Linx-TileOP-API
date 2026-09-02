@@ -46,6 +46,16 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(
 | `bias` | 偏置 Tile，用于需要偏置的重载。 |
 | `options` | `fixp::Options` 选项对象；携带量化、激活、转置、缩放以及可选辅助输出配置。 |
 
+### Bias Tile 契约
+
+Bias 是普通 Local RowMajor Tile，而不是 CUBE CELL Tile。它的 dtype 必须与
+该输入组合派生出的 accumulator 类型一致；例如 FP16 矩阵输入使用 FP32
+accumulator，因此 Bias 也使用 FP32。Bias 的有效区域固定为 `1 x N`，其中
+`N` 与矩阵结果列数一致；物理 shape 可以更大，但不能把 padding 当作 Bias。
+
+Bias 从 GM 加载时使用普通 `TLOAD(bias, bias_gm)`。`TLOAD_CUBE` 只接受
+CUBE layout，不能用于 Bias。
+
 ### 重载选择
 
 - **基础重载**：不传 `options`，使用该操作的默认后处理属性。

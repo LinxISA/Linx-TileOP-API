@@ -35,7 +35,8 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src);
 
 ## 约束
 
-该操作沿列方向归约或广播；输入、输出及广播 Tile 的有效区域和 shape 必须满足 该方向的对应关系，且索引输出的整数类型必须符合本页约束。
+该操作沿每列的行轴归约。输入有效 shape 为 `R x C`，输出逻辑 valid
+shape 必须为 `1 x C`，输出 dtype 与输入 dtype 相同。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
@@ -43,7 +44,7 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src);
 
 | 项目 | 规则 |
 | --- | --- |
-| 有效元素 | 归约轴会收缩，广播轴会扩展；输出 valid region 由该操作的轴规则决定。 |
+| 有效元素 | 输入 `R x C` 的每列产生一个元素，输出 valid shape 为 `1 x C`。 |
 | 物理容量 / SizeCode | 只决定容量，不重新定义逻辑 shape。 |
 | 输出 padding | 除非本操作明确规定填充值或传播规则，否则视为不可依赖。 |
 

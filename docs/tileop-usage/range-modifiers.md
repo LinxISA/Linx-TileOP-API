@@ -101,7 +101,7 @@ using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
 using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
 
 Parent parent;
-auto source = TPARTVIEW<Fragment, 1, 4>(parent)[0][2];
+auto source_tile = TPARTVIEW<Fragment, 1, 4>(parent)[0][2];
 
 TileArray<Fragment, 1, 4> destinations;
 TCVT(destinations[0][2], source_tile);

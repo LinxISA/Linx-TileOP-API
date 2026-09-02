@@ -11,6 +11,7 @@ INSTALL_DIR = $(shell $(CLANG_PREFIX)/bin/clang -print-resource-dir)/include/$(L
 
 check:
 	python3 tools/generate_engine_docs.py --check
+	python3 tools/check_issue_49_docs.py
 	python3 tools/check_tileop_usage_examples.py
 	python3 test/test_v058_engine_contract.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \

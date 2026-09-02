@@ -32,3 +32,75 @@ TADD(local_dst, local_lhs, local_rhs);
   CUBE layout。非 CUBE 的兼容 descriptor 还必须匹配容量、shape、dtype 和 layout。
 - 非零 PE mask 的部分更新先检查 descriptor 兼容性，再复制选定 quarter；完整记录
   赋值是架构提交点。`PE_MASK=0000` 是不改变状态的严格空操作。
+
+## 生命周期和移动接口
+
+- `SharedTile` 是架构 Shared descriptor handle，不具有普通 C++ 跨函数值 ABI。
+  应在创建它的函数内消费，或只通过 `PTO_SHARED_INLINE` / `always_inline` wrapper
+  传递；不要通过非内联函数的参数、返回值、普通对象存储或 spill 保留 handle。
+- Local-to-Shared 使用 `TMOV_L2S_INSERT` 或 `TMOV_L2S_PUBLISH`；Shared-to-Local
+  使用 `TMOV_S2L_BROADCAST` 或 `TMOV_S2L_EXTRACT`。普通 `TMOV(dst, src)` 仅是
+  同一 Local Tile 类型之间的复制，不是 Local/Shared 转换。
+- 输出参数形式会同步 Local Tile 的 runtime valid rows/columns 到 Shared descriptor。
+  后续 `TSTORE`、`TSTORE_PART` 或 S2L 操作读取的是该 Shared valid metadata。
+- Shared full store 使用 `TSTORE(gm, shared)` 和固定 mask `1111`；部分 store 使用
+  `TSTORE_PART<PEMask>(gm, shared)`，且 `PEMask` 必须是公开接口接受的非零集合。
+
+### C++ 接口
+
+以下是 Local/Shared 移动接口的完整公开形式。`PEMask` 是编译期 PE
+participation mask，默认值为 `15`（`1111`）；可用的非零值为
+`1, 2, 4, 8, 12, 14, 15`。
+
+```cpp
+template <int PEMask = 15, is_tile_data_v LocalTile>
+PTO_SHARED_INLINE void TMOV_L2S_INSERT(
+    SharedTile<LocalTile> &dst, const LocalTile &src);
+template <int PEMask = 15, is_tile_data_v LocalTile>
+PTO_SHARED_INLINE SharedTile<LocalTile>
+TMOV_L2S_INSERT(const LocalTile &src);
+
+template <int PEMask = 15, is_tile_data_v LocalTile>
+PTO_SHARED_INLINE void TMOV_L2S_PUBLISH(
+    SharedTile<LocalTile> &dst, const LocalTile &src);
+template <int PEMask = 15, is_tile_data_v LocalTile>
+PTO_SHARED_INLINE SharedTile<LocalTile>
+TMOV_L2S_PUBLISH(const LocalTile &src);
+
+template <int PEMask = 15, is_tile_data_v LocalTile,
+          is_tile_data_v LocalDst>
+PTO_SHARED_INLINE void TMOV_S2L_BROADCAST(
+    LocalDst &dst, const SharedTile<LocalTile> &src);
+template <int PEMask = 15, is_tile_data_v LocalTile,
+          is_tile_data_v LocalDst>
+PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
+    LocalDst &dst, const SharedTile<LocalTile> &src);
+```
+
+`INSERT`/`PUBLISH` 的返回值形式最适合普通局部使用；输出参数形式适合已有
+`SharedTile` carrier。两种 S2L 形式都要求目标是普通 Local Tile，并且 Shared
+handle 只能在当前函数或强制 inline 的调用链中消费。
+
+### 最小构造与往返示例
+
+Shared Tile 不是通过 `Tile<Location::Shared, ...>` 声明，而是用普通 Local
+Tile 类型包装：
+
+```cpp
+using Local = Tile<Location::Vec, float, 8, 256, BLayout::RowMajor>;
+using GM = global_tensor<float, RowMajor<8, 256>>;
+
+void shared_roundtrip(float *out, float *in) {
+  GM dst(out), src_gm(in);
+  Local src, restored;
+  TLOAD(src, src_gm);
+
+  auto shared = TMOV_L2S_INSERT(src);       // SharedTile<Local>
+  TMOV_S2L_BROADCAST(restored, shared);
+  TSTORE(dst, shared);                      // full mask 1111
+}
+```
+
+需要只让部分 PE 写回 GM 时，将最后一行替换为
+`TSTORE_PART<12>(dst, shared)` 等合法 mask 形式。不要把 `shared` 保存到
+普通对象、通过非内联函数传递，或把它作为普通 Local Tile 传给 `TMOV`。

@@ -29,6 +29,9 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row);
 
 ## 使用要求
 
+- `src` 必须是列数在类型中静态可知的 `global_tensor<..., RowMajor<Rows, Cols>>`
+  本体；iterator、切片或其他 view 不满足接口对 `Cols` 和静态 stride 的要求；
+- `valid_col` 和 `valid_row` 必须落在该 static global tensor 的 shape 内；
 - Tile 类型必须满足接口模板约束；
 - 数据类型、形状、有效区域、布局、容量和存储位置必须满足该操作要求；
 - 输入 Tile 必须已初始化，输出 Tile 必须具有足够容量；
