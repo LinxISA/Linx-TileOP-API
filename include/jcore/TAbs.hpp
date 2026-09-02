@@ -49,37 +49,46 @@ void __vec__ TAbs_NzLayout_Impl(
   }
 }
 
-template <is_tile_data_v tile_shape> void TABS_Impl(tile_shape &dst, tile_shape &src){
-  static constexpr size_t row = tile_shape::ValidRow;
-  static constexpr size_t col = tile_shape::ValidCol;
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void TABS_Impl(tile_shape_out &dst, const tile_shape_in &src){
+  static_assert(std::is_same_v<typename tile_shape_out::DType,
+                               typename tile_shape_in::DType>,
+                "TABS source and destination dtypes must match");
+  static_assert(tile_shape_out::Rows == tile_shape_in::Rows &&
+                    tile_shape_out::Cols == tile_shape_in::Cols &&
+                    tile_shape_out::BFractal == tile_shape_in::BFractal &&
+                    tile_shape_out::SFractal == tile_shape_in::SFractal,
+                "TABS source and destination descriptors must match");
+  static constexpr size_t row = tile_shape_in::ValidRow;
+  static constexpr size_t col = tile_shape_in::ValidCol;
   static_assert(row != DYNAMIC && col != DYNAMIC,
               "TODO: Support tile dynamic shape!");
   static constexpr size_t Y =
-      tile_shape::Rows / (LaneNum / tile_shape::InnerCols);
-  if constexpr (!tile_shape::isBoxedLayout){
-    if constexpr (std::is_same<typename tile_shape::DType, __half>::value ||
-                  std::is_same<typename tile_shape::DType, __fp32>::value){
-      if constexpr (tile_shape::isRowMajor)
-        TAbs_Vec_RowMajor<tile_shape><<<col, row, 1>>>(dst.data(), src.data());
+      tile_shape_in::Rows / (LaneNum / tile_shape_in::InnerCols);
+  if constexpr (!tile_shape_in::isBoxedLayout){
+    if constexpr (std::is_same<typename tile_shape_in::DType, __half>::value ||
+                  std::is_same<typename tile_shape_in::DType, __fp32>::value){
+      if constexpr (tile_shape_in::isRowMajor)
+        TAbs_Vec_RowMajor<tile_shape_in><<<col, row, 1>>>(dst.data(), src.data());
       else 
-        TAbs_Vec_ColMajor<tile_shape><<<row, col, 1>>>(dst.data(), src.data());
+        TAbs_Vec_ColMajor<tile_shape_in><<<row, col, 1>>>(dst.data(), src.data());
     } else {
-      static_assert(std::is_same<typename tile_shape::DType, __half>::value ||
-                    std::is_same<typename tile_shape::DType, __fp32>::value,
+      static_assert(std::is_same<typename tile_shape_in::DType, __half>::value ||
+                    std::is_same<typename tile_shape_in::DType, __fp32>::value,
                     "Int data type not supported");
     }
   } else {
-    if constexpr (std::is_same<typename tile_shape::DType, __half>::value ||
-                  std::is_same<typename tile_shape::DType, __fp32>::value){
-      if constexpr (is_Nz_layout<tile_shape>::value)
-        TAbs_NzLayout_Impl<tile_shape><<<LaneNum, Y, 1>>>
+    if constexpr (std::is_same<typename tile_shape_in::DType, __half>::value ||
+                  std::is_same<typename tile_shape_in::DType, __fp32>::value){
+      if constexpr (is_Nz_layout<tile_shape_in>::value)
+        TAbs_NzLayout_Impl<tile_shape_in><<<LaneNum, Y, 1>>>
                           (dst.data(), src.data());
       else 
-        static_assert(is_Nz_layout<tile_shape>::value,
+        static_assert(is_Nz_layout<tile_shape_in>::value,
                       "Layout type not supported");
     } else {
-      static_assert(std::is_same<typename tile_shape::DType, __half>::value ||
-                    std::is_same<typename tile_shape::DType, __fp32>::value,
+      static_assert(std::is_same<typename tile_shape_in::DType, __half>::value ||
+                    std::is_same<typename tile_shape_in::DType, __fp32>::value,
                     "Int data type not supported");
     }
   }

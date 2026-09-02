@@ -44,22 +44,31 @@ void TAbs_NzLayout_Imp(typename tile_shape::TileDType dst,
   }
 }
 
-template <is_tile_data_v tile_shape> void TABS_Impl(tile_shape &dst, tile_shape &src) {
-  static_assert(tile_shape::ValidRow != DYNAMIC && tile_shape::ValidCol != DYNAMIC,
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void TABS_Impl(tile_shape_out &dst, const tile_shape_in &src) {
+  static_assert(std::is_same_v<typename tile_shape_out::DType,
+                               typename tile_shape_in::DType>,
+                "TABS source and destination dtypes must match");
+  static_assert(tile_shape_out::Rows == tile_shape_in::Rows &&
+                    tile_shape_out::Cols == tile_shape_in::Cols &&
+                    tile_shape_out::BFractal == tile_shape_in::BFractal &&
+                    tile_shape_out::SFractal == tile_shape_in::SFractal,
+                "TABS source and destination descriptors must match");
+  static_assert(tile_shape_in::ValidRow != DYNAMIC && tile_shape_in::ValidCol != DYNAMIC,
               "TODO: Support tile dynamic shape!");
-  if constexpr (is_Nz_layout<tile_shape>::value) {
-      TAbs_NzLayout_Imp<tile_shape>(dst.data(), src.data());
-  } else if constexpr (is_Zn_layout<tile_shape>::value) {
-      static_assert(!is_Zn_layout<tile_shape>::value,
+  if constexpr (is_Nz_layout<tile_shape_in>::value) {
+      TAbs_NzLayout_Imp<tile_shape_in>(dst.data(), src.data());
+  } else if constexpr (is_Zn_layout<tile_shape_in>::value) {
+      static_assert(!is_Zn_layout<tile_shape_in>::value,
                     "Zn layout type not supported");
-  } else if constexpr (tile_shape::isBoxedLayout == false) {
-    if constexpr (tile_shape::isRowMajor) {
-      TAbs_RowMajor_Imp<tile_shape>(dst.data(), src.data());
+  } else if constexpr (tile_shape_in::isBoxedLayout == false) {
+    if constexpr (tile_shape_in::isRowMajor) {
+      TAbs_RowMajor_Imp<tile_shape_in>(dst.data(), src.data());
     } else {
-      TAbs_ColMajor_Imp<tile_shape>(dst.data(), src.data());
+      TAbs_ColMajor_Imp<tile_shape_in>(dst.data(), src.data());
     }
   } else {
-    static_assert(tile_shape::isBoxedLayout == false,
+    static_assert(tile_shape_in::isBoxedLayout == false,
                   "Storage type not supported");
   }
 }

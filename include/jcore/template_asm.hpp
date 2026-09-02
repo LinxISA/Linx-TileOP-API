@@ -563,8 +563,7 @@ inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], mask=1111, 0, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOT %[mask], mask=1111, last\n"
+      "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base], %[GmStride]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -594,7 +593,7 @@ inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=1111, 0\n"
+      "B.IOT %[src], %[off], mask=1111\n"
       "B.IOT %[mask], mask=1111, last\n"
       "B.IOR [%[base], %[GmStride]], []\n"
       :
@@ -2523,7 +2522,7 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
                     tile_shape_src::LogicalTileBytes,
                 "GMOV source and destination logical sizes must match");
   asm volatile(
-      "BSTART.TLSU GMOV, %D[DataType]\n"
+      "BSTART.GMOV %D[DataType]\n"
       PTO_PE_MASK_ASM("B.IOT %[src], mask=",
                       ", last, ->%[dst]<%Z[TileSize]>\n")
       "B.IOR [%[peer]],[]\n"
@@ -7295,9 +7294,17 @@ void TSEL(tile_shape &dst, tile_shape &mask, tile_shape &true_src) {
 }
 
 // TABS: dst = |src|
-template <is_tile_data_v tile_shape>
-void TABS(tile_shape &dst, tile_shape &src) {
-  if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void TABS(tile_shape_out &dst, const tile_shape_in &src) {
+  static_assert(std::is_same_v<typename tile_shape_out::DType,
+                               typename tile_shape_in::DType>,
+                "TABS source and destination dtypes must match");
+  static_assert(tile_shape_out::Rows == tile_shape_in::Rows &&
+                    tile_shape_out::Cols == tile_shape_in::Cols &&
+                    tile_shape_out::BFractal == tile_shape_in::BFractal &&
+                    tile_shape_out::SFractal == tile_shape_in::SFractal,
+                "TABS source and destination descriptors must match");
+  if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 15, %D1\n"
     "B.DIM zero, %c2, ->lb0\n"
@@ -7306,12 +7313,12 @@ void TABS(tile_shape &dst, tile_shape &src) {
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "i"(tile_shape::ValidCol),
-      "i"(tile_shape::ValidRow),
-      "i"(tile_shape::Cols),
+    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
   } else {
   asm volatile(
@@ -7322,12 +7329,12 @@ void TABS(tile_shape &dst, tile_shape &src) {
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "r"(src.GetValidCol()),
       "r"(src.GetValidRow()),
-      "i"(tile_shape::Cols),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
   }
 }
