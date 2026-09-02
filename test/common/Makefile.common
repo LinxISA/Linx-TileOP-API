@@ -14,7 +14,7 @@ OBJ := $(patsubst %.c, %.o, $(OBJ))
 OBJ := $(patsubst %.s, %.o, $(OBJ))
 
 PLAT ?= linx
-LINX_TARGET ?= linx64-unknown-linux-musl
+LINX_TARGET ?= linx64v5-unknown-linux-musl
 
 ifeq ($(PLAT), cpu)
 DEFINES += -D__cpu_sim__

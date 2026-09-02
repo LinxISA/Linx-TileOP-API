@@ -336,12 +336,26 @@ constexpr MatrixNumericClass matrix_numeric_class(int TypeCode) {
 constexpr bool matrix_mx_input_supported(int TypeCode) {
   return TypeCode == __type_fp16 || TypeCode == __type_bf16 ||
          TypeCode == __type_fp8_e4m3 || TypeCode == __type_fp8_e5m2 ||
-         TypeCode == __type_fp4_e2m1x2 || TypeCode == __type_fp4_e1m2x2;
+         TypeCode == __type_fp4_e2m1x2 || TypeCode == __type_fp4_e1m2x2 ||
+         TypeCode == __type_fp4_hif4x2;
 }
 
 constexpr bool matrix_mx_input_needs_scale(int TypeCode) {
-  return matrix_mx_input_supported(TypeCode) &&
-         TypeCode != __type_fp16 && TypeCode != __type_bf16;
+  return TypeCode == __type_fp8_e4m3 || TypeCode == __type_fp8_e5m2 ||
+         TypeCode == __type_fp4_e2m1x2 ||
+         TypeCode == __type_fp4_e1m2x2 ||
+         TypeCode == __type_fp4_hif4x2;
+}
+
+// Each Matrix-MX primary selects its scale contract independently.  HiF4X2
+// uses a raw U32 scale for every 64 logical K elements; the other scaled MX
+// carriers use E8M0 for every 32 logical K elements.
+constexpr int matrix_mx_scale_carrier_type(int TypeCode) {
+  return TypeCode == __type_fp4_hif4x2 ? __type_uint32 : __type_fp8_e8m0;
+}
+
+constexpr int matrix_mx_scale_group_size(int TypeCode) {
+  return TypeCode == __type_fp4_hif4x2 ? 64 : 32;
 }
 
 constexpr int matrix_accumulator_type_code(int InputTypeCode) {
@@ -914,11 +928,9 @@ public:
   static_assert(Rows > 0 && ValidRow <= Rows && Cols > 0 && ValidCol <= Cols,
                 "Invalid Tile Layout.");
   static_assert(!IsCubeLayout ||
-                    ((CubeElementBits == 4 || CubeElementBits == 8 ||
-                      CubeElementBits == 16 || CubeElementBits == 32) &&
-                     type_traits<DType>::TypeCode != __type_fp4_hif4x2),
-                "CUBE CELL layouts support only 4/8/16/32-bit element widths "
-                "and reject HiF4X2");
+                    (CubeElementBits == 4 || CubeElementBits == 8 ||
+                     CubeElementBits == 16 || CubeElementBits == 32),
+                "CUBE CELL layouts support only 4/8/16/32-bit element widths");
   static_assert(BFractal_ != BLayout::CubeM16 || Rows <= 16,
                 "CUBE_M16 supports at most 16 logical rows");
   static_assert(BFractal_ != BLayout::CubeM32 || Rows <= 32,

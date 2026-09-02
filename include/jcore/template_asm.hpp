@@ -2727,9 +2727,11 @@ constexpr void validate_matrix_contract() {
                 "Matrix D dtype must match the derived accumulator/output type");
   static_assert(Dst::IsCubeLayout && is_cube_m_layout_v<Dst>,
                 "CUBE destination D must use CUBE_M16 or CUBE_M32 CELL layout");
-  static_assert(!is_shared_tile_v<A> || is_shared_tile_v<B>,
-                "Shared matmul A requires B to be Shared as well; a lone "
-                "B.IOS binder denotes the existing Shared-Right form");
+  if constexpr (!MX) {
+    static_assert(!is_shared_tile_v<A> || is_shared_tile_v<B>,
+                  "Shared matmul A requires B to be Shared as well; a lone "
+                  "B.IOS binder denotes the existing Shared-Right form");
+  }
   if constexpr (!is_shared_tile_v<A>) {
     static_assert(A::IsCubeLayout && is_cube_m_layout_v<A>,
                   "Local matrix A must use CUBE_M16 or CUBE_M32 CELL layout");
@@ -2853,28 +2855,35 @@ constexpr void validate_matrix_scale_contract() {
       ? A::ValidRow : A::ValidCol;
   constexpr int N = is_shared_tile_v<B> && Attr.TransB
       ? B::ValidRow : B::ValidCol;
-  constexpr int KBlocks = (K + 31) / 32;
+  constexpr int ScaleAType = matrix_mx_scale_carrier_type(ACode);
+  constexpr int ScaleBType = matrix_mx_scale_carrier_type(BCode);
+  constexpr int ScaleAGroup = matrix_mx_scale_group_size(ACode);
+  constexpr int ScaleBGroup = matrix_mx_scale_group_size(BCode);
+  constexpr int KBlocksA = (K + ScaleAGroup - 1) / ScaleAGroup;
+  constexpr int KBlocksB = (K + ScaleBGroup - 1) / ScaleBGroup;
   if constexpr (HasScaleA) {
-    static_assert(type_traits<typename ScaleA::DType>::TypeCode == __type_fp8_e8m0,
-                  "MX ScaleA dtype must be E8M0");
+    static_assert(type_traits<typename ScaleA::DType>::TypeCode == ScaleAType,
+                  "MX ScaleA dtype must match its primary input type "
+                  "(HiF4X2 uses U32; other scaled MX types use E8M0)");
     static_assert(ScaleA::BFractal == BLayout::RowMajor &&
                       ScaleA::SFractal == SLayout::NoneBox,
                   "MX ScaleA must use ordinary RowMajor layout");
     static_assert(is_shared_tile_v<ScaleA> == is_shared_tile_v<A>,
                   "MX ScaleA storage must match A storage");
-    static_assert(ScaleA::ValidRow == M && ScaleA::ValidCol == KBlocks,
-                  "MX ScaleA valid shape must be M x ceil(K/32)");
+    static_assert(ScaleA::ValidRow == M && ScaleA::ValidCol == KBlocksA,
+                  "MX ScaleA valid shape must be M x ceil(K/groupA)");
   }
   if constexpr (HasScaleB) {
-    static_assert(type_traits<typename ScaleB::DType>::TypeCode == __type_fp8_e8m0,
-                  "MX ScaleB dtype must be E8M0");
+    static_assert(type_traits<typename ScaleB::DType>::TypeCode == ScaleBType,
+                  "MX ScaleB dtype must match its primary input type "
+                  "(HiF4X2 uses U32; other scaled MX types use E8M0)");
     static_assert(ScaleB::BFractal == BLayout::RowMajor &&
                       ScaleB::SFractal == SLayout::NoneBox,
                   "MX ScaleB must use ordinary RowMajor layout");
     static_assert(is_shared_tile_v<ScaleB> == is_shared_tile_v<B>,
                   "MX ScaleB storage must match B storage");
-    static_assert(ScaleB::ValidRow == KBlocks && ScaleB::ValidCol == N,
-                  "MX ScaleB valid shape must be ceil(K/32) x N");
+    static_assert(ScaleB::ValidRow == KBlocksB && ScaleB::ValidCol == N,
+                  "MX ScaleB valid shape must be ceil(K/groupB) x N");
   }
 }
 

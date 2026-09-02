@@ -6,7 +6,7 @@ set -euo pipefail
 
 MODE=${1:-all}
 PLAT=${PLAT:-linx}
-LINX_TARGET=${LINX_TARGET:-linx64-unknown-linux-musl}
+LINX_TARGET=${LINX_TARGET:-linx64v5-unknown-linux-musl}
 MAKE_CMD=${MAKE:-make}
 export PLAT LINX_TARGET
 
@@ -18,7 +18,7 @@ fi
 
 ACTIVE_FIXTURES=(
   DynamicShape DynamicTlsuStride CubeCellTransport VecCubeLoadStore CubeTCvt SharedTranspose
-  SharedTransposeNonSquare MatrixIntegerDtypes MXScaleVariants SharedMatmul
+  SharedTransposeNonSquare MatrixIntegerDtypes MXScaleVariants HiF4X2MatmulMX SharedMatmul
   TMatmulAccFullOptions TMatmulAccCScale TMatmulAllOptions TGEMVAllOptions TGEMVOperandOrder
   PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs

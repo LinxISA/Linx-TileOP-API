@@ -59,9 +59,10 @@ PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, B &b, SB &sb);
 
 | 操作数角色 | 类型要求 |
 | --- | --- |
-| A / B 主输入 | 支持FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E2M1X2、E1M2X2、S4X2、U4X2、S16、S8、U16、U8类型。 A/B 必须属于该矩阵重载允许的数值类。 |
-| C / D（累加器或结果） | 类型由该数值类和重载确定；不能仅因列在支持列表中就任意组合。 |
-| Bias / Scale / 辅助输出 | 必须使用该重载规定的 dtype、shape 与 layout。 |
+| A / B 主输入 | 支持FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E2M1X2、E1M2X2、S4X2、U4X2、S16、S8、U16、U8类型。；HiF4X2 仅允许 Matrix-MX。 |
+| ScaleA / ScaleB | 与对应主输入独立校验；HiF4X2 为 `uint32_t`/group-64，其他 scaled MX 为 E8M0/group-32，storage 必须分别匹配 A/B。 |
+| C / D（累加器或结果） | Matrix-MX 默认使用 FP32 累加器。 |
+| Bias / 辅助输出 | 必须使用该重载规定的 dtype、shape 与 layout。 |
 
 ### 参数说明
 
@@ -92,7 +93,7 @@ PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, B &b, SB &sb);
 
 ## 约束
 
-矩阵维度必须满足乘法关系（`M×K` 与 `K×N`，或对应 GEMV 形式）；A/B/D 的 CUBE layout、累加器类型和任何 scale/bias/options 必须构成该重载允许的组合。
+矩阵 MX 的 A/B 主输入分别独立选择 scale contract；普通 MX 类型使用 E8M0/group-32，而 HiF4X2 只能用于 Matrix-MX，并使用 `uint32_t`/group-64。ScaleA/ScaleB 的 shape、layout 和 storage 必须分别跟随 A/B 主输入。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 

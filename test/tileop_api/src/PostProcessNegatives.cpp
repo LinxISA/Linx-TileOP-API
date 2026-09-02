@@ -52,6 +52,17 @@ using BadScaleShape = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
 using TransStoredA = SharedMatrixLeft<float, 32, 16>;
 using TransStoredB = SharedMatrixRight<float, 32, 32, 24, 32>;
 using BadTransD = CubeAccumulatorM16<float, 16, 24, 16, 16>;
+using Hif4A = CubeTileM16<__fp4_hif4x2, 16, 64>;
+using Hif4B = CubeTileN8<__fp4_hif4x2, 64, 32>;
+using Hif4D = CubeAccumulatorM16<float, 16, 32>;
+using Hif4ScaleU32A = Tile<Location::Scaling, uint32_t, 16, 1,
+                            BLayout::RowMajor, 16, 1>;
+using Hif4ScaleU32B = Tile<Location::Scaling, uint32_t, 1, 32,
+                            BLayout::RowMajor, 1, 32>;
+using Hif4ScaleE8M0A = Tile<Location::Scaling, __fp8_e8m0, 16, 1,
+                             BLayout::RowMajor, 16, 1>;
+using Hif4ScaleWrongShapeA = Tile<Location::Scaling, uint32_t, 16, 2,
+                                   BLayout::RowMajor, 16, 2>;
 
 void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
 #if defined(SHOULD_FAIL_dtype)
@@ -163,6 +174,42 @@ void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
   PlainMXB mxb;
   GoodScaleB scale_b;
   TMATMUL_MX(d, mxa, mxb, scale_b);
+#endif
+#if defined(SHOULD_FAIL_hif4_ordinary_matmul)
+  Hif4A hif4_a;
+  Hif4B hif4_b;
+  Hif4D hif4_d;
+  TMATMUL(hif4_d, hif4_a, hif4_b);
+#endif
+#if defined(SHOULD_FAIL_hif4_missing_scale_a)
+  Hif4A hif4_a;
+  Hif4B hif4_b;
+  Hif4D hif4_d;
+  Hif4ScaleU32B sb;
+  TMATMUL_MX(hif4_d, hif4_a, hif4_b, sb);
+#endif
+#if defined(SHOULD_FAIL_hif4_missing_scale_b)
+  Hif4A hif4_a;
+  Hif4B hif4_b;
+  Hif4D hif4_d;
+  Hif4ScaleU32A sa;
+  TMATMUL_MX(hif4_d, hif4_a, sa, hif4_b);
+#endif
+#if defined(SHOULD_FAIL_hif4_scale_dtype)
+  Hif4A hif4_a;
+  Hif4B hif4_b;
+  Hif4D hif4_d;
+  Hif4ScaleE8M0A bad_sa;
+  Hif4ScaleU32B sb;
+  TMATMUL_MX(hif4_d, hif4_a, bad_sa, hif4_b, sb);
+#endif
+#if defined(SHOULD_FAIL_hif4_scale_shape)
+  Hif4A hif4_a;
+  Hif4B hif4_b;
+  Hif4D hif4_d;
+  Hif4ScaleWrongShapeA bad_sa;
+  Hif4ScaleU32B sb;
+  TMATMUL_MX(hif4_d, hif4_a, bad_sa, hif4_b, sb);
 #endif
 #if defined(SHOULD_FAIL_bad_transpose_d)
   TransStoredA stored_a;

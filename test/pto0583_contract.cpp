@@ -129,6 +129,24 @@ static_assert(matrix_output_type_legal<FixpAttr::keep_acc(), UnsignedA,
 static_assert(matrix_output_type_legal<FixpAttr::keep_acc(), FloatA, FloatB,
                                        FloatD>());
 
+using Hif4A = CubeTileM16<__fp4_hif4x2, 16, 64>;
+using Hif4B = CubeTileN8<__fp4_hif4x2, 64, 16>;
+using Hif4D = CubeAccumulatorM16<float, 16, 16>;
+using Hif4ScaleA = Tile<Location::Scaling, uint32_t, 16, 1,
+                        BLayout::RowMajor, 16, 1>;
+using Hif4ScaleB = Tile<Location::Scaling, uint32_t, 1, 16,
+                        BLayout::RowMajor, 1, 16>;
+static_assert(matrix_mx_input_supported(__type_fp4_hif4x2));
+static_assert(matrix_mx_input_needs_scale(__type_fp4_hif4x2));
+static_assert(matrix_mx_scale_carrier_type(__type_fp4_hif4x2) == __type_uint32);
+static_assert(matrix_mx_scale_group_size(__type_fp4_hif4x2) == 64);
+static_assert(matrix_accumulator_type_legal<Hif4A, Hif4B, Hif4D, true>());
+static_assert(!matrix_accumulator_type_legal<Hif4A, Hif4B, Hif4D>());
+static_assert(type_traits<typename Hif4ScaleA::DType>::TypeCode == __type_uint32);
+static_assert(type_traits<typename Hif4ScaleB::DType>::TypeCode == __type_uint32);
+static_assert(Hif4ScaleA::ValidRow == 16 && Hif4ScaleA::ValidCol == 1);
+static_assert(Hif4ScaleB::ValidRow == 1 && Hif4ScaleB::ValidCol == 16);
+
 static_assert(matrix_mx_input_supported(__type_fp16));
 static_assert(matrix_mx_input_supported(__type_bf16));
 static_assert(matrix_mx_input_supported(__type_fp8_e4m3));

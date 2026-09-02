@@ -3,8 +3,10 @@
 # -DSHOULD_FAIL_<case> and asserts the compile FAILS (the static_assert fires).
 # Usage: TC=<toolchain-bin> ./run_negatives.sh
 set -euo pipefail
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+cd "$SCRIPT_DIR"
 TC_DIR=${TC_DIR:-/home/zhuwei/linx-toolchain-build-online-main/output/linx_blockisa_llvm_musl/bin}
-LINX_TARGET=${LINX_TARGET:-linx64-unknown-linux-musl}
+LINX_TARGET=${LINX_TARGET:-linx64v5-unknown-linux-musl}
 CXX="$TC_DIR/clang++"
 OUT=$(mktemp -d "${TMPDIR:-/tmp}/tileop-negatives.XXXXXX")
 trap 'rm -rf "$OUT"' EXIT
@@ -14,7 +16,7 @@ if [[ -n "${LINX_SYSROOT:-}" ]]; then
   FLAGS+=(--sysroot="$LINX_SYSROOT" -nostdinc++
           -isystem "$LINX_SYSROOT/usr/include/c++/v1")
 fi
-CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose old_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b bad_transpose_d group_shape group_k group_n group_dynamic"
+CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose old_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b hif4_ordinary_matmul hif4_missing_scale_a hif4_missing_scale_b hif4_scale_dtype hif4_scale_shape bad_transpose_d group_shape group_k group_n group_dynamic"
 TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_large"
 RANGE_CASES="subview_dest assemble_source subview_length"
 TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape"

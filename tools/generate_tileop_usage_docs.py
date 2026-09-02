@@ -346,6 +346,10 @@ def operation_contract(name: str) -> str:
         return ("`TLOAD/TSTORE` 的 GM 行 stride 以**字节**计，而不是元素数；普通 Tile 与 "
                 "CUBE Tile 分别走普通传输和布局转换路径。source/destination 的顺序不可互换。")
     if name.startswith(("TMATMUL", "TGEMV")):
+        if name.startswith("TMATMUL_MX"):
+            return ("矩阵 MX 的 A/B 主输入分别独立选择 scale contract；普通 MX 类型使用 "
+                    "E8M0/group-32，而 HiF4X2 只能用于 Matrix-MX，并使用 `uint32_t`/group-64。"
+                    "ScaleA/ScaleB 的 shape、layout 和 storage 必须分别跟随 A/B 主输入。")
         return ("矩阵维度必须满足乘法关系（`M×K` 与 `K×N`，或对应 GEMV 形式）；A/B/D 的 "
                 "CUBE layout、累加器类型和任何 scale/bias/options 必须构成该重载允许的组合。")
     if name in {"TSORT", "TMRGSORT"}:
@@ -403,6 +407,13 @@ def overload_selection(sigs: list[str]) -> str:
 
 def dtype_roles(name: str, types: str) -> str:
     if name.startswith(("TMATMUL", "TGEMV")):
+        if name.startswith("TMATMUL_MX"):
+            return ("| 操作数角色 | 类型要求 |\n| --- | --- |\n"
+                    f"| A / B 主输入 | {types}；HiF4X2 仅允许 Matrix-MX。 |\n"
+                    "| ScaleA / ScaleB | 与对应主输入独立校验；HiF4X2 为 `uint32_t`/group-64，"
+                    "其他 scaled MX 为 E8M0/group-32，storage 必须分别匹配 A/B。 |\n"
+                    "| C / D（累加器或结果） | Matrix-MX 默认使用 FP32 累加器。 |\n"
+                    "| Bias / 辅助输出 | 必须使用该重载规定的 dtype、shape 与 layout。 |")
         return ("| 操作数角色 | 类型要求 |\n| --- | --- |\n"
                 f"| A / B 主输入 | {types} A/B 必须属于该矩阵重载允许的数值类。 |\n"
                 "| C / D（累加器或结果） | 类型由该数值类和重载确定；不能仅因列在支持列表中就任意组合。 |\n"
