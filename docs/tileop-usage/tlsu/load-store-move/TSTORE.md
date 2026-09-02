@@ -1,6 +1,9 @@
 # TSTORE
 
 `TSTORE` 将一个有效的 Local 或 Shared 矩形存储到 GM，且不修改源 Tile。
+对 Local CUBE Tile，`TSTORE` 等价于显式的 `TSTORE_CUBE` layout conversion；
+GM 与 CUBE dtype 必须相同，CUBE capacity 必须在 `128 B..256 KiB` 范围内，
+并且只写入 source 的 valid rows/columns。store padding 固定为 `Null`。
 
 ## C++ 接口
 
@@ -13,6 +16,11 @@ template <is_global_data_v gm_shape, is_tile_data_v cube_shape>
 requires(cube_shape::IsCubeLayout) void TSTORE(gm_shape &dst, const cube_shape &src);
 template <is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
 PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src);
+
+// Explicit CUBE layout-conversion spelling.
+template <is_global_data_v gm_shape, is_local_tile_v cube_shape>
+requires(cube_shape::IsCubeLayout)
+void TSTORE_CUBE(gm_shape &dst, const cube_shape &src);
 ```
 
 ### 支持的数据类型
@@ -63,6 +71,26 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src);
 | range / subview | base address 与 byte offset 分别传递 | 最终地址为 base 加操作的 range offset。 |
 
 普通 Tile 使用常规 TLSU 传输；CUBE Tile 由统一 `TLOAD/TSTORE` 自动选择布局转换。需要在源码中显式表达该边界时，可使用 `TLOAD_CUBE/TSTORE_CUBE`。
+
+### Shared Tile 与部分 PE 存储
+
+`TSTORE(gm, shared)` 只接受完整的 `PE_MASK=1111` Shared store。需要写入非零
+PE 子集时使用：
+
+```cpp
+template <int PEMask = 15, is_global_data_v gm_shape,
+          is_shared_tile_v SharedTileT>
+PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src);
+```
+
+`PEMask` 只能是 `1, 2, 4, 8, 12, 14, 15`。Shared Tile 的 Local payload
+必须与 GM dtype 相同，必须是非 boxed RowMajor，且容量在 `128 B..256 KiB`
+（`SizeCode=1..12`）内。Shared handle 必须在当前函数或 inline SSA 生命周期
+内保持有效。`TSTORE`/`TSTORE_PART` 只存储 runtime valid rectangle；物理
+capacity 不会扩大 GM 的逻辑输出区域。
+
+`TSTORE_CUBE` 的两个 C++ 参数顺序是 `(global_tensor, cube_tile)`，并要求两者
+dtype 相同；它只适用于 Local CUBE Tile，不是 Shared partial-store 接口。
 
 ### Vector CUBE layout
 

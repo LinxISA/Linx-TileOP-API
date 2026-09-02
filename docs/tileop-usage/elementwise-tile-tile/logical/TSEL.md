@@ -1,6 +1,7 @@
 # TSEL
 
-`TSEL` 按照 packed predicate Tile 从两个 Tile 源中选择原始 carrier bit。
+`TSEL` 按照 packed predicate Tile 从 true source 和调用前的 `dst`
+逐元素选择结果。调用前的 `dst` 是显式的 false source，因此必须先初始化。
 
 ## C++ 接口
 
@@ -8,7 +9,8 @@
 
 ```cpp
 template <is_tile_data_v tile_shape>
-void TSEL(tile_shape &dst, tile_shape &src0, tile_shape &src1);
+void TSEL(tile_shape &dst, tile_shape &predicate,
+          tile_shape &src_true);
 ```
 
 ### 支持的数据类型
@@ -21,9 +23,12 @@ void TSEL(tile_shape &dst, tile_shape &src0, tile_shape &src1);
 
 | 参数 | 说明 |
 | --- | --- |
-| `dst` | 输出 Tile；成功调用后写入操作结果。 |
-| `src0` | 第一个输入 Tile。 |
-| `src1` | 第二个输入 Tile。 |
+| `dst` | 输入/输出 Tile；调用前的值是 false source，成功后被结果覆盖。 |
+| `predicate` | `TCMP`/`TCMPS` 产生的 packed predicate。 |
+| `src_true` | predicate 为真时选择的 Tile。 |
+
+对每个有效元素，predicate 为真时执行 `dst = src_true`，否则执行
+`dst = prior_dst`。predicate 不是普通数据 Tile。
 
 
 
@@ -95,11 +100,17 @@ using GM = global_tensor<float, RowMajor<64, 32>>;
 using TileT = Tile<Location::Vec, float, 64, 32>;
 float left_data[64 * 32] = {}, right_data[64 * 32] = {}, dst_data[64 * 32] = {};
 GM left_global(left_data), right_global(right_data), dst_global(dst_data);
-TileT left, right, dst;
+TileT left, right, dst, predicate;
 TLOAD(left, left_global);
 TLOAD(right, right_global);
-TSEL(dst, left, right);
+TLOAD(dst, right_global); // false source 必须在调用前存入 dst
+TCMP<CmpMode::LT>(predicate, left, right);
+TSEL(dst, predicate, left);
 TSTORE(dst_global, dst);
+```
+
+```cpp
+// TileT dst; TSEL(dst, predicate, src_true); // 错误：dst/false source 未初始化
 ```
 
 涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。

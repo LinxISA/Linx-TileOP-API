@@ -1,6 +1,7 @@
 # TMOV
 
-`TMOV` 将源 Tile 的 payload 和 definedness 复制到目标 Tile。
+`TMOV` 将 Local Tile 的 payload 和 definedness 复制到目标 Tile；它不是
+Local/Shared 之间的转换接口。
 
 ## C++ 接口
 
@@ -35,7 +36,11 @@ inline void TMOV(Tile &dst, const Tile &src);
 
 ## 约束
 
-输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
+`dst` 和 `src` 必须是同一 Tile 类型（包括 location、dtype、layout、物理
+shape 和 capacity），并且 `src` 必须已初始化。普通 `TMOV` 只支持 Local-to-Local；
+Shared Tile 必须使用 `TMOV_L2S_INSERT` / `TMOV_L2S_PUBLISH` 或
+`TMOV_S2L_BROADCAST` / `TMOV_S2L_EXTRACT`，这些接口要求函数内或 inline SSA
+生命周期，不能把 Shared handle 当作普通对象跨非内联函数传递。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 

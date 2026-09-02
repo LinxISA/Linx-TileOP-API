@@ -1,6 +1,8 @@
 # TSELS
 
-`TSELS` 按照 packed predicate Tile，从 Tile 源或每 PE 标量中选择结果。
+`TSELS` 按照 packed predicate Tile，从 Tile true source 和每 PE
+false-scalar 中选择结果。其参数顺序是
+`(dst, predicate, false_scalar, src_true)`。
 
 ## C++ 接口
 
@@ -8,7 +10,9 @@
 
 ```cpp
 template <is_tile_data_v tile_shape>
-void TSELS(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile_shape &src1);
+void TSELS(tile_shape &dst, tile_shape &predicate,
+           typename tile_shape::DType false_scalar,
+           tile_shape &src_true);
 ```
 
 ### 支持的数据类型
@@ -22,9 +26,12 @@ void TSELS(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile
 | 参数 | 说明 |
 | --- | --- |
 | `dst` | 输出 Tile；成功调用后写入操作结果。 |
-| `src0` | 第一个输入 Tile。 |
-| `s` | 标量或标量 Tile 操作数；具体载体由重载决定。 |
-| `src1` | 第二个输入 Tile。 |
+| `predicate` | `TCMP`/`TCMPS` 产生的 packed predicate。 |
+| `false_scalar` | predicate 为假时使用的每 PE scalar。 |
+| `src_true` | predicate 为真时使用的 Tile。 |
+
+对每个有效元素，predicate 为真时执行 `dst = src_true`，否则使用
+`false_scalar`。
 
 
 
@@ -96,11 +103,12 @@ using GM = global_tensor<float, RowMajor<64, 32>>;
 using TileT = Tile<Location::Vec, float, 64, 32>;
 float left_data[64 * 32] = {}, right_data[64 * 32] = {}, dst_data[64 * 32] = {};
 GM left_global(left_data), right_global(right_data), dst_global(dst_data);
-TileT left, right, dst;
+TileT left, right, dst, predicate;
 TileT::DType scalar = 1.0f;
 TLOAD(left, left_global);
 TLOAD(right, right_global);
-TSELS(dst, left, scalar, right);
+TCMP<CmpMode::LT>(predicate, left, right);
+TSELS(dst, predicate, scalar, left);
 TSTORE(dst_global, dst);
 ```
 

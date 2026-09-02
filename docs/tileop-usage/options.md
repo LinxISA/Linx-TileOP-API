@@ -188,6 +188,19 @@ S32 或 U32，并保持原类型。目标 Tile dtype 也必须与所选 mode 匹
 S16 mode 输出 S16，S4 mode 输出 S4 packed，FP8/HiF8 mode 输出对应 FP8/HiF8，
 F16/BF16/F32 mode 输出对应浮点类型。最终判断以操作重载的静态检查为准。
 
+不能只根据目标 dtype 选择 mode；必须先由 A/B 输入类型确定 accumulator class：
+
+| accumulator class | 可选 mode 类别 | 说明 |
+| --- | --- | --- |
+| FP32 | 名称为 `QF322*`/`VQF322*` 的 FP32 量化或转换 mode | FP16/BF16/FP32 等浮点矩阵路径通常派生 FP32 accumulator。 |
+| S32 | 名称为 `QS322*`/`VQS322*` 或明确声明 S32 输入的 mode | 整数矩阵路径通常派生 S32 accumulator。 |
+| U32 | `None` | 当前非零 pre-quant mode 不接受 U32 accumulator。 |
+
+`QF322S16Pre` 的前提是 **FP32 accumulator**，输出为 S16；它不是“任意
+输入矩阵转 S16”的通用开关。若输入组合没有派生 FP32 accumulator，编译器会以
+`PreQuantMode incompatible with the derived matrix accumulator type` 拒绝。
+具体 A/B dtype 到 accumulator 的映射以各矩阵操作页面和 header 静态检查为准。
+
 ### 5.1 Scalar descriptor
 
 ```cpp

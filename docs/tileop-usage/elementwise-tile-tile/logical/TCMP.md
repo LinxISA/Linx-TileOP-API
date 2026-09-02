@@ -1,6 +1,7 @@
 # TCMP
 
-`TCMP` 是由 VEC 执行的选择器编码 Tile 操作：它按照 CMode 比较对应的数值元素，并将谓词结果编码为 0 或 1；其当前指令 contract 规定了确切的 bundle 形式和发布边界。
+`TCMP` 是由 VEC 执行的比较操作。它产生 packed predicate；该 carrier
+可以通过 `TSEL`/`TSELS` 消费，也可以存入与输出 Tile dtype 匹配的 GM。
 
 ## C++ 接口
 
@@ -96,24 +97,31 @@ BSTOP
 
 using namespace pto;
 using InputGM = global_tensor<float, RowMajor<64, 32>>;
-using ResultGM = global_tensor<int32_t, RowMajor<64, 32>>;
+using ResultGM = global_tensor<float, RowMajor<64, 32>>;
 using InputTile = Tile<Location::Vec, float, 64, 32>;
-using ResultTile = Tile<Location::Vec, int32_t, 64, 32>;
+// The current TSEL wrapper uses one tile type for mask and data operands.
+using PredicateTile = Tile<Location::Vec, float, 64, 32>;
+using ResultTile = Tile<Location::Vec, float, 64, 32>;
 
 float left_data[64 * 32] = {};
 float right_data[64 * 32] = {};
-int32_t result_data[64 * 32] = {};
+float result_data[64 * 32] = {};
 InputGM left_global(left_data);
 InputGM right_global(right_data);
 ResultGM result_global(result_data);
 InputTile left;
 InputTile right;
+PredicateTile predicate;
 ResultTile result;
 
 TLOAD(left, left_global);
 TLOAD(right, right_global);
-TCMP<CmpMode::EQ>(result, left, right);
+TCMP<CmpMode::EQ>(predicate, left, right);
+result = right; // TSEL 的 false source 是调用前的 dst
+TSEL(result, predicate, left);
 TSTORE(result_global, result);
 ```
+
+示例选择相等位置的 `left`，其他位置保留预先放入 `result` 的 `right`。
 
 涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。

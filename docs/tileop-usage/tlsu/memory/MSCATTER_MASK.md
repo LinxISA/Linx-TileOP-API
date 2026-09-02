@@ -105,18 +105,18 @@ BSTOP
 
 using namespace pto;
 using Values = Tile<Location::Vec, float, 8, 32, BLayout::RowMajor>;
-using ByteOffsets = Tile<Location::Vec, uint16_t, 8, 32, BLayout::RowMajor>;
+using ByteOffsets = Tile<Location::Vec, uint32_t, 8, 32, BLayout::RowMajor>;
 using Mask = Tile<Location::Vec, uint8_t, 8, 32, BLayout::RowMajor>;
 using GM = global_tensor<float, RowMajor<8, 1024>>;
 
-void scatter_masked(float *base, const float *input, const uint16_t *offsets,
+void scatter_masked(float *base, const float *input, const uint32_t *offsets,
                     const uint8_t *enabled) {
   GM base_gm(base);
   Values src;
   ByteOffsets offset;
   Mask mask;
   global_tensor<float, RowMajor<8, 32>> input_gm(input);
-  global_tensor<uint16_t, RowMajor<8, 32>> offsets_gm(offsets);
+  global_tensor<uint32_t, RowMajor<8, 32>> offsets_gm(offsets);
   global_tensor<uint8_t, RowMajor<8, 32>> enabled_gm(enabled);
   TLOAD(src, input_gm);
   TLOAD(offset, offsets_gm);

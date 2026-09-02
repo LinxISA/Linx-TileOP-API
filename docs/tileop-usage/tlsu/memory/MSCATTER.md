@@ -95,15 +95,15 @@ BSTOP
 
 using namespace pto;
 using Values = Tile<Location::Vec, float, 8, 32, BLayout::RowMajor>;
-using ByteOffsets = Tile<Location::Vec, uint16_t, 8, 32, BLayout::RowMajor>;
+using ByteOffsets = Tile<Location::Vec, uint32_t, 8, 32, BLayout::RowMajor>;
 using GM = global_tensor<float, RowMajor<8, 1024>>;
 
-void scatter(float *base, const float *input, const uint16_t *offsets) {
+void scatter(float *base, const float *input, const uint32_t *offsets) {
   GM base_gm(base);
   Values src;
   ByteOffsets offset;
   global_tensor<float, RowMajor<8, 32>> input_gm(input);
-  global_tensor<uint16_t, RowMajor<8, 32>> offsets_gm(offsets);
+  global_tensor<uint32_t, RowMajor<8, 32>> offsets_gm(offsets);
   TLOAD(src, input_gm);
   TLOAD(offset, offsets_gm);
   // offset 中的每个元素是相对于 GM base 的字节位移。
