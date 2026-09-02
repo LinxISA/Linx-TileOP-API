@@ -22,6 +22,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC_ROOT = ROOT / "docs/tileop-usage"
+# Conceptual and migration pages contain explanatory snippets rather than
+# standalone compilation examples. Keep them out of this check explicitly;
+# operation pages elsewhere remain subject to the C++ example gate.
+EXCLUDED_DOC_DIRS = frozenset({
+    DOC_ROOT / "migration",
+    DOC_ROOT / "concepts",
+})
 USAGE_SECTION = re.compile(
     r"^## (?:\d+\.\s*)?使用示例\s*$([\s\S]*?)(?=^## |\Z)", re.M
 )
@@ -49,6 +56,8 @@ class Example:
 def examples() -> list[Example]:
     result: list[Example] = []
     for document in sorted(DOC_ROOT.rglob("*.md")):
+        if any(parent in EXCLUDED_DOC_DIRS for parent in document.parents):
+            continue
         match = USAGE_SECTION.search(document.read_text(encoding="utf-8"))
         if not match:
             continue
