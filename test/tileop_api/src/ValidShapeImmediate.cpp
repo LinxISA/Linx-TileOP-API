@@ -18,11 +18,14 @@ using namespace pto;
 
 // Static half: a fully-static Tile drives the "i" + C.B.DIMI path.
 using S = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
-using SR = Tile<Location::Vec, float, 16, 1, BLayout::RowMajor>;
+using SR = Tile<Location::Vec, float, 16, 1, BLayout::RowMajor>;   // row-reduce dst / row-expand source
+using SC = Tile<Location::Vec, float, 1, 16, BLayout::RowMajor>;   // col-reduce dst / col-expand source
+using SE = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;  // expand destination
 using SO = Tile<Location::Vec, uint16_t, 16, 16, BLayout::RowMajor>;
 
 __attribute__((noinline)) void static_path(S &d, S &a, S &b, S &c,
-                                           SR &r, SO &off, float v) {
+                                           SR &r, SC &rc, SE &ex,
+                                           SO &off, float v) {
   // elementwise batch
   TADD(d, a, b);
   TSUB(d, a, b);
@@ -41,12 +44,12 @@ __attribute__((noinline)) void static_path(S &d, S &a, S &b, S &c,
   TROWMAX(r, a);
   TROWMIN(r, a);
   TROWARGMAX(r, a);
-  TROWEXPAND(a, r);
-  TCOLSUM(r, a);
-  TCOLEXPAND(a, r);
-  TROWEXPANDADD(d, a, r);
-  TROWEXPANDSUB(d, a, r);
-  TROWEXPANDMUL(d, a, r);
+  TROWEXPAND(ex, r);
+  TCOLSUM(rc, a);
+  TCOLEXPAND(ex, rc);
+  TROWEXPANDADD(ex, d, r);
+  TROWEXPANDSUB(ex, d, r);
+  TROWEXPANDMUL(ex, d, r);
   // unary / scalar batch
   TABS(d, a);
   TNOT(d, a);
@@ -88,18 +91,21 @@ __attribute__((noinline)) void static_path(S &d, S &a, S &b, S &c,
 
 // Dynamic half: same families on dynamic Tiles drive the "r" + B.DIM path.
 using D = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor, -1, -1>;
-using DR = Tile<Location::Vec, float, 16, 1, BLayout::RowMajor, -1, -1>;
+using DR = Tile<Location::Vec, float, 16, 1, BLayout::RowMajor, -1, -1>;   // row-reduce dst / row-expand source
+using DC = Tile<Location::Vec, float, 1, 16, BLayout::RowMajor, -1, -1>;   // col-reduce dst / col-expand source
+using DE = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor, -1, -1>;  // expand destination
 using DO = Tile<Location::Vec, uint16_t, 16, 16, BLayout::RowMajor, -1, -1>;
 
 __attribute__((noinline)) void dynamic_path(D &d, D &a, D &b, D &c,
-                                            DR &r, DO &off, float v) {
+                                            DR &r, DC &rc, DE &ex,
+                                            DO &off, float v) {
   TADD(d, a, b);
   TSUB(d, a, b);
   TMUL(d, a, b);
   TROWSUM(r, a);
   TROWMAX(r, a);
-  TROWEXPAND(a, r);
-  TROWEXPANDADD(d, a, r);
+  TROWEXPAND(ex, r);
+  TROWEXPANDADD(ex, d, r);
   TABS(d, a);
   TEXP(d, a);
   TSUBS(d, a, v);
@@ -116,11 +122,15 @@ __attribute__((noinline)) void dynamic_path(D &d, D &a, D &b, D &c,
 int main() {
   S s, sa, sb, sc;
   SR sr;
+  SC src;
+  SE sex;
   SO soff;
   D d, da, db, dc;
   DR dr;
+  DC drc;
+  DE dex;
   DO doff;
-  static_path(s, sa, sb, sc, sr, soff, 1.0f);
-  dynamic_path(d, da, db, dc, dr, doff, 1.0f);
+  static_path(s, sa, sb, sc, sr, src, sex, soff, 1.0f);
+  dynamic_path(d, da, db, dc, dr, drc, dex, doff, 1.0f);
   return 0;
 }

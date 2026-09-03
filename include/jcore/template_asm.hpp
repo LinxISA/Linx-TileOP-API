@@ -9388,6 +9388,12 @@ void TPARTMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 // TROWSUM: row sum reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): row-axis reduction destination is a
+  // single-column tile with one valid row per reduced source row.
+  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
+                "TROWSUM destination must be a single-column tile (N x 1)");
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
+                "TROWSUM destination valid rows must equal the source valid rows");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 64, %D1\n"
@@ -9398,9 +9404,9 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9418,7 +9424,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "r"(valid_col),
       "r"(valid_row),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9428,6 +9434,12 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
 // TROWMAX: row max reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): row-axis reduction destination is a
+  // single-column tile with one valid row per reduced source row.
+  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
+                "TROWMAX destination must be a single-column tile (N x 1)");
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
+                "TROWMAX destination valid rows must equal the source valid rows");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 65, %D1\n"
@@ -9438,9 +9450,9 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9454,9 +9466,9 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9466,6 +9478,12 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TROWMIN: row min reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): row-axis reduction destination is a
+  // single-column tile with one valid row per reduced source row.
+  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
+                "TROWMIN destination must be a single-column tile (N x 1)");
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
+                "TROWMIN destination valid rows must equal the source valid rows");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 66, %D1\n"
@@ -9476,9 +9494,9 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9492,9 +9510,9 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9504,6 +9522,12 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
 // TROWPROD: row product reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): row-axis reduction destination is a
+  // single-column tile with one valid row per reduced source row.
+  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
+                "TROWPROD destination must be a single-column tile (N x 1)");
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
+                "TROWPROD destination valid rows must equal the source valid rows");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 67, %D1\n"
@@ -9514,9 +9538,9 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9530,9 +9554,9 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9542,6 +9566,10 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
 // TROWEXPAND: broadcast first element of each row
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in::ValidCol == DYNAMIC || tile_shape_in::ValidCol == 1,
+                "TROWEXPAND source must be a one-column broadcast tile");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 68, %D1\n"
@@ -9552,9 +9580,9 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9568,9 +9596,9 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9580,6 +9608,12 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 // TROWARGMAX: row argmax (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): row-axis reduction destination is a
+  // single-column tile with one valid row per reduced source row.
+  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
+                "TROWARGMAX destination must be a single-column tile (N x 1)");
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
+                "TROWARGMAX destination valid rows must equal the source valid rows");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 76, %D1\n"
@@ -9590,9 +9624,9 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9606,9 +9640,9 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9618,6 +9652,12 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TROWARGMIN: row argmin (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): row-axis reduction destination is a
+  // single-column tile with one valid row per reduced source row.
+  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
+                "TROWARGMIN destination must be a single-column tile (N x 1)");
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
+                "TROWARGMIN destination valid rows must equal the source valid rows");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 77, %D1\n"
@@ -9628,9 +9668,9 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9644,9 +9684,9 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9656,6 +9696,14 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLSUM: col sum reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): column-axis reduction destination has
+  // exactly one valid row and inherits the source column geometry.
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_out::ValidRow == 1,
+                "TCOLSUM destination must have exactly one valid row (1 x N)");
+  static_assert(tile_shape_out::ValidCol == DYNAMIC ||
+                    (tile_shape_out::ValidCol == tile_shape_in::ValidCol &&
+                     tile_shape_out::Cols == tile_shape_in::Cols),
+                "TCOLSUM destination columns must match the source columns");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 80, %D1\n"
@@ -9666,9 +9714,9 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9682,9 +9730,9 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9694,6 +9742,14 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLMAX: col max reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): column-axis reduction destination has
+  // exactly one valid row and inherits the source column geometry.
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_out::ValidRow == 1,
+                "TCOLMAX destination must have exactly one valid row (1 x N)");
+  static_assert(tile_shape_out::ValidCol == DYNAMIC ||
+                    (tile_shape_out::ValidCol == tile_shape_in::ValidCol &&
+                     tile_shape_out::Cols == tile_shape_in::Cols),
+                "TCOLMAX destination columns must match the source columns");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 81, %D1\n"
@@ -9704,9 +9760,9 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9720,9 +9776,9 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9732,6 +9788,14 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLMIN: col min reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): column-axis reduction destination has
+  // exactly one valid row and inherits the source column geometry.
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_out::ValidRow == 1,
+                "TCOLMIN destination must have exactly one valid row (1 x N)");
+  static_assert(tile_shape_out::ValidCol == DYNAMIC ||
+                    (tile_shape_out::ValidCol == tile_shape_in::ValidCol &&
+                     tile_shape_out::Cols == tile_shape_in::Cols),
+                "TCOLMIN destination columns must match the source columns");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 82, %D1\n"
@@ -9742,9 +9806,9 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9758,9 +9822,9 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9770,6 +9834,14 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLPROD: col product reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): column-axis reduction destination has
+  // exactly one valid row and inherits the source column geometry.
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_out::ValidRow == 1,
+                "TCOLPROD destination must have exactly one valid row (1 x N)");
+  static_assert(tile_shape_out::ValidCol == DYNAMIC ||
+                    (tile_shape_out::ValidCol == tile_shape_in::ValidCol &&
+                     tile_shape_out::Cols == tile_shape_in::Cols),
+                "TCOLPROD destination columns must match the source columns");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 83, %D1\n"
@@ -9780,9 +9852,9 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9796,9 +9868,9 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9808,6 +9880,10 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLEXPAND: broadcast first element of each col
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in::ValidRow == DYNAMIC || tile_shape_in::ValidRow == 1,
+                "TCOLEXPAND source must be a one-row broadcast tile");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 84, %D1\n"
@@ -9818,9 +9894,9 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9834,9 +9910,9 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9846,6 +9922,14 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLARGMAX: col argmax (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): column-axis reduction destination has
+  // exactly one valid row and inherits the source column geometry.
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_out::ValidRow == 1,
+                "TCOLARGMAX destination must have exactly one valid row (1 x N)");
+  static_assert(tile_shape_out::ValidCol == DYNAMIC ||
+                    (tile_shape_out::ValidCol == tile_shape_in::ValidCol &&
+                     tile_shape_out::Cols == tile_shape_in::Cols),
+                "TCOLARGMAX destination columns must match the source columns");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 92, %D1\n"
@@ -9856,9 +9940,9 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9872,9 +9956,9 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9884,6 +9968,14 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLARGMIN: col argmin (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
+  // ASL (reduction-and-expansion): column-axis reduction destination has
+  // exactly one valid row and inherits the source column geometry.
+  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_out::ValidRow == 1,
+                "TCOLARGMIN destination must have exactly one valid row (1 x N)");
+  static_assert(tile_shape_out::ValidCol == DYNAMIC ||
+                    (tile_shape_out::ValidCol == tile_shape_in::ValidCol &&
+                     tile_shape_out::Cols == tile_shape_in::Cols),
+                "TCOLARGMIN destination columns must match the source columns");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 93, %D1\n"
@@ -9894,9 +9986,9 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9910,9 +10002,9 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9925,6 +10017,10 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
+                "TROWEXPANDADD broadcast source must be a one-column tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -9941,9 +10037,9 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9964,9 +10060,9 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9980,6 +10076,10 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
+                "TROWEXPANDSUB broadcast source must be a one-column tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -9996,9 +10096,9 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10019,9 +10119,9 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10035,6 +10135,10 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
+                "TROWEXPANDMUL broadcast source must be a one-column tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10051,9 +10155,9 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10078,7 +10182,7 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
       "r"(valid_col),
       "r"(valid_row),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10092,6 +10196,10 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
+                "TROWEXPANDDIV broadcast source must be a one-column tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10108,9 +10216,9 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10131,9 +10239,9 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10147,6 +10255,10 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
+                "TROWEXPANDMAX broadcast source must be a one-column tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10163,9 +10275,9 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10186,9 +10298,9 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10202,6 +10314,10 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
+                "TROWEXPANDMIN broadcast source must be a one-column tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10218,9 +10334,9 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10241,9 +10357,9 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10257,6 +10373,10 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
+                "TROWEXPANDEXPDIF broadcast source must be a one-column tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10273,9 +10393,9 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10296,9 +10416,9 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10312,6 +10432,10 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
+                "TCOLEXPANDADD broadcast source must be a one-row tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10328,9 +10452,9 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10351,9 +10475,9 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10367,6 +10491,10 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
+                "TCOLEXPANDSUB broadcast source must be a one-row tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10383,9 +10511,9 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10406,9 +10534,9 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10422,6 +10550,10 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
+                "TCOLEXPANDMUL broadcast source must be a one-row tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10438,9 +10570,9 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10461,9 +10593,9 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10477,6 +10609,10 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
+                "TCOLEXPANDDIV broadcast source must be a one-row tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10493,9 +10629,9 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10516,9 +10652,9 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10532,6 +10668,10 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
+                "TCOLEXPANDMAX broadcast source must be a one-row tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10548,9 +10688,9 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10571,9 +10711,9 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10587,6 +10727,10 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
+                "TCOLEXPANDMIN broadcast source must be a one-row tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10603,9 +10747,9 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10626,9 +10770,9 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10642,6 +10786,10 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // destination geometry comes from the destination B.DIM, not the source.
+  static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
+                "TCOLEXPANDEXPDIF broadcast source must be a one-row tile");
   if constexpr (tile_shape_in0::ValidCol > 0 && tile_shape_in0::ValidRow > 0) {
   static_assert(std::is_same<typename tile_shape_in0::DType,
                              typename tile_shape_in1::DType>::value,
@@ -10658,9 +10806,9 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "i"(tile_shape_in0::ValidCol),
-      "i"(tile_shape_in0::ValidRow),
-      "i"(tile_shape_in0::Cols),
+      "i"(tile_shape_out::ValidCol),
+      "i"(tile_shape_out::ValidRow),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10681,9 +10829,9 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
-      "i"(tile_shape_in0::Cols),
+      "r"(dst.GetValidCol()),
+      "r"(dst.GetValidRow()),
+      "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
