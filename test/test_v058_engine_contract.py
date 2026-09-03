@@ -218,7 +218,12 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_tlsu_load_store_stride_is_expressed_in_bytes(self) -> None:
         self.assertIn("GetStrideBytes", self.header)
         tlsu_doc = (ROOT / "docs" / "tileop-usage" / "tlsu" / "load-store-move" / "TLOAD.md").read_text(encoding="utf-8")
-        self.assertIn("row stride in **bytes**", tlsu_doc)
+        self.assertIn("stride", tlsu_doc)
+        self.assertRegex(
+            tlsu_doc,
+            r"row stride in \*\*bytes\*\*|\*\*字节 stride\*\*",
+        )
+        self.assertIn("B.IOR.RegSrc1", tlsu_doc)
 
     def test_tsel_binds_explicit_false_source_on_both_shape_paths(self) -> None:
         start = self.header.index("void TSEL(")
@@ -329,7 +334,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_matrix_dtype_and_effective_shape_contract_is_centralized(self) -> None:
         tile = PTO_TILE.read_text(encoding="utf-8")
         self.assertIn(
-            '"B.DATR %D[DataTypeB], RNONE, NOSAT\\n"', self.header
+            '"B.DATR %D[DataTypeB], Zero, RNONE, NOSAT\\n"', self.header
         )
         self.assertIn("matrix_accumulator_type_code", tile)
         self.assertIn("MatrixNumericClass::Unsigned", tile)
@@ -359,6 +364,22 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             text = (ROOT / "test" / "tileop_api" / "src" / fixture).read_text()
             self.assertIn("__fp8_e4m3", text)
             self.assertIn("__fp8_e8m0", text)
+
+    def test_copy_expand_describes_destination_geometry(self) -> None:
+        for mnemonic, next_comment in (
+            ("TROWEXPAND", "// TROWARGMAX:"),
+            ("TCOLEXPAND", "// TCOLARGMAX:"),
+        ):
+            start = self.header.index(
+                f"void {mnemonic}(tile_shape_out &dst, tile_shape_in &src)"
+            )
+            end = self.header.index(next_comment, start)
+            body = self.header[start:end]
+            self.assertIn('"r"(dst.GetValidCol())', body)
+            self.assertIn('"r"(dst.GetValidRow())', body)
+            self.assertIn('"i"(tile_shape_out::Cols)', body)
+            self.assertNotIn('"r"(src.GetValidCol())', body)
+            self.assertNotIn('"r"(src.GetValidRow())', body)
 
     def test_mc_gate_requires_canonical_cube_layout_names(self) -> None:
         gate = (ROOT / "test" / "tileop_api" /
@@ -490,7 +511,9 @@ int main() { return sizeof(Bad); }
     def test_generated_engine_document_is_fresh(self) -> None:
         generated = ROOT / "docs" / "tileop-usage" / "generated" / "engines.md"
         self.assertTrue(generated.is_file())
-        self.assertIn("**VEC**, **TLSU**, **CUBE**, and **SFU**", generated.read_text())
+        text = generated.read_text()
+        for engine in ("VEC", "TLSU", "CUBE", "SFU"):
+            self.assertIn(f"**{engine}**", text)
 
     def test_test_harness_uses_v058_compiler_surface_without_install_mutation(self) -> None:
         makefile = (ROOT / "test" / "common" / "Makefile.common").read_text(encoding="utf-8")
