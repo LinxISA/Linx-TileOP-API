@@ -8,8 +8,13 @@
 
 本目录包含两个有意并存的版本视角：
 
-- 一般操作页和 range modifier 页面按 **v0.58.4.1** 的规范内容编写；使用这些 API
-  时应配套支持相同规则的 Linx 编译器。
+- 一般操作页和 range modifier 页面按 **v0.58.4.1** 的规范内容编写；
+  [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md)、
+  [TSHUF](layout-and-rearrangement/layout/TSHUF.md)、
+  [TPACK](layout-and-rearrangement/layout/TPACK.md)、
+  [TUNPACK](layout-and-rearrangement/layout/TUNPACK.md) 和
+  [TGPR2T](layout-and-rearrangement/layout/TGPR2T.md) 按 **v0.58.5** 编写。使用这些 API
+  时应配套支持对应规则的 Linx 编译器。
 - [0.58.3 迁移说明](migration/pto-0583-migration.md)与
   [engine catalog](generated/engines.md)记录的是 **0.58.3** 的历史迁移/引擎投影，
   不应被当作 0.58.4.1 新增 descriptor 的编译器兼容性声明。
@@ -54,6 +59,9 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
 - 需要从 GM 传输数据时，阅读 [TLSU load/store/move](tlsu/load-store-move/TLOAD.md)。
 - 常规逐元素算子从 [TADD](elementwise-tile-tile/arithmetic/TADD.md) 开始；按目录选择
   算术、逻辑、转换、归约、布局和不规则操作。
+- PTO ISA v0.58.5 的 CUBE layout 重排操作从
+  [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md) 开始；pack/unpack、shuffle
+  和 GPR predicate plane 转换页面位于同一目录。
 - 矩阵/向量计算使用 [CUBE TMATMUL](cube/matrix-matrix/TMATMUL.md) 或相应 GEMV 页面。
 - 需要启用矩阵后处理属性时，先阅读 [`fixp::Options` 指南](options.md)。
 - 需要绑定 Tile range 或分区/组装时，阅读

@@ -1,6 +1,7 @@
 # Linx TileOP API
 
-Header-only C++ TileOP bindings for the LinxISA / PTO ISA v0.58.3 architectural contract.
+Header-only C++ TileOP bindings for the LinxISA / PTO ISA v0.58 architectural contract,
+including the PTO ISA v0.58.5 layout-and-rearrangement additions.
 
 The normative instruction names, encodings, and execution-engine classification come from the
 pinned LinxISA projection in
@@ -17,6 +18,7 @@ canonical aliases.
 - [CUBE operations](docs/tileop-usage/cube/matrix-matrix/TMATMUL.md)
 - [Tile and Shared-register constraints](docs/tileop-usage/concepts/tile-constraints.md)
 - [Layout helpers](docs/tileop-usage/layout-and-rearrangement/layout/TCONCAT.md)
+- [PTO ISA v0.58.5 CUBE layout operations](docs/tileop-usage/layout-and-rearrangement/layout/TPERMUTE.md)
 - [Comparison operations](docs/tileop-usage/elementwise-tile-tile/logical/TCMP.md)
 - [Sorting operations](docs/tileop-usage/irregular-and-complex/sorting/TSORT.md)
 - [Fixed-point matrix wrappers](docs/tileop-usage/options.md)

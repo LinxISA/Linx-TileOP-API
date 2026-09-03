@@ -70,6 +70,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
   TSTORE_Impl(dst, src);
 }
 #endif
+
 // TGATHER / TSCATTER: defined as one-layer inline-asm in
 // jcore/template_asm.hpp (no __vec__ kernel), so no wrapper here. The
 // jcore/cpu_sim *_Impl definitions remain available for callers that

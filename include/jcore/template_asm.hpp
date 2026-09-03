@@ -10762,6 +10762,145 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   }
 }
 
+// PTO ISA 0.58.5 layout-and-rearrangement operations (TEPL mode 3).
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B, is_tile_data_v I>
+void TPERMUTE(D &dst, A &src0, B &src1, I &indices) {
+  static_assert(std::is_same_v<typename D::DType, typename A::DType> &&
+                    std::is_same_v<typename D::DType, typename B::DType>,
+                "TPERMUTE data tile types must match");
+  static_assert(type_traits<typename D::DType>::bits != 64,
+                "TPERMUTE does not support 64-bit elements");
+  static_assert(type_traits<typename I::DType>::TypeCode == __type_uint8,
+                "TPERMUTE indices must use U8 elements");
+  static_assert(D::BFractal == A::BFractal && D::BFractal == B::BFractal &&
+                    D::BFractal == I::BFractal &&
+                    (D::BFractal == BLayout::CubeM16 ||
+                     D::BFractal == BLayout::CubeM32),
+                "TPERMUTE requires matching CUBE_M16 or CUBE_M32 layouts");
+  static_assert(D::ValidRow > 0 && D::ValidCol > 0,
+                "TPERMUTE currently requires a static valid shape");
+  asm volatile(
+      "BSTART.TEPL 117, %D[Type]\n"
+      "B.DIM zero, %c[Cols], ->lb0\n"
+      "B.DIM zero, %c[Rows], ->lb1\n"
+      "B.DIM zero, %c[FullCols], ->lb2\n"
+      "B.IOT %[Src0], %[Src1], mask=1111\n"
+      "B.IOT %[Indices], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+        [Indices] "Tr"(indices.data()),
+        [Type] "i"(type_traits<typename D::DType>::TypeCode),
+        [Cols] "i"(D::ValidCol), [Rows] "i"(D::ValidRow),
+        [FullCols] "i"(D::Cols), [Size] "i"(D::TilesizeCode));
+}
+
+template <is_tile_data_v D, is_tile_data_v S, is_tile_data_v C>
+void TSHUF(D &dst, S &src, C &controls, uint64_t control) {
+  static_assert(std::is_same_v<typename D::DType, typename S::DType>,
+                "TSHUF source and destination types must match");
+  static_assert(type_traits<typename D::DType>::bits != 64,
+                "TSHUF does not support 64-bit elements");
+  static_assert(type_traits<typename C::DType>::TypeCode == __type_uint32,
+                "TSHUF controls must use U32 elements");
+  static_assert(D::BFractal == S::BFractal && D::BFractal == C::BFractal &&
+                    (D::BFractal == BLayout::CubeM16 ||
+                     D::BFractal == BLayout::CubeM32),
+                "TSHUF requires matching CUBE_M16 or CUBE_M32 layouts");
+  static_assert(D::ValidRow > 0 && D::ValidCol > 0,
+                "TSHUF currently requires a static valid shape");
+  volatile uint64_t controlValue = control;
+  asm volatile(
+      "BSTART.TEPL 118, %D[Type]\n"
+      "B.DIM zero, %c[Cols], ->lb0\n"
+      "B.DIM zero, %c[Rows], ->lb1\n"
+      "B.DIM zero, %c[FullCols], ->lb2\n"
+      "B.IOT %[Src], %[Controls], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      "B.IOR [%[Control]],[]\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Src] "Tr"(src.data()), [Controls] "Tr"(controls.data()),
+        [Control] "r"(controlValue),
+        [Type] "i"(type_traits<typename D::DType>::TypeCode),
+        [Cols] "i"(D::ValidCol), [Rows] "i"(D::ValidRow),
+        [FullCols] "i"(D::Cols), [Size] "i"(D::TilesizeCode));
+}
+
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
+  static_assert(type_traits<typename D::DType>::TypeCode == __type_uint32 &&
+                    type_traits<typename A::DType>::TypeCode == __type_uint32 &&
+                    type_traits<typename B::DType>::TypeCode == __type_uint32,
+                "TPACK requires U32 tiles");
+  static_assert(D::BFractal == A::BFractal && D::BFractal == B::BFractal &&
+                    (D::BFractal == BLayout::CubeM16 ||
+                     D::BFractal == BLayout::CubeM32),
+                "TPACK requires matching CUBE_M16 or CUBE_M32 layouts");
+  static_assert(D::ValidRow > 0 && D::ValidCol > 0,
+                "TPACK currently requires a static valid shape");
+  volatile uint64_t controlValue = control;
+  asm volatile(
+      "BSTART.TEPL 119, %D[Type]\n"
+      "B.DIM zero, %c[Cols], ->lb0\n"
+      "B.DIM zero, %c[Rows], ->lb1\n"
+      "B.DIM zero, %c[FullCols], ->lb2\n"
+      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      "B.IOR [%[Control]],[]\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+        [Control] "r"(controlValue), [Type] "i"(__type_uint32),
+        [Cols] "i"(D::ValidCol), [Rows] "i"(D::ValidRow),
+        [FullCols] "i"(D::Cols), [Size] "i"(D::TilesizeCode));
+}
+
+template <is_tile_data_v D, is_tile_data_v S>
+void TUNPACK(D &dst, S &src, uint64_t control) {
+  static_assert(type_traits<typename D::DType>::TypeCode == __type_uint32 &&
+                    type_traits<typename S::DType>::TypeCode == __type_uint32,
+                "TUNPACK requires U32 tiles");
+  static_assert(D::BFractal == S::BFractal &&
+                    (D::BFractal == BLayout::CubeM16 ||
+                     D::BFractal == BLayout::CubeM32),
+                "TUNPACK requires matching CUBE_M16 or CUBE_M32 layouts");
+  static_assert(D::ValidRow > 0 && D::ValidCol > 0,
+                "TUNPACK currently requires a static valid shape");
+  volatile uint64_t controlValue = control;
+  asm volatile(
+      "BSTART.TEPL 120, %D[Type]\n"
+      "B.DIM zero, %c[Cols], ->lb0\n"
+      "B.DIM zero, %c[Rows], ->lb1\n"
+      "B.DIM zero, %c[FullCols], ->lb2\n"
+      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      "B.IOR [%[Control]],[]\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Src] "Tr"(src.data()), [Control] "r"(controlValue),
+        [Type] "i"(__type_uint32), [Cols] "i"(D::ValidCol),
+        [Rows] "i"(D::ValidRow), [FullCols] "i"(D::Cols),
+        [Size] "i"(D::TilesizeCode));
+}
+
+template <is_tile_data_v D>
+void TGPR2T(D &dst, uint64_t gpr0, uint64_t gpr1, uint64_t gpr2,
+            uint64_t gpr3) {
+  static_assert(type_traits<typename D::DType>::TypeCode == __type_uint8,
+                "TGPR2T requires a U8 destination");
+  static_assert((D::BFractal == BLayout::CubeM32 && D::ValidRow == 32 &&
+                 D::ValidCol == 4) ||
+                (D::BFractal == BLayout::CubeM16 && D::ValidRow == 16 &&
+                 D::ValidCol == 8),
+                "TGPR2T requires CUBE_M32 32x4 or CUBE_M16 16x8");
+  asm volatile(
+      "BSTART.TEPL 126, %D[Type]\n"
+      "B.DIM zero, %c[Cols], ->lb0\n"
+      "B.DIM zero, %c[Rows], ->lb1\n"
+      "B.IOR [%[Gpr0],%[Gpr1],%[Gpr2]],[]\n"
+      "B.IOR [%[Gpr3]],[]\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Gpr0] "r"(gpr0), [Gpr1] "r"(gpr1), [Gpr2] "r"(gpr2),
+        [Gpr3] "r"(gpr3), [Type] "i"(__type_uint8),
+        [Cols] "i"(D::ValidCol), [Rows] "i"(D::ValidRow),
+        [Size] "i"(D::TilesizeCode));
+}
+
 // TGATHERB: byte-offset tile gather (opcode 97)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_offset, is_global_data_v gm_shape>
 void TGATHERB(tile_shape_out &dst, gm_shape &src, tile_shape_offset &offset) {
