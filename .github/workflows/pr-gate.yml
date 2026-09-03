@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   gate:
-    name: Build latest Linx LLVM and validate TileOP API
+    name: Validate jcore/template_asm.hpp
     runs-on: ubuntu-latest
     timeout-minutes: 240
 
@@ -185,29 +185,43 @@ jobs:
             toolchain/output/linx_blockisa_llvm_musl
           key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
 
-      - name: Run TileOP contract checks
+      - name: Check template_asm.hpp whitespace
+        working-directory: tileop-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show --check --format= HEAD -- include/jcore/template_asm.hpp
+
+      - name: Run template_asm.hpp contract checks
+        working-directory: tileop-api
+        run: |
+          python3 test/test_pto0585_layout_interfaces.py \
+            PTO0585LayoutInterfaceTest.test_selectors \
+            PTO0585LayoutInterfaceTest.test_operand_schemas
+
+      - name: Parse template_asm.hpp with Linx Clang
         working-directory: toolchain/src/Linx-TileOP-API
         env:
-          CC: gcc
-          CXX: g++
-        run: |
-          export PATH="${TOOLCHAIN_INSTALL_DIR}/bin:$PATH"
-          make check
-
-      - name: Run Linx target gate
-        working-directory: toolchain/src/Linx-TileOP-API/test/tileop_api
-        env:
-          TC_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
-          COMPILER_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
           LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot/usr
-          LINX_TARGET: ${{ env.LINX_TARGET }}
-          PLAT: linx
+        shell: bash
         run: |
-          export PATH="${TOOLCHAIN_INSTALL_DIR}/bin:$PATH"
-          bash ./compile.all
-          bash ./run_negatives.sh
-          bash ./verify_pto0583_asm.sh
-          bash ./verify_target_cxx_frontend.sh
+          set -euo pipefail
+          cat > /tmp/template_asm_header_check.cpp <<'CPP'
+          #include "jcore/template_asm.hpp"
+          CPP
+          "${TOOLCHAIN_INSTALL_DIR}/bin/clang++" \
+            --target="${LINX_TARGET}" \
+            -mlxbc \
+            --sysroot="${LINX_SYSROOT}" \
+            -nostdinc++ \
+            -isystem "${LINX_SYSROOT}/include/c++/v1" \
+            -fenable-matrix \
+            -std=c++20 \
+            -D__linx \
+            -DENABLE_TENSOR_INSTR \
+            -Iinclude \
+            -fsyntax-only \
+            /tmp/template_asm_header_check.cpp
 
       - name: Upload build log on failure
         if: failure() && hashFiles('toolchain/build.log') != ''

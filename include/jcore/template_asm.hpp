@@ -402,7 +402,7 @@ void TSTORE2_DN2DN(gm_shape &dst, tile_shape &src1, tile_shape &src0) {
     "B.DIM zero, %[__pto_COL], ->lb2\n"
     "B.IOT %[__pto_s0], %[s1], mask=1111, last\n"
     "B.IOR [%[__pto_d0],%[__pto_GmStride]], []\n"
-    : 
+    :
     : [__pto_d0]"r"(dst.data()), [__pto_s0]"Tr"(src0.data()), [s1]"Tr"(src1.data()),
       [__pto_DstType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),

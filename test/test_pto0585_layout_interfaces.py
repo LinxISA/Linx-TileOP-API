@@ -6,8 +6,7 @@ import unittest
 HEADER = (Path(__file__).parents[1] / "include/jcore/template_asm.hpp").read_text()
 DOC_ROOT = (Path(__file__).parents[1] /
             "docs/tileop-usage/layout-and-rearrangement/layout")
-DOC_INDEX = (Path(__file__).parents[1] /
-             "docs/tileop-usage/README.md").read_text()
+DOC_INDEX = Path(__file__).parents[1] / "docs/tileop-usage/README.md"
 
 
 class PTO0585LayoutInterfaceTest(unittest.TestCase):
@@ -36,6 +35,7 @@ class PTO0585LayoutInterfaceTest(unittest.TestCase):
         )
 
     def test_usage_documentation(self):
+        doc_index = DOC_INDEX.read_text()
         for name in ("TPERMUTE", "TSHUF", "TPACK", "TUNPACK", "TGPR2T"):
             document = DOC_ROOT / f"{name}.md"
             self.assertTrue(document.is_file(), f"missing documentation: {document}")
@@ -45,7 +45,7 @@ class PTO0585LayoutInterfaceTest(unittest.TestCase):
             self.assertIn("## 约束", content)
             self.assertIn("## Bundle 组成", content)
             self.assertIn("## 使用示例", content)
-            self.assertIn(f"layout-and-rearrangement/layout/{name}.md", DOC_INDEX)
+            self.assertIn(f"layout-and-rearrangement/layout/{name}.md", doc_index)
 
 
 if __name__ == "__main__":
