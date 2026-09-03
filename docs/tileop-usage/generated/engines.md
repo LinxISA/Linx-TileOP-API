@@ -89,7 +89,7 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 | `TEXTRACT` | `BSTART.SFU TEXTRACT` | 98 | layout-and-rearrangement |
 | `TINSERT` | `BSTART.SFU TINSERT` | 99 | layout-and-rearrangement |
 | `TIMG2COL` | `BSTART.SFU TIMG2COL` | 100 | layout-and-rearrangement |
-| `TFILLPAD` | `BSTART.SFU TFILLPAD` | 101 | layout-and-rearrangement |
+| `TFILLPAD (unreleased)` | `BSTART.SFU TFILLPAD` | 101 | layout-and-rearrangement |
 | `TCI` | `BSTART.SFU TCI` | 102 | irregular-and-complex |
 | `TTRI` | `BSTART.SFU TTRI` | 103 | irregular-and-complex |
 | `THISTOGRAM` | `BSTART.SFU THISTOGRAM` | 104 | irregular-and-complex |
@@ -97,13 +97,13 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 | `TDEQUANT` | `BSTART.SFU TDEQUANT` | 107 | irregular-and-complex |
 | `TSORT` | `BSTART.SFU TSORT` | 108 | irregular-and-complex |
 | `TMRGSORT` | `BSTART.SFU TMRGSORT` | 109 | irregular-and-complex |
-| `TTRANS` | `BSTART.SFU TTRANS` | 110 | layout-and-rearrangement |
+| `TTRANS (unreleased)` | `BSTART.SFU TTRANS` | 110 | layout-and-rearrangement |
 | `TGATHER` | `BSTART.SFU TGATHER` | 111 | irregular-and-complex |
 | `TSCATTER` | `BSTART.SFU TSCATTER` | 112 | irregular-and-complex |
-| `TPARTADD` | `BSTART.SFU TPARTADD` | 113 | irregular-and-complex |
-| `TPARTMUL` | `BSTART.SFU TPARTMUL` | 114 | irregular-and-complex |
-| `TPARTMAX` | `BSTART.SFU TPARTMAX` | 115 | irregular-and-complex |
-| `TPARTMIN` | `BSTART.SFU TPARTMIN` | 116 | irregular-and-complex |
+| `TPARTADD (unreleased)` | `BSTART.SFU TPARTADD` | 113 | irregular-and-complex |
+| `TPARTMUL (unreleased)` | `BSTART.SFU TPARTMUL` | 114 | irregular-and-complex |
+| `TPARTMAX (unreleased)` | `BSTART.SFU TPARTMAX` | 115 | irregular-and-complex |
+| `TPARTMIN (unreleased)` | `BSTART.SFU TPARTMIN` | 116 | irregular-and-complex |
 
 ## TLSU
 
@@ -118,7 +118,7 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 | `MGATHER_MASK` | `BSTART.TLSU MGATHER.MASK` | 6 |
 | `MSCATTER_MASK` | `BSTART.TLSU MSCATTER.MASK` | 7 |
 | `MGATHER_CAS` | `BSTART.TLSU MGATHER.CAS` | 8 |
-| `GMOV` | `BSTART.TLSU GMOV` | 13 |
+| `GMOV` | `BSTART.GMOV` | 13 |
 
 ## CUBE
 

@@ -80,22 +80,28 @@
     "TALLOC",
     "TAXPY",
     "TDEINTERLEAVE",
+    "TFILLPAD",
     "TFMOD",
     "TFMODS",
     "TFREE",
     "TGATHERB",
     "TINTERLEAVE",
     "TLRELU",
+    "TPARTADD",
     "TPARTARGMAX",
     "TPARTARGMIN",
+    "TPARTMAX",
+    "TPARTMIN",
+    "TPARTMUL",
     "TPOP",
     "TPRELU",
     "TPUSH",
+    "TRANDOM",
     "TRESHAPE",
+    "TSORT32",
     "TSUBC",
     "TSUBSC",
-    "TRANDOM",
-    "TSORT32"
+    "TTRANS"
   ],
   "profile": "v0.58",
   "pto_source": {
@@ -887,7 +893,7 @@
     {
       "engine": "TLSU",
       "function": 13,
-      "mnemonic": "BSTART.TLSU GMOV",
+      "mnemonic": "BSTART.GMOV",
       "name": "GMOV"
     }
   ]

@@ -107,8 +107,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         for row in self.contract.get("tlsu_ops", []):
             if row["name"] in {"TPREFETCH", "MGATHER_CAS"}:
                 continue
-            spelling = row["name"].replace("_", ".")
-            self.assertIn(f"BSTART.TLSU {spelling}", self.header, row["name"])
+            self.assertIn(row["mnemonic"], self.header, row["name"])
 
     # --- inline-asm ABI: Tr + %Z + %D ---
 

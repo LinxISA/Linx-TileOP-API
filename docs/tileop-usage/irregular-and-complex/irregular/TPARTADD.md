@@ -1,4 +1,6 @@
-# TPARTADD
+# TPARTADD (unreleased)
+
+> **注意**：`TPARTADD` 已从当前 PTO ISA catalog（main `961fa81e`）的活跃操作集中移除（deleted_names）。本页保留作历史参考；新代码不应使用该操作。
 
 `TPARTADD` 构造以原点对齐的并集，并将重叠元素相加。
 

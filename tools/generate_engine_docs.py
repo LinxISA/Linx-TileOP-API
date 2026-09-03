@@ -26,6 +26,7 @@ OUTPUT = ROOT / "docs" / "tileop-usage" / "generated" / "engines.md"
 
 def render() -> str:
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+    deleted_names = set(contract.get("deleted_tile_names", []))
     lines = [
         "# LinxISA / PTO ISA v0.58.3 执行引擎",
         "",
@@ -50,8 +51,9 @@ def render() -> str:
             ]
         )
         for row in rows:
+            suffix = " (unreleased)" if row['name'] in deleted_names else ""
             lines.append(
-                f"| `{row['name']}` | `BSTART.{engine} {row['name']}` | "
+                f"| `{row['name']}{suffix}` | `BSTART.{engine} {row['name']}` | "
                 f"{row['logical_selector']} | {row['classification']} |"
             )
         lines.append("")
@@ -66,7 +68,8 @@ def render() -> str:
             ]
         )
         for row in contract[key]:
-            lines.append(f"| `{row['name']}` | `{row['mnemonic']}` | {row['function']} |")
+            suffix = " (unreleased)" if row['name'] in deleted_names else ""
+            lines.append(f"| `{row['name']}{suffix}` | `{row['mnemonic']}` | {row['function']} |")
         lines.append("")
 
     lines.extend(

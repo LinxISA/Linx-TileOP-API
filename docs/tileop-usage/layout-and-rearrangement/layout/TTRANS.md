@@ -1,4 +1,6 @@
-# TTRANS
+# TTRANS (unreleased)
+
+> **注意**：`TTRANS` 已从当前 PTO ISA catalog（main `961fa81e`）的活跃操作集中移除（deleted_names）。本页保留作历史参考；新代码不应使用该操作。
 
 `TTRANS` 将源 Tile 转置后写入目标 Tile。
 
