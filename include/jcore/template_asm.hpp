@@ -2768,7 +2768,13 @@ constexpr void validate_matrix_contract() {
       ? B::ValidRow : B::ValidCol;
   static_assert(AValidCols == BValidRows,
                 "Matrix effective valid K dimensions must match");
-  if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
+  if constexpr (is_shared_tile_v<A> || is_shared_tile_v<B>) {
+    // ASL TMATMUL legality: any cooperative Local-A/Shared-B or
+    // Shared-A/Shared-B TMATMUL interprets LB0 as core-total group_M, and
+    // PE i computes valid_M = clamp(group_M - i*M_per_PE, 0, M_per_PE).
+    // D is a per-PE tile, so its valid rows are the per-PE block, not the
+    // core-total group_M. A right-only Shared primary inherits Local A's
+    // layout, so group_M is A's (core-total) valid row count in that case.
     static_assert(AValidRows >= 1 && AValidRows <= 128,
                   "Cooperative Matrix group_M must be in the range 1..128");
     constexpr int RowsPerPE = cooperative_group_m_rows_per_pe(AValidRows);
@@ -2899,11 +2905,19 @@ constexpr void validate_matrix_postprocess_contract() {
       ? A::ValidCol : A::ValidRow;
   constexpr int N = is_shared_tile_v<B> && Attr.TransB
       ? B::ValidRow : B::ValidCol;
+  // Reduction outputs reduce the per-PE D rows: ASL MatrixRowMaxResult
+  // iterates input.valid_rows, the per-PE clamp of group_M for a
+  // cooperative TMATMUL, not the core-total group_M.
+  constexpr int PPRows =
+      (is_shared_tile_v<A> || is_shared_tile_v<B>)
+          ? pto_matmul_detail::cooperative_group_m_rows_per_pe(M)
+          : M;
   if constexpr ((OutMask & 1) != 0) {
     static_assert(type_traits<typename RowOut::DType>::TypeCode == AccCode,
                   "RowMaxOut dtype must match the derived accumulator type");
-    static_assert(RowOut::ValidRow == M && RowOut::ValidCol == 1,
-                  "RowMaxOut valid shape must be M x 1");
+    static_assert(RowOut::ValidRow == PPRows && RowOut::ValidCol == 1,
+                  "RowMaxOut valid shape must be per-PE M rows x 1 "
+                  "(group_M block for cooperative, effective M otherwise)");
   }
   if constexpr ((SrcMask & 1) != 0) {
     static_assert(type_traits<typename RowIn::DType>::TypeCode == AccCode,
@@ -2915,9 +2929,10 @@ constexpr void validate_matrix_postprocess_contract() {
     constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
     static_assert(type_traits<typename GroupOut::DType>::TypeCode == AccCode,
                   "GroupMaxOut dtype must match the derived accumulator type");
-    static_assert(GroupOut::ValidRow == M &&
+    static_assert(GroupOut::ValidRow == PPRows &&
                       GroupOut::ValidCol == (N + GroupN - 1) / GroupN,
-                  "GroupMaxOut valid shape must be M x ceil(N/GroupN)");
+                  "GroupMaxOut valid shape must be per-PE M rows x "
+                  "ceil(N/GroupN)");
   }
   if constexpr ((SrcMask & 2) != 0) {
     static_assert(type_traits<typename QuantTile::DType>::TypeCode == __type_uint64,
@@ -2950,8 +2965,12 @@ constexpr void validate_gemv_contract() {
 }
 
 // These helpers centralize the encoded M/N/K decision so basic/ACC/BIAS/MX
-// and options overloads cannot diverge. LB0/M always follows the effective
-// row count of input A, for both Local and cooperative Shared A/B operands.
+// and options overloads cannot diverge. Per the ASL TMATMUL legality, LB0
+// carries Local M or core-total cooperative group_M; either way it equals
+// the effective row count of input A (a Local A tile logically holds the
+// full M rows, a Shared A tile is shaped group_MxK), so one derivation
+// serves both. The per-PE clamp of group_M only bounds per-PE tiles (D and
+// the reduction outputs), which the validate functions check separately.
 struct MatmulShape {
   size_t M;
   size_t N;
@@ -5342,6 +5361,13 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
       ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+  // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
+  // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
+  // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
+  constexpr int RedRows =
+      (is_shared_tile_v<tile_shape_a> || is_shared_tile_v<tile_shape_b>)
+          ? pto_matmul_detail::cooperative_group_m_rows_per_pe(EffectiveM)
+          : EffectiveM;
 
   static_assert(HasVectorQuant ==
                     !std::is_same_v<typename Options::QuantTile,
@@ -5440,6 +5466,13 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
       ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+  // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
+  // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
+  // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
+  constexpr int RedRows =
+      (is_shared_tile_v<tile_shape_a> || is_shared_tile_v<tile_shape_b>)
+          ? pto_matmul_detail::cooperative_group_m_rows_per_pe(EffectiveM)
+          : EffectiveM;
 
   static_assert(HasVectorQuant ==
                     !std::is_same_v<typename Options::QuantTile,
@@ -5498,8 +5531,9 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   }
   if constexpr (HasRowOut) {
     using RowOut = typename Options::RowMaxOut;
-    static_assert(RowOut::ValidRow == EffectiveM,
-                  "TMATMUL RowMaxOut must have ValidRow=M");
+    static_assert(RowOut::ValidRow == RedRows,
+                  "TMATMUL RowMaxOut must have ValidRow = per-PE M rows "
+                  "(group_M block for cooperative, effective M otherwise)");
     static_assert(RowOut::ValidCol == -1 || RowOut::ValidCol == 1,
                   "TMATMUL RowMaxOut must have ValidCol=1");
     static_assert(matrix_accumulator_type_legal<tile_shape_a, tile_shape_b,
@@ -5531,8 +5565,9 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
     constexpr int ExpectedCols =
         (EffectiveN + GroupN - 1) / GroupN;
-    static_assert(GroupOut::ValidRow == EffectiveM,
-                  "TMATMUL GroupMaxOut must have ValidRow=M");
+    static_assert(GroupOut::ValidRow == RedRows,
+                  "TMATMUL GroupMaxOut must have ValidRow = per-PE M rows "
+                  "(group_M block for cooperative, effective M otherwise)");
     static_assert(GroupOut::ValidCol == -1 || ExpectedCols == -1 ||
                       GroupOut::ValidCol == ExpectedCols,
                   "TMATMUL GroupMaxOut must have ValidCol=ceil(N/GroupN)");
