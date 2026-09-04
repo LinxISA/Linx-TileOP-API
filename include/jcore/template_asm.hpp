@@ -212,7 +212,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>          
 void TMOV_##LAYOUT_NAME(tile_shape_out &dst, tile_shape_in &src) {               \
   asm volatile(                                                                  \
     "BSTART.TLSU TMOV, %D2\n"                                                        \
-    "B.DATR " #LAYOUT_NAME ", DTYPE_NONE, Null\n"                                  \
+    "B.DATR " #LAYOUT_NAME ", DTYPE_NONE, Zero\n"                                  \
     "B.IOT %1, mask=1111, last, ->%0<%Z3>\n"                                              \
     "B.DIM %4, 0, ->lb0\n"                                                   \
     "B.DIM %5, 0, ->lb1\n"                                                   \
@@ -265,7 +265,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TMOV_DN2NZ_DYN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
     "BSTART.TLSU TMOV, %D2\n"
-    "B.DATR DN2NZ, DTYPE_NONE, Null\n"
+    "B.DATR DN2NZ, DTYPE_NONE, Zero\n"
     "B.IOT %1, mask=1111, last, ->%0<%Z3>\n"
     "B.DIM %4, 0, ->lb0\n"
     "B.DIM %5, 0, ->lb1\n"
@@ -2656,7 +2656,7 @@ namespace pto_matmul_detail {
 
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
   "BSTART.CUBE " OPCODE ", %D[DataTypeA]\n"                                      \
-  "B.DATR %D[DataTypeB], RNONE, NOSAT\n" EXTRA_ATTRS                     \
+  "B.DATR %D[DataTypeB], byte0, Zero, RNE, NOSAT\n" EXTRA_ATTRS                     \
   "B.DIM %[M], 0, ->lb0\n"                                                   \
   "B.DIM %[N], 0, ->lb1\n"                                                   \
   "B.DIM %[K], 0, ->lb2\n"
