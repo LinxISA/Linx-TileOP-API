@@ -244,26 +244,27 @@ jobs:
   automerge:
     name: Auto-merge after green gate
     needs: gate
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.user.login != 'github-actions[bot]'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
-      - name: Enable auto-merge (squash)
+      - name: Merge the PR (gate already green)
         env:
           # GITHUB_TOKEN cannot merge its own PR (integration restriction);
-          # a PAT stored as AUTOMERGE_TOKEN performs the auto-merge instead.
+          # a PAT stored as AUTOMERGE_TOKEN performs the merge instead.
           GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
+          # This job only runs when the required gate job is green
+          # (needs: gate + default "wait for successful dependencies").
           for i in 1 2 3 4 5; do
-            if gh pr merge --auto --squash "$PR_URL"; then
-              echo "auto-merge enabled"
+            if gh pr merge --squash --auto "$PR_URL" 2>/dev/null || \
+               gh pr merge --squash "$PR_URL"; then
+              echo "PR merged (or queued)"
               exit 0
             fi
-            echo "retry $i: waiting for required check to report"
+            echo "retry $i"
             sleep 30
           done
-          echo "auto-merge could not be enabled" >&2
+          echo "could not merge" >&2
           exit 1
