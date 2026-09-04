@@ -61,6 +61,8 @@ PTO_SHARED_INLINE void TMATMUL_ACC(
 
 ## 约束
 
+- 协作 TMATMUL（任一 Shared 操作数）的 `LB0` 携带 core-total `group_M`（1..128），每个 PE 计算 `valid_M = clamp(group_M - i*M_per_PE, 0, M_per_PE)`（`M_per_PE`：group_M≤64 为 16，≥65 为 32）；RowMax/GroupMax 输出的有效行数是 **per-PE 块**（16 或 32 行），不是 `group_M`。
+
 矩阵维度必须满足乘法关系（`M×K` 与 `K×N`，或对应 GEMV 形式）；A/B/D 的 CUBE layout、累加器类型和任何 scale/bias/options 必须构成该重载允许的组合。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
