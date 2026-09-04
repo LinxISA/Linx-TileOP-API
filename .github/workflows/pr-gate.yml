@@ -252,7 +252,9 @@ jobs:
     steps:
       - name: Enable auto-merge (squash)
         env:
-          GH_TOKEN: ${{ github.token }}
+          # GITHUB_TOKEN cannot merge its own PR (integration restriction);
+          # a PAT stored as AUTOMERGE_TOKEN performs the auto-merge instead.
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
           for i in 1 2 3 4 5; do
