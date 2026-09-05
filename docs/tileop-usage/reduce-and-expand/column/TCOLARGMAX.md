@@ -39,6 +39,8 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src);
 shape 为 `1 x C`，输出元素是 U32 语义的行索引；输出 Tile dtype 必须为
 `uint32_t`。
 
+源 Tile 的 allocated capacity 不得超过 **2048 bytes**。该限制针对归约源的物理分配容量，而不是输入的逻辑 valid shape；超过限制的源 Tile 不满足接口规范。
+
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding

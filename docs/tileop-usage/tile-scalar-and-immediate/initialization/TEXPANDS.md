@@ -37,6 +37,12 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s);
 
 输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
 
+### 数据规模与布局限制
+
+- 使用 `CUBE_M16` 布局时，目标 Tile 的 `ValidRow` 不得超过 **16**。
+- 使用 `CUBE_M32` 布局时，目标 Tile 的 `ValidRow` 不得超过 **32**。
+- CUBE 布局下目标 Tile 的物理 shape 和容量必须能够表示声明的 valid shape；物理几何由所选布局和容量规则推导。
+
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding
