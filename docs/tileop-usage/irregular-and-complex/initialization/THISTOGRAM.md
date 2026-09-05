@@ -39,6 +39,14 @@ void THISTOGRAM(tile_shape_out &dst, tile_shape_in &src, tile_shape_in &Idx, int
 
 输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
 
+### 数据规模与结果形状限制
+
+- 每个源行的结果固定包含 **256 个 U32 bin**，因此输出 Tile 的 `ValidCol` 必须为 **256**。
+- 输出 Tile 的 `ValidRow` 必须等于源 Tile 的 `ValidRow`；物理 `Row` 至少能够容纳该行数，物理 `Col` 至少能够容纳 256 个 bin。
+- 输出 Tile 必须具有足够容量，且必须与源 Tile、filter Tile 分离；容量不足或结果形状不匹配时，操作在产生结果前被拒绝。
+- 源 Tile 必须为 RowMajor 的 U16 或 U32 Local Tile，filter Tile 必须为 U8 Local Tile。U16 源仅允许 `ByteId=0` 或 `1`；U32 源允许 `ByteId=0..3`。
+- 对 U16，`ByteId=0` 需要每个源行的 filter `[row,0]`，`ByteId=1` 不读取 filter；对 U32，`ByteId=0..2` 分别需要长度为 3、2、1 的全局前缀 filter，`ByteId=3` 不筛选。
+
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding
