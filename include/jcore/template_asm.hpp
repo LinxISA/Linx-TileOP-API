@@ -67,15 +67,15 @@ void TMAX_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   asm volatile(
     "BSTART.VPAR 0b0000100011, %c3\n"
     "B.IOT %1, %2, mask=1111, last, ->%0<%Z4>\n"
-    "B.DIM %5, 0, ->lb0\n"
-    "B.DIM %6, 0, ->lb1\n"
+    "B.DIM zero, %c5, ->lb0\n"
+    "B.DIM zero, %c6, ->lb1\n"
 
     ""
     : "=Tr"(dst.data())
     : "Tr"(src0.data()), "Tr"(src1.data()), \
       "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "ri"(src0.GetValidCol()), "ri"(src0.GetValidRow())
+      "i"(src0.GetValidCol()), "i"(src0.GetValidRow())
   );
 }
 
@@ -84,15 +84,15 @@ void TSUB_EXP_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
   asm volatile(
     "BSTART.VPAR 0b0001000011, %c3\n"
     "B.IOT %1, %2, mask=1111, last, ->%0<%Z4>\n"
-    "B.DIM %5, 0, ->lb0\n"
-    "B.DIM %6, 0, ->lb1\n"
+    "B.DIM zero, %c5, ->lb0\n"
+    "B.DIM zero, %c6, ->lb1\n"
 
     ""
     : "=Tr"(dst.data())
     : "Tr"(src0.data()), "Tr"(src1.data()), \
       "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "ri"(src0.GetValidCol()), "ri"(src0.GetValidRow())
+      "i"(src0.GetValidCol()), "i"(src0.GetValidRow())
   );
 }
 
@@ -103,14 +103,14 @@ void TMUL_ADD_ROWSUM_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
     "B.IOT %1, %2, mask=1111, 0, ->%0<%Z5>\n"
     "B.IOT %3, mask=1111, last\n"
     "B.DIM %6, 0, ->lb0\n"
-    "B.DIM %7, 0, ->lb1\n"
+    "B.DIM zero, %c7, ->lb1\n"
 
     ""
     : "=Tr"(dst.data())
     : "Tr"(src0.data()), "Tr"(src1.data()), "Tr"(src2.data()),
       "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "ri"(src0.GetValidCol()), "ri"(src0.GetValidRow())
+      "i"(src0.GetValidCol()), "i"(src0.GetValidRow())
   );
 }
 
@@ -121,14 +121,14 @@ void TADD_MUL_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
     "B.IOT %1, %2, mask=1111, 0, ->%0<%Z5>\n"
     "B.IOT %3, mask=1111, last\n"
     "B.DIM %6, 0, ->lb0\n"
-    "B.DIM %7, 0, ->lb1\n"
+    "B.DIM zero, %c7, ->lb1\n"
 
     ""
     : "=Tr"(dst.data())
     : "Tr"(src0.data()), "Tr"(src1.data()), "Tr"(src2.data()),
       "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "ri"(src0.GetValidCol()), "ri"(src0.GetValidRow())
+      "i"(src0.GetValidCol()), "i"(src0.GetValidRow())
   );
 }
 
@@ -166,8 +166,8 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
     asm volatile(
       "BSTART.TEPL 27, %D1\n"
       "B.DATR %D2, RNONE\n"
-      "B.DIM %5, 0, ->lb0\n"
-      "B.DIM %6, 0, ->lb1\n"
+      "B.DIM zero, %c5, ->lb0\n"
+      "B.DIM zero, %c6, ->lb1\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
       : "=Tr"(dst.data())
       : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -191,8 +191,8 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
     asm volatile(
       "BSTART.TEPL 27, %D1\n"
       "B.DATR %D2, RNONE\n"
-      "B.DIM %5, 0, ->lb0\n"
-      "B.DIM %6, 0, ->lb1\n"
+      "B.DIM zero, %c5, ->lb0\n"
+      "B.DIM zero, %c6, ->lb1\n"
       "B.DIM zero, %c7, ->lb2\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
       : "=Tr"(dst.data())
@@ -214,14 +214,14 @@ void TMOV_##LAYOUT_NAME(tile_shape_out &dst, tile_shape_in &src) {              
     "BSTART.TLSU TMOV, %D2\n"                                                        \
     "B.DATR " #LAYOUT_NAME ", DTYPE_NONE, Zero\n"                                  \
     "B.IOT %1, mask=1111, last, ->%0<%Z3>\n"                                              \
-    "B.DIM %4, 0, ->lb0\n"                                                   \
-    "B.DIM %5, 0, ->lb1\n"                                                   \
+    "B.DIM zero, %c4, ->lb0\n"                                                   \
+    "B.DIM zero, %c5, ->lb1\n"                                                   \
     : "=Tr"(dst.data())                                                          \
     : "Tr"(src.data()),                                                          \
       "i"(type_traits<typename tile_shape_in::DType>::TypeCode),                 \
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),   \
-      "ri"(src.GetValidCol()),                                              \
-      "ri"(src.GetValidRow())                                               \
+      "i"(src.GetValidCol()),                                              \
+      "i"(src.GetValidRow())                                               \
   );                                                                             \
 }
 
@@ -250,8 +250,8 @@ inline void TMOV(Tile &dst, const Tile &src) {
   const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TLSU TMOV, %D[DataType]\n"
-    "B.DIM %[ValidCol], 0, ->lb0\n"
-    "B.DIM %[ValidRow], 0, ->lb1\n"
+    "B.DIM zero, %c[ValidCol], ->lb0\n"
+    "B.DIM zero, %c[ValidRow], ->lb1\n"
     "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=&Tr"(dst.data())
     : [Src] "Tr"(src.data()),
@@ -267,15 +267,15 @@ void TMOV_DN2NZ_DYN(tile_shape_out &dst, tile_shape_in &src) {
     "BSTART.TLSU TMOV, %D2\n"
     "B.DATR DN2NZ, DTYPE_NONE, Zero\n"
     "B.IOT %1, mask=1111, last, ->%0<%Z3>\n"
-    "B.DIM %4, 0, ->lb0\n"
-    "B.DIM %5, 0, ->lb1\n"
+    "B.DIM zero, %c4, ->lb0\n"
+    "B.DIM zero, %c5, ->lb1\n"
 
     : "=Tr"(dst.data())
     : "Tr"(src.data()),
       "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow())
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow())
   );
 }
 
@@ -1830,8 +1830,8 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
             static_cast<uintptr_t>(dst.GetRangeBase());
         asm volatile(
           "BSTART.TLSU TLOAD, %D[SrcType]\n"
-          "B.DIM %[VCOL], 0, ->lb0\n"
-          "B.DIM %[VROW], 0, ->lb1\n"
+          "B.DIM zero, %c[VCOL], ->lb0\n"
+          "B.DIM zero, %c[VROW], ->lb1\n"
           "B.DIM zero, %c[COL], ->lb2\n"
           "B.IOS mask=1111, ->%S[d0]<%Z[TileSize]>\n"
           "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
@@ -1840,7 +1840,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
           : [s0]"r"(src.data()),
             [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
             [TileSize]"i"(tile_type_traits<typename ParentTile::TileDType>::TilesizeCode),
-            [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
+            [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
             [COL]"i"(ParentTile::Cols),
             [GmStride]"r"(src.GetStrideBytes(3)),
             [Init]"i"(static_cast<int>(tile_shape::INIT)),
@@ -1856,8 +1856,8 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
               static_cast<uintptr_t>(dst.GetRangeBase()); \
           asm volatile( \
             "BSTART.TLSU TLOAD, %D[SrcType]\n" \
-            "B.DIM %[VCOL], 0, ->lb0\n" \
-            "B.DIM %[VROW], 0, ->lb1\n" \
+            "B.DIM zero, %c[VCOL], ->lb0\n" \
+            "B.DIM zero, %c[VROW], ->lb1\n" \
             "B.DIM zero, %c[COL], ->lb2\n" \
             "B.IOS mask=1111, ->%S[d0]<%Z[TileSize]>\n" \
             "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[ParentSize]\n" \
@@ -1866,7 +1866,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
             : [s0]"r"(src.data()), \
               [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode), \
               [TileSize]"i"(tile_type_traits<typename ParentTile::TileDType>::TilesizeCode), \
-              [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row), \
+              [VCOL]"i"(valid_col), [VROW]"i"(valid_row), \
               [COL]"i"(ParentTile::Cols), \
               [GmStride]"r"(src.GetStrideBytes(3)), \
               [Init]"i"(static_cast<int>(tile_shape::INIT)), \
@@ -1899,8 +1899,8 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
           static_cast<uintptr_t>(dst.GetRangeBase());
       asm volatile(
         "BSTART.TLSU TLOAD, %D[SrcType]\n"
-        "B.DIM %[VCOL], 0, ->lb0\n"
-        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[VCOL], ->lb0\n"
+        "B.DIM zero, %c[VROW], ->lb1\n"
         "B.DIM zero, %c[COL], ->lb2\n"
         "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
         "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
@@ -1909,7 +1909,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
         : [s0]"r"(src.data()),
           [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
           [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-          [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
+          [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
           [COL]"i"(tile_shape::Cols),
           [GmStride]"r"(src.GetStrideBytes(3)),
           [Init]"i"(static_cast<int>(tile_shape::INIT)),
@@ -1925,8 +1925,8 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
             static_cast<uintptr_t>(dst.GetRangeBase()); \
         asm volatile( \
           "BSTART.TLSU TLOAD, %D[SrcType]\n" \
-          "B.DIM %[VCOL], 0, ->lb0\n" \
-          "B.DIM %[VROW], 0, ->lb1\n" \
+          "B.DIM zero, %c[VCOL], ->lb0\n" \
+          "B.DIM zero, %c[VROW], ->lb1\n" \
           "B.DIM zero, %c[COL], ->lb2\n" \
           "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n" \
           "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[ParentSize]\n" \
@@ -1935,7 +1935,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
           : [s0]"r"(src.data()), \
             [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode), \
             [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode), \
-            [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row), \
+            [VCOL]"i"(valid_col), [VROW]"i"(valid_row), \
             [COL]"i"(tile_shape::Cols), \
             [GmStride]"r"(src.GetStrideBytes(3)), \
             [Init]"i"(static_cast<int>(tile_shape::INIT)), \
@@ -1963,8 +1963,8 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
   } else {
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
-    "B.DIM %[VCOL], 0, ->lb0\n"
-    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
@@ -1972,7 +1972,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
     : [s0]"r"(src.data()),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
+      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
@@ -1995,8 +1995,8 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
   const size_t valid_row = result.GetValidRow();
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
-    "B.DIM %[VCOL], 0, ->lb0\n"
-    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
     "B.IOR [%[s0],%[GmStride]], []\n"
@@ -2005,7 +2005,7 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
       [PEMask]"i"(PEMask),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
-      [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
+      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
@@ -2024,8 +2024,8 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
-    "B.DIM %[VCOL], 0, ->lb0\n"
-    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
     "B.IOR [%[s0],%[GmStride]], []\n"
@@ -2034,7 +2034,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       [PEMask]"i"(PEMask),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
-      [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
+      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
@@ -2062,8 +2062,8 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
             static_cast<uintptr_t>(src.GetRangeBase());
         asm volatile(
           "BSTART.TLSU TSTORE, %D[SrcType]\n"
-          "B.DIM %[VCOL], 0, ->lb0\n"
-          "B.DIM %[VROW], 0, ->lb1\n"
+          "B.DIM zero, %c[VCOL], ->lb0\n"
+          "B.DIM zero, %c[VROW], ->lb1\n"
           "B.DIM zero, %c[COL], ->lb2\n"
           "B.IOS %S[s0], mask=1111\n"
           "B.SUBVIEW %c[SrcSelect], %[RegSrc], %c[Off], %c[SubSize]\n"
@@ -2071,7 +2071,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
           :
           : [d0]"r"(dst.data()), [s0]"Sr"(src.handle()),
             [SrcType]"i"(type_traits<typename ParentTile::DType>::TypeCode),
-            [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
+            [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
             [COL]"i"(ParentTile::Cols),
             [GmStride]"r"(dst.GetStrideBytes(3)),
             [SrcSelect]"i"(0), [RegSrc]"r"(range_base),
@@ -2085,8 +2085,8 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
               static_cast<uintptr_t>(src.GetRangeBase()); \
           asm volatile( \
             "BSTART.TLSU TSTORE, %D[SrcType]\n" \
-            "B.DIM %[VCOL], 0, ->lb0\n" \
-            "B.DIM %[VROW], 0, ->lb1\n" \
+            "B.DIM zero, %c[VCOL], ->lb0\n" \
+            "B.DIM zero, %c[VROW], ->lb1\n" \
             "B.DIM zero, %c[COL], ->lb2\n" \
             "B.IOS %S[s0], mask=1111\n" \
             "B.SUBVIEW %c[SrcSelect], r" #N ", %c[Off], %c[SubSize]\n" \
@@ -2094,7 +2094,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
             : \
             : [d0]"r"(dst.data()), [s0]"Sr"(src.handle()), \
               [SrcType]"i"(type_traits<typename ParentTile::DType>::TypeCode), \
-              [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row), \
+              [VCOL]"i"(valid_col), [VROW]"i"(valid_row), \
               [COL]"i"(ParentTile::Cols), \
               [GmStride]"r"(dst.GetStrideBytes(3)), \
               [SrcSelect]"i"(0), [RegSrc]"r"(range_base), \
@@ -2124,8 +2124,8 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
           static_cast<uintptr_t>(src.GetRangeBase());
       asm volatile(
         "BSTART.TLSU TSTORE, %D[SrcType]\n"
-        "B.DIM %[VCOL], 0, ->lb0\n"
-        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[VCOL], ->lb0\n"
+        "B.DIM zero, %c[VROW], ->lb1\n"
         "B.DIM zero, %c[COL], ->lb2\n"
         "B.IOT %[s0], mask=1111, last\n"
         "B.SUBVIEW %c[SrcSelect], %[RegSrc], %c[Off], %c[SubSize]\n"
@@ -2133,7 +2133,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
         :
         : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
           [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
-          [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
+          [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
           [COL]"i"(tile_shape::Cols),
           [GmStride]"r"(dst.GetStrideBytes(3)),
           [SrcSelect]"i"(0), [RegSrc]"r"(range_base),
@@ -2147,8 +2147,8 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
             static_cast<uintptr_t>(src.GetRangeBase()); \
         asm volatile( \
           "BSTART.TLSU TSTORE, %D[SrcType]\n" \
-          "B.DIM %[VCOL], 0, ->lb0\n" \
-          "B.DIM %[VROW], 0, ->lb1\n" \
+          "B.DIM zero, %c[VCOL], ->lb0\n" \
+          "B.DIM zero, %c[VROW], ->lb1\n" \
           "B.DIM zero, %c[COL], ->lb2\n" \
           "B.IOT %[s0], mask=1111, last\n" \
           "B.SUBVIEW %c[SrcSelect], r" #N ", %c[Off], %c[SubSize]\n" \
@@ -2156,7 +2156,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
           : \
           : [d0]"r"(dst.data()), [s0]"Tr"(src.data()), \
             [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode), \
-            [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row), \
+            [VCOL]"i"(valid_col), [VROW]"i"(valid_row), \
             [COL]"i"(tile_shape::Cols), \
             [GmStride]"r"(dst.GetStrideBytes(3)), \
             [SrcSelect]"i"(0), \
@@ -2183,15 +2183,15 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
   } else {
   asm volatile(
     "BSTART.TLSU TSTORE, %D[SrcType]\n"
-    "B.DIM %[VCOL], 0, ->lb0\n"
-    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     "B.IOT %[s0], mask=1111, last\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
       [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
+      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(dst.GetStrideBytes(3))
       : "memory");
@@ -2221,8 +2221,8 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
   asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
       "B.DATR ND2M32.normal, Zero\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       : [Dst] "=Tr"(dst.data())
@@ -2236,8 +2236,8 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
   asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
       "B.DATR ND2M16.normal, Zero\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       : [Dst] "=Tr"(dst.data())
@@ -2251,8 +2251,8 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
   asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
       "B.DATR ND2N8.normal, Zero\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       : [Dst] "=Tr"(dst.data())
@@ -2285,8 +2285,8 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
   asm volatile(
       "BSTART.TLSU TSTORE, %D[DataType]\n"
       "B.DATR M322ND.normal, Null\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT %[Src], mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
@@ -2299,8 +2299,8 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
   asm volatile(
       "BSTART.TLSU TSTORE, %D[DataType]\n"
       "B.DATR M162ND.normal, Null\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT %[Src], mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
@@ -2313,8 +2313,8 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
   asm volatile(
       "BSTART.TLSU TSTORE, %D[DataType]\n"
       "B.DATR N82ND.normal, Null\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT %[Src], mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
@@ -2360,8 +2360,8 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src) {
   const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TLSU TSTORE, %D[SrcType]\n"
-    "B.DIM %[VCOL], 0, ->lb0\n"
-    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     "B.IOS %S[Shared], mask=1111\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
@@ -2394,8 +2394,8 @@ PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
   const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TLSU TSTORE.SPART, %D[SrcType]\n"
-    "B.DIM %[VCOL], 0, ->lb0\n"
-    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
     "B.IOR [%[d0],%[GmStride]], []\n"
@@ -2422,8 +2422,8 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
       gm_shape::Cols == DYNAMIC ? rowStride : gm_shape::Cols;
   asm volatile(
     "BSTART.TLSU TPREFETCH, %D[DataType]\n"
-    "B.DIM %[VCOL], 0, ->lb0\n"
-    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM %[Col], 0, ->lb2\n"
     "B.IOR [%[Base], %[Stride]], []\n"
     :
@@ -2477,8 +2477,8 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
                 "MGATHER_CAS tiles must match the resolved ValidRow x ValidCol");
   asm volatile(
     "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
-    "B.DIM %[VCOL], 0, ->lb0\n"
-    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
@@ -7078,8 +7078,8 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 0, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7118,8 +7118,8 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 1, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7160,8 +7160,8 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   const size_t valid_row = src0.GetValidRow();
   asm volatile(
     "BSTART.TEPL 2, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7200,8 +7200,8 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 3, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7240,8 +7240,8 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 4, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7288,8 +7288,8 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 6, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7328,8 +7328,8 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 7, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7368,8 +7368,8 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 8, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7408,8 +7408,8 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 9, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7448,8 +7448,8 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 10, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7488,8 +7488,8 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 11, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7528,8 +7528,8 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 12, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -7559,8 +7559,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, EQ\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
@@ -7577,8 +7577,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, NE\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
@@ -7595,8 +7595,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, LT\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
@@ -7613,8 +7613,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, GT\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
@@ -7631,8 +7631,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, LE\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
@@ -7649,8 +7649,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
     asm volatile(
       "BSTART.TEPL 13, %D[TCode]\n"
       "B.DATR Zero, GE\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
@@ -7756,15 +7756,15 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 15, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -7794,15 +7794,15 @@ void TNOT(tile_shape &dst, tile_shape &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 16, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7832,15 +7832,15 @@ void TNEG(tile_shape &dst, tile_shape &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 17, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7870,15 +7870,15 @@ void TEXP(tile_shape &dst, tile_shape &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 18, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7908,15 +7908,15 @@ void TLOG(tile_shape &dst, tile_shape &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 19, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7931,8 +7931,8 @@ void TRECIP(tile_shape &dst, tile_shape &src) {
   const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TEPL 20, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
@@ -7968,15 +7968,15 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 21, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -8006,15 +8006,15 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 22, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -8044,15 +8044,15 @@ void TRELU(tile_shape &dst, tile_shape &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 23, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -8095,8 +8095,8 @@ void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TEPL 32, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
@@ -8142,16 +8142,16 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 33, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8170,8 +8170,8 @@ void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TEPL 34, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
@@ -8217,16 +8217,16 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 35, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8265,16 +8265,16 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 36, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8321,16 +8321,16 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 38, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8369,16 +8369,16 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 39, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8417,16 +8417,16 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 40, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8465,16 +8465,16 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 41, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8513,16 +8513,16 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 42, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8561,16 +8561,16 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 43, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8609,16 +8609,16 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 44, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8645,8 +8645,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, EQ\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
@@ -8664,8 +8664,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, NE\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
@@ -8683,8 +8683,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, LT\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
@@ -8702,8 +8702,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, GT\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
@@ -8721,8 +8721,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, LE\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
@@ -8740,8 +8740,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
     asm volatile(
       "BSTART.TEPL 45, %D[TCode]\n"
       "B.DATR Zero, GE\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
@@ -8805,8 +8805,8 @@ void TSELS(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 58, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     "B.IOR [%8],[]\n"
@@ -8852,8 +8852,8 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
   volatile typename tile_shape::DType sv = s;
   asm volatile(
     "BSTART.TEPL 59, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT mask=1111, last, ->%0<%Z5>\n"
     "B.IOR [%6],[]\n"
@@ -8897,8 +8897,8 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
   } else {
   asm volatile(
     "BSTART.TEPL 28, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111\n"
     "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
@@ -8951,16 +8951,16 @@ void TEXTRACT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t
   volatile int32_t icv = indexCol;
   asm volatile(
     "BSTART.TEPL 98, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7,%8],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -9003,16 +9003,16 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
   volatile int32_t icv = indexCol;
   asm volatile(
     "BSTART.TEPL 99, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7,%8],[]\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -9048,8 +9048,8 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src, TIMG2COLParams params) {
   asm volatile(
     "BSTART.TIMG2COL %D[DataType]\n"
     "B.DATR %c[Layout], DTYPE_NONE, Zero\n"
-    "B.DIM %[ValidCol], 0, ->lb0\n"
-    "B.DIM %[ValidRow], 0, ->lb1\n"
+    "B.DIM zero, %c[ValidCol], ->lb0\n"
+    "B.DIM zero, %c[ValidRow], ->lb1\n"
     "B.DIM zero, %c[TotalCol], ->lb2\n"
     "B.IOR [%[GMBase], zero, zero], []\n"
     "B.IOR [%[Param0], %[Param1], %[Param2]], []\n"
@@ -9095,15 +9095,15 @@ void TFILLPAD(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 101, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9138,7 +9138,7 @@ void TCI(tile_shape &dst, T s) {
   volatile uint32_t directionValue = descending;
   asm volatile(
     "BSTART.TEPL 102, %D[DataType]\n"
-    "B.DIM %[ValidCol], 0, ->lb0\n"
+    "B.DIM zero, %c[ValidCol], ->lb0\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
     "B.IOR [%[Start],%[Direction]],[]\n"
     "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
@@ -9173,8 +9173,8 @@ void TTRI(tile_shape &dst) {
   } else {
   asm volatile(
     "BSTART.TEPL 103, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT mask=1111, last, ->%0<%Z5>\n"
     ""
@@ -9242,8 +9242,8 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
       // LLVM currently names encoded RMode zero RNONE. PTO ISA 0.58.3 defines
       // that encoding as the operation default, which is RNE for TQUANT.
       "B.DATR %D[__pto_DstType], RNONE, sat\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
       "B.IOR [%[Mult], %[ZP]], []\n"
       "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
@@ -9260,8 +9260,8 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     asm volatile(
       "BSTART.TEPL 106, %D[SType]\n"
       "B.DATR %D[__pto_DstType], RNONE\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
       "B.IOR [%[Mult], %[ZP]], []\n"
       "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
@@ -9278,8 +9278,8 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     asm volatile(
       "BSTART.TEPL 106, %D[SType]\n"
       PTO_RMODE_DATR_ASM(", sat\n")
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
       "B.IOR [%[Mult], %[ZP]], []\n"
       "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
@@ -9297,8 +9297,8 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     asm volatile(
       "BSTART.TEPL 106, %D[SType]\n"
       PTO_RMODE_DATR_ASM("\n")
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
       "B.IOR [%[Mult], %[ZP]], []\n"
       "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
@@ -9355,8 +9355,8 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     asm volatile(
       "BSTART.TEPL 107, %D[SType]\n"
       "B.DATR FP32, RNONE\n"
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
       "B.IOR [%[Mult], %[ZP]], []\n"
       "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
@@ -9374,8 +9374,8 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
     asm volatile(
       "BSTART.TEPL 107, %D[SType]\n"
       PTO_RMODE_DATR_ASM("\n")
-      "B.DIM %[VCOL], 0, ->lb0\n"
-      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Col], ->lb2\n"
       "B.IOR [%[Mult], %[ZP]], []\n"
       "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
@@ -9567,15 +9567,15 @@ void TTRANS(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 110, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9607,8 +9607,8 @@ void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
   } else {
   asm volatile(
     "BSTART.TEPL 111, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
@@ -9649,8 +9649,8 @@ void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
   } else {
   asm volatile(
     "BSTART.TEPL 112, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
@@ -9690,8 +9690,8 @@ void TPARTADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 113, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -9730,8 +9730,8 @@ void TPARTMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 114, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -9770,8 +9770,8 @@ void TPARTMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 115, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -9810,8 +9810,8 @@ void TPARTMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   } else {
   asm volatile(
     "BSTART.TEPL 116, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -9860,8 +9860,8 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
   const size_t valid_row = src.GetValidRow();
   asm volatile(
     "BSTART.TEPL 64, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
@@ -9905,15 +9905,15 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 65, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9950,15 +9950,15 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 66, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9995,15 +9995,15 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 67, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10037,8 +10037,8 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 68, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
@@ -10082,15 +10082,15 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 76, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10127,15 +10127,15 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 77, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(src.GetValidCol()),
-      "ri"(src.GetValidRow()),
+      "i"(src.GetValidCol()),
+      "i"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10173,8 +10173,8 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 80, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
@@ -10219,8 +10219,8 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 81, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
@@ -10265,8 +10265,8 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 82, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
@@ -10311,8 +10311,8 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 83, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
@@ -10353,8 +10353,8 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 84, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
@@ -10399,8 +10399,8 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 92, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
@@ -10445,8 +10445,8 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
   } else {
   asm volatile(
     "BSTART.TEPL 93, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
     ""
@@ -10503,8 +10503,8 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TROWEXPANDADD: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 69, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -10562,8 +10562,8 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TROWEXPANDSUB: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 70, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -10623,8 +10623,8 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
   const size_t valid_row = src0.GetValidRow();
   asm volatile(
     "BSTART.TEPL 71, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -10682,8 +10682,8 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TROWEXPANDDIV: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 72, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -10741,8 +10741,8 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TROWEXPANDMAX: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 73, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -10800,8 +10800,8 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TROWEXPANDMIN: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 74, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -10859,8 +10859,8 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
                 "TROWEXPANDEXPDIF: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 75, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -10918,8 +10918,8 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TCOLEXPANDADD: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 85, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -10977,8 +10977,8 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TCOLEXPANDSUB: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 86, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -11036,8 +11036,8 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TCOLEXPANDMUL: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 87, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -11095,8 +11095,8 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TCOLEXPANDDIV: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 88, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -11154,8 +11154,8 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TCOLEXPANDMAX: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 89, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -11213,8 +11213,8 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                 "TCOLEXPANDMIN: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 90, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -11272,8 +11272,8 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
                 "TCOLEXPANDEXPDIF: src0/dst dtype must match");
   asm volatile(
     "BSTART.TEPL 91, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
@@ -11343,8 +11343,8 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
                 "TCONCAT: src0/dst row count must match");
   asm volatile(
     "BSTART.TEPL 96, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
