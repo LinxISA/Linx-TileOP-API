@@ -5429,8 +5429,21 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
   auto &cscale = pto_matmul_detail::select_fixp_operand<Attr.CScaleEn>(
       options.CScale, c);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_acc_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, c, a, b, cscale, row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
@@ -5621,8 +5634,21 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(
       options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, a, b, row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
@@ -5691,8 +5717,21 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, c);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, c);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_bias_fixp<Attr, SrcMask, OutMask, IorMode>(c, a, b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
@@ -5762,8 +5801,21 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, c);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, c);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_mx_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(c, a, ascale, b, bscale, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
@@ -5839,8 +5891,21 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
   auto &cscale = pto_matmul_detail::select_fixp_operand<Attr.CScaleEn>(
       options.CScale, c);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_mx_acc_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, c, a, scale_a, b, scale_b, cscale, row_in, quant_tile, relu_tile,
       row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
@@ -5914,8 +5979,21 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_mx_bias_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(d, a, scale_a, b, scale_b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
@@ -6136,8 +6214,21 @@ PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx,
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, mtx, vec,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -6221,8 +6312,21 @@ PTO_SHARED_INLINE void TGEMV_BIAS(tile_shape_d &d, tile_shape_mtx &mtx,
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_bias_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, mtx, vec, bias,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -6290,8 +6394,21 @@ PTO_SHARED_INLINE void TGEMV_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_mt
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_acc_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, c, mtx, vec,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -6361,8 +6478,21 @@ PTO_SHARED_INLINE void TGEMV_MX(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_mx_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, mtx, smtx, vec, svec,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -6436,8 +6566,21 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(tile_shape_d &d, tile_shape_mtx &mtx, tile_
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_mx_bias_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, mtx, smtx, vec, svec, bias,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -6509,8 +6652,21 @@ PTO_SHARED_INLINE void TGEMV_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_mx_acc_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, c, mtx, smtx, vec, svec,
       row_in, quant_tile, relu_tile, row_out, group_out,
