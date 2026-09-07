@@ -2777,13 +2777,12 @@ constexpr void validate_matrix_contract() {
       ? B::ValidRow : B::ValidCol;
   static_assert(AValidCols == BValidRows,
                 "Matrix effective valid K dimensions must match");
-  if constexpr (is_shared_tile_v<A> || is_shared_tile_v<B>) {
-    // ASL TMATMUL legality: any cooperative Local-A/Shared-B or
-    // Shared-A/Shared-B TMATMUL interprets LB0 as core-total group_M, and
-    // PE i computes valid_M = clamp(group_M - i*M_per_PE, 0, M_per_PE).
-    // D is a per-PE tile, so its valid rows are the per-PE block, not the
-    // core-total group_M. A right-only Shared primary inherits Local A's
-    // layout, so group_M is A's (core-total) valid row count in that case.
+  if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
+    // ASL TMATMUL legality: any cooperative TMATMUL interprets LB0 as
+    // core-total group_M, and PE i computes valid_M =
+    // clamp(group_M - i*M_per_PE, 0, M_per_PE). A Shared A tile is shaped
+    // group_MxK, so group_M is known at compile time here and D is the
+    // per-PE block of that group_M.
     static_assert(AValidRows >= 1 && AValidRows <= 128,
                   "Cooperative Matrix group_M must be in the range 1..128");
     constexpr int RowsPerPE = cooperative_group_m_rows_per_pe(AValidRows);
@@ -2791,6 +2790,20 @@ constexpr void validate_matrix_contract() {
                       Dst::ValidCol == BValidCols,
                   "Cooperative Matrix D valid shape must match the per-PE "
                   "M block (16 rows for group_M<=64, otherwise 32) x N");
+  } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
+    // Local-A/Shared-B cooperative: each PE holds only its per-PE A shard
+    // (ASL dispatch checks left.valid_rows == pe_m, the clamp of group_M),
+    // so A::ValidRow is the per-PE M. group_M itself is a runtime value
+    // (LB0), carried by the matmul M parameter - it cannot be derived from
+    // a Local tile. D is per-PE and must match the A shard.
+    static_assert(Dst::ValidRow == AValidRows &&
+                      Dst::ValidCol == BValidCols,
+                  "Cooperative Local-A/Shared-B D valid shape must match the "
+                  "per-PE A shard (valid_M x N); LB0 carries group_M at "
+                  "runtime");
+    static_assert(AValidRows == 16 || AValidRows == 32,
+                  "Cooperative Local A per-PE shard must be 16 or 32 rows "
+                  "(group_M<=64 or >=65 per ASL)");
   } else {
     static_assert(Dst::ValidRow == AValidRows &&
                       Dst::ValidCol == BValidCols,
@@ -2974,12 +2987,15 @@ constexpr void validate_gemv_contract() {
 }
 
 // These helpers centralize the encoded M/N/K decision so basic/ACC/BIAS/MX
-// and options overloads cannot diverge. Per the ASL TMATMUL legality, LB0
-// carries Local M or core-total cooperative group_M; either way it equals
-// the effective row count of input A (a Local A tile logically holds the
-// full M rows, a Shared A tile is shaped group_MxK), so one derivation
-// serves both. The per-PE clamp of group_M only bounds per-PE tiles (D and
-// the reduction outputs), which the validate functions check separately.
+// and options overloads cannot diverge. Per the ASL TMATMUL contract, LB0
+// carries Local M or core-total cooperative group_M:
+//  - Local/Local and Shared-A forms: M == A::ValidRow (compile-time exact);
+//  - Local-A/Shared-B cooperative: A::ValidRow is the per-PE shard
+//    (dispatch checks left.valid_rows == pe_m); LB0 (group_M) is a runtime
+//    value supplied by the caller through the matmul M parameter, because
+//    a Local shard cannot carry the core-total row count.
+// The per-PE clamp of group_M only bounds per-PE tiles (D and the
+// reduction outputs), which the validate functions check separately.
 struct MatmulShape {
   size_t M;
   size_t N;
