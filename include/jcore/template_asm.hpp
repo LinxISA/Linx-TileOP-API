@@ -8633,35 +8633,55 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
   }
 }
 
-// TIMG2COL: image-to-column with feature-map posM/posK (PTO ISA 0.58.3 TEPL
-// Mode3 Fn4 / selector 0x064). B.IOR carries PosMGPR, PosKGPR (low 16 bits
-// each per B4; the spec's optional B.IOR defaults to posM=posK=0). The
-// source's feature-map descriptor (NC1HWC0 / NDC1HWC0 layout, filter,
-// stride, dilation, padding) is a property of the persistent Matrix-location
-// source tile; TileOP exposes the position selectors via B.IOR.
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0,
-              uint32_t posK = 0) {
-  // low 16 bits of each position selector (B4: only low 16 bits encoded).
-  volatile uint32_t posM_v = posM & 0xffffu;
-  volatile uint32_t posK_v = posK & 0xffffu;
+// TIMG2COL: GM feature-map image-to-column materialization.  The source-only
+// B.IOR pair carries GMBase followed by the three packed parameter GPRs.
+template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
+  requires(tile_shape_out::Loc == Location::Left &&
+           (tile_shape_out::BFractal == BLayout::CubeM16 ||
+            tile_shape_out::BFractal == BLayout::CubeM32))
+void TIMG2COL(tile_shape_out &dst, gm_shape &src, TIMG2COLParams params) {
+  static_assert(tile_shape_out::ValidRow != 0 &&
+                    tile_shape_out::ValidCol != 0,
+                "TIMG2COL valid dimensions must be nonzero");
+  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+                "TIMG2COL DataType is not supported by the ASL contract");
+  volatile uint64_t param0 = params.param0;
+  volatile uint64_t param1 = params.param1;
+  volatile uint64_t param2 = params.param2;
   asm volatile(
-    "BSTART.TEPL 100, %D1\n"
-    "B.DIM %2, 0, ->lb0\n"
-    "B.DIM %3, 0, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOR [%5, %6], []\n"
-    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
-    ""
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
-      "i"(tile_shape_in::Cols),
-      "r"(posM_v), "r"(posK_v),
-      "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
-  );
+    "BSTART.TIMG2COL %D[DataType]\n"
+    "B.DATR %c[Layout], DTYPE_NONE, Zero\n"
+    "B.DIM %[ValidCol], 0, ->lb0\n"
+    "B.DIM %[ValidRow], 0, ->lb1\n"
+    "B.DIM zero, %c[TotalCol], ->lb2\n"
+    "B.IOR [%[GMBase], zero, zero], []\n"
+    "B.IOR [%[Param0], %[Param1], %[Param2]], []\n"
+    "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+    : [Dst] "=Tr"(dst.data())
+    : [GMBase] "r"(src.data()),
+      [DataType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [Layout] "i"(tile_shape_out::BFractal == BLayout::CubeM16 ?
+                         BLayout::ND2M16 : BLayout::ND2M32),
+      [ValidCol] "r"(dst.GetValidCol()),
+      [ValidRow] "r"(dst.GetValidRow()),
+      [TotalCol] "i"(tile_shape_out::Cols),
+      [Param0] "r"(param0), [Param1] "r"(param1), [Param2] "r"(param2),
+      [TileSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+    : "memory");
+}
+
+template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
+void TIMG2COL(tile_shape_out &dst, gm_shape &src,
+              uint64_t param0, uint64_t param1, uint64_t param2) {
+  TIMG2COL(dst, src, TIMG2COLParams{param0, param1, param2});
 }
 
 // TFILLPAD: copy valid region and fill padding

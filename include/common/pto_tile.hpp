@@ -1228,6 +1228,15 @@ private:
   MLayout layout_;
 };
 
+// Packed parameter words consumed by BSTART.TIMG2COL.  The bit layout is
+// defined by PTO-BSTART-TIMG2COL-PARAMS-001; keeping the words opaque here
+// prevents the API from duplicating the architectural field packing.
+struct TIMG2COLParams {
+  uint64_t param0 = 0;
+  uint64_t param1 = 0;
+  uint64_t param2 = 0;
+};
+
 template <typename T> struct is_global : std::false_type {};
 template <typename T> struct is_tile : std::false_type {
   static constexpr SLayout layout_enum = SLayout::NoneBox;
