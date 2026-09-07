@@ -95,6 +95,14 @@ public:
   int GetValidRow() const { return SubTile::ValidRow; }
   int GetValidCol() const { return SubTile::ValidCol; }
   decltype(auto) data() { return parent_->data(); }
+  unsigned long handle()
+      requires(is_shared_tile_v<Parent>) {
+    return parent_->handle();
+  }
+  unsigned long &handle_ref()
+      requires(is_shared_tile_v<Parent>) {
+    return parent_->handle_ref();
+  }
 
 private:
   Parent *parent_;

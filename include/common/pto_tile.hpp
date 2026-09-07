@@ -124,6 +124,21 @@ enum class FixpReluMode : uint8_t {
   PRelu = 3,
 };
 
+// CUBE InternalAcc control (PTO-ISA 0.58.6, spec#236): encoded into the
+// B.DATR PadValueOrByteId[1:0] field of Matrix/CUBE bundles only.
+//   0 = None (final D output, no hint)  [default]
+//   1 = RawAccumulator (CCTRL[0]: raw accumulator-type D; forbids final
+//       post-process except legal CScale)
+//   2 = InternalAccHint (CCTRL[1]: ACC-only transparent cache-use/prefetch
+//       hint on explicit C)
+//   3 = RawAccumulator | InternalAccHint
+enum CubeControl : uint8_t {
+  CubeCtrlNone = 0,
+  CubeCtrlRawAccumulator = 1,
+  CubeCtrlInternalAccHint = 2,
+  CubeCtrlRawAccAndHint = 3,
+};
+
 struct FixpAttr {
   FixpPreQuantMode PreQuant = FixpPreQuantMode::None;
   FixpReluMode Relu = FixpReluMode::None;
@@ -135,7 +150,17 @@ struct FixpAttr {
   bool TransA = false;
   bool TransB = false;
   bool CScaleEn = false;
+  CubeControl CubeCtrl = CubeCtrlNone;
 
+  // CUBE InternalAcc control setters (PTO-ISA 0.58.6, spec#236). CCTRL[0]
+  // (raw accumulator D) forbids final post-process; CCTRL[1] (ACC-only
+  // transparent cache hint) is validated against the operation kind at the
+  // wrapper layer.
+  static constexpr FixpAttr with_cube_ctrl(CubeControl Ctrl) {
+    FixpAttr Attr;
+    Attr.CubeCtrl = Ctrl;
+    return Attr;
+  }
   static constexpr FixpAttr keep_acc(
       FixpReluMode ReluMode = FixpReluMode::None) {
     FixpAttr Attr;
@@ -1623,6 +1648,33 @@ struct Options {
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
                    GroupMaxOut, Tile>(QuantDescriptor, LReluDescriptor, Quant,
                                       Relu, RowIn, RowOut, GroupOut, &Scale);
+  }
+
+  // CUBE InternalAcc controls (issue: PTO-ISA spec#236). These only change
+  // the B.DATR CCTRL bits; operands and all other attributes are carried.
+  constexpr auto raw_acc() const {
+    static_assert(Attr.CubeCtrl == CubeCtrlNone ||
+                      Attr.CubeCtrl == CubeCtrlRawAccAndHint,
+                  "CCTRL raw-accumulator bit was already configured");
+    constexpr FixpAttr NewAttr =
+        Attr.with_cube_ctrl(static_cast<CubeControl>(Attr.CubeCtrl |
+                                                    CubeCtrlRawAccumulator));
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
+  }
+  constexpr auto acc_hint() const {
+    static_assert(Attr.CubeCtrl == CubeCtrlNone ||
+                      Attr.CubeCtrl == CubeCtrlRawAccumulator,
+                  "CCTRL InternalAcc hint bit was already configured");
+    constexpr FixpAttr NewAttr =
+        Attr.with_cube_ctrl(static_cast<CubeControl>(Attr.CubeCtrl |
+                                                    CubeCtrlInternalAccHint));
+    return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
+                   GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
+                                            Quant, Relu, RowIn, RowOut,
+                                            GroupOut, CScale);
   }
 };
 
