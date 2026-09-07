@@ -75,7 +75,7 @@ void TMAX_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
     : "Tr"(src0.data()), "Tr"(src1.data()), \
       "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "r"(src0.GetValidCol()), "r"(src0.GetValidRow())
+      "ri"(src0.GetValidCol()), "ri"(src0.GetValidRow())
   );
 }
 
@@ -92,7 +92,7 @@ void TSUB_EXP_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
     : "Tr"(src0.data()), "Tr"(src1.data()), \
       "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "r"(src0.GetValidCol()), "r"(src0.GetValidRow())
+      "ri"(src0.GetValidCol()), "ri"(src0.GetValidRow())
   );
 }
 
@@ -110,7 +110,7 @@ void TMUL_ADD_ROWSUM_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
     : "Tr"(src0.data()), "Tr"(src1.data()), "Tr"(src2.data()),
       "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "r"(src0.GetValidCol()), "r"(src0.GetValidRow())
+      "ri"(src0.GetValidCol()), "ri"(src0.GetValidRow())
   );
 }
 
@@ -128,7 +128,7 @@ void TADD_MUL_EXPAND_T(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1
     : "Tr"(src0.data()), "Tr"(src1.data()), "Tr"(src2.data()),
       "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "r"(src0.GetValidCol()), "r"(src0.GetValidRow())
+      "ri"(src0.GetValidCol()), "ri"(src0.GetValidRow())
   );
 }
 
@@ -174,8 +174,8 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
         "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
         "Tr"(src.data()),
         "i"(tile_shape_out::TilesizeCode),
-        "r"(valid_col),
-        "r"(valid_row)
+        "ri"(valid_col),
+        "ri"(valid_row)
     );
   } else {
     static_assert(!tile_shape_out::IsCubeLayout,
@@ -200,8 +200,8 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
         "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
         "Tr"(src.data()),
         "i"(tile_shape_out::TilesizeCode),
-        "r"(valid_col),
-        "r"(valid_row),
+        "ri"(valid_col),
+        "ri"(valid_row),
         "i"(tile_shape_out::Cols)
     );
   }
@@ -220,8 +220,8 @@ void TMOV_##LAYOUT_NAME(tile_shape_out &dst, tile_shape_in &src) {              
     : "Tr"(src.data()),                                                          \
       "i"(type_traits<typename tile_shape_in::DType>::TypeCode),                 \
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),   \
-      "r"(src.GetValidCol()),                                              \
-      "r"(src.GetValidRow())                                               \
+      "ri"(src.GetValidCol()),                                              \
+      "ri"(src.GetValidRow())                                               \
   );                                                                             \
 }
 
@@ -258,7 +258,7 @@ inline void TMOV(Tile &dst, const Tile &src) {
       [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
       [TileSize] "i"(
           tile_type_traits<typename Tile::TileDType>::TilesizeCode),
-      [ValidCol] "r"(valid_col), [ValidRow] "r"(valid_row));
+      [ValidCol] "ri"(valid_col), [ValidRow] "ri"(valid_row));
 }
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
@@ -274,8 +274,8 @@ void TMOV_DN2NZ_DYN(tile_shape_out &dst, tile_shape_in &src) {
     : "Tr"(src.data()),
       "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow())
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow())
   );
 }
 
@@ -293,8 +293,8 @@ void THISTOGRAM(tile_shape_out &dst, tile_shape_in &src, tile_shape_in &Idx, int
     : "=Tr"(dst.data())                                                \
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),       \
       "i"(type_traits<typename tile_shape_out::DType>::TypeCode),      \
-      "r"(src.GetValidCol()),                                    \
-      "r"(src.GetValidRow()),                                    \
+      "ri"(src.GetValidCol()),                                    \
+      "ri"(src.GetValidRow()),                                    \
       "i"(tile_shape_in::Cols),                                        \
       "Tr"(src.data()),                                                \
       "Tr"(Idx.data()),                                                \
@@ -339,7 +339,7 @@ void TLOAD2_ND2NZ(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_DstType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [__pto_VCOL]"r"(dst1.GetValidCol()*2), [__pto_VROW]"r"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
+      [__pto_VCOL]"ri"(dst1.GetValidCol()*2), [__pto_VROW]"ri"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
       [__pto_GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
@@ -362,7 +362,7 @@ void TLOAD2_ND2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
       [__pto_DstType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
       [__pto_SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [__pto_VCOL]"r"(dst1.GetValidCol()*2), [__pto_VROW]"r"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
+      [__pto_VCOL]"ri"(dst1.GetValidCol()*2), [__pto_VROW]"ri"(dst1.GetValidRow()), [__pto_COL]"i"(tile_shape::Cols*2),
       [__pto_GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
 }
@@ -406,7 +406,7 @@ void TSTORE2_DN2DN(gm_shape &dst, tile_shape &src1, tile_shape &src0) {
     : [__pto_d0]"r"(dst.data()), [__pto_s0]"Tr"(src0.data()), [s1]"Tr"(src1.data()),
       [__pto_DstType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [__pto_VCOL]"r"(src0.GetValidRow()*2), [__pto_VROW]"r"(src0.GetValidCol()), [__pto_COL]"i"(tile_shape::Rows*2),
+      [__pto_VCOL]"ri"(src0.GetValidRow()*2), [__pto_VROW]"ri"(src0.GetValidCol()), [__pto_COL]"i"(tile_shape::Rows*2),
       [__pto_GmStride]"r"(dst.GetStrideBytes(4))
       : "memory");
 }
@@ -515,8 +515,8 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
         [PadValue] "i"(static_cast<int>(Pad)),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-        [ValidCol] "r"(offset.GetValidCol()),
-        [ValidRow] "r"(offset.GetValidRow()),
+        [ValidCol] "ri"(offset.GetValidCol()),
+        [ValidRow] "ri"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
         [GmStride] "r"(src.GetStride(3))
       : "memory");
@@ -540,8 +540,8 @@ inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [ValidCol] "r"(offset.GetValidCol()),
-        [ValidRow] "r"(offset.GetValidRow()),
+        [ValidCol] "ri"(offset.GetValidCol()),
+        [ValidRow] "ri"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
         [GmStride] "r"(dst.GetStride(3))
       : "memory");
@@ -572,8 +572,8 @@ inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
         [PadValue] "i"(static_cast<int>(Pad)),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-        [ValidCol] "r"(offset.GetValidCol()),
-        [ValidRow] "r"(offset.GetValidRow()),
+        [ValidCol] "ri"(offset.GetValidCol()),
+        [ValidRow] "ri"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
         [GmStride] "r"(src.GetStride(3))
       : "memory");
@@ -600,8 +600,8 @@ inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [ValidCol] "r"(offset.GetValidCol()),
-        [ValidRow] "r"(offset.GetValidRow()),
+        [ValidCol] "ri"(offset.GetValidCol()),
+        [ValidRow] "ri"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
         [GmStride] "r"(dst.GetStride(3))
       : "memory");
@@ -1840,7 +1840,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
           : [s0]"r"(src.data()),
             [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
             [TileSize]"i"(tile_type_traits<typename ParentTile::TileDType>::TilesizeCode),
-            [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+            [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
             [COL]"i"(ParentTile::Cols),
             [GmStride]"r"(src.GetStrideBytes(3)),
             [Init]"i"(static_cast<int>(tile_shape::INIT)),
@@ -1866,7 +1866,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
             : [s0]"r"(src.data()), \
               [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode), \
               [TileSize]"i"(tile_type_traits<typename ParentTile::TileDType>::TilesizeCode), \
-              [VCOL]"r"(valid_col), [VROW]"r"(valid_row), \
+              [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row), \
               [COL]"i"(ParentTile::Cols), \
               [GmStride]"r"(src.GetStrideBytes(3)), \
               [Init]"i"(static_cast<int>(tile_shape::INIT)), \
@@ -1909,7 +1909,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
         : [s0]"r"(src.data()),
           [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
           [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-          [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+          [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
           [COL]"i"(tile_shape::Cols),
           [GmStride]"r"(src.GetStrideBytes(3)),
           [Init]"i"(static_cast<int>(tile_shape::INIT)),
@@ -1935,7 +1935,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
           : [s0]"r"(src.data()), \
             [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode), \
             [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode), \
-            [VCOL]"r"(valid_col), [VROW]"r"(valid_row), \
+            [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row), \
             [COL]"i"(tile_shape::Cols), \
             [GmStride]"r"(src.GetStrideBytes(3)), \
             [Init]"i"(static_cast<int>(tile_shape::INIT)), \
@@ -1972,7 +1972,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
     : [s0]"r"(src.data()),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
@@ -2005,7 +2005,7 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
       [PEMask]"i"(PEMask),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
-      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
@@ -2034,7 +2034,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       [PEMask]"i"(PEMask),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
-      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
@@ -2071,7 +2071,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
           :
           : [d0]"r"(dst.data()), [s0]"Sr"(src.handle()),
             [SrcType]"i"(type_traits<typename ParentTile::DType>::TypeCode),
-            [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+            [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
             [COL]"i"(ParentTile::Cols),
             [GmStride]"r"(dst.GetStrideBytes(3)),
             [SrcSelect]"i"(0), [RegSrc]"r"(range_base),
@@ -2094,7 +2094,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
             : \
             : [d0]"r"(dst.data()), [s0]"Sr"(src.handle()), \
               [SrcType]"i"(type_traits<typename ParentTile::DType>::TypeCode), \
-              [VCOL]"r"(valid_col), [VROW]"r"(valid_row), \
+              [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row), \
               [COL]"i"(ParentTile::Cols), \
               [GmStride]"r"(dst.GetStrideBytes(3)), \
               [SrcSelect]"i"(0), [RegSrc]"r"(range_base), \
@@ -2133,7 +2133,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
         :
         : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
           [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
-          [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+          [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
           [COL]"i"(tile_shape::Cols),
           [GmStride]"r"(dst.GetStrideBytes(3)),
           [SrcSelect]"i"(0), [RegSrc]"r"(range_base),
@@ -2156,7 +2156,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
           : \
           : [d0]"r"(dst.data()), [s0]"Tr"(src.data()), \
             [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode), \
-            [VCOL]"r"(valid_col), [VROW]"r"(valid_row), \
+            [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row), \
             [COL]"i"(tile_shape::Cols), \
             [GmStride]"r"(dst.GetStrideBytes(3)), \
             [SrcSelect]"i"(0), \
@@ -2191,7 +2191,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
     :
     : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
       [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [VCOL]"ri"(valid_col), [VROW]"ri"(valid_row),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(dst.GetStrideBytes(3))
       : "memory");
@@ -2230,7 +2230,7 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+        [VCOL] "ri"(valid_col), [VROW] "ri"(valid_row)
       : "memory");
   } else if constexpr (cube_shape::BFractal == BLayout::CubeM16) {
   asm volatile(
@@ -2245,7 +2245,7 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+        [VCOL] "ri"(valid_col), [VROW] "ri"(valid_row)
       : "memory");
   } else { // CubeN8
   asm volatile(
@@ -2260,7 +2260,7 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+        [VCOL] "ri"(valid_col), [VROW] "ri"(valid_row)
       : "memory");
   }
 }
@@ -2293,7 +2293,7 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
         [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
-        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+        [VCOL] "ri"(valid_col), [VROW] "ri"(valid_row)
       : "memory");
   } else if constexpr (cube_shape::BFractal == BLayout::CubeM16) {
   asm volatile(
@@ -2307,7 +2307,7 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
         [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
-        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+        [VCOL] "ri"(valid_col), [VROW] "ri"(valid_row)
       : "memory");
   } else { // CubeN8
   asm volatile(
@@ -2321,7 +2321,7 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
         [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
-        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+        [VCOL] "ri"(valid_col), [VROW] "ri"(valid_row)
       : "memory");
   }
 }
@@ -2368,7 +2368,7 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src) {
     :
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
       [SrcType] "i"(type_traits<typename LocalType::DType>::TypeCode),
-      [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+      [VCOL] "ri"(valid_col), [VROW] "ri"(valid_row),
       [COL] "i"(LocalType::Cols),
       [GmStride] "r"(dst.GetStrideBytes(3))
     : "memory");
@@ -2403,7 +2403,7 @@ PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
       [PEMask] "i"(PEMask),
       [SrcType] "i"(type_traits<typename LocalType::DType>::TypeCode),
-      [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+      [VCOL] "ri"(valid_col), [VROW] "ri"(valid_row),
       [COL] "i"(LocalType::Cols),
       [GmStride] "r"(dst.GetStrideBytes(3))
     : "memory");
@@ -2429,7 +2429,7 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
     :
     : [Base] "r"(src.data()), [Stride] "r"(rowStride),
       [DataType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
-      [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+      [VCOL] "ri"(valid_col), [VROW] "ri"(valid_row),
       [Col] "r"(physicalCol)
     : "memory");
 }
@@ -2488,7 +2488,7 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
       [Rep] "Tr"(replacement.data()),
       [Base] "r"(base),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
-      [VCOL] "r"(validCol), [VROW] "r"(validRow),
+      [VCOL] "ri"(validCol), [VROW] "ri"(validRow),
       [Col] "i"(DstTile::Cols),
       [DstSize] "i"(DstTile::TilesizeCode)
     : "memory");
@@ -6661,8 +6661,8 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -6701,8 +6701,8 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -6743,8 +6743,8 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(valid_col),
-      "r"(valid_row),
+      "ri"(valid_col),
+      "ri"(valid_row),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -6783,8 +6783,8 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -6823,8 +6823,8 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -6871,8 +6871,8 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -6911,8 +6911,8 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -6951,8 +6951,8 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -6991,8 +6991,8 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -7031,8 +7031,8 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -7071,8 +7071,8 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -7111,8 +7111,8 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -7142,8 +7142,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src0.GetValidCol()),
-        [VROW] "r"(src0.GetValidRow()),
+        [VCOL] "ri"(src0.GetValidCol()),
+        [VROW] "ri"(src0.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S0] "Tr"(src0.data()),
         [S1] "Tr"(src1.data()),
@@ -7160,8 +7160,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src0.GetValidCol()),
-        [VROW] "r"(src0.GetValidRow()),
+        [VCOL] "ri"(src0.GetValidCol()),
+        [VROW] "ri"(src0.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S0] "Tr"(src0.data()),
         [S1] "Tr"(src1.data()),
@@ -7178,8 +7178,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src0.GetValidCol()),
-        [VROW] "r"(src0.GetValidRow()),
+        [VCOL] "ri"(src0.GetValidCol()),
+        [VROW] "ri"(src0.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S0] "Tr"(src0.data()),
         [S1] "Tr"(src1.data()),
@@ -7196,8 +7196,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src0.GetValidCol()),
-        [VROW] "r"(src0.GetValidRow()),
+        [VCOL] "ri"(src0.GetValidCol()),
+        [VROW] "ri"(src0.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S0] "Tr"(src0.data()),
         [S1] "Tr"(src1.data()),
@@ -7214,8 +7214,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src0.GetValidCol()),
-        [VROW] "r"(src0.GetValidRow()),
+        [VCOL] "ri"(src0.GetValidCol()),
+        [VROW] "ri"(src0.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S0] "Tr"(src0.data()),
         [S1] "Tr"(src1.data()),
@@ -7232,8 +7232,8 @@ void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src0.GetValidCol()),
-        [VROW] "r"(src0.GetValidRow()),
+        [VCOL] "ri"(src0.GetValidCol()),
+        [VROW] "ri"(src0.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S0] "Tr"(src0.data()),
         [S1] "Tr"(src1.data()),
@@ -7292,8 +7292,8 @@ void TSEL(tile_shape &dst, tile_shape &mask, tile_shape &true_src) {
     : [Dst] "=Tr"(dst.data())
     : [Prior] "0"(dst.data()),
       [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [ValidCol] "r"(mask.GetValidCol()),
-      [ValidRow] "r"(mask.GetValidRow()),
+      [ValidCol] "ri"(mask.GetValidCol()),
+      [ValidRow] "ri"(mask.GetValidRow()),
       [Cols] "i"(tile_shape::Cols),
       [Mask] "Tr"(mask.data()),
       [True] "Tr"(true_src.data()),
@@ -7339,8 +7339,8 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -7377,8 +7377,8 @@ void TNOT(tile_shape &dst, tile_shape &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7415,8 +7415,8 @@ void TNEG(tile_shape &dst, tile_shape &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7453,8 +7453,8 @@ void TEXP(tile_shape &dst, tile_shape &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7491,8 +7491,8 @@ void TLOG(tile_shape &dst, tile_shape &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7514,8 +7514,8 @@ void TRECIP(tile_shape &dst, tile_shape &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(valid_col),
-      "r"(valid_row),
+      "ri"(valid_col),
+      "ri"(valid_row),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7551,8 +7551,8 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7589,8 +7589,8 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7627,8 +7627,8 @@ void TRELU(tile_shape &dst, tile_shape &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
@@ -7679,8 +7679,8 @@ void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(valid_col),
-      "r"(valid_row),
+      "ri"(valid_col),
+      "ri"(valid_row),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -7726,8 +7726,8 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -7754,8 +7754,8 @@ void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(valid_col),
-      "r"(valid_row),
+      "ri"(valid_col),
+      "ri"(valid_row),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -7801,8 +7801,8 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -7849,8 +7849,8 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -7905,8 +7905,8 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -7953,8 +7953,8 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8001,8 +8001,8 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8049,8 +8049,8 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8097,8 +8097,8 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8145,8 +8145,8 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8193,8 +8193,8 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
@@ -8229,8 +8229,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src.GetValidCol()),
-        [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()),
+        [VROW] "ri"(src.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S] "Tr"(src.data()),
         [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -8248,8 +8248,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src.GetValidCol()),
-        [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()),
+        [VROW] "ri"(src.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S] "Tr"(src.data()),
         [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -8267,8 +8267,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src.GetValidCol()),
-        [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()),
+        [VROW] "ri"(src.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S] "Tr"(src.data()),
         [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -8286,8 +8286,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src.GetValidCol()),
-        [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()),
+        [VROW] "ri"(src.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S] "Tr"(src.data()),
         [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -8305,8 +8305,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src.GetValidCol()),
-        [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()),
+        [VROW] "ri"(src.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S] "Tr"(src.data()),
         [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -8324,8 +8324,8 @@ void TCMPS(tile_shape_out &dst, tile_shape_in &src,
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-        [VCOL] "r"(src.GetValidCol()),
-        [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()),
+        [VROW] "ri"(src.GetValidRow()),
         [Cols] "i"(tile_shape_in::Cols),
         [S] "Tr"(src.data()),
         [TSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -8389,8 +8389,8 @@ void TSELS(tile_shape &dst, tile_shape &src0, typename tile_shape::DType s, tile
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -8436,8 +8436,8 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape::Cols),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       "r"(sv)
@@ -8481,8 +8481,8 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -8535,8 +8535,8 @@ void TEXTRACT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -8587,8 +8587,8 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -8620,8 +8620,8 @@ void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0,
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "r"(posM_v), "r"(posK_v),
       "Tr"(src.data()),
@@ -8658,8 +8658,8 @@ void TFILLPAD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -8700,7 +8700,7 @@ void TCI(tile_shape &dst, T s) {
     "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=Tr"(dst.data())
     : [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [ValidCol] "r"(dst.GetValidCol()),
+      [ValidCol] "ri"(dst.GetValidCol()),
       [PhysicalCol] "i"(tile_shape::Cols),
       [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [Start] "r"(startValue),
@@ -8736,8 +8736,8 @@ void TTRI(tile_shape &dst) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape::Cols),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
   );
@@ -8807,7 +8807,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
       : [Src] "Tr"(src.data()),
         [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         [__pto_DstType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
-        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()), [VROW] "ri"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),
         [Mult] "r"(mult), [ZP] "r"(zp),
         [DstSize] "i"(tile_shape_out::TilesizeCode)
@@ -8825,7 +8825,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
       : [Src] "Tr"(src.data()),
         [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         [__pto_DstType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
-        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()), [VROW] "ri"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),
         [Mult] "r"(mult), [ZP] "r"(zp),
         [DstSize] "i"(tile_shape_out::TilesizeCode)
@@ -8844,7 +8844,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
         [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         [__pto_DstType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
         [RMode] "i"(static_cast<unsigned>(Mode)),
-        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()), [VROW] "ri"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),
         [Mult] "r"(mult), [ZP] "r"(zp),
         [DstSize] "i"(tile_shape_out::TilesizeCode)
@@ -8863,7 +8863,7 @@ void TQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
         [SType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         [__pto_DstType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
         [RMode] "i"(static_cast<unsigned>(Mode)),
-        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()), [VROW] "ri"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),
         [Mult] "r"(mult), [ZP] "r"(zp),
         [DstSize] "i"(tile_shape_out::TilesizeCode)
@@ -8921,7 +8921,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
         [SType] "i"(
             type_traits<typename tile_shape_in::DType>::TypeCode == __type_int8
                 ? __type_int8 : __type_uint8),
-        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()), [VROW] "ri"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),
         [Mult] "r"(mult), [ZP] "r"(zp),
         [DstSize] "i"(tile_shape_out::TilesizeCode)
@@ -8942,7 +8942,7 @@ void TDEQUANT(tile_shape_out &dst, tile_shape_in &src, float multiplier = 1.0f,
                 ? __type_int8 : __type_uint8),
         [__pto_DstType] "i"(__type_fp32),
         [RMode] "i"(static_cast<unsigned>(Mode)),
-        [VCOL] "r"(src.GetValidCol()), [VROW] "r"(src.GetValidRow()),
+        [VCOL] "ri"(src.GetValidCol()), [VROW] "ri"(src.GetValidRow()),
         [Col] "i"(tile_shape_in::Cols),
         [Mult] "r"(mult), [ZP] "r"(zp),
         [DstSize] "i"(tile_shape_out::TilesizeCode)
@@ -9130,8 +9130,8 @@ void TTRANS(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(src.GetValidCol()),
-      "r"(src.GetValidRow()),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9171,8 +9171,8 @@ void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(off.GetValidCol()),
-      "r"(off.GetValidRow()),
+      "ri"(off.GetValidCol()),
+      "ri"(off.GetValidRow()),
       "i"(tile_shape_off::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -9213,8 +9213,8 @@ void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(off.GetValidCol()),
-      "r"(off.GetValidRow()),
+      "ri"(off.GetValidCol()),
+      "ri"(off.GetValidRow()),
       "i"(tile_shape_off::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -9253,8 +9253,8 @@ void TPARTADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -9293,8 +9293,8 @@ void TPARTMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -9333,8 +9333,8 @@ void TPARTMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -9373,8 +9373,8 @@ void TPARTMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      "r"(src0.GetValidCol()),
-      "r"(src0.GetValidRow()),
+      "ri"(src0.GetValidCol()),
+      "ri"(src0.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -9422,8 +9422,8 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(valid_col),
-      "r"(valid_row),
+      "ri"(valid_col),
+      "ri"(valid_row),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9466,8 +9466,8 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9510,8 +9510,8 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9554,8 +9554,8 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9596,8 +9596,8 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9640,8 +9640,8 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9684,8 +9684,8 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9730,8 +9730,8 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9776,8 +9776,8 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9822,8 +9822,8 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9868,8 +9868,8 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9910,8 +9910,8 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -9956,8 +9956,8 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10002,8 +10002,8 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
@@ -10060,8 +10060,8 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10119,8 +10119,8 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10180,8 +10180,8 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(valid_col),
-      "r"(valid_row),
+      "ri"(valid_col),
+      "ri"(valid_row),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10239,8 +10239,8 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10298,8 +10298,8 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10357,8 +10357,8 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10416,8 +10416,8 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10475,8 +10475,8 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10534,8 +10534,8 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10593,8 +10593,8 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10652,8 +10652,8 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10711,8 +10711,8 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10770,8 +10770,8 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10829,8 +10829,8 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
@@ -10900,8 +10900,8 @@ void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
+      "ri"(dst.GetValidCol()),
+      "ri"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),

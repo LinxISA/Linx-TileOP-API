@@ -240,6 +240,38 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             '"B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\\n"', tsel
         )
 
+    def test_valid_shape_immediate_fixture_separates_static_and_dynamic_paths(self) -> None:
+        fixture = (ROOT / "test" / "tileop_api" / "src" / "ValidShapeImmediate.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"i" + C.B.DIMI path', fixture)
+        self.assertIn('"r" + B.DIM path', fixture)
+        self.assertIn('using S = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;', fixture)
+        self.assertIn('using D = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor, -1, -1>;', fixture)
+
+    def test_static_valid_shape_bindings_remain_immediate_eligible(self) -> None:
+        header = self.header
+        for spelling in (
+            '"ri"(dst.GetValidCol())',
+            '"ri"(dst.GetValidRow())',
+            '"ri"(src.GetValidCol())',
+            '"ri"(src.GetValidRow())',
+            '"ri"(offset.GetValidCol())',
+            '"ri"(offset.GetValidRow())',
+            '[VCOL] "ri"(validCol)',
+            '[VROW] "ri"(validRow)',
+        ):
+            self.assertIn(spelling, header)
+        for spelling in (
+            '"r"(dst.GetValidCol())',
+            '"r"(dst.GetValidRow())',
+            '"r"(src.GetValidCol())',
+            '"r"(src.GetValidRow())',
+            '"r"(offset.GetValidCol())',
+            '"r"(offset.GetValidRow())',
+        ):
+            self.assertNotIn(spelling, header)
+
     def test_fpatr_carries_shared_transpose_controls(self) -> None:
         tile = PTO_TILE.read_text(encoding="utf-8")
         self.assertIn("bool TransA = false", tile)
