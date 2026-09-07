@@ -87,6 +87,17 @@ void matmul_step(GM &ga, GM &gb, GM &gc, A &a, B &b, C &c) {
 }
 ```
 
+For cooperative `Local-A/Shared-B` matmul, the source `Local-A` shard does not
+carry the core-total `group_M`. Use the explicit `groupM` overload instead of
+relying on the three-argument form:
+
+```cpp
+TMATMUL(c, local_a, shared_b, groupM);
+```
+
+This keeps `LB0` aligned with the ASL cooperative `group_M` contract while the
+Local shard descriptor remains per-PE.
+
 For a non-CUBE Tile, the same spelling remains the normal `B.IOT` transport:
 
 ```cpp
