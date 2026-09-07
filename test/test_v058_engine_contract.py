@@ -531,8 +531,8 @@ int main() { return sizeof(Bad); }
 
     def test_timg2col_uses_destination_geometry_and_cube_output(self) -> None:
         body = self.header[self.header.index("void TIMG2COL"):self.header.index("// TFILLPAD")]
-        self.assertIn('"ri"(dst.GetValidCol())', body)
-        self.assertIn('"ri"(dst.GetValidRow())', body)
+        self.assertIn('"r"(dst.GetValidCol())', body)
+        self.assertIn('"r"(dst.GetValidRow())', body)
         self.assertIn("tile_shape_out::Loc == Location::Left", body)
         self.assertIn("BLayout::CubeM16", body)
         self.assertIn("BLayout::CubeM32", body)

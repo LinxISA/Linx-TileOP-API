@@ -8947,9 +8947,9 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src, TIMG2COLParams params) {
     : [GMBase] "r"(src.data()),
       [DataType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
       [Layout] "i"(tile_shape_out::BFractal == BLayout::CubeM16 ?
-                         LayoutCvtEnum::ND2M16 : LayoutCvtEnum::ND2M32),
-      [ValidCol] "ri"(dst.GetValidCol()),
-      [ValidRow] "ri"(dst.GetValidRow()),
+                         BLayout::ND2M16 : BLayout::ND2M32),
+      [ValidCol] "r"(dst.GetValidCol()),
+      [ValidRow] "r"(dst.GetValidRow()),
       [TotalCol] "i"(tile_shape_out::Cols),
       [Param0] "r"(param0), [Param1] "r"(param1), [Param2] "r"(param2),
       [TileSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
