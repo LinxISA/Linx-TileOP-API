@@ -123,4 +123,170 @@ template <int VR,int VC> using T = Tile<Location::Vec, float, 32, 32, BLayout::R
 
 
 
+namespace sw_a {
+template <int VR,int VC> using T =
+  Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, VR, VC>;
+template <int VR,int VC> using TQ =
+  Tile<Location::Vec, int8_t, 32, 32, BLayout::RowMajor, VR, VC>;
+
+// 三参同型: TPARTADD/MAX/MIN/MUL, TSEL(dst,mask,true), TFMA 4参
+#define SW3(FN) \
+  __attribute__((noinline)) void FN##_ss(T<16,32> &a,T<16,32> &b,T<16,32> &c){FN(a,b,c);} \
+  __attribute__((noinline)) void FN##_sd(T<16,-1> &a,T<16,-1> &b,T<16,-1> &c){FN(a,b,c);} \
+  __attribute__((noinline)) void FN##_ds(T<-1,32> &a,T<-1,32> &b,T<-1,32> &c){FN(a,b,c);} \
+  __attribute__((noinline)) void FN##_dd(T<-1,-1> &a,T<-1,-1> &b,T<-1,-1> &c){FN(a,b,c);}
+SW3(TPARTADD) SW3(TPARTMAX) SW3(TPARTMIN) SW3(TPARTMUL) SW3(TSEL)
+#define SW4(FN) \
+  __attribute__((noinline)) void FN##_ss(T<16,32> &a,T<16,32> &b,T<16,32> &c,T<16,32> &d){FN(a,b,c,d);} \
+  __attribute__((noinline)) void FN##_sd(T<16,-1> &a,T<16,-1> &b,T<16,-1> &c,T<16,-1> &d){FN(a,b,c,d);} \
+  __attribute__((noinline)) void FN##_ds(T<-1,32> &a,T<-1,32> &b,T<-1,32> &c,T<-1,32> &d){FN(a,b,c,d);} \
+  __attribute__((noinline)) void FN##_dd(T<-1,-1> &a,T<-1,-1> &b,T<-1,-1> &c,T<-1,-1> &d){FN(a,b,c,d);}
+SW4(TFMA)
+
+// 二参 dst/src: TFILLPAD, TEXTRACT/TINSERT(带index)
+#define SW2(FN) \
+  __attribute__((noinline)) void FN##_ss(T<16,32> &a,T<16,32> &b){FN(a,b);} \
+  __attribute__((noinline)) void FN##_sd(T<16,-1> &a,T<16,-1> &b){FN(a,b);} \
+  __attribute__((noinline)) void FN##_ds(T<-1,32> &a,T<-1,32> &b){FN(a,b);} \
+  __attribute__((noinline)) void FN##_dd(T<-1,-1> &a,T<-1,-1> &b){FN(a,b);}
+SW2(TFILLPAD)
+#define SW2I(FN) \
+  __attribute__((noinline)) void FN##_ss(T<16,32> &a,T<16,32> &b){FN(a,b,0,0);} \
+  __attribute__((noinline)) void FN##_sd(T<16,-1> &a,T<16,-1> &b){FN(a,b,0,0);} \
+  __attribute__((noinline)) void FN##_ds(T<-1,32> &a,T<-1,32> &b){FN(a,b,0,0);} \
+  __attribute__((noinline)) void FN##_dd(T<-1,-1> &a,T<-1,-1> &b){FN(a,b,0,0);}
+SW2I(TEXTRACT) SW2I(TINSERT)
+// TEXPANDS(dst, s)
+#define SW1S(FN) \
+  __attribute__((noinline)) void FN##_ss(T<16,32> &a){FN(a,1.0f);} \
+  __attribute__((noinline)) void FN##_sd(T<16,-1> &a){FN(a,1.0f);} \
+  __attribute__((noinline)) void FN##_ds(T<-1,32> &a){FN(a,1.0f);} \
+  __attribute__((noinline)) void FN##_dd(T<-1,-1> &a){FN(a,1.0f);}
+SW1S(TEXPANDS)
+// TDEQUANT(dst,src,mult,zp)
+__attribute__((noinline)) void tdq_ss(T<16,32> &d,TQ<16,32> &s){TDEQUANT(d,s,1.0f,2);}
+__attribute__((noinline)) void tdq_sd(T<16,-1> &d,TQ<16,-1> &s){TDEQUANT(d,s,1.0f,2);}
+__attribute__((noinline)) void tdq_ds(T<-1,32> &d,TQ<-1,32> &s){TDEQUANT(d,s,1.0f,2);}
+__attribute__((noinline)) void tdq_dd(T<-1,-1> &d,TQ<-1,-1> &s){TDEQUANT(d,s,1.0f,2);}
+
+
+
+}  // namespace sw_a
+
+namespace sw_b {
+template <int VR,int VC> using T =
+  Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, VR, VC>;
+template <int VR,int VC> using C1 =
+  Tile<Location::Vec, float, 32, 1, BLayout::RowMajor, VR, VC>;
+
+// EXPAND (dst=T, src=C1 单列)
+#define SWEX(FN) \
+  __attribute__((noinline)) void FN##_ss(T<16,32> &d,C1<16,1> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_sd(T<16,-1> &d,C1<16,-1> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_ds(T<-1,32> &d,C1<-1,1> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_dd(T<-1,-1> &d,C1<-1,-1> &s){FN(d,s);}
+SWEX(TROWEXPAND)
+#define SWEX3(FN) \
+  __attribute__((noinline)) void FN##_ss(T<16,32> &d,C1<16,1> &a,C1<16,1> &b){FN(d,a,b);} \
+  __attribute__((noinline)) void FN##_sd(T<16,-1> &d,C1<16,-1> &a,C1<16,-1> &b){FN(d,a,b);} \
+  __attribute__((noinline)) void FN##_ds(T<-1,32> &d,C1<-1,1> &a,C1<-1,1> &b){FN(d,a,b);} \
+  __attribute__((noinline)) void FN##_dd(T<-1,-1> &d,C1<-1,-1> &a,C1<-1,-1> &b){FN(d,a,b);}
+SWEX3(TROWEXPANDADD) SWEX3(TROWEXPANDDIV) SWEX3(TROWEXPANDMUL) SWEX3(TROWEXPANDSUB)
+SWEX3(TROWEXPANDMAX) SWEX3(TROWEXPANDMIN) SWEX3(TROWEXPANDEXPDIF)
+
+// ARGMAX/ARGMIN (dst=C1, src=T)
+#define SWAR(FN) \
+  __attribute__((noinline)) void FN##_ss(C1<16,1> &d,T<16,32> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_sd(C1<16,-1> &d,T<16,-1> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_ds(C1<-1,1> &d,T<-1,32> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_dd(C1<-1,-1> &d,T<-1,-1> &s){FN(d,s);}
+SWAR(TROWARGMAX) SWAR(TROWARGMIN)
+
+
+
+}  // namespace sw_b
+
+namespace sw_c {
+template <int VR,int VC> using T =
+  Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, VR, VC>;
+template <int VR,int VC> using R1 =
+  Tile<Location::Vec, float, 1, 32, BLayout::RowMajor, VR, VC>;
+
+// col expand: src 单行 R1, dst T
+#define SWEX(FN) \
+  __attribute__((noinline)) void FN##_ss(T<16,32> &d,R1<1,32> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_sd(T<16,-1> &d,R1<1,-1> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_ds(T<-1,32> &d,R1<-1,32> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_dd(T<-1,-1> &d,R1<-1,-1> &s){FN(d,s);}
+SWEX(TCOLEXPAND)
+#define SWEX3(FN) \
+  __attribute__((noinline)) void FN##_ss(T<16,32> &d,R1<1,32> &a,R1<1,32> &b){FN(d,a,b);} \
+  __attribute__((noinline)) void FN##_sd(T<16,-1> &d,R1<1,-1> &a,R1<1,-1> &b){FN(d,a,b);} \
+  __attribute__((noinline)) void FN##_ds(T<-1,32> &d,R1<-1,32> &a,R1<-1,32> &b){FN(d,a,b);} \
+  __attribute__((noinline)) void FN##_dd(T<-1,-1> &d,R1<-1,-1> &a,R1<-1,-1> &b){FN(d,a,b);}
+SWEX3(TCOLEXPANDADD) SWEX3(TCOLEXPANDDIV) SWEX3(TCOLEXPANDMUL) SWEX3(TCOLEXPANDSUB)
+SWEX3(TCOLEXPANDMAX) SWEX3(TCOLEXPANDMIN) SWEX3(TCOLEXPANDEXPDIF)
+#define SWAR(FN) \
+  __attribute__((noinline)) void FN##_ss(R1<1,32> &d,T<16,32> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_sd(R1<1,-1> &d,T<16,-1> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_ds(R1<-1,32> &d,T<-1,32> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_dd(R1<-1,-1> &d,T<-1,-1> &s){FN(d,s);}
+SWAR(TCOLARGMAX) SWAR(TCOLARGMIN)
+
+
+
+}  // namespace sw_c
+
+namespace sw_d {
+template <int VR,int VC> using T =
+  Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, VR, VC>;
+template <int VR,int VC> using O =
+  Tile<Location::Vec, int32_t, 32, 32, BLayout::RowMajor, VR, VC>;
+
+// (dst, src, off) — off 的 ValidCol/Row 驱动四分支
+#define SWGO(FN) \
+  __attribute__((noinline)) void FN##_ss(T<16,32> &d,T<16,32> &s,O<16,32> &o){FN(d,s,o);} \
+  __attribute__((noinline)) void FN##_sd(T<16,-1> &d,T<16,-1> &s,O<16,-1> &o){FN(d,s,o);} \
+  __attribute__((noinline)) void FN##_ds(T<-1,32> &d,T<-1,32> &s,O<-1,32> &o){FN(d,s,o);} \
+  __attribute__((noinline)) void FN##_dd(T<-1,-1> &d,T<-1,-1> &s,O<-1,-1> &o){FN(d,s,o);}
+SWGO(TGATHER) SWGO(TSCATTER)
+
+
+
+}  // namespace sw_d
+
+namespace sw_e {
+using gms = global_tensor<float, RowMajor<32, 32>>;
+template <int VR,int VC> using ST =
+  Tile<Location::Vec, float, 16, 32, BLayout::RowMajor, VR, VC>;
+
+// Shared produced inline via TMOV_L2S_INSERT (never crosses the C++ ABI)
+__attribute__((noinline)) void tst_ss(float *out, float *in) {
+  gms g(out); gms src(in); ST<16,32> t;
+  TLOAD(t, src);
+  auto sh = TMOV_L2S_INSERT(t);
+  TSTORE(g, sh);
+}
+__attribute__((noinline)) void tst_sd(float *out, float *in) {
+  gms g(out); gms src(in); ST<16,-1> t;
+  TLOAD(t, src);
+  auto sh = TMOV_L2S_INSERT(t);
+  TSTORE(g, sh);
+}
+__attribute__((noinline)) void tst_ds(float *out, float *in) {
+  gms g(out); gms src(in); ST<-1,32> t;
+  TLOAD(t, src);
+  auto sh = TMOV_L2S_INSERT(t);
+  TSTORE(g, sh);
+}
+__attribute__((noinline)) void tst_dd(float *out, float *in) {
+  gms g(out); gms src(in); ST<-1,-1> t;
+  TLOAD(t, src);
+  auto sh = TMOV_L2S_INSERT(t);
+  TSTORE(g, sh);
+}
+
+
+}  // namespace sw_e
+
 int main() { return 0; }
