@@ -199,6 +199,27 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("length cannot exceed the parent Tile capacity", tile_header)
         self.assertIn("auto assemble_last_at_reg(Parent &parent", tile_header)
 
+    def test_range_modifier_types_and_aliases_remain_supported(self) -> None:
+        header = PTO_TILE.read_text(encoding="utf-8")
+        docs = (ROOT / "docs" / "tileop-usage" / "range-modifiers.md").read_text(
+            encoding="utf-8"
+        )
+        for spelling in (
+            "range::Subview",
+            "range::Assemble",
+            "subview_at_reg",
+            "subview_sized_at_reg",
+            "assemble_at_reg",
+            "assemble_last_at_reg",
+        ):
+            self.assertIn(spelling, header)
+        for spelling in (
+            "range::subview",
+            "range::assemble",
+            "range::assemble_last",
+        ):
+            self.assertIn(spelling, docs)
+
     # --- PE mask: 4 binary digits ---
 
     def test_pe_masks_are_four_binary_digits(self) -> None:
