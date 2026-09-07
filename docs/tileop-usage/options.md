@@ -338,6 +338,7 @@ Shared form 使用四 PE cooperative、mask `1111`，Shared Right 当前要求�
 
 ```cpp
 TMATMUL(d, local_a, shared_b, groupM);
+TMATMUL(d, local_a, shared_b, options, groupM);
 ```
 
 其中：
@@ -345,6 +346,7 @@ TMATMUL(d, local_a, shared_b, groupM);
 - `groupM` 必须是 `1..128` 的静态或运行时正值；
 - `local_a` 仍表示每 PE 的 Local shard；
 - `shared_b` 仍表示 `K×N` 的 Shared 右操作数；
+- `options` 仍然遵循本页 `fixp::Options` 约束，可与 `groupM` 一起使用；
 - 该入口仅用于 `Local-A/Shared-B` cooperative 场景，不影响 `Local/Local`、`Local/Shared-Right` 或 `Shared-Left/Shared-Right` 的既有调用方式。
 
 ### 操作支持速查

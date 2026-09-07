@@ -5546,6 +5546,117 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
       quant_gpr, lrelu_gpr, M, N, K);
 }
 
+// Cooperative Local-A/Shared-B + options form: LB0 encodes the core-total
+// group_M provided by the caller, while A still denotes the per-PE Local shard
+// and B remains the Shared KxN right operand. This keeps the existing options
+// contract but lets the caller override the M value that would otherwise be
+// inferred from the Local shard shape.
+namespace pto_matmul_detail {
+
+template <bool Use, typename Pointer, typename Dummy>
+decltype(auto) select_fixp_operand(Pointer *PointerValue, Dummy &DummyValue);
+
+} // namespace pto_matmul_detail
+
+template <is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL(tile_shape_d &d, tile_shape_a &a,
+                               tile_shape_b &b, const Options &options,
+                               size_t groupM) {
+  static_assert(tile_role_v<tile_shape_a> == Location::Left &&
+                    tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL requires A=Left and B=Right");
+  static_assert(!is_shared_tile_v<tile_shape_a> && is_shared_tile_v<tile_shape_b>,
+                "TMATMUL(..., options, groupM) is only for Local-A/Shared-B "
+                "cooperative form");
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL destination dtype does not match PreQuantMode");
+
+  constexpr bool HasVectorQuant =
+      is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant =
+      is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) |
+                          (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) |
+                          (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+  constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
+      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+  constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
+      ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  // Reduction outputs still use the per-PE clamp of group_M for cooperative
+  // Local-A/Shared-B; the explicit groupM only changes the encoded LB0 M.
+  constexpr int RedRows =
+      (is_shared_tile_v<tile_shape_a> || is_shared_tile_v<tile_shape_b>)
+          ? pto_matmul_detail::cooperative_group_m_rows_per_pe(EffectiveM)
+          : EffectiveM;
+
+  static_assert(HasVectorQuant ==
+                    !std::is_same_v<typename Options::QuantTile,
+                                    fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu ==
+                    !std::is_same_v<typename Options::ReluTile,
+                                    fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn ==
+                    !std::is_same_v<typename Options::RowMaxIn,
+                                    fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut ==
+                    !std::is_same_v<typename Options::RowMaxOut,
+                                    fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut ==
+                    !std::is_same_v<typename Options::GroupMaxOut,
+                                    fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  if (groupM < 1 || groupM > 128) {
+    __builtin_printf("TMATMUL: cooperative group_M must be in 1..128\n");
+    __builtin_trap();
+  }
+
+  static_assert(EffectiveN == tile_shape_d::ValidCol,
+                "TMATMUL destination valid Col must match N");
+  static_assert(tile_shape_d::ValidRow == RedRows,
+                "TMATMUL destination valid Row must match the per-PE M block "
+                "(group_M block for cooperative, effective M otherwise)");
+
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+
+  uint64_t quant_gpr_storage;
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
+  pto_matmul_detail::emit_fixp<Attr, SrcMask, OutMask, IorMode>(
+      d, a, b, row_in, quant_tile, relu_tile, row_out, group_out,
+      quant_gpr, lrelu_gpr, groupM, N, K);
+}
+
 
 namespace pto_matmul_detail {
 

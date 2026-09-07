@@ -8,6 +8,10 @@
 
 ```cpp
 PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b);
+PTO_SHARED_INLINE void TMATMUL(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b,
+                               const Options &options);
+PTO_SHARED_INLINE void TMATMUL(tile_shape_d &d, tile_shape_a &a, tile_shape_b &b,
+                               const Options &options, size_t groupM);
 template <
     is_tile_data_v tile_shape_d,
     is_local_or_shared_left tile_shape_a,
@@ -39,11 +43,13 @@ __attribute__((always_inline)) inline void TMATMUL(
 | `b` | 右操作数或输入 Tile。 |
 | `d` | 输出 Tile；成功调用后写入操作结果。 |
 | `options` | `fixp::Options` 选项对象；携带量化、激活、转置、缩放以及可选辅助输出配置。 |
+| `groupM` | cooperative `Local-A/Shared-B` 场景下的 core-total `group_M`；必须是 `1..128` 的正值。 |
 
 ### 重载选择
 
 - **基础重载**：不传 `options`，使用该操作的默认后处理属性。
 - **带 `Options` 的重载**：需要量化、激活、转置、scale 或辅助输出时传入 `options`。它不是重复声明，而是在相同核心操作数上增加显式属性；仅可启用本操作支持的属性。详见 [fixp::Options 指南](../../options.md)。
+- **带 `Options + groupM` 的重载**：仅用于 cooperative 的 `Local-A/Shared-B` 语义；`groupM` 显式提供 LB0 的 core-total `group_M`，而不是从 Local A shard 推导。
 
 
 ## 使用要求
