@@ -147,8 +147,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         for instruction in (
                 '"BSTART.TEPL 27, %D1\\n"',
                 '"B.DATR %D2, RNONE\\n"',
-                '"B.DIM %5, 0, ->lb0\\n"',
-                '"B.DIM %6, 0, ->lb1\\n"',
+                '"B.DIM zero, %c5, ->lb0\\n"',
+                '"B.DIM zero, %c6, ->lb1\\n"',
                 '"B.DIM zero, %c7, ->lb2\\n"',
                 '"B.IOT %3, mask=1111, last, ->%0<%Z4>\\n"'):
             self.assertIn(instruction, ordinary_branch)
@@ -265,10 +265,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         fixture = (ROOT / "test" / "tileop_api" / "src" / "ValidShapeImmediate.cpp").read_text(
             encoding="utf-8"
         )
-        self.assertIn('"i" + C.B.DIMI path', fixture)
-        self.assertIn('"r" + B.DIM path', fixture)
         self.assertIn('using S = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;', fixture)
         self.assertIn('using D = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor, -1, -1>;', fixture)
+        self.assertIn('static void static_path(SR &dst, GM &src)', fixture)
+        self.assertIn('static void dynamic_path(DR &dst, GM &src)', fixture)
 
     def test_static_valid_shape_bindings_remain_immediate_eligible(self) -> None:
         header = self.header
@@ -533,9 +533,10 @@ int main() { return sizeof(Bad); }
         body = self.header[self.header.index("void TIMG2COL"):self.header.index("// TFILLPAD")]
         self.assertIn('"ri"(dst.GetValidCol())', body)
         self.assertIn('"ri"(dst.GetValidRow())', body)
-        self.assertIn("tile_shape_out::Loc == Location::Left", body)
-        self.assertIn("BLayout::CubeM16", body)
-        self.assertIn("BLayout::CubeM32", body)
+        self.assertIn('"B.DIM zero, %c[ValidCol], ->lb0\\n"', body)
+        self.assertIn('"B.DIM zero, %c[ValidRow], ->lb1\\n"', body)
+        self.assertIn("BLayout::ND2M16", body)
+        self.assertIn("BLayout::ND2M32", body)
 
     def test_tquant_tdequant_use_datr_and_ior(self) -> None:
         # TQUANT/TDEQUANT: B.DATR carries named dtype/RMode and optional sat,
