@@ -2654,9 +2654,17 @@ void ACCCVT(tile_shape_out &, tile_shape_in &) {
 
 namespace pto_matmul_detail {
 
+// ASL B.FPATR legality: "Matrix B.DATR supplies only destination
+// conversion controls when B.FPATR is present: None requires RMode=NONE
+// and Sat=0". PreQuant=0 (None) therefore forbids the RNE spelling, while
+// programmable integer PreQuant modes retain the rounding selector.
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
   "BSTART.CUBE " OPCODE ", %D[DataTypeA]\n"                                      \
-  "B.DATR %D[DataTypeB], byte0, Zero, RNE, NOSAT\n" EXTRA_ATTRS                     \
+  ".if %c[PreQuant] == 0\n"                                                     \
+  "B.DATR %D[DataTypeB], byte0, Zero, RNONE, NOSAT\n"                            \
+  ".else\n"                                                                     \
+  "B.DATR %D[DataTypeB], byte0, Zero, RNE, NOSAT\n"                              \
+  ".endif\n" EXTRA_ATTRS                                                     \
   "B.DIM %[M], 0, ->lb0\n"                                                   \
   "B.DIM %[N], 0, ->lb1\n"                                                   \
   "B.DIM %[K], 0, ->lb2\n"
