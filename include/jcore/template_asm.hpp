@@ -212,7 +212,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>          
 void TMOV_##LAYOUT_NAME(tile_shape_out &dst, tile_shape_in &src) {               \
   asm volatile(                                                                  \
     "BSTART.TLSU TMOV, %D2\n"                                                        \
-    "B.DATR " #LAYOUT_NAME ", DTYPE_NONE, Null\n"                                  \
+    "B.DATR " #LAYOUT_NAME ", DTYPE_NONE, Zero\n"                                  \
     "B.IOT %1, mask=1111, last, ->%0<%Z3>\n"                                              \
     "B.DIM %4, 0, ->lb0\n"                                                   \
     "B.DIM %5, 0, ->lb1\n"                                                   \
@@ -265,7 +265,7 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TMOV_DN2NZ_DYN(tile_shape_out &dst, tile_shape_in &src) {
   asm volatile(
     "BSTART.TLSU TMOV, %D2\n"
-    "B.DATR DN2NZ, DTYPE_NONE, Null\n"
+    "B.DATR DN2NZ, DTYPE_NONE, Zero\n"
     "B.IOT %1, mask=1111, last, ->%0<%Z3>\n"
     "B.DIM %4, 0, ->lb0\n"
     "B.DIM %5, 0, ->lb1\n"
@@ -402,7 +402,7 @@ void TSTORE2_DN2DN(gm_shape &dst, tile_shape &src1, tile_shape &src0) {
     "B.DIM zero, %[__pto_COL], ->lb2\n"
     "B.IOT %[__pto_s0], %[s1], mask=1111, last\n"
     "B.IOR [%[__pto_d0],%[__pto_GmStride]], []\n"
-    : 
+    :
     : [__pto_d0]"r"(dst.data()), [__pto_s0]"Tr"(src0.data()), [s1]"Tr"(src1.data()),
       [__pto_DstType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [__pto_SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -2654,9 +2654,18 @@ void ACCCVT(tile_shape_out &, tile_shape_in &) {
 
 namespace pto_matmul_detail {
 
+// ASL B.FPATR legality: "Matrix B.DATR supplies only destination
+// conversion controls when B.FPATR is present: None requires RMode=NONE
+// and Sat=0; ... programmable integer modes retain the complete rounding
+// selector." PreQuant=0 (None) therefore forbids the RNE spelling, while
+// programmable integer pre-quant modes retain it.
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
   "BSTART.CUBE " OPCODE ", %D[DataTypeA]\n"                                      \
-  "B.DATR %D[DataTypeB], RNONE, NOSAT\n" EXTRA_ATTRS                     \
+  ".if %c[PreQuant] == 0\n"                                                     \
+  "B.DATR %D[DataTypeB], byte0, Zero, RNONE, NOSAT\n"                            \
+  ".else\n"                                                                     \
+  "B.DATR %D[DataTypeB], byte0, Zero, RNE, NOSAT\n"                              \
+  ".endif\n" EXTRA_ATTRS                                                     \
   "B.DIM %[M], 0, ->lb0\n"                                                   \
   "B.DIM %[N], 0, ->lb1\n"                                                   \
   "B.DIM %[K], 0, ->lb2\n"
@@ -2769,6 +2778,11 @@ constexpr void validate_matrix_contract() {
   static_assert(AValidCols == BValidRows,
                 "Matrix effective valid K dimensions must match");
   if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
+    // ASL TMATMUL legality: any cooperative TMATMUL interprets LB0 as
+    // core-total group_M, and PE i computes valid_M =
+    // clamp(group_M - i*M_per_PE, 0, M_per_PE). A Shared A tile is shaped
+    // group_MxK, so group_M is known at compile time here and D is the
+    // per-PE block of that group_M.
     static_assert(AValidRows >= 1 && AValidRows <= 128,
                   "Cooperative Matrix group_M must be in the range 1..128");
     constexpr int RowsPerPE = cooperative_group_m_rows_per_pe(AValidRows);
@@ -2776,6 +2790,20 @@ constexpr void validate_matrix_contract() {
                       Dst::ValidCol == BValidCols,
                   "Cooperative Matrix D valid shape must match the per-PE "
                   "M block (16 rows for group_M<=64, otherwise 32) x N");
+  } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
+    // Local-A/Shared-B cooperative: each PE holds only its per-PE A shard
+    // (ASL dispatch checks left.valid_rows == pe_m, the clamp of group_M),
+    // so A::ValidRow is the per-PE M. group_M itself is a runtime value
+    // (LB0), carried by the matmul M parameter - it cannot be derived from
+    // a Local tile. D is per-PE and must match the A shard.
+    static_assert(Dst::ValidRow == AValidRows &&
+                      Dst::ValidCol == BValidCols,
+                  "Cooperative Local-A/Shared-B D valid shape must match the "
+                  "per-PE A shard (valid_M x N); LB0 carries group_M at "
+                  "runtime");
+    static_assert(AValidRows == 16 || AValidRows == 32,
+                  "Cooperative Local A per-PE shard must be 16 or 32 rows "
+                  "(group_M<=64 or >=65 per ASL)");
   } else {
     static_assert(Dst::ValidRow == AValidRows &&
                       Dst::ValidCol == BValidCols,
@@ -2899,11 +2927,19 @@ constexpr void validate_matrix_postprocess_contract() {
       ? A::ValidCol : A::ValidRow;
   constexpr int N = is_shared_tile_v<B> && Attr.TransB
       ? B::ValidRow : B::ValidCol;
+  // Reduction outputs reduce the per-PE D rows: ASL MatrixRowMaxResult
+  // iterates input.valid_rows, the per-PE clamp of group_M for a
+  // cooperative TMATMUL, not the core-total group_M.
+  constexpr int PPRows =
+      (is_shared_tile_v<A> || is_shared_tile_v<B>)
+          ? pto_matmul_detail::cooperative_group_m_rows_per_pe(M)
+          : M;
   if constexpr ((OutMask & 1) != 0) {
     static_assert(type_traits<typename RowOut::DType>::TypeCode == AccCode,
                   "RowMaxOut dtype must match the derived accumulator type");
-    static_assert(RowOut::ValidRow == M && RowOut::ValidCol == 1,
-                  "RowMaxOut valid shape must be M x 1");
+    static_assert(RowOut::ValidRow == PPRows && RowOut::ValidCol == 1,
+                  "RowMaxOut valid shape must be per-PE M rows x 1 "
+                  "(group_M block for cooperative, effective M otherwise)");
   }
   if constexpr ((SrcMask & 1) != 0) {
     static_assert(type_traits<typename RowIn::DType>::TypeCode == AccCode,
@@ -2915,9 +2951,10 @@ constexpr void validate_matrix_postprocess_contract() {
     constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
     static_assert(type_traits<typename GroupOut::DType>::TypeCode == AccCode,
                   "GroupMaxOut dtype must match the derived accumulator type");
-    static_assert(GroupOut::ValidRow == M &&
+    static_assert(GroupOut::ValidRow == PPRows &&
                       GroupOut::ValidCol == (N + GroupN - 1) / GroupN,
-                  "GroupMaxOut valid shape must be M x ceil(N/GroupN)");
+                  "GroupMaxOut valid shape must be per-PE M rows x "
+                  "ceil(N/GroupN)");
   }
   if constexpr ((SrcMask & 2) != 0) {
     static_assert(type_traits<typename QuantTile::DType>::TypeCode == __type_uint64,
@@ -2950,8 +2987,15 @@ constexpr void validate_gemv_contract() {
 }
 
 // These helpers centralize the encoded M/N/K decision so basic/ACC/BIAS/MX
-// and options overloads cannot diverge. LB0/M always follows the effective
-// row count of input A, for both Local and cooperative Shared A/B operands.
+// and options overloads cannot diverge. Per the ASL TMATMUL contract, LB0
+// carries Local M or core-total cooperative group_M:
+//  - Local/Local and Shared-A forms: M == A::ValidRow (compile-time exact);
+//  - Local-A/Shared-B cooperative: A::ValidRow is the per-PE shard
+//    (dispatch checks left.valid_rows == pe_m); LB0 (group_M) is a runtime
+//    value supplied by the caller through the matmul M parameter, because
+//    a Local shard cannot carry the core-total row count.
+// The per-PE clamp of group_M only bounds per-PE tiles (D and the
+// reduction outputs), which the validate functions check separately.
 struct MatmulShape {
   size_t M;
   size_t N;
@@ -2989,6 +3033,10 @@ inline MatmulShape resolve_matmul_shape_runtime(const C &c, const A &a,
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B>
 PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
                               size_t K) {
+  // M is the value encoded into LB0: for Local/Local it is the Local M;
+  // for a cooperative form it is the core-total group_M (runtime). For
+  // Local-A/Shared-B the A shard descriptor is per-PE (valid_rows == pe_m)
+  // and cannot supply group_M, so the caller must pass it here.
   validate_matrix_contract<Attr, Dst, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
@@ -5280,12 +5328,48 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
                 "TMATMUL supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
+  // ASL: a cooperative Local-A/Shared-B TMATMUL encodes LB0 as the
+  // core-total group_M. This 3-arg form derives LB0 from A::ValidRow,
+  // which is exactly group_M only when the group fits one per-PE block
+  // (group_M == pe_m, e.g. 16/32-row groups). For a multi-shard group
+  // use the explicit groupM overload below - a Local A shard cannot
+  // supply the core-total row count.
   pto_matmul_detail::MatmulShape __shape =
       pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_detail::matmul<Attr>(c, a, b, M, N, K);
+}
+
+// Cooperative Local-A/Shared-B form: LB0 encodes the core-total group_M,
+// which a Local A shard descriptor cannot supply, so the caller passes it
+// explicitly. group_M must be 1..128; each PE computes
+// valid_M = clamp(group_M - i*M_per_PE, 0, M_per_PE) per the ASL dispatch.
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b>
+PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
+                              tile_shape_b &b, size_t groupM) {
+  static_assert(tile_role_v<tile_shape_a> == Location::Left,
+                "TMATMUL input A must be a Left tile");
+  static_assert(tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL input B must be a Right tile");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the overload taking fixp::Options");
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+  // Runtime guard mirroring the ASL dispatch (group_M in 1..128; each PE
+  // computes valid_M = clamp(group_M - i*M_per_PE, 0, M_per_PE)).
+  if (groupM < 1 || groupM > 128) {
+    __builtin_printf("TMATMUL: cooperative group_M must be in 1..128\n");
+    __builtin_trap();
+  }
+  pto_matmul_detail::matmul<Attr>(c, a, b, groupM, N, K);
 }
 
 
@@ -5342,6 +5426,13 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
       ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+  // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
+  // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
+  // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
+  constexpr int RedRows =
+      (is_shared_tile_v<tile_shape_a> || is_shared_tile_v<tile_shape_b>)
+          ? pto_matmul_detail::cooperative_group_m_rows_per_pe(EffectiveM)
+          : EffectiveM;
 
   static_assert(HasVectorQuant ==
                     !std::is_same_v<typename Options::QuantTile,
@@ -5378,8 +5469,21 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
   auto &cscale = pto_matmul_detail::select_fixp_operand<Attr.CScaleEn>(
       options.CScale, c);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_acc_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, c, a, b, cscale, row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
@@ -5440,6 +5544,13 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
       ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+  // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
+  // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
+  // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
+  constexpr int RedRows =
+      (is_shared_tile_v<tile_shape_a> || is_shared_tile_v<tile_shape_b>)
+          ? pto_matmul_detail::cooperative_group_m_rows_per_pe(EffectiveM)
+          : EffectiveM;
 
   static_assert(HasVectorQuant ==
                     !std::is_same_v<typename Options::QuantTile,
@@ -5498,8 +5609,9 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   }
   if constexpr (HasRowOut) {
     using RowOut = typename Options::RowMaxOut;
-    static_assert(RowOut::ValidRow == EffectiveM,
-                  "TMATMUL RowMaxOut must have ValidRow=M");
+    static_assert(RowOut::ValidRow == RedRows,
+                  "TMATMUL RowMaxOut must have ValidRow = per-PE M rows "
+                  "(group_M block for cooperative, effective M otherwise)");
     static_assert(RowOut::ValidCol == -1 || RowOut::ValidCol == 1,
                   "TMATMUL RowMaxOut must have ValidCol=1");
     static_assert(matrix_accumulator_type_legal<tile_shape_a, tile_shape_b,
@@ -5531,8 +5643,9 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
     constexpr int ExpectedCols =
         (EffectiveN + GroupN - 1) / GroupN;
-    static_assert(GroupOut::ValidRow == EffectiveM,
-                  "TMATMUL GroupMaxOut must have ValidRow=M");
+    static_assert(GroupOut::ValidRow == RedRows,
+                  "TMATMUL GroupMaxOut must have ValidRow = per-PE M rows "
+                  "(group_M block for cooperative, effective M otherwise)");
     static_assert(GroupOut::ValidCol == -1 || ExpectedCols == -1 ||
                       GroupOut::ValidCol == ExpectedCols,
                   "TMATMUL GroupMaxOut must have ValidCol=ceil(N/GroupN)");
@@ -5561,8 +5674,21 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(
       options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, a, b, row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
@@ -5631,8 +5757,21 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, c);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, c);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_bias_fixp<Attr, SrcMask, OutMask, IorMode>(c, a, b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
@@ -5702,8 +5841,21 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, c);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, c);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_mx_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(c, a, ascale, b, bscale, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
@@ -5779,8 +5931,21 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
   auto &cscale = pto_matmul_detail::select_fixp_operand<Attr.CScaleEn>(
       options.CScale, c);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_mx_acc_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, c, a, scale_a, b, scale_b, cscale, row_in, quant_tile, relu_tile,
       row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
@@ -5854,8 +6019,21 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_mx_bias_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(d, a, scale_a, b, scale_b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
@@ -6076,8 +6254,21 @@ PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx,
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, mtx, vec,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -6161,8 +6352,21 @@ PTO_SHARED_INLINE void TGEMV_BIAS(tile_shape_d &d, tile_shape_mtx &mtx,
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_bias_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, mtx, vec, bias,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -6230,8 +6434,21 @@ PTO_SHARED_INLINE void TGEMV_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_mt
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_acc_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, c, mtx, vec,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -6301,8 +6518,21 @@ PTO_SHARED_INLINE void TGEMV_MX(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_mx_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, mtx, smtx, vec, svec,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -6376,8 +6606,21 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(tile_shape_d &d, tile_shape_mtx &mtx, tile_
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_mx_bias_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, mtx, smtx, vec, svec, bias,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -6449,8 +6692,21 @@ PTO_SHARED_INLINE void TGEMV_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape
   auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
   auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
 
-  volatile uint64_t quant_gpr = options.QuantDescriptor;
-  volatile uint64_t lrelu_gpr = options.LReluDescriptor;
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_gemv_mx_acc_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
       d, c, mtx, smtx, vec, svec,
       row_in, quant_tile, relu_tile, row_out, group_out,
@@ -9388,8 +9644,9 @@ void TPARTMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 // TROWSUM: row sum reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWSUM destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9404,9 +9661,9 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9424,7 +9681,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "ri"(valid_col),
       "ri"(valid_row),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9434,8 +9691,9 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
 // TROWMAX: row max reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWMAX destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9450,9 +9708,9 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9466,9 +9724,9 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(dst.GetValidCol()),
-      "ri"(dst.GetValidRow()),
-      "i"(tile_shape_out::Cols),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9478,8 +9736,9 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TROWMIN: row min reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWMIN destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9494,9 +9753,9 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9510,9 +9769,9 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(dst.GetValidCol()),
-      "ri"(dst.GetValidRow()),
-      "i"(tile_shape_out::Cols),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9522,8 +9781,9 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
 // TROWPROD: row product reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWPROD destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9538,9 +9798,9 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9554,9 +9814,9 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(dst.GetValidCol()),
-      "ri"(dst.GetValidRow()),
-      "i"(tile_shape_out::Cols),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9608,8 +9868,9 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 // TROWARGMAX: row argmax (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWARGMAX destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9624,9 +9885,9 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9640,9 +9901,9 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(dst.GetValidCol()),
-      "ri"(dst.GetValidRow()),
-      "i"(tile_shape_out::Cols),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9652,8 +9913,9 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TROWARGMIN: row argmin (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWARGMIN destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9668,9 +9930,9 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9684,9 +9946,9 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "ri"(dst.GetValidCol()),
-      "ri"(dst.GetValidRow()),
-      "i"(tile_shape_out::Cols),
+      "ri"(src.GetValidCol()),
+      "ri"(src.GetValidRow()),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );

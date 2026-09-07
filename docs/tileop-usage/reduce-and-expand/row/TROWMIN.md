@@ -38,6 +38,8 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src);
 该操作沿每行的列轴归约。输入有效 shape 为 `R x C`，输出逻辑 valid
 shape 必须为 `R x 1`，输出 dtype 与输入 dtype 相同。
 
+源 Tile 的 allocated capacity 不得超过 **2048 bytes**。该限制针对归约源的物理分配容量，而不是输入的逻辑 valid shape；超过限制的源 Tile 不满足接口规范。
+
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding

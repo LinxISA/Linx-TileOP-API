@@ -1,27 +1,27 @@
 # TCVT
 
-`TCVT(dst, src)` converts every valid element of `src` to the destination element type described by `dst`. The C++ Tile types determine the source data type, destination data type, layout, valid shape, physical storage shape, and destination Tile capacity.
+`TCVT(dst, src)` 将 `src` 的每个有效元素转换为由 `dst` 描述的目标元素类型。C++ Tile 类型决定源数据类型、目标数据类型、布局、有效 shape、物理存储 shape 以及目标 Tile 容量。
 
-## C++ interface
+## C++ 接口
 
 ```cpp
 template <is_tile_data_v DstTile, is_tile_data_v SrcTile>
 void TCVT(DstTile &dst, SrcTile &src);
 ```
 
-Developers provide typed source and destination Tiles. No ISA encoding value, Tile register number, or TSize code is passed manually.
+开发者需要提供具有明确类型的源 Tile 和目标 Tile。无需手动传入 ISA 编码值、Tile 寄存器编号或 TSize code。
 
-## Ordinary layouts
+## 普通布局
 
-For ordinary layouts such as `RowMajor` and `ColMajor`, source and destination must have:
+对于 `RowMajor`、`ColMajor` 等普通布局，源 Tile 和目标 Tile 必须满足以下条件：
 
-- identical physical `Rows` and `Cols`;
-- identical `ValidRow` and `ValidCol`;
-- a valid region contained by each physical Tile;
-- a legal source/destination dtype combination and Tile location;
-- enough destination capacity for the converted result.
+- 物理 `Rows` 和 `Cols` 相同；
+- `ValidRow` 和 `ValidCol` 相同；
+- 有效区域均包含在对应的物理 Tile 中；
+- 源/目标 dtype 组合以及 Tile location 合法；
+- 目标容量足以容纳转换结果。除适用的 Tile 容量和 shape 规则外，普通布局没有额外的固定字节数限制。
 
-Example:
+示例：
 
 ```cpp
 #include <common/pto_tileop.hpp>
@@ -36,20 +36,20 @@ void convert(Dst &dst, Src &src) {
 }
 ```
 
-## CUBE_M16 and CUBE_M32 conversion
+## CUBE_M16 和 CUBE_M32 转换
 
-PTO-SPEC ADR-0110 closes the conversion rules for `CUBE_M16` and `CUBE_M32`. These layouts differ from ordinary TCVT in one important way: changing dtype can change the number of elements stored by each 128-byte CELL. Therefore, source and destination physical columns and TSize are derived independently from their own dtype.
+PTO-SPEC ADR-0110 明确了 `CUBE_M16` 和 `CUBE_M32` 的转换规则。这些布局与普通 TCVT 有一个重要区别：改变 dtype 可能改变每个 128-byte CELL 中存储的元素数量。因此，源和目标的物理列数及 TSize 分别根据各自的 dtype 独立推导。
 
-The developer must preserve:
+开发者必须保持以下条件不变：
 
-- the same CUBE layout (`CUBE_M16` to `CUBE_M16`, or `CUBE_M32` to `CUBE_M32`);
-- the same logical valid rows and valid columns;
-- a Matrix Tile location;
-- Local Tile capacities in the ISA range `128 B` through `64 KiB`.
+- 相同的 CUBE 布局（`CUBE_M16` 到 `CUBE_M16`，或 `CUBE_M32` 到 `CUBE_M32`）；
+- 相同的逻辑有效行数和有效列数；
+- Matrix Tile location；
+- ISA 规定范围内的 Local Tile 容量，即 `128 B` 至 `64 KiB`。
 
-The physical `Rows`, physical `Cols`, CELL count, required bytes, and `TilesizeCode` do **not** need to match between source and destination. `CubeTileM16` and `CubeTileM32` calculate them from the element type and declared shape.
+源和目标的物理 `Rows`、物理 `Cols`、CELL 数量、所需字节数以及 `TilesizeCode` **不要求**相同。`CubeTileM16` 和 `CubeTileM32` 会根据元素类型和声明的 shape 分别计算这些属性。
 
-Example: the FP16 source uses `512 B`, while the FP32 destination needs `1 KiB`. Both represent the same valid `16 x 9` matrix.
+示例：FP16 源 Tile 使用 `512 B`，而 FP32 目标 Tile 需要 `1 KiB`。二者表示相同的有效 `16 x 9` 矩阵。
 
 ```cpp
 #include <common/pto_tileop.hpp>
@@ -69,11 +69,11 @@ void convert_cube(Dst &dst, Src &src) {
 }
 ```
 
-`CUBE_N8` conversion is not included in ADR-0110 and is rejected by the current API.
+`CUBE_N8` 转换不在 ADR-0110 的范围内，当前 API 会拒绝此类转换。
 
-## Mapping to the ISA bundle
+## ISA bundle 映射
 
-For an ordinary Tile, TileOP emits all three logical-dimension bindings:
+对于普通 Tile，TileOP 会生成全部三个逻辑维度绑定：
 
 ```asm
 BSTART.TEPL TCVT, SrcDataType
@@ -84,12 +84,12 @@ B.DIM zero, PhysicalCol, ->lb2
 B.IOT SrcTile, mask=1111, last, ->DstTile<DstTSize>
 ```
 
-For `CUBE_M16` and `CUBE_M32`, ADR-0110 defines:
+对于 `CUBE_M16` 和 `CUBE_M32`，ADR-0110 定义如下：
 
-- `LB0 = source ValidCol`;
-- `LB1 = source ValidRow`;
-- `LB2` is omitted;
-- the `B.IOT` destination TSize comes from the destination Tile type.
+- `LB0 = source ValidCol`；
+- `LB1 = source ValidRow`；
+- 省略 `LB2`；
+- `B.IOT` 中目标 TSize 来自目标 Tile 类型。
 
 ```asm
 BSTART.TEPL TCVT, SrcDataType
@@ -99,22 +99,22 @@ B.DIM rValidRow, 0, ->lb1
 B.IOT SrcTile, mask=1111, last, ->DstTile<DstTSize>
 ```
 
-The current implementation uses extended inline assembly. An intrinsic is not required because the typed C++ operands already provide every field required by this bundle: source and destination Tile registers, dtype selectors, valid dimensions, layout checks, and destination TSize.
+当前实现使用扩展内联汇编。由于带类型的 C++ 操作数已经提供了该 bundle 所需的全部字段，因此不需要额外的 intrinsic：包括源和目标 Tile 寄存器、dtype 选择器、有效维度、布局检查以及目标 TSize。
 
-## Compile-time diagnostics
+## 编译期诊断
 
-TileOP rejects calls when it can prove that:
+当 TileOP 能够证明以下条件成立时，会拒绝调用：
 
-- a CUBE conversion changes between `CUBE_M16` and `CUBE_M32`;
-- source and destination valid shapes differ;
-- a CUBE operand is not in a Matrix Tile location;
-- source or destination Local TSize is outside `128 B..64 KiB`;
-- the destination is a CUBE layout but the source is not `CUBE_M16` or `CUBE_M32`;
-- either operand uses unsupported `CUBE_N8` conversion;
-- an ordinary conversion changes physical `Rows` or `Cols`.
+- CUBE 转换在 `CUBE_M16` 和 `CUBE_M32` 之间切换；
+- 源和目标的有效 shape 不同；
+- CUBE 操作数不在 Matrix Tile location；
+- 源或目标 Local TSize 超出 `128 B..64 KiB` 范围；
+- 目标使用 CUBE 布局，但源不是 `CUBE_M16` 或 `CUBE_M32`；
+- 任一操作数使用不支持的 `CUBE_N8` 转换；
+- 普通布局转换改变了物理 `Rows` 或 `Cols`。
 
-Other dtype legality, aliasing, numerical behavior, saturation, rounding, padding, and exception behavior follow the PTO-SPEC TCVT contract.
+其他 dtype 合法性、alias、数值行为、饱和、舍入、padding 以及异常行为遵循 PTO-SPEC 的 TCVT 合约。
 
-## Specification
+## 规范
 
-See the PTO-SPEC `TCVT` operation and ADR-0110, introduced by PTO-SPEC issue #167 / PR #176.
+详见 PTO-SPEC `TCVT` 操作和 ADR-0110；该规则由 PTO-SPEC issue #167 / PR #176 引入。

@@ -37,6 +37,13 @@ void TCI(tile_shape &dst, T s);
 
 输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
 
+### 数据规模与形状限制
+
+- 输出 Tile 必须为 RowMajor 布局，`ValidRow` 必须为 **1**。
+- `ValidCol` 必须非零，物理列数 `Col` 必须至少为 `ValidCol`；输出容量必须足以容纳声明的形状。
+- 若显式提供方向控制，方向值只能为 `0`（递增）或 `1`（递减）；起始值按所选元素宽度解释，高位按规范忽略。未提供时默认起始值为 0 且递增。
+- 该接口没有额外的固定字节容量上限；实际可用规模仍受 Tile 的物理容量和 shape 合法性约束。
+
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding
