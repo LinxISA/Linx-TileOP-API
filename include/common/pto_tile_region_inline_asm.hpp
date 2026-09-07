@@ -10,56 +10,101 @@ namespace pto {
 template <int Opcode, typename Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void
 pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
-  static_assert(SubTile::BFractal == BLayout::RowMajor,
-                "inline Tile region path requires RowMajor fragments");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
   const uintptr_t region_base_units = src.GetRangeBase();
-  asm volatile(
-      "BSTART.TEPL %c8, %D1\n"
-      "B.DIM zero, %c3, ->lb0\n"
-      "B.DIM zero, %c4, ->lb1\n"
-      "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"
-      "B.SUBVIEW 0, %9, 0, %c7\n"
-      : [Dst] "=Tr"(dst.data())
-      : "i"(type_traits<typename SubTile::DType>::TypeCode),
-        "Tr"(src.data()), "i"(std::remove_reference_t<decltype(src)>::ValidCol),
-        "i"(std::remove_reference_t<decltype(src)>::ValidRow),
-        "i"(SubTile::Cols),
-        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-        "i"(Opcode), "r"(region_base_units)
-      : "memory");
+  if constexpr (is_shared_tile_v<Parent>) {
+    static_assert(tile_type_traits<typename Parent::TileDType>::IsValidSharedActiveSize,
+                  "Shared B.SUBVIEW source size must be 128 B..256 KB");
+    asm volatile(
+        "BSTART.TEPL %c8, %D1\n"
+        "B.DIM zero, %c3, ->lb0\n"
+        "B.DIM zero, %c4, ->lb1\n"
+        "B.DIM zero, %c5, ->lb2\n"
+        "B.IOS %S[s0], mask=1111\n"
+        "B.SUBVIEW 0, %9, 0, %c7\n"
+        : [Dst] "=Tr"(dst.data())
+        : "i"(type_traits<typename SubTile::DType>::TypeCode),
+          [s0] "Sr"(src.handle()),
+          "i"(std::remove_reference_t<decltype(src)>::ValidCol),
+          "i"(std::remove_reference_t<decltype(src)>::ValidRow),
+          "i"(SubTile::Cols),
+          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+          "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+          "i"(Opcode), "r"(region_base_units)
+        : "memory");
+  } else {
+    static_assert(SubTile::BFractal == BLayout::RowMajor,
+                  "inline Tile region path requires RowMajor fragments");
+    asm volatile(
+        "BSTART.TEPL %c8, %D1\n"
+        "B.DIM zero, %c3, ->lb0\n"
+        "B.DIM zero, %c4, ->lb1\n"
+        "B.DIM zero, %c5, ->lb2\n"
+        "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"
+        "B.SUBVIEW 0, %9, 0, %c7\n"
+        : [Dst] "=Tr"(dst.data())
+        : "i"(type_traits<typename SubTile::DType>::TypeCode),
+          "Tr"(src.data()), "i"(std::remove_reference_t<decltype(src)>::ValidCol),
+          "i"(std::remove_reference_t<decltype(src)>::ValidRow),
+          "i"(SubTile::Cols),
+          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+          "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+          "i"(Opcode), "r"(region_base_units)
+        : "memory");
+  }
 }
 
 template <int Opcode, typename Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void pto_region_scalar(
     Out &dst, region::SubTileView<Parent, SubTile> &src,
     typename SubTile::DType scalar) {
-  static_assert(SubTile::BFractal == BLayout::RowMajor,
-                "inline Tile region path requires RowMajor fragments");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
   volatile typename SubTile::DType value = scalar;
   const uintptr_t region_base_units = src.GetRangeBase();
-  asm volatile(
-      "BSTART.TEPL %c10, %D1\n"
-      "B.DIM zero, %c3, ->lb0\n"
-      "B.DIM zero, %c4, ->lb1\n"
-      "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"
-      "B.SUBVIEW 0, %9, 0, %c7\n"
-      "B.IOR [%8],[]\n"
-      : [Dst] "=Tr"(dst.data())
-      : "i"(type_traits<typename SubTile::DType>::TypeCode),
-        "Tr"(src.data()), "i"(std::remove_reference_t<decltype(src)>::ValidCol),
-        "i"(std::remove_reference_t<decltype(src)>::ValidRow),
-        "i"(SubTile::Cols),
-        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-        "r"(value), "r"(region_base_units), "i"(Opcode)
-      : "memory");
+  if constexpr (is_shared_tile_v<Parent>) {
+    static_assert(tile_type_traits<typename Parent::TileDType>::IsValidSharedActiveSize,
+                  "Shared B.SUBVIEW source size must be 128 B..256 KB");
+    asm volatile(
+        "BSTART.TEPL %c10, %D1\n"
+        "B.DIM zero, %c3, ->lb0\n"
+        "B.DIM zero, %c4, ->lb1\n"
+        "B.DIM zero, %c5, ->lb2\n"
+        "B.IOS %S[s0], mask=1111\n"
+        "B.SUBVIEW 0, %9, 0, %c7\n"
+        "B.IOR [%8],[]\n"
+        : [Dst] "=Tr"(dst.data())
+        : "i"(type_traits<typename SubTile::DType>::TypeCode),
+          [s0] "Sr"(src.handle()),
+          "i"(std::remove_reference_t<decltype(src)>::ValidCol),
+          "i"(std::remove_reference_t<decltype(src)>::ValidRow),
+          "i"(SubTile::Cols),
+          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+          "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+          "r"(value), "r"(region_base_units), "i"(Opcode)
+        : "memory");
+  } else {
+    static_assert(SubTile::BFractal == BLayout::RowMajor,
+                  "inline Tile region path requires RowMajor fragments");
+    asm volatile(
+        "BSTART.TEPL %c10, %D1\n"
+        "B.DIM zero, %c3, ->lb0\n"
+        "B.DIM zero, %c4, ->lb1\n"
+        "B.DIM zero, %c5, ->lb2\n"
+        "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"
+        "B.SUBVIEW 0, %9, 0, %c7\n"
+        "B.IOR [%8],[]\n"
+        : [Dst] "=Tr"(dst.data())
+        : "i"(type_traits<typename SubTile::DType>::TypeCode),
+          "Tr"(src.data()), "i"(std::remove_reference_t<decltype(src)>::ValidCol),
+          "i"(std::remove_reference_t<decltype(src)>::ValidRow),
+          "i"(SubTile::Cols),
+          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+          "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+          "r"(value), "r"(region_base_units), "i"(Opcode)
+        : "memory");
+  }
 }
 
 template <is_tile_data_v Out, typename Parent, typename SubTile>
