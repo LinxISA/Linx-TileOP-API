@@ -138,7 +138,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         tcvt = re.search(
             r'(?s)template <is_tile_data_v tile_shape_out, '
             r'is_tile_data_v tile_shape_in>\n'
-            r'void TCVT_T\(.*?\n}\n\n#define DEFINE_TMOV_LAYOUT',
+            r'void TCVT_T\(.*?\n}\n\n\n// PTO ISA 0.58 generic Local-to-Local TMOV',
             self.header,
         )
         self.assertIsNotNone(tcvt)
@@ -157,7 +157,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         tcvt = re.search(
             r'(?s)template <is_tile_data_v tile_shape_out, '
             r'is_tile_data_v tile_shape_in>\n'
-            r'void TCVT_T\(.*?\n}\n\n#define DEFINE_TMOV_LAYOUT',
+            r'void TCVT_T\(.*?\n}\n\n\n// PTO ISA 0.58 generic Local-to-Local TMOV',
             self.header,
         )
         self.assertIsNotNone(tcvt)
@@ -244,19 +244,23 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         start = self.header.index("void TSEL(")
         end = self.header.index("// TABS:", start)
         tsel = self.header[start:end]
+        # Per-dimension dispatch: four B.DIM combinations, each a full asm
+        # statement with the same binder shape.
         self.assertEqual(
-            tsel.count('"B.IOT %6, %7, mask=1111\\n"'), 2
+            tsel.count('"B.IOT %6, %7, mask=1111\\n"'), 4
         )
         self.assertEqual(
             tsel.count(
                 '"B.IOT %1, mask=1111, last, ->%0<%Z8>\\n"'
             ),
-            2,
+            4,
         )
-        self.assertEqual(tsel.count(': [Dst] "=Tr"(dst.data())'), 2)
-        self.assertEqual(tsel.count('[Prior] "0"(dst.data())'), 2)
+        self.assertEqual(tsel.count(': [Dst] "=Tr"(dst.data())'), 4)
+        self.assertEqual(tsel.count('[Prior] "0"(dst.data())'), 4)
         self.assertIn('"B.DIM zero, %c3, ->lb0\\n"', tsel)
-        self.assertIn('"B.DIM %3, 0, ->lb0\\n"', tsel)
+        self.assertIn('"B.DIM %[mask____dimcol], 0, ->lb0\\n"', tsel)
+        self.assertIn('"B.DIM %[mask____dimrow], 0, ->lb1\\n"', tsel)
+        self.assertIn("::ValidCol > 0 && ", tsel)
         self.assertNotIn(
             '"B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\\n"', tsel
         )
@@ -272,17 +276,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_static_valid_shape_bindings_remain_immediate_eligible(self) -> None:
         header = self.header
-        for spelling in (
-            '"ri"(dst.GetValidCol())',
-            '"ri"(dst.GetValidRow())',
-            '"ri"(src.GetValidCol())',
-            '"ri"(src.GetValidRow())',
-            '"ri"(offset.GetValidCol())',
-            '"ri"(offset.GetValidRow())',
-            '[VCOL] "ri"(validCol)',
-            '[VROW] "ri"(validRow)',
-        ):
-            self.assertIn(spelling, header)
+        # Per-dimension dispatch: every B.DIM site splits into the four
+        # ValidCol/ValidRow combinations, so no "ri" masquerade may remain
+        # and fully-dynamic operands must bind as plain "r" registers.
+        self.assertNotIn('"ri"(', header)
         for spelling in (
             '"r"(dst.GetValidCol())',
             '"r"(dst.GetValidRow())',
@@ -291,7 +288,28 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             '"r"(offset.GetValidCol())',
             '"r"(offset.GetValidRow())',
         ):
-            self.assertNotIn(spelling, header)
+            self.assertIn(spelling, header)
+        # A register must never land in the immediate slot of B.DIM.
+        self.assertNotIn("B.DIM zero, %[", header)
+        # lb2 must always stay the static immediate form; the only allowed
+        # dynamic lb2 is TPREFETCH's dynamic-GM fallback branch.
+        dyn_lb2 = [
+            line for line in header.split("\n")
+            if "->lb2" in line and "B.DIM" in line and "%c" not in line
+        ]
+        tprefetch = header[header.index("void TPREFETCH"):]
+        tprefetch = tprefetch[: tprefetch.index("\n}")]
+        self.assertEqual(
+            len(dyn_lb2),
+            tprefetch.count('"B.DIM %[Col], 0, ->lb2\\n"'),
+            "lb2 must be immediate-form everywhere except TPREFETCH's "
+            "dynamic-GM fallback",
+        )
+        # TMATMUL: M stays a runtime register (group_M), N/K are compile-time
+        # immediates per resolve_matmul_shape.
+        self.assertIn('"B.DIM %[M], 0, ->lb0\\n"', header)
+        self.assertIn('"B.DIM zero, %c[N], ->lb1\\n"', header)
+        self.assertIn('"B.DIM zero, %c[K], ->lb2\\n"', header)
 
     def test_fpatr_carries_shared_transpose_controls(self) -> None:
         tile = PTO_TILE.read_text(encoding="utf-8")
@@ -531,12 +549,14 @@ int main() { return sizeof(Bad); }
 
     def test_timg2col_uses_destination_geometry_and_cube_output(self) -> None:
         body = self.header[self.header.index("void TIMG2COL"):self.header.index("// TFILLPAD")]
-        self.assertIn('"ri"(dst.GetValidCol())', body)
-        self.assertIn('"ri"(dst.GetValidRow())', body)
+        self.assertIn('[ValidCol] "r"(dst.GetValidCol())', body)
+        self.assertIn('[ValidRow] "r"(dst.GetValidRow())', body)
+        self.assertIn('[ValidCol] "i"(tile_shape_out::ValidCol)', body)
+        self.assertIn('[ValidRow] "i"(tile_shape_out::ValidRow)', body)
         self.assertIn('"B.DIM zero, %c[ValidCol], ->lb0\\n"', body)
         self.assertIn('"B.DIM zero, %c[ValidRow], ->lb1\\n"', body)
-        self.assertIn("BLayout::ND2M16", body)
-        self.assertIn("BLayout::ND2M32", body)
+        self.assertIn("LayoutCvtEnum::ND2M16", body)
+        self.assertIn("LayoutCvtEnum::ND2M32", body)
 
     def test_tquant_tdequant_use_datr_and_ior(self) -> None:
         # TQUANT/TDEQUANT: B.DATR carries named dtype/RMode and optional sat,
