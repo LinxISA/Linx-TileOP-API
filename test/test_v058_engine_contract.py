@@ -272,6 +272,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_static_valid_shape_bindings_remain_immediate_eligible(self) -> None:
         header = self.header
+        timg2col = header[header.index("void TIMG2COL"):header.index("// TFILLPAD")]
         for spelling in (
             '"ri"(dst.GetValidCol())',
             '"ri"(dst.GetValidRow())',
@@ -291,7 +292,9 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             '"r"(offset.GetValidCol())',
             '"r"(offset.GetValidRow())',
         ):
-            self.assertNotIn(spelling, header)
+            self.assertNotIn(spelling, header[: header.index("void TIMG2COL")])
+        self.assertIn('"r"(dst.GetValidCol())', timg2col)
+        self.assertIn('"r"(dst.GetValidRow())', timg2col)
 
     def test_fpatr_carries_shared_transpose_controls(self) -> None:
         tile = PTO_TILE.read_text(encoding="utf-8")
@@ -530,10 +533,10 @@ int main() { return sizeof(Bad); }
         self.assertRegex(self.header, r'B\.IOT mask=1111, last, ->%\[Dst\]')
 
     def test_timg2col_uses_destination_geometry_and_cube_output(self) -> None:
-        body = self.header[self.header.index("void TIMG2COL"):self.header.index("// TFILLPAD")]
-        self.assertIn('"ri"(dst.GetValidCol())', body)
-        self.assertIn('"ri"(dst.GetValidRow())', body)
+        body = self.header[self.header.index("// TIMG2COL") : self.header.index("// TFILLPAD")]
         self.assertIn("tile_shape_out::Loc == Location::Left", body)
+        self.assertIn('"r"(dst.GetValidCol())', body)
+        self.assertIn('"r"(dst.GetValidRow())', body)
         self.assertIn("BLayout::CubeM16", body)
         self.assertIn("BLayout::CubeM32", body)
 
