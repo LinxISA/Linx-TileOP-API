@@ -3033,6 +3033,10 @@ inline MatmulShape resolve_matmul_shape_runtime(const C &c, const A &a,
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B>
 PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
                               size_t K) {
+  // M is the value encoded into LB0: for Local/Local it is the Local M;
+  // for a cooperative form it is the core-total group_M (runtime). For
+  // Local-A/Shared-B the A shard descriptor is per-PE (valid_rows == pe_m)
+  // and cannot supply group_M, so the caller must pass it here.
   validate_matrix_contract<Attr, Dst, A, B>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
@@ -5324,12 +5328,48 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
                 "TMATMUL supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
+  // ASL: a cooperative Local-A/Shared-B TMATMUL encodes LB0 as the
+  // core-total group_M. This 3-arg form derives LB0 from A::ValidRow,
+  // which is exactly group_M only when the group fits one per-PE block
+  // (group_M == pe_m, e.g. 16/32-row groups). For a multi-shard group
+  // use the explicit groupM overload below - a Local A shard cannot
+  // supply the core-total row count.
   pto_matmul_detail::MatmulShape __shape =
       pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_detail::matmul<Attr>(c, a, b, M, N, K);
+}
+
+// Cooperative Local-A/Shared-B form: LB0 encodes the core-total group_M,
+// which a Local A shard descriptor cannot supply, so the caller passes it
+// explicitly. group_M must be 1..128; each PE computes
+// valid_M = clamp(group_M - i*M_per_PE, 0, M_per_PE) per the ASL dispatch.
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b>
+PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
+                              tile_shape_b &b, size_t groupM) {
+  static_assert(tile_role_v<tile_shape_a> == Location::Left,
+                "TMATMUL input A must be a Left tile");
+  static_assert(tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL input B must be a Right tile");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the overload taking fixp::Options");
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+  // Runtime guard mirroring the ASL dispatch (group_M in 1..128; each PE
+  // computes valid_M = clamp(group_M - i*M_per_PE, 0, M_per_PE)).
+  if (groupM < 1 || groupM > 128) {
+    __builtin_printf("TMATMUL: cooperative group_M must be in 1..128\n");
+    __builtin_trap();
+  }
+  pto_matmul_detail::matmul<Attr>(c, a, b, groupM, N, K);
 }
 
 
