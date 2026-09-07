@@ -331,6 +331,22 @@ Shared Right 的 options 与普通 Right 完全相同，只替换 operand 类型
 Local `B.IOT` source stream，而由 `C.B.IOS S#right` 携带；其余输入输出仍是 Local Tile。
 Shared form 使用四 PE cooperative、mask `1111`，Shared Right 当前要求静态 valid N。
 
+### Local-A/Shared-B 的显式 group_M
+
+当 `TMATMUL` 进入 cooperative 的 `Local-A/Shared-B` 语义时，`LB0` 表示 core-total
+`group_M`，而不是 Local-A shard 的 per-PE `M`。此时推荐使用显式 `groupM` 入口：
+
+```cpp
+TMATMUL(d, local_a, shared_b, groupM);
+```
+
+其中：
+
+- `groupM` 必须是 `1..128` 的静态或运行时正值；
+- `local_a` 仍表示每 PE 的 Local shard；
+- `shared_b` 仍表示 `K×N` 的 Shared 右操作数；
+- 该入口仅用于 `Local-A/Shared-B` cooperative 场景，不影响 `Local/Local`、`Local/Shared-Right` 或 `Shared-Left/Shared-Right` 的既有调用方式。
+
 ### 操作支持速查
 
 以下是当前 API 的使用方向；每个操作页仍可能根据输入 dtype、layout 和 accumulator 类型
