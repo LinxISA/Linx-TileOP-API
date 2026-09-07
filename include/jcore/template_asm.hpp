@@ -2661,10 +2661,22 @@ namespace pto_matmul_detail {
 // programmable integer pre-quant modes retain it.
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
   "BSTART.CUBE " OPCODE ", %D[DataTypeA]\n"                                      \
-  ".if %c[PreQuant] == 0\n"                                                     \
+  ".if %c[PreQuant] == 0 && %c[CCTRL] == 0\n"                                    \
   "B.DATR %D[DataTypeB], byte0, Zero, RNONE, NOSAT\n"                            \
-  ".else\n"                                                                     \
+  ".elseif %c[PreQuant] == 0 && %c[CCTRL] == 1\n"                                \
+  "B.DATR %D[DataTypeB], byte0, Max, RNONE, NOSAT\n"                             \
+  ".elseif %c[PreQuant] == 0 && %c[CCTRL] == 2\n"                                \
+  "B.DATR %D[DataTypeB], byte0, Min, RNONE, NOSAT\n"                             \
+  ".elseif %c[PreQuant] == 0 && %c[CCTRL] == 3\n"                                \
+  "B.DATR %D[DataTypeB], byte0, Null, RNONE, NOSAT\n"                            \
+  ".elseif %c[PreQuant] != 0 && %c[CCTRL] == 0\n"                                \
   "B.DATR %D[DataTypeB], byte0, Zero, RNE, NOSAT\n"                              \
+  ".elseif %c[PreQuant] != 0 && %c[CCTRL] == 1\n"                                \
+  "B.DATR %D[DataTypeB], byte0, Max, RNE, NOSAT\n"                               \
+  ".elseif %c[PreQuant] != 0 && %c[CCTRL] == 2\n"                                \
+  "B.DATR %D[DataTypeB], byte0, Min, RNE, NOSAT\n"                               \
+  ".elseif %c[PreQuant] != 0 && %c[CCTRL] == 3\n"                                \
+  "B.DATR %D[DataTypeB], byte0, Null, RNE, NOSAT\n"                              \
   ".endif\n" EXTRA_ATTRS                                                     \
   "B.DIM %[M], 0, ->lb0\n"                                                   \
   "B.DIM %[N], 0, ->lb1\n"                                                   \
@@ -2672,6 +2684,7 @@ namespace pto_matmul_detail {
 
 #define PTO_MATMUL_COMMON_INPUTS(DstType, AType, BType, MValue, NValue, KValue) \
   [M] "r"(MValue), [N] "r"(NValue), [K] "r"(KValue),                         \
+      [CCTRL] "i"(static_cast<uint8_t>(Attr.CubeCtrl)),                        \
       [DataTypeA] "i"(type_traits<typename AType::DType>::TypeCode),           \
       [DataTypeB] "i"(type_traits<typename BType::DType>::TypeCode),           \
       [TileSize] "i"(                                                           \
@@ -2849,6 +2862,36 @@ constexpr void validate_cscale_contract() {
   }
 }
 
+// PTO-ISA 0.58.6 InternalAcc (spec#236): B.DATR CCTRL legality for the
+// CUBE Matrix family.
+//  - CCTRL[1] (transparent cache hint on explicit C) is ACC-only;
+//  - CCTRL[0] (raw accumulator-type D) requires every final-output
+//    post-process and auxiliary-output control to be zero; legal CScale
+//    (accumulator-input transform) is the sole exception;
+//  - raw D publishes the accumulator type, which is FP32/S32/U32.
+template <FixpAttr Attr, bool IsAccForm>
+constexpr void validate_cube_ctrl_contract() {
+  constexpr bool IsRaw = (Attr.CubeCtrl & CubeCtrlRawAccumulator) != 0;
+  constexpr bool IsHint = (Attr.CubeCtrl & CubeCtrlInternalAccHint) != 0;
+  static_assert(!IsHint || IsAccForm,
+                "CCTRL InternalAcc hint (CCTRL[1]) is legal only for "
+                "accumulator (ACC) forms");
+  static_assert(!IsRaw || Attr.PreQuant == FixpPreQuantMode::None,
+                "raw accumulator D (CCTRL[0]) forbids PreQuant conversion");
+  static_assert(!IsRaw || Attr.Relu == FixpReluMode::None,
+                "raw accumulator D (CCTRL[0]) forbids Relu/activation");
+  static_assert(!IsRaw || Attr.GroupNCode == 0,
+                "raw accumulator D (CCTRL[0]) forbids GroupMax");
+  static_assert(!IsRaw || !Attr.RowMaxEn,
+                "raw accumulator D (CCTRL[0]) forbids RowMax output");
+  static_assert(!IsRaw || !Attr.GroupMaxEn,
+                "raw accumulator D (CCTRL[0]) forbids GroupMax output");
+  static_assert(!IsRaw || !Attr.RowMaxInit,
+                "raw accumulator D (CCTRL[0]) forbids RowMaxInit input");
+  static_assert(!IsRaw || !Attr.MaxAbsEn,
+                "raw accumulator D (CCTRL[0]) forbids MaxAbs reduction");
+}
+
 template <FixpAttr Attr, typename Bias, typename A, typename B, bool MX = false>
 constexpr void validate_matrix_bias_contract() {
   static_assert(matrix_accumulator_type_legal<A, B, Bias, MX>(),
@@ -2917,8 +2960,22 @@ constexpr void validate_matrix_scale_contract() {
 
 template <FixpAttr Attr, int SrcMask, int OutMask, typename A, typename B,
           typename RowIn, typename QuantTile, typename ReluTile,
-          typename RowOut, typename GroupOut, bool MX = false>
+          typename RowOut, typename GroupOut, bool MX = false,
+          bool IsAccForm = true>
 constexpr void validate_matrix_postprocess_contract() {
+  // PTO-ISA 0.58.6 InternalAcc (spec#236): CCTRL legality.
+  constexpr bool CubeRawD = (Attr.CubeCtrl & CubeCtrlRawAccumulator) != 0;
+  constexpr bool CubeHint = (Attr.CubeCtrl & CubeCtrlInternalAccHint) != 0;
+  static_assert(!CubeHint || IsAccForm,
+                "CCTRL InternalAcc hint (CCTRL[1]) is legal only for "
+                "accumulator (ACC) forms");
+  static_assert(!CubeRawD || (SrcMask == 0 && OutMask == 0 &&
+                              Attr.PreQuant == FixpPreQuantMode::None &&
+                              Attr.Relu == FixpReluMode::None &&
+                              Attr.GroupNCode == 0),
+                "raw accumulator D (CCTRL[0]) forbids final post-process and "
+                "auxiliary outputs (legal CScale is the sole exception)");
+
   constexpr int AccCode = MX
       ? __type_fp32
       : matrix_accumulator_type_code(
@@ -4684,7 +4741,7 @@ PTO_SHARED_INLINE void emit_fixp(
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -4719,7 +4776,7 @@ PTO_SHARED_INLINE void emit_matmul_acc_fixp(
   validate_matrix_accumulator_contract<Attr, Dst, C_, A, B>();
   validate_cscale_contract<Attr, C_, CScale>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_ACC_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -4743,7 +4800,7 @@ PTO_SHARED_INLINE void emit_matmul_bias_fixp(
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_bias_contract<Attr, BiasT, A, B>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_BIAS_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -4773,7 +4830,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_LOCAL); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_PLAIN_L); }
@@ -4811,7 +4868,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_LOCAL); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_ACC_L); }
@@ -4847,7 +4904,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_LOCAL); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_BIAS_L); }
@@ -4933,7 +4990,7 @@ PTO_SHARED_INLINE void emit_gemv_fixp(
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GV_EMIT_LOCAL);
 }
 
@@ -4952,7 +5009,7 @@ PTO_SHARED_INLINE void emit_gemv_bias_fixp(
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_bias_contract<Attr, BiasT, Vec, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVB_EMIT_LOCAL);
 }
 
@@ -4971,7 +5028,7 @@ PTO_SHARED_INLINE void emit_gemv_acc_fixp(
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVA_EMIT_LOCAL);
 }
 
@@ -4996,7 +5053,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_fixp(
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_PLAIN); }
 }
@@ -5024,7 +5081,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_BIAS); }
 }
@@ -5052,7 +5109,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, true>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_ACC); }
 }
