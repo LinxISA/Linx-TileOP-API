@@ -9432,8 +9432,9 @@ void TPARTMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 // TROWSUM: row sum reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWSUM destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9448,9 +9449,9 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9468,7 +9469,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
       "r"(valid_col),
       "r"(valid_row),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9478,8 +9479,9 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
 // TROWMAX: row max reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWMAX destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9494,9 +9496,9 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9510,9 +9512,9 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
-      "i"(tile_shape_out::Cols),
+      "r"(src.GetValidCol()),
+      "r"(src.GetValidRow()),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9522,8 +9524,9 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TROWMIN: row min reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWMIN destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9538,9 +9541,9 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9554,9 +9557,9 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
-      "i"(tile_shape_out::Cols),
+      "r"(src.GetValidCol()),
+      "r"(src.GetValidRow()),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9566,8 +9569,9 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
 // TROWPROD: row product reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWPROD destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9582,9 +9586,9 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9598,9 +9602,9 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
-      "i"(tile_shape_out::Cols),
+      "r"(src.GetValidCol()),
+      "r"(src.GetValidRow()),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9652,8 +9656,9 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 // TROWARGMAX: row argmax (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWARGMAX destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9668,9 +9673,9 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9684,9 +9689,9 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
-      "i"(tile_shape_out::Cols),
+      "r"(src.GetValidCol()),
+      "r"(src.GetValidRow()),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9696,8 +9701,9 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TROWARGMIN: row argmin (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
-  // ASL (reduction-and-expansion): row-axis reduction destination is a
-  // single-column tile with one valid row per reduced source row.
+  // ASL (row reduction): B.DIM describes the SOURCE geometry
+  // (ValidCol/ValidRow/Col); the destination is rule-derived: one
+  // column, ValidRow = source.ValidRow.
   static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
                 "TROWARGMIN destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
@@ -9712,9 +9718,9 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_out::ValidCol),
-      "i"(tile_shape_out::ValidRow),
-      "i"(tile_shape_out::Cols),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
@@ -9728,9 +9734,9 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "r"(dst.GetValidCol()),
-      "r"(dst.GetValidRow()),
-      "i"(tile_shape_out::Cols),
+      "r"(src.GetValidCol()),
+      "r"(src.GetValidRow()),
+      "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
   );
