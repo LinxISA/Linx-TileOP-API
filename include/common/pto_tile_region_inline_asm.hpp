@@ -34,8 +34,9 @@ pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
           "i"(Opcode), "r"(region_base_units)
         : "memory");
   } else {
-    static_assert(SubTile::BFractal == BLayout::RowMajor,
-                  "inline Tile region path requires RowMajor fragments");
+    static_assert(SubTile::BFractal == BLayout::RowMajor ||
+                      SubTile::IsCubeLayout,
+                  "inline Tile region path requires RowMajor or Cube fragments");
     asm volatile(
         "BSTART.TEPL %c8, %D1\n"
         "B.DIM zero, %c3, ->lb0\n"
@@ -85,8 +86,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar(
           "r"(value), "r"(region_base_units), "i"(Opcode)
         : "memory");
   } else {
-    static_assert(SubTile::BFractal == BLayout::RowMajor,
-                  "inline Tile region path requires RowMajor fragments");
+    static_assert(SubTile::BFractal == BLayout::RowMajor ||
+                      SubTile::IsCubeLayout,
+                  "inline Tile region path requires RowMajor or Cube fragments");
     asm volatile(
         "BSTART.TEPL %c10, %D1\n"
         "B.DIM zero, %c3, ->lb0\n"
@@ -831,9 +833,11 @@ template <int Opcode, typename Out, typename Parent0, typename SubTile0,
 PTO_REGION_ALWAYS_INLINE void pto_region_binary(
     Out &dst, region::SubTileView<Parent0, SubTile0> &src0,
     region::SubTileView<Parent1, SubTile1> &src1) {
-  static_assert(SubTile0::BFractal == BLayout::RowMajor &&
-                    SubTile1::BFractal == BLayout::RowMajor,
-                "inline Tile region path requires RowMajor fragments");
+  static_assert((SubTile0::BFractal == BLayout::RowMajor ||
+                 SubTile0::IsCubeLayout) &&
+                    (SubTile1::BFractal == BLayout::RowMajor ||
+                     SubTile1::IsCubeLayout),
+                "inline Tile region path requires RowMajor or Cube fragments");
   static_assert(SubTile0::SFractal == SLayout::NoneBox &&
                     SubTile1::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
