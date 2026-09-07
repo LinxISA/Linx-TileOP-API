@@ -199,6 +199,27 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("length cannot exceed the parent Tile capacity", tile_header)
         self.assertIn("auto assemble_last_at_reg(Parent &parent", tile_header)
 
+    def test_range_modifier_types_and_aliases_remain_supported(self) -> None:
+        header = PTO_TILE.read_text(encoding="utf-8")
+        docs = (ROOT / "docs" / "tileop-usage" / "range-modifiers.md").read_text(
+            encoding="utf-8"
+        )
+        for spelling in (
+            "range::Subview",
+            "range::Assemble",
+            "subview_at_reg",
+            "subview_sized_at_reg",
+            "assemble_at_reg",
+            "assemble_last_at_reg",
+        ):
+            self.assertIn(spelling, header)
+        for spelling in (
+            "range::subview",
+            "range::assemble",
+            "range::assemble_last",
+        ):
+            self.assertIn(spelling, docs)
+
     # --- PE mask: 4 binary digits ---
 
     def test_pe_masks_are_four_binary_digits(self) -> None:
@@ -239,6 +260,38 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertNotIn(
             '"B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\\n"', tsel
         )
+
+    def test_valid_shape_immediate_fixture_separates_static_and_dynamic_paths(self) -> None:
+        fixture = (ROOT / "test" / "tileop_api" / "src" / "ValidShapeImmediate.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"i" + C.B.DIMI path', fixture)
+        self.assertIn('"r" + B.DIM path', fixture)
+        self.assertIn('using S = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;', fixture)
+        self.assertIn('using D = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor, -1, -1>;', fixture)
+
+    def test_static_valid_shape_bindings_remain_immediate_eligible(self) -> None:
+        header = self.header
+        for spelling in (
+            '"ri"(dst.GetValidCol())',
+            '"ri"(dst.GetValidRow())',
+            '"ri"(src.GetValidCol())',
+            '"ri"(src.GetValidRow())',
+            '"ri"(offset.GetValidCol())',
+            '"ri"(offset.GetValidRow())',
+            '[VCOL] "ri"(validCol)',
+            '[VROW] "ri"(validRow)',
+        ):
+            self.assertIn(spelling, header)
+        for spelling in (
+            '"r"(dst.GetValidCol())',
+            '"r"(dst.GetValidRow())',
+            '"r"(src.GetValidCol())',
+            '"r"(src.GetValidRow())',
+            '"r"(offset.GetValidCol())',
+            '"r"(offset.GetValidRow())',
+        ):
+            self.assertNotIn(spelling, header)
 
     def test_fpatr_carries_shared_transpose_controls(self) -> None:
         tile = PTO_TILE.read_text(encoding="utf-8")
