@@ -1,20 +1,22 @@
-// TIMG2COL: image-to-column with feature-map posM/posK
-// (PTO ISA 0.58.3 TEPL Mode3 Fn4 / selector 0x064; B.IOR PosMGPR, PosKGPR).
+// TIMG2COL: GM feature-map image-to-column with packed parameter GPRs.
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
 
-using T = Tile<Location::Vec, float, 8, 256, BLayout::RowMajor>;
+using T = CubeTileM32<float, 32, 256>;
+using GM = global_tensor<float, RowMajor<8, 256>>;
 
-__attribute__((noinline)) void ic_pos(T &d, T &s) { TIMG2COL(d, s, 3, 5); }
-__attribute__((noinline)) void ic_default(T &d, T &s) { TIMG2COL(d, s); }
+__attribute__((noinline)) void ic(T &d, GM &s) {
+  TIMG2COL(d, s, 0x0008000800040008ULL, 0, 0);
+}
 
 void use(void *) {}
 
 int main() {
-  T d, s;
-  ic_pos(d, s);
-  ic_default(d, s);
+  T d;
+  float data[8 * 256] = {};
+  GM s(data);
+  ic(d, s);
   use(&d);
   return 0;
 }

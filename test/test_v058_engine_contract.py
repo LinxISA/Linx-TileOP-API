@@ -523,10 +523,19 @@ int main() { return sizeof(Bad); }
         self.assertRegex(self.header, r"B\.IOT %\[Rep\], mask=1111, last, ->%\[Dst\]")
         self.assertRegex(self.header, r"B\.IOR \[%\[Base\]\]")
 
-    def test_timg2col_bundle_has_position_ior(self) -> None:
-        # TIMG2COL: B.IOR carries posM/posK (+ optional zero slot omitted).
-        self.assertRegex(self.header, r"B\.IOR \[%5, %6\], \[\]")
-        self.assertRegex(self.header, r"B\.IOT %7, mask=1111, last")
+    def test_timg2col_bundle_has_gm_and_parameter_iors(self) -> None:
+        self.assertIn('"BSTART.TIMG2COL %D[DataType]', self.header)
+        self.assertRegex(self.header, r'B\.IOR \[%\[GMBase\], zero, zero\], \[\]')
+        self.assertRegex(self.header, r'B\.IOR \[%\[Param0\], %\[Param1\], %\[Param2\]\], \[\]')
+        self.assertRegex(self.header, r'B\.IOT mask=1111, last, ->%\[Dst\]')
+
+    def test_timg2col_uses_destination_geometry_and_cube_output(self) -> None:
+        body = self.header[self.header.index("void TIMG2COL"):self.header.index("// TFILLPAD")]
+        self.assertIn('"ri"(dst.GetValidCol())', body)
+        self.assertIn('"ri"(dst.GetValidRow())', body)
+        self.assertIn("tile_shape_out::Loc == Location::Left", body)
+        self.assertIn("BLayout::CubeM16", body)
+        self.assertIn("BLayout::CubeM32", body)
 
     def test_tquant_tdequant_use_datr_and_ior(self) -> None:
         # TQUANT/TDEQUANT: B.DATR carries named dtype/RMode and optional sat,

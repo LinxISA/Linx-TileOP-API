@@ -13,6 +13,14 @@ B.IOR [a0, a1], []
 B.IOT t#1, mask=1100, last, ->m<64KB>
 B.IOS S1, mask=1111
 B.IOS mask=1111, ->S63<256KB>
+BSTART.TIMG2COL FP32
+B.DATR ND2M32, DTYPE_NONE, Zero
+B.DIM a0, 0, ->lb0
+B.DIM a1, 0, ->lb1
+B.DIM zero, 256, ->lb2
+B.IOR [a2, zero, zero], []
+B.IOR [a3, a4, a5], []
+B.IOT mask=1111, last, ->t<64KB>
 
 # Optional MX scale binders use constant assembler conditions after inline-asm
 # substitution.  Prove the matching MC accepts the form and fully elides the

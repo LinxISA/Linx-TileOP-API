@@ -1,14 +1,15 @@
 # TIMG2COL
 
-`TIMG2COL` 将描述符指定的 feature-map 窗口提取为标准 Left 矩阵顺序。
+`TIMG2COL` 从 GM feature-map 按打包参数提取窗口，并直接物化为 Local CUBE。
 
 ## C++ 接口
 
 当前 API 中可用的调用形式：
 
 ```cpp
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0, uint32_t posK = 0);
+template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
+void TIMG2COL(tile_shape_out &dst, gm_shape &src,
+              uint64_t param0, uint64_t param1, uint64_t param2);
 ```
 
 ### 支持的数据类型
@@ -22,9 +23,10 @@ void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0, uint32
 | 参数 | 说明 |
 | --- | --- |
 | `dst` | 输出 Tile；成功调用后写入操作结果。 |
-| `src` | 输入 Tile 或源数据。 |
-| `posM` | 矩阵 M 方向的位置或偏移描述符。 |
-| `posK` | 矩阵 K 方向的位置或偏移描述符。 |
+| `src` | GM feature-map 基址。 |
+| `param0` | 输入尺寸、Cin 和 kernel 尺寸的打包参数字。 |
+| `param1` | padding、dilation、stride 和扩展控制的打包参数字。 |
+| `param2` | 输出 row/column 起始位置的打包参数字。 |
 
 
 
@@ -53,12 +55,7 @@ void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0, uint32
 
 ## 默认值
 
- 以下是 C++ 声明中可直接省略的默认实参：
-
-| 参数 | 默认值 |
-| --- | --- |
-| `posM` | `0` |
-| `posK` | `0` |
+参数字必须显式提供；各字段的位分配见 PTO 的 TIMG2COL parameter contract。
 
 ### 编码字段和省略值
 
@@ -80,12 +77,14 @@ void TIMG2COL(tile_shape_out &dst, tile_shape_in &src, uint32_t posM = 0, uint32
 开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
 
 ```asm
-BSTART.SFU TIMG2COL, DataType
+BSTART.TIMG2COL DataType
+B.DATR       ND2M32, DTYPE_NONE, Zero
 B.DIM       rValidCol, 0, ->LB0
-B.DIM       rValidRow, 0, ->LB1  ; (optional)
-B.DIM       rCol, 0, ->LB2  ; (optional)
-B.IOT       SrcTile, mask=PE_MASK, last, ->DstTile<TSize>
-B.IOR       PosMGPR, PosKGPR, zero, ->zero (optional)
+B.DIM       rValidRow, 0, ->LB1
+B.DIM       rTotalCol, 0, ->LB2
+B.IOR       GMBase, zero, zero, []
+B.IOR       ParamGPR0, ParamGPR1, ParamGPR2, []
+B.IOT       mask=1111, last, ->DstTile<TSize>
 BSTOP
 ```
 
@@ -96,13 +95,12 @@ BSTOP
 
 using namespace pto;
 using GM = global_tensor<float, RowMajor<8, 256>>;
-using TileT = Tile<Location::Vec, float, 8, 256, BLayout::RowMajor>;
+using TileT = CubeTileM32<float, 32, 256>;
 float src_data[8 * 256] = {};
 GM src_global(src_data);
-TileT src;
 TileT dst;
-TLOAD(src, src_global);
-TIMG2COL(dst, src, 3, 5);
+TIMG2COL(dst, src_global, 0x0008000800040008ULL, 0, 0);
 ```
 
-涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。
+涉及不同输入尺寸、padding、stride、dilation 或起始位置时，请按
+TIMG2COL parameter contract 重新打包三个参数字，而不是使用旧的二维位置参数。
