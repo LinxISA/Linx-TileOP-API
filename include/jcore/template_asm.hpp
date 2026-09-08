@@ -701,7 +701,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [GmStride] "r"(src.GetStrideBytes(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -721,7 +721,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [GmStride] "r"(src.GetStrideBytes(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -741,7 +741,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [GmStride] "r"(src.GetStrideBytes(3))
       : "memory");  }
   else {
 asm volatile(
@@ -761,7 +761,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [GmStride] "r"(src.GetStrideBytes(3))
       : "memory");  }
 }
 
@@ -787,7 +787,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [GmStride] "r"(dst.GetStrideBytes(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -804,7 +804,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [GmStride] "r"(dst.GetStrideBytes(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -821,7 +821,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [GmStride] "r"(dst.GetStrideBytes(3))
       : "memory");  }
   else {
 asm volatile(
@@ -838,7 +838,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [GmStride] "r"(dst.GetStrideBytes(3))
       : "memory");  }
 }
 
@@ -871,7 +871,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [GmStride] "r"(src.GetStrideBytes(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -892,7 +892,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [GmStride] "r"(src.GetStrideBytes(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -913,7 +913,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [GmStride] "r"(src.GetStrideBytes(3))
       : "memory");  }
   else {
 asm volatile(
@@ -934,7 +934,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [GmStride] "r"(src.GetStrideBytes(3))
       : "memory");  }
 }
 
@@ -963,7 +963,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [GmStride] "r"(dst.GetStrideBytes(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -981,7 +981,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [GmStride] "r"(dst.GetStrideBytes(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -999,7 +999,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [GmStride] "r"(dst.GetStrideBytes(3))
       : "memory");  }
   else {
 asm volatile(
@@ -1017,7 +1017,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [GmStride] "r"(dst.GetStrideBytes(3))
       : "memory");  }
 }
 
@@ -3190,10 +3190,10 @@ asm volatile(
 // participation 1111, no B.IOT/B.IOS members. Omitted LB0/LB1 default to one
 // and omitted LB2 to the resolved ValidCol; we pass the caller's valid shape
 // and the GM row length (logical elements) through B.DIM, and the GM base +
-// logical row stride through B.IOR.
+// the byte row stride (SuperScalarModel 2d467114 contract) through B.IOR.
 template <is_global_data_v gm_shape>
 void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
-  const size_t rowStride = src.GetStride(3);
+  const size_t rowStride = src.GetStrideBytes(3);
   const size_t physicalCol =
       gm_shape::Cols == DYNAMIC ? rowStride : gm_shape::Cols;
   // LB2 carries the GM row length. When the GM shape is statically known it
