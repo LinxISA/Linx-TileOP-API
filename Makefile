@@ -13,6 +13,7 @@ check:
 	python3 tools/generate_engine_docs.py --check
 	python3 tools/check_issue_49_docs.py
 	python3 tools/check_tileop_usage_examples.py
+	python3 tools/check_no_legacy_tileop_api.py
 	python3 test/test_v058_engine_contract.py
 	python3 test/test_pto0585_layout_interfaces.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
