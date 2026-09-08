@@ -98,6 +98,17 @@ TMATMUL(c, local_a, shared_b, groupM);
 This keeps `LB0` aligned with the ASL cooperative `group_M` contract while the
 Local shard descriptor remains per-PE.
 
+The same explicit-`groupM` entry exists across the matrix family
+(basic, parameter-free forms):
+
+```cpp
+TMATMUL_ACC(d, c, local_a, shared_b, groupM);
+TMATMUL_BIAS(d, local_a, shared_b, bias, groupM);
+TMATMUL_MX(d, local_a, scale_a, shared_b, scale_b, groupM);
+TMATMUL_MX_ACC(d, c, local_a, scale_a, shared_b, scale_b, groupM);
+TMATMUL_MX_BIAS(d, local_a, scale_a, shared_b, scale_b, bias, groupM);
+```
+
 For a non-CUBE Tile, the same spelling remains the normal `B.IOT` transport:
 
 ```cpp

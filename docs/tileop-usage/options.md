@@ -339,6 +339,13 @@ Shared form 使用四 PE cooperative、mask `1111`，Shared Right 当前要求�
 ```cpp
 TMATMUL(d, local_a, shared_b, groupM);
 TMATMUL(d, local_a, shared_b, options, groupM);
+
+// 其余矩阵族接口提供相同的显式 groupM 入口（basic 形式）：
+TMATMUL_ACC(d, c, local_a, shared_b, groupM);
+TMATMUL_BIAS(d, local_a, shared_b, bias, groupM);
+TMATMUL_MX(d, local_a, scale_a, shared_b, scale_b, groupM);
+TMATMUL_MX_ACC(d, c, local_a, scale_a, shared_b, scale_b, groupM);
+TMATMUL_MX_BIAS(d, local_a, scale_a, shared_b, scale_b, bias, groupM);
 ```
 
 其中：
@@ -347,7 +354,9 @@ TMATMUL(d, local_a, shared_b, options, groupM);
 - `local_a` 仍表示每 PE 的 Local shard；
 - `shared_b` 仍表示 `K×N` 的 Shared 右操作数；
 - `options` 仍然遵循本页 `fixp::Options` 约束，可与 `groupM` 一起使用；
-- 该入口仅用于 `Local-A/Shared-B` cooperative 场景，不影响 `Local/Local`、`Local/Shared-Right` 或 `Shared-Left/Shared-Right` 的既有调用方式。
+- 该入口仅用于 `Local-A/Shared-B` cooperative 场景，不影响 `Local/Local`、`Local/Shared-Right` 或 `Shared-Left/Shared-Right` 的既有调用方式；
+- `D`（以及 ACC 形式的 `C`）valid 行数必须等于 per-PE A shard 大小（`M_per_PE`：CubeM16 对应 `group_M <= 64`，CubeM32 对应 `group_M > 64`）；
+- MX 形式的 scale 操作数与其主操作数存储一致（Local A 配 Local scale，Shared B 配 Shared scale）。
 
 ### 操作支持速查
 
