@@ -58,4 +58,20 @@ __attribute__((noinline)) void mx(float *out, __fp8_e4m3 *ain, __fp8_e4m3 *bin, 
 
 }  // namespace mx_forms
 
+
+namespace options_groupm_forms {
+// 用户报错形态: TMATMUL_ACC(tO, tO, tW, tV, pvOptions, kGroupM)
+using TW = Tile<Location::Left, __bf16, 32, 128, BLayout::CubeM32, 32, 128>;
+using TV = SharedMatrixRight<__bf16, 128, 16>;
+using TO = Tile<Location::Acc, float, 32, 16, BLayout::CubeM32, 32, 16>;
+constexpr size_t kGroupM = 128;
+__attribute__((noinline)) void pv(TO &tO, TW &tW, TV &tV) {
+  auto sv = TMOV_L2S_INSERT(tV);
+  auto pvOptions = fixp::Options<FixpAttr::keep_acc()>{};
+  TMATMUL_ACC(tO, tO, tW, sv, pvOptions, kGroupM);
+}
+
+
+}  // namespace options_groupm_forms
+
 int main() { return 0; }

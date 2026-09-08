@@ -6469,6 +6469,111 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
       quant_gpr, lrelu_gpr, M, N, K);
 }
 
+// Cooperative Local-A/Shared-B form with explicit core-total group_M
+// (options variant; LB0 encodes group_M, which a Local A shard cannot supply).
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
+                 tile_shape_b &b, const Options &options,
+                               size_t groupM) {
+  pto_matmul_groupm_detail::validate_local_a_shared_b<tile_shape_a,
+                                                       tile_shape_b>("TMATMUL_ACC");
+  pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_ACC", groupM);
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(tile_role_v<tile_shape_a> == Location::Left &&
+                    tile_role_v<tile_shape_b> == Location::Right,
+                "TMATMUL_ACC requires A=Left and B=Right");
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_ACC destination dtype does not match PreQuantMode");
+
+  constexpr bool HasVectorQuant =
+      is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant =
+      is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) |
+                          (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) |
+                          (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+  constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
+      ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
+      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+  // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
+  // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
+  // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
+  // For cooperative forms the reduction/output rows are the per-PE M.
+  // Shared-A: per-PE block = rows_per_pe(group_M) derived from the core
+  // total. Local-A/Shared-B: A::ValidRow already IS the per-PE shard size
+  // (M_per_PE itself, per ADR-0100), so it must be used directly — feeding
+  // it back through rows_per_pe() would map M_per_PE=32 to 16 and break
+  // CubeM32 group_M>64 configurations.
+  constexpr int RedRows =
+      (is_shared_tile_v<tile_shape_a>)
+          ? pto_matmul_detail::cooperative_group_m_rows_per_pe(EffectiveM)
+          : EffectiveM;
+
+  static_assert(HasVectorQuant ==
+                    !std::is_same_v<typename Options::QuantTile,
+                                    fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu ==
+                    !std::is_same_v<typename Options::ReluTile,
+                                    fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn ==
+                    !std::is_same_v<typename Options::RowMaxIn,
+                                    fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut ==
+                    !std::is_same_v<typename Options::RowMaxOut,
+                                    fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut ==
+                    !std::is_same_v<typename Options::GroupMaxOut,
+                                    fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+  auto &cscale = pto_matmul_detail::select_fixp_operand<Attr.CScaleEn>(
+      options.CScale, c);
+
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
+  pto_matmul_detail::emit_matmul_acc_fixp<Attr, SrcMask, OutMask, IorMode>(
+      d, c, a, b, cscale, row_in, quant_tile, relu_tile, row_out, group_out,
+      quant_gpr, lrelu_gpr, groupM, N, K);
+}
+
 // Cooperative Local-A/Shared-B + options form: LB0 encodes the core-total
 // group_M provided by the caller, while A still denotes the per-PE Local shard
 // and B remains the Shared KxN right operand. This keeps the existing options
@@ -6901,6 +7006,74 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   pto_matmul_detail::emit_matmul_bias_fixp<Attr, SrcMask, OutMask, IorMode>(c, a, b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
+// Cooperative Local-A/Shared-B form with explicit core-total group_M
+// (options variant; LB0 encodes group_M, which a Local A shard cannot supply).
+template <is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b,
+          is_tile_data_v tile_shape_bias, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b,
+                  tile_shape_bias &bias, const Options &options,
+                               size_t groupM) {
+  pto_matmul_groupm_detail::validate_local_a_shared_b<tile_shape_a,
+                                                       tile_shape_b>("TMATMUL_BIAS");
+  pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_BIAS", groupM);
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_c::DType>(),
+                "TMATMUL_BIAS destination dtype does not match PreQuantMode");
+
+  constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) | (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) | (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant == !std::is_same_v<typename Options::QuantTile, fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu == !std::is_same_v<typename Options::ReluTile, fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn == !std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut == !std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, c);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, c);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, c);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, c);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, c);
+
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
+  pto_matmul_detail::emit_matmul_bias_fixp<Attr, SrcMask, OutMask, IorMode>(c, a, b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, groupM, N, K);
+}
+
 // TMATMUL_MX: C = (A * aScale) * (B * bScale) (BSTART.CUBE TMATMULMX).
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
@@ -7005,6 +7178,76 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
   const uint64_t quant_gpr = quant_gpr_storage;
   const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_mx_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(c, a, ascale, b, bscale, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
+}
+
+// Cooperative Local-A/Shared-B form with explicit core-total group_M
+// (options variant; LB0 encodes group_M, which a Local A shard cannot supply).
+template <int ScaleMask = 3, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          typename tile_shape_ascale,
+          is_local_or_shared_right tile_shape_b,
+          typename tile_shape_bscale, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_ascale &ascale,
+                tile_shape_b &b, tile_shape_bscale &bscale,
+                const Options &options,
+                               size_t groupM) {
+  pto_matmul_groupm_detail::validate_local_a_shared_b<tile_shape_a,
+                                                       tile_shape_b>("TMATMUL_MX");
+  pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_MX", groupM);
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_c::DType>(),
+                "TMATMUL_MX destination dtype does not match PreQuantMode");
+
+  constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) | (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) | (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant == !std::is_same_v<typename Options::QuantTile, fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu == !std::is_same_v<typename Options::ReluTile, fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn == !std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut == !std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, c);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, c);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, c);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, c);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, c);
+
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
+  pto_matmul_detail::emit_matmul_mx_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(c, a, ascale, b, bscale, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, groupM, N, K);
 }
 
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
@@ -7128,6 +7371,81 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
       row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
 }
 
+// Cooperative Local-A/Shared-B form with explicit core-total group_M
+// (options variant; LB0 encodes group_M, which a Local A shard cannot supply).
+template <int ScaleMask = 3, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a, typename tile_shape_sa,
+          is_local_or_shared_right tile_shape_b, typename tile_shape_sb,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
+                    tile_shape_sa &scale_a, tile_shape_b &b,
+                    tile_shape_sb &scale_b, const Options &options,
+                               size_t groupM) {
+  pto_matmul_groupm_detail::validate_local_a_shared_b<tile_shape_a,
+                                                       tile_shape_b>("TMATMUL_MX_ACC");
+  pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_MX_ACC", groupM);
+  constexpr FixpAttr Attr = Options::Attr;
+  pto_matmul_detail::validate_matrix_accumulator_contract<Attr,
+      tile_shape_d, tile_shape_c, tile_shape_a, tile_shape_b, true>();
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_MX_ACC destination dtype does not match PreQuantMode");
+
+  constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) | (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) | (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant == !std::is_same_v<typename Options::QuantTile, fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu == !std::is_same_v<typename Options::ReluTile, fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn == !std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut == !std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+  auto &cscale = pto_matmul_detail::select_fixp_operand<Attr.CScaleEn>(
+      options.CScale, c);
+
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
+  pto_matmul_detail::emit_matmul_mx_acc_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(
+      d, c, a, scale_a, b, scale_b, cscale, row_in, quant_tile, relu_tile,
+      row_out, group_out, quant_gpr, lrelu_gpr, groupM, N, K);
+}
+
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
           is_local_or_shared_left tile_shape_a,
           typename tile_shape_sa,
@@ -7237,6 +7555,78 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
   const uint64_t quant_gpr = quant_gpr_storage;
   const uint64_t lrelu_gpr = lrelu_gpr_storage;
   pto_matmul_detail::emit_matmul_mx_bias_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(d, a, scale_a, b, scale_b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, M, N, K);
+}
+
+// Cooperative Local-A/Shared-B form with explicit core-total group_M
+// (options variant; LB0 encodes group_M, which a Local A shard cannot supply).
+template <int ScaleMask = 3, is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a,
+          typename tile_shape_sa,
+          is_local_or_shared_right tile_shape_b,
+          typename tile_shape_sb, is_tile_data_v tile_shape_bias,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
+                     tile_shape_sa &scale_a, tile_shape_b &b,
+                     tile_shape_sb &scale_b, tile_shape_bias &bias,
+                     const Options &options,
+                               size_t groupM) {
+  pto_matmul_groupm_detail::validate_local_a_shared_b<tile_shape_a,
+                                                       tile_shape_b>("TMATMUL_MX_BIAS");
+  pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_MX_BIAS", groupM);
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_MX_BIAS destination dtype does not match PreQuantMode");
+
+  constexpr bool HasVectorQuant = is_vector_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasScalarQuant = is_scalar_fixp_pre_quant(Attr.PreQuant);
+  constexpr bool HasRowIn = Attr.RowMaxInit;
+  constexpr bool HasRowOut = Attr.RowMaxEn;
+  constexpr bool HasGroupOut = Attr.GroupMaxEn;
+  constexpr bool HasPRelu = Attr.Relu == FixpReluMode::PRelu;
+  constexpr int SrcMask = (HasRowIn ? 1 : 0) | (HasVectorQuant ? 2 : 0) | (HasPRelu ? 4 : 0);
+  constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
+  constexpr int IorMode = (HasScalarQuant ? 1 : 0) | (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+
+  static_assert(HasVectorQuant == !std::is_same_v<typename Options::QuantTile, fixp::NoOperand>,
+                "vector PreQuant mode requires a quant parameter Tile");
+  static_assert(HasPRelu == !std::is_same_v<typename Options::ReluTile, fixp::NoOperand>,
+                "PRelu mode requires a PReLU parameter Tile");
+  static_assert(HasRowIn == !std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand>,
+                "RowMaxInit requires a RowMaxIn Tile");
+  static_assert(HasRowOut == !std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand>,
+                "RowMaxEn requires a RowMaxOut Tile");
+  static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
+                "GroupMaxEn requires a GroupMaxOut Tile");
+
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  size_t M = __shape.M;
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+
+  auto &row_in = pto_matmul_detail::select_fixp_operand<HasRowIn>(options.RowIn, d);
+  auto &quant_tile = pto_matmul_detail::select_fixp_operand<HasVectorQuant>(options.Quant, d);
+  auto &relu_tile = pto_matmul_detail::select_fixp_operand<HasPRelu>(options.Relu, d);
+  auto &row_out = pto_matmul_detail::select_fixp_operand<HasRowOut>(options.RowOut, d);
+  auto &group_out = pto_matmul_detail::select_fixp_operand<HasGroupOut>(options.GroupOut, d);
+
+  // ASL B.FPATR: PreQuant=None and Relu!=LRelu consume no scalar
+  // parameter at all (BundleFPATRModeUsesScalarParameter(0)=false), so
+  // materialising the zero descriptors would only produce dead
+  // sdi/ldi round-trips (issue: keep_acc zero-descriptor dead code).
+  // Materialise the GPR values only when the IOR schema reads them.
+  uint64_t quant_gpr_storage;  // addresses stable only when used
+  uint64_t lrelu_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &quant_gpr_v = quant_gpr_storage;
+  [[maybe_unused]] volatile uint64_t &lrelu_gpr_v = lrelu_gpr_storage;
+  if constexpr (IorMode != 0) {
+    quant_gpr_storage = options.QuantDescriptor;
+    lrelu_gpr_storage = options.LReluDescriptor;
+  }
+  const uint64_t quant_gpr = quant_gpr_storage;
+  const uint64_t lrelu_gpr = lrelu_gpr_storage;
+  pto_matmul_detail::emit_matmul_mx_bias_fixp<Attr, ScaleMask, SrcMask, OutMask, IorMode>(d, a, scale_a, b, scale_b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, groupM, N, K);
 }
 
 // MX scale presence is owned independently by each input side.  The primary
