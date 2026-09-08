@@ -156,10 +156,8 @@ struct FixpAttr {
   // (raw accumulator D) forbids final post-process; CCTRL[1] (ACC-only
   // transparent cache hint) is validated against the operation kind at the
   // wrapper layer.
-  // Chainable: preserves all other attributes, unlike the parameter-free
-  // static constructors (f16/bf16/keep_acc) which start from defaults.
-  constexpr FixpAttr with_cube_ctrl(CubeControl Ctrl) const {
-    FixpAttr Attr = *this;
+  static constexpr FixpAttr with_cube_ctrl(CubeControl Ctrl) {
+    FixpAttr Attr;
     Attr.CubeCtrl = Ctrl;
     return Attr;
   }
