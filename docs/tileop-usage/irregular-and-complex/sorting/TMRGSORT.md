@@ -42,7 +42,7 @@ void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right, bool descending = 
 
 三个 Tile 必须都是 Vector Local、非 boxed 的 RowMajor Tile，且物理行数均为
 `1`。两个 source 的 valid columns 必须非零；`dst` 的 valid columns 必须等于
-两者 valid columns 之和，且 `dst` 物理 columns 足以容纳该结果。物理 columns
+两者 valid columns 之和，且 `dst` physical columns 足以容纳该结果。physical columns
 还必须是 2 的幂，且 `dst.Cols / 2 < combined_valid_columns`。输入各自必须已按
 相同方向排序；`TMRGSORT` 不会执行预排序。
 

@@ -93,9 +93,9 @@ BSTOP
 
 using namespace pto;
 using InputGM = global_tensor<float, RowMajor<32, 32>>;
-using OutputGM = global_tensor<float, RowMajor<32, 32>>;
+using OutputGM = global_tensor<float, RowMajor<32, 1>>;
 using InputTile = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor>;
-using OutputTile = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
+using OutputTile = Tile<Location::Vec, float, 32, 1, BLayout::RowMajor, 32, 1>;
 float src_data[32 * 32] = {}, dst_data[32 * 32] = {};
 InputGM src_global(src_data); OutputGM dst_global(dst_data);
 InputTile src; OutputTile dst;
