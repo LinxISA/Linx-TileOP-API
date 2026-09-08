@@ -156,10 +156,33 @@ asm volatile(
   } else {
     static_assert(!tile_shape_out::IsCubeLayout,
                   "TCVT to a CUBE layout requires a CUBE_M16/M32 source");
-    static_assert(tile_shape_out::Rows == tile_shape_in::Rows &&
-                      tile_shape_out::Cols == tile_shape_in::Cols,
-                  "ordinary TCVT source and destination must have identical "
-                  "physical Rows/Cols");
+    // PTO ISA (PTO-TILE-TCVT legality): "Source and destination have equal
+    // Row, Col, ValidRow, and ValidCol. Their capacities and packing
+    // independently match their own DataTypes." Row/Col are the
+    // capacity-derived physical dimensions
+    // (DerivedTileRows = capacity*8 / (Col * elementBits),
+    // asl/tile/model/shape/rows-columns.asl), NOT the C++ logical Rows/Cols
+    // of the Tile type. A narrowing conversion (e.g. bf16 -> e8m0 [Rows,1])
+    // pads the destination to the 128B minimum TSize, which doubles its
+    // capacity-derived rows; the ISA-legal encoding declares a wider
+    // physical column on both sides (Col=2 keeps the derived rows equal
+    // while ValidCol stays 1). Enforce the ISA condition directly instead
+    // of requiring bitwise-identical C++ Rows/Cols (issue #42).
+    constexpr int SrcDerivedRows =
+        (tile_shape_in::StorageBytes * 8) /
+        (tile_shape_in::Cols *
+         type_traits<typename tile_shape_in::DType>::bits);
+    constexpr int DstDerivedRows =
+        (tile_shape_out::StorageBytes * 8) /
+        (tile_shape_out::Cols *
+         type_traits<typename tile_shape_out::DType>::bits);
+    static_assert(SrcDerivedRows == DstDerivedRows,
+                  "ordinary TCVT source and destination must have equal "
+                  "capacity-derived physical Rows (ISA PTO-TILE-TCVT: "
+                  "DerivedTileRows(capacity, Col, dtype) must match; for a "
+                  "narrowing dtype, declare a wider physical Col on both "
+                  "sides, e.g. [Rows,2] with ValidCol=1, so the 128B "
+                  "minimum TSize does not double the destination rows)");
     static_assert(tile_shape_out::ValidRow == tile_shape_in::ValidRow &&
                       tile_shape_out::ValidCol == tile_shape_in::ValidCol,
                   "ordinary TCVT source and destination must have identical "

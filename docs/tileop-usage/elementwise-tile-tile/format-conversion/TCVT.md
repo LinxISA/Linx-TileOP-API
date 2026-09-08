@@ -15,11 +15,29 @@ void TCVT(DstTile &dst, SrcTile &src);
 
 对于 `RowMajor`、`ColMajor` 等普通布局，源 Tile 和目标 Tile 必须满足以下条件：
 
-- 物理 `Rows` 和 `Cols` 相同；
+- **容量推导的物理行相同**（PTO ISA `PTO-TILE-TCVT` legality："Source and
+  destination have equal Row, Col, ValidRow, and ValidCol. Their capacities
+  and packing independently match their own DataTypes."，其中 Row/Col 是
+  `DerivedTileRows = capacity × 8 / (物理Col × 元素位宽)` 的容量推导值，不是
+  C++ Tile 类型声明的逻辑 `Rows`/`Cols`）；
 - `ValidRow` 和 `ValidCol` 相同；
 - 有效区域均包含在对应的物理 Tile 中；
 - 源/目标 dtype 组合以及 Tile location 合法；
 - 目标容量足以容纳转换结果。除适用的 Tile 容量和 shape 规则外，普通布局没有额外的固定字节数限制。
+
+**窄化 dtype（如 bf16/fp32 → e8m0）注意**：B.IOT 目的 TSize 最小 128B，1 字节
+窄类型的 `[Rows,1]` 列向量会被 `round_capacity` 抬到 128B 档，容量推导行数随之
+翻倍（如 `[64,1]` e8m0 推导为 128 行），与 2 字节源（64 行）不再相等——这是 ISA
+层面的非法编码（issue #42）。合法写法是把**两侧**的物理列声明为更大的 2 的幂
+（如 `[64,2]`，`ValidCol` 保持 1）：
+
+```cpp
+using SrcBf = Tile<Location::Vec, __bf16,    64, 2, BLayout::RowMajor, 64, 1>;
+using DstE8 = Tile<Location::Vec, __fp8_e8m0, 64, 2, BLayout::RowMajor, 64, 1>;
+// bf16 256B → DerivedTileRows = 256*8/(2*16) = 64
+// e8m0 128B → DerivedTileRows = 128*8/(2*8)  = 64  ✓ 相等，ISA 合法
+TCVT(dst_e8, src_bf);
+```
 
 示例：
 
