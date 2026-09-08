@@ -109,6 +109,17 @@ TMATMUL_MX_ACC(d, c, local_a, scale_a, shared_b, scale_b, groupM);
 TMATMUL_MX_BIAS(d, local_a, scale_a, shared_b, scale_b, bias, groupM);
 ```
 
+Every family member also accepts `options` combined with the explicit
+`groupM` (full PostProcess capability with the core-total group_M):
+
+```cpp
+TMATMUL_ACC(d, c, local_a, shared_b, options, groupM);
+TMATMUL_BIAS(d, local_a, shared_b, bias, options, groupM);
+TMATMUL_MX(d, local_a, scale_a, shared_b, scale_b, options, groupM);
+TMATMUL_MX_ACC(d, c, local_a, scale_a, shared_b, scale_b, options, groupM);
+TMATMUL_MX_BIAS(d, local_a, scale_a, shared_b, scale_b, bias, options, groupM);
+```
+
 For a non-CUBE Tile, the same spelling remains the normal `B.IOT` transport:
 
 ```cpp
