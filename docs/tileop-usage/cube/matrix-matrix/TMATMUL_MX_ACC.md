@@ -65,6 +65,13 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(
     tile_shape_b &b,
     tile_shape_sb &scale_b,
     size_t groupM);
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a, typename tile_shape_sa,
+          is_local_or_shared_right tile_shape_b, typename tile_shape_sb,
+          fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
+                    tile_shape_sa &scale_a, tile_shape_b &b, tile_shape_sb &scale_b,
+                    const Options &options, size_t groupM);
 ```
 
 ### 支持的数据类型
@@ -99,7 +106,7 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(
 - **带 `Options` 的重载**：需要量化、激活、转置、scale 或辅助输出时传入 `options`。它不是重复声明，而是在相同核心操作数上增加显式属性；仅可启用本操作支持的属性。详见 [fixp::Options 指南](../../options.md)。
 
 
-- **带 `groupM` 的重载**：仅用于 cooperative 的 `Local-A/Shared-B` 语义；`groupM` 显式提供 LB0 的 core-total `group_M`，而不是从 Local A shard 推导。`D`（以及 ACC 形式的 `C`）的 valid 行数必须等于 per-PE A shard 大小（`M_per_PE`：CubeM16 对应 `group_M <= 64`，CubeM32 对应 `group_M > 64`）。MX 形式的 scale 操作数与其主操作数存储一致（Local A 配 Local scale，Shared B 配 Shared scale）。
+- **带 `groupM` 的重载**（basic 与 `options`+`groupM` 两种形式）：仅用于 cooperative 的 `Local-A/Shared-B` 语义；`groupM` 显式提供 LB0 的 core-total `group_M`，而不是从 Local A shard 推导。`D`（以及 ACC 形式的 `C`）的 valid 行数必须等于 per-PE A shard 大小（`M_per_PE`：CubeM16 对应 `group_M <= 64`，CubeM32 对应 `group_M > 64`）。MX 形式的 scale 操作数与其主操作数存储一致（Local A 配 Local scale，Shared B 配 Shared scale）。
 ## 使用要求
 
 - Tile 类型必须满足接口模板约束；

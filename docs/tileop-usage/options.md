@@ -346,6 +346,13 @@ TMATMUL_BIAS(d, local_a, shared_b, bias, groupM);
 TMATMUL_MX(d, local_a, scale_a, shared_b, scale_b, groupM);
 TMATMUL_MX_ACC(d, c, local_a, scale_a, shared_b, scale_b, groupM);
 TMATMUL_MX_BIAS(d, local_a, scale_a, shared_b, scale_b, bias, groupM);
+
+// 每个接口同样提供 options + groupM 组合（完整后处理能力与显式 group_M 并用）：
+TMATMUL_ACC(d, c, local_a, shared_b, options, groupM);
+TMATMUL_BIAS(d, local_a, shared_b, bias, options, groupM);
+TMATMUL_MX(d, local_a, scale_a, shared_b, scale_b, options, groupM);
+TMATMUL_MX_ACC(d, c, local_a, scale_a, shared_b, scale_b, options, groupM);
+TMATMUL_MX_BIAS(d, local_a, scale_a, shared_b, scale_b, bias, options, groupM);
 ```
 
 其中：
