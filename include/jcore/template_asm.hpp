@@ -6054,11 +6054,11 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOS %S[SharedB], mask=1111\n"                                              \
         "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n"                                   \
-        "B.IOT %[ScaleB], mask=1111\n"                                                  \
+        ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n"                             \
         "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
-          [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
+          [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(scale_b.handle()),       \
           PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
@@ -6071,7 +6071,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
-          [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
+          [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(scale_b.handle()),       \
           PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
         : "memory");                                                          \
@@ -6178,11 +6178,12 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
         "B.IOS %S[SharedB], mask=1111\n"                                              \
         "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n"                                   \
-        "B.IOT %[ScaleB], %[Extra], mask=1111\n"                               \
+        "B.IOS %S[ScaleB], mask=1111\n"                                        \
+        "B.IOT %[Extra], mask=1111\n"                                          \
         "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
-          [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
+          [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(scale_b.handle()),       \
           [Extra] "Tr"(extra.data()),                                         \
           PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
@@ -6197,7 +6198,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
         "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Tr"(scale_a.data()),         \
-          [SharedB] "Sr"(b.handle()), [ScaleB] "Tr"(scale_b.data()),         \
+          [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(scale_b.handle()),       \
           [Extra] "Tr"(extra.data()),                                         \
           PTO_FIXP_ATTR_INPUTS, PTO_MX_SCALE_INPUTS,                                                \
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)                         \
@@ -6216,6 +6217,45 @@ PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_acc, "TMATMULMX.ACC", true)
 #undef PTO_MATMUL_HEADER
 
 } // namespace pto_matmul_detail
+namespace pto_matmul_groupm_detail {
+
+// Explicit-groupM overloads exist only for the cooperative Local-A/Shared-B
+// CUBE matrix forms (ADR-0100): each PE holds a [M_per_PE, K] A shard and
+// LB0 must carry the core-total group_M, which a Local A tile cannot supply.
+template <typename A, typename B>
+constexpr void validate_local_a_shared_b(const char *Name) {
+  (void)Name;
+  static_assert(!is_shared_tile_v<A> && is_shared_tile_v<B>,
+                "the explicit groupM overload is only for Local-A/Shared-B "
+                "cooperative CUBE matrix forms");
+  static_assert(tile_role_v<A> == Location::Left,
+                "cooperative matrix input A must be a Left tile");
+  static_assert(tile_role_v<B> == Location::Right,
+                "cooperative matrix input B must be a Right tile");
+}
+
+// D (and accumulator C, when present) valid rows must equal the per-PE A
+// shard size: A::ValidRow already IS M_per_PE for a Local cooperative A.
+template <typename Dst, typename A>
+constexpr void validate_per_pe_destination(const char *Name) {
+  (void)Name;
+  static_assert(Dst::ValidRow == A::ValidRow,
+                "cooperative destination valid Row must match the per-PE "
+                "Local-A shard (M_per_PE x N)");
+}
+
+// ASL dispatch: group_M in 1..128; each PE computes
+// valid_M = clamp(group_M - i*M_per_PE, 0, M_per_PE).
+PTO_SHARED_INLINE void validate_groupm_runtime(const char *Name,
+                                               size_t groupM) {
+  if (groupM < 1 || groupM > 128) {
+    __builtin_printf("%s: cooperative group_M must be in 1..128\n", Name);
+    __builtin_trap();
+  }
+}
+
+} // namespace pto_matmul_groupm_detail
+
 
 // TMATMUL: C = A(M,K) * B(K,N). Supported storage combinations are
 // Local/Local, Local/Shared-Right, and Shared-Left/Shared-Right. A lone Shared
@@ -6300,6 +6340,34 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_detail::matmul_acc<Attr>(d, c, a, b, M, N, K);
+}
+
+// Cooperative Local-A/Shared-B form: LB0 encodes the core-total group_M,
+// which a Local A shard descriptor cannot supply, so the caller passes it
+// explicitly. D/C valid rows must equal the per-PE A shard (M_per_PE).
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b>
+PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
+                 tile_shape_b &b, size_t groupM) {
+  pto_matmul_groupm_detail::validate_local_a_shared_b<tile_shape_a,
+                                                       tile_shape_b>("TMATMUL_ACC");
+  pto_matmul_groupm_detail::validate_per_pe_destination<tile_shape_d,
+                                                        tile_shape_a>("TMATMUL_ACC");
+  pto_matmul_groupm_detail::validate_per_pe_destination<tile_shape_c,
+                                                        tile_shape_a>("TMATMUL_ACC");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_ACC supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the overload taking fixp::Options");
+  static_assert(!Attr.CScaleEn,
+                "CScale requires the ACC overload with a CScale tile");
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+  pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_ACC", groupM);
+  pto_matmul_detail::matmul_acc<Attr>(d, c, a, b, groupM, N, K);
 }
 
 template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
@@ -6748,6 +6816,29 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   pto_matmul_detail::matmul_bias<Attr>(c, a, b, bias, M, N, K);
 }
 
+// Cooperative Local-A/Shared-B form with explicit core-total group_M.
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b,
+          is_tile_data_v tile_shape_bias>
+PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape_b &b,
+                  tile_shape_bias &bias, size_t groupM) {
+  pto_matmul_groupm_detail::validate_local_a_shared_b<tile_shape_a,
+                                                       tile_shape_b>("TMATMUL_BIAS");
+  pto_matmul_groupm_detail::validate_per_pe_destination<tile_shape_c,
+                                                        tile_shape_a>("TMATMUL_BIAS");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_BIAS supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the overload taking fixp::Options");
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+  pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_BIAS", groupM);
+  pto_matmul_detail::matmul_bias<Attr>(c, a, b, bias, groupM, N, K);
+}
+
 template <is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b,
@@ -6813,9 +6904,9 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
 // TMATMUL_MX: C = (A * aScale) * (B * bScale) (BSTART.CUBE TMATMULMX).
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
-          is_tile_data_v tile_shape_ascale,
+          typename tile_shape_ascale,
           is_local_or_shared_right tile_shape_b,
-          is_tile_data_v tile_shape_bscale>
+          typename tile_shape_bscale>
 PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_ascale &ascale,
                 tile_shape_b &b, tile_shape_bscale &bscale) {
   static_assert(is_basic_fixp_attr(Attr),
@@ -6828,6 +6919,28 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_detail::matmul_mx<Attr>(c, a, ascale, b, bscale, M, N, K);
+}
+
+// Cooperative Local-A/Shared-B form with explicit core-total group_M.
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a, typename tile_shape_ascale,
+          is_local_or_shared_right tile_shape_b, typename tile_shape_bscale>
+PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_ascale &ascale,
+                tile_shape_b &b, tile_shape_bscale &bscale, size_t groupM) {
+  pto_matmul_groupm_detail::validate_local_a_shared_b<tile_shape_a,
+                                                       tile_shape_b>("TMATMUL_MX");
+  pto_matmul_groupm_detail::validate_per_pe_destination<tile_shape_c,
+                                                        tile_shape_a>("TMATMUL_MX");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_MX supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the overload taking fixp::Options");
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+  pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_MX", groupM);
+  pto_matmul_detail::matmul_mx<Attr>(c, a, ascale, b, bscale, groupM, N, K);
 }
 
 template <int ScaleMask = 3, is_tile_data_v tile_shape_c,
@@ -6896,8 +7009,8 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
 
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
           is_tile_data_v tile_shape_c,
-          is_local_or_shared_left tile_shape_a, is_tile_data_v tile_shape_sa,
-          is_local_or_shared_right tile_shape_b, is_tile_data_v tile_shape_sb>
+          is_local_or_shared_left tile_shape_a, typename tile_shape_sa,
+          is_local_or_shared_right tile_shape_b, typename tile_shape_sb>
 PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
                     tile_shape_sa &scale_a, tile_shape_b &b,
                     tile_shape_sb &scale_b) {
@@ -6915,6 +7028,35 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_detail::matmul_mx_acc<Attr>(d, a, scale_a, b, scale_b, c, M, N, K);
+}
+
+// Cooperative Local-A/Shared-B form with explicit core-total group_M.
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a, typename tile_shape_sa,
+          is_local_or_shared_right tile_shape_b, typename tile_shape_sb>
+PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
+                    tile_shape_sa &scale_a, tile_shape_b &b,
+                    tile_shape_sb &scale_b, size_t groupM) {
+  pto_matmul_groupm_detail::validate_local_a_shared_b<tile_shape_a,
+                                                       tile_shape_b>("TMATMUL_MX_ACC");
+  pto_matmul_groupm_detail::validate_per_pe_destination<tile_shape_d,
+                                                        tile_shape_a>("TMATMUL_MX_ACC");
+  pto_matmul_groupm_detail::validate_per_pe_destination<tile_shape_c,
+                                                        tile_shape_a>("TMATMUL_MX_ACC");
+  pto_matmul_detail::validate_matrix_accumulator_contract<Attr,
+      tile_shape_d, tile_shape_c, tile_shape_a, tile_shape_b, true>();
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_MX_ACC supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the overload taking fixp::Options");
+  static_assert(!Attr.CScaleEn,
+                "CScale requires the MX_ACC overload with a CScale tile");
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+  pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_MX_ACC", groupM);
+  pto_matmul_detail::matmul_mx_acc<Attr>(d, a, scale_a, b, scale_b, c, groupM, N, K);
 }
 
 template <int ScaleMask = 3, is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
@@ -6988,9 +7130,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
 
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
           is_local_or_shared_left tile_shape_a,
-          is_tile_data_v tile_shape_sa,
+          typename tile_shape_sa,
           is_local_or_shared_right tile_shape_b,
-          is_tile_data_v tile_shape_sb, is_tile_data_v tile_shape_bias>
+          typename tile_shape_sb, is_tile_data_v tile_shape_bias>
 PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
                      tile_shape_sa &scale_a, tile_shape_b &b,
                      tile_shape_sb &scale_b, tile_shape_bias &bias) {
@@ -7004,6 +7146,31 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_detail::matmul_mx_bias<Attr>(d, a, scale_a, b, scale_b, bias, M, N, K);
+}
+
+// Cooperative Local-A/Shared-B form with explicit core-total group_M.
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a, typename tile_shape_sa,
+          is_local_or_shared_right tile_shape_b, typename tile_shape_sb,
+          is_tile_data_v tile_shape_bias>
+PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
+                     tile_shape_sa &scale_a, tile_shape_b &b,
+                     tile_shape_sb &scale_b, tile_shape_bias &bias,
+                     size_t groupM) {
+  pto_matmul_groupm_detail::validate_local_a_shared_b<tile_shape_a,
+                                                       tile_shape_b>("TMATMUL_MX_BIAS");
+  pto_matmul_groupm_detail::validate_per_pe_destination<tile_shape_d,
+                                                        tile_shape_a>("TMATMUL_MX_BIAS");
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_MX_BIAS supports only parameter-free FPATR options "
+                "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
+                "require the overload taking fixp::Options");
+  pto_matmul_detail::MatmulShape __shape =
+      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  size_t N = __shape.N;
+  size_t K = __shape.K;
+  pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_MX_BIAS", groupM);
+  pto_matmul_detail::matmul_mx_bias<Attr>(d, a, scale_a, b, scale_b, bias, groupM, N, K);
 }
 
 template <int ScaleMask = 3, is_tile_data_v tile_shape_d,
