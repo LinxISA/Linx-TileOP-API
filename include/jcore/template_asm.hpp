@@ -6335,8 +6335,14 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
+  // For cooperative forms the reduction/output rows are the per-PE M.
+  // Shared-A: per-PE block = rows_per_pe(group_M) derived from the core
+  // total. Local-A/Shared-B: A::ValidRow already IS the per-PE shard size
+  // (M_per_PE itself, per ADR-0100), so it must be used directly — feeding
+  // it back through rows_per_pe() would map M_per_PE=32 to 16 and break
+  // CubeM32 group_M>64 configurations.
   constexpr int RedRows =
-      (is_shared_tile_v<tile_shape_a> || is_shared_tile_v<tile_shape_b>)
+      (is_shared_tile_v<tile_shape_a>)
           ? pto_matmul_detail::cooperative_group_m_rows_per_pe(EffectiveM)
           : EffectiveM;
 
@@ -6443,8 +6449,14 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_d &d, tile_shape_a &a,
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   // Reduction outputs still use the per-PE clamp of group_M for cooperative
   // Local-A/Shared-B; the explicit groupM only changes the encoded LB0 M.
+  // For cooperative forms the reduction/output rows are the per-PE M.
+  // Shared-A: per-PE block = rows_per_pe(group_M) derived from the core
+  // total. Local-A/Shared-B: A::ValidRow already IS the per-PE shard size
+  // (M_per_PE itself, per ADR-0100), so it must be used directly — feeding
+  // it back through rows_per_pe() would map M_per_PE=32 to 16 and break
+  // CubeM32 group_M>64 configurations.
   constexpr int RedRows =
-      (is_shared_tile_v<tile_shape_a> || is_shared_tile_v<tile_shape_b>)
+      (is_shared_tile_v<tile_shape_a>)
           ? pto_matmul_detail::cooperative_group_m_rows_per_pe(EffectiveM)
           : EffectiveM;
 
@@ -6564,8 +6576,14 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
+  // For cooperative forms the reduction/output rows are the per-PE M.
+  // Shared-A: per-PE block = rows_per_pe(group_M) derived from the core
+  // total. Local-A/Shared-B: A::ValidRow already IS the per-PE shard size
+  // (M_per_PE itself, per ADR-0100), so it must be used directly — feeding
+  // it back through rows_per_pe() would map M_per_PE=32 to 16 and break
+  // CubeM32 group_M>64 configurations.
   constexpr int RedRows =
-      (is_shared_tile_v<tile_shape_a> || is_shared_tile_v<tile_shape_b>)
+      (is_shared_tile_v<tile_shape_a>)
           ? pto_matmul_detail::cooperative_group_m_rows_per_pe(EffectiveM)
           : EffectiveM;
 
