@@ -4090,8 +4090,17 @@ constexpr void validate_matrix_scale_contract() {
                   "MX ScaleA must use ordinary RowMajor layout");
     static_assert(is_shared_tile_v<ScaleA> == is_shared_tile_v<A>,
                   "MX ScaleA storage must match A storage");
-    static_assert(ScaleA::ValidRow == M && ScaleA::ValidCol == KBlocksA,
-                  "MX ScaleA valid shape must be M x ceil(K/groupA)");
+    // A Shared ScaleA follows the same A-major physical rule as its primary
+    // (pto-spec #257): stored [M, KBlocks] without TransA, [KBlocks, M] with
+    // it. Local ScaleA keeps the logical [M, KBlocks] shape.
+    if constexpr (is_shared_tile_v<ScaleA> && Attr.TransA) {
+      static_assert(ScaleA::ValidRow == KBlocksA && ScaleA::ValidCol == M,
+                    "Shared transposed MX ScaleA is declared as its "
+                    "physical [ceil(K/groupA), M] shape");
+    } else {
+      static_assert(ScaleA::ValidRow == M && ScaleA::ValidCol == KBlocksA,
+                    "MX ScaleA valid shape must be M x ceil(K/groupA)");
+    }
   }
   if constexpr (HasScaleB) {
     static_assert(type_traits<typename ScaleB::DType>::TypeCode == ScaleBType,
