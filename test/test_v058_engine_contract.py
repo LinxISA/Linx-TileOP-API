@@ -534,10 +534,12 @@ int main() { return sizeof(Bad); }
     # --- new-operation bundle fixtures ---
 
     def test_tsort_bundle_has_two_destinations(self) -> None:
-        # TSORT: one source+value-dest B.IOT and a destination-only index
-        # B.IOT, each carrying its own TileSizeCode (%Z).
-        self.assertRegex(self.header, r"B\.IOT %\[Source\], mask=1111")
-        self.assertRegex(self.header, r"%\[IndexDst\]<%Z\[IndexTileSize\]>")
+        # TSORT/TMRGSORT are retired (PTO-ISA 0.58.5 deleted_names): they
+        # must fail closed instead of emitting the dead TEPL 108/109 selectors.
+        self.assertIn("TSORT is retired", self.header)
+        self.assertIn("TMRGSORT is retired", self.header)
+        self.assertNotIn("BSTART.TEPL 108", self.header)
+        self.assertNotIn("BSTART.TEPL 109", self.header)
 
     def test_mgather_cas_bundle_is_two_b_iot_with_base_ior(self) -> None:
         # MGATHER_CAS: IndexTile+ExpectedTile (TwoSrc_NoDst) then
@@ -567,13 +569,12 @@ int main() { return sizeof(Bad); }
         self.assertIn("LayoutCvtEnum::ND2M32", body)
 
     def test_tquant_tdequant_use_datr_and_ior(self) -> None:
-        # TQUANT/TDEQUANT: B.DATR carries named dtype/RMode and optional sat,
-        # and B.IOR carries multiplier+zero-point.
-        self.assertRegex(
-            self.header,
-            r"B\.DATR %D\[__pto_DstType\], (?:RTZ|RTM|RTP|RNA|RTO|RHB)",
-        )
-        self.assertRegex(self.header, r"B\.IOR \[%\[Mult\], %\[ZP\]\]")
+        # TQUANT/TDEQUANT are retired (PTO-ISA 0.58.5 deleted_names): they
+        # must fail closed instead of emitting the dead TEPL 106/107 selectors.
+        self.assertIn("TQUANT is retired", self.header)
+        self.assertIn("TDEQUANT is retired", self.header)
+        self.assertNotIn("BSTART.TEPL 106", self.header)
+        self.assertNotIn("BSTART.TEPL 107", self.header)
 
     # --- docs and harness sanity ---
 
@@ -624,7 +625,7 @@ int main() { return sizeof(Bad); }
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("FAIL object: CubeCellTransport", result.stderr)
-            self.assertIn("TESTCASE=TTrans object", calls.read_text(encoding="utf-8"))
+            self.assertIn("TESTCASE=TCvt object", calls.read_text(encoding="utf-8"))
 
     def test_pto_identity_verifier_rejects_hostile_elf_notes(self) -> None:
         verifier = ROOT / "test" / "tileop_api" / "verify_pto_identity.py"

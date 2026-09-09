@@ -38,7 +38,7 @@ template <int VR,int VC> using T =
 SWEEP1(TABS) SWEEP1(TEXP) SWEEP1(TLOG) SWEEP1(TNEG) SWEEP1(TNOT)
 SWEEP1(TRECIP) SWEEP1(TRELU) SWEEP1(TRSQRT) SWEEP1(TSQRT)
 
-SWEEP1(TCVT_T) SWEEP1(TMOV) SWEEP1(TTRANS)
+SWEEP1(TCVT_T) SWEEP1(TMOV)
 
 
 // TTRI(dst) single-arg
@@ -76,7 +76,6 @@ SWEEPS(TMAXS) SWEEPS(TMINS) SWEEPS(TCMPS)
   __attribute__((noinline)) void FN##_sd(TQ<16,-1> &d,T<16,-1> &s){FN(d,s,1.0f,2);} \
   __attribute__((noinline)) void FN##_ds(TQ<-1,32> &d,T<-1,32> &s){FN(d,s,1.0f,2);} \
   __attribute__((noinline)) void FN##_dd(TQ<-1,-1> &d,T<-1,-1> &s){FN(d,s,1.0f,2);}
-SWEEPQ(TQUANT)
 
 
 // TSELS(dst, src0, s, src1)
@@ -104,7 +103,6 @@ SWEEPC(TCMP)
   __attribute__((noinline)) void FN##_sd(T<16,-1> &a,T<16,-1> &b,T<16,-1> &c){FN(a,b,c,0);} \
   __attribute__((noinline)) void FN##_ds(T<-1,32> &a,T<-1,32> &b,T<-1,32> &c){FN(a,b,c,0);} \
   __attribute__((noinline)) void FN##_dd(T<-1,-1> &a,T<-1,-1> &b,T<-1,-1> &c){FN(a,b,c,0);}
-SWEEPH(THISTOGRAM)
 
 // TLOAD_CUBE / TSTORE_CUBE
 using gmc = GlobalTensor<float, Shape<1,1,1,16,64>, Stride<1,1,16*64,64,1>, Layout::ND>;
@@ -135,7 +133,7 @@ template <int VR,int VC> using TQ =
   __attribute__((noinline)) void FN##_sd(T<16,-1> &a,T<16,-1> &b,T<16,-1> &c){FN(a,b,c);} \
   __attribute__((noinline)) void FN##_ds(T<-1,32> &a,T<-1,32> &b,T<-1,32> &c){FN(a,b,c);} \
   __attribute__((noinline)) void FN##_dd(T<-1,-1> &a,T<-1,-1> &b,T<-1,-1> &c){FN(a,b,c);}
-SW3(TPARTADD) SW3(TPARTMAX) SW3(TPARTMIN) SW3(TPARTMUL) SW3(TSEL)
+SW3(TSEL)
 #define SW4(FN) \
   __attribute__((noinline)) void FN##_ss(T<16,32> &a,T<16,32> &b,T<16,32> &c,T<16,32> &d){FN(a,b,c,d);} \
   __attribute__((noinline)) void FN##_sd(T<16,-1> &a,T<16,-1> &b,T<16,-1> &c,T<16,-1> &d){FN(a,b,c,d);} \
@@ -149,13 +147,11 @@ SW4(TFMA)
   __attribute__((noinline)) void FN##_sd(T<16,-1> &a,T<16,-1> &b){FN(a,b);} \
   __attribute__((noinline)) void FN##_ds(T<-1,32> &a,T<-1,32> &b){FN(a,b);} \
   __attribute__((noinline)) void FN##_dd(T<-1,-1> &a,T<-1,-1> &b){FN(a,b);}
-SW2(TFILLPAD)
 #define SW2I(FN) \
   __attribute__((noinline)) void FN##_ss(T<16,32> &a,T<16,32> &b){FN(a,b,0,0);} \
   __attribute__((noinline)) void FN##_sd(T<16,-1> &a,T<16,-1> &b){FN(a,b,0,0);} \
   __attribute__((noinline)) void FN##_ds(T<-1,32> &a,T<-1,32> &b){FN(a,b,0,0);} \
   __attribute__((noinline)) void FN##_dd(T<-1,-1> &a,T<-1,-1> &b){FN(a,b,0,0);}
-SW2I(TEXTRACT) SW2I(TINSERT)
 // TEXPANDS(dst, s)
 #define SW1S(FN) \
   __attribute__((noinline)) void FN##_ss(T<16,32> &a){FN(a,1.0f);} \
@@ -164,10 +160,6 @@ SW2I(TEXTRACT) SW2I(TINSERT)
   __attribute__((noinline)) void FN##_dd(T<-1,-1> &a){FN(a,1.0f);}
 SW1S(TEXPANDS)
 // TDEQUANT(dst,src,mult,zp)
-__attribute__((noinline)) void tdq_ss(T<16,32> &d,TQ<16,32> &s){TDEQUANT(d,s,1.0f,2);}
-__attribute__((noinline)) void tdq_sd(T<16,-1> &d,TQ<16,-1> &s){TDEQUANT(d,s,1.0f,2);}
-__attribute__((noinline)) void tdq_ds(T<-1,32> &d,TQ<-1,32> &s){TDEQUANT(d,s,1.0f,2);}
-__attribute__((noinline)) void tdq_dd(T<-1,-1> &d,TQ<-1,-1> &s){TDEQUANT(d,s,1.0f,2);}
 
 
 
