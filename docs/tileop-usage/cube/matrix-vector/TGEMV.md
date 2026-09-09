@@ -74,7 +74,7 @@ PTO_SHARED_INLINE void TGEMV(tile_shape_d &d, tile_shape_mtx &mtx, tile_shape_ve
 
 ### 编码字段和省略值
 
-- 数据类型编码始终使用 `AType`；省略 `B.DATR` 时，`BType` 沿用 `AType`，舍入模式使用 `RNE`，并关闭饱和处理。
+- 数据类型编码始终使用 `AType`；省略 `B.DATR` 时，`BType` 沿用 `AType`，`PreQuant=None` 与固定舍入（fixed floating/fixed shift 及 QF322*Pre 固定模式）使用 `RNONE`；仅可编程整数预量化模式保留 `RNE` 舍入选择；`Sat` 始终关闭。
 - 省略 `LB0`、`LB1`、`LB2` 时，`M`、`N`、`K` 分别默认为 1，且 `TGEMV` 固定要求 `M=1`；显式给出的维度必须为正值。
 - 全零 `B.FPATR` 表示不启用转换、激活和归约；只有后处理模式需要时才提供 `B.IOR` 或辅助 `B.IOT` 操作数。
 - `TransA=0`、`TransB=0` 表示不转置；非零转置控制仅可用于规范允许的 `Shared` 主操作数。

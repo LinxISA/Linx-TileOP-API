@@ -3528,9 +3528,15 @@ namespace pto_matmul_detail {
 
 // ASL B.FPATR legality: "Matrix B.DATR supplies only destination
 // conversion controls when B.FPATR is present: None requires RMode=NONE
-// and Sat=0; ... programmable integer modes retain the complete rounding
-// selector." PreQuant=0 (None) therefore forbids the RNE spelling, while
-// programmable integer pre-quant modes retain it.
+// and Sat=0; fixed floating modes require RMode=NONE; fixed shift modes
+// require RMode=NONE and Sat=0; programmable integer modes retain the
+// complete rounding selector." PreQuant=0 (None) therefore forbids the
+// RNE spelling. The fixed-rounding set is NOT just F322F16(1) and
+// F322BF16(16): BundleFPATRModeFixedRounding also covers QF322HIF8Pre(25),
+// QF322FP8Pre(26), VQF322HIF8Pre(28), QF322F16Pre(32), VQF322F16Pre(33),
+// QF322BF16Pre(34), VQF322BF16Pre(36), and VQF322FP8Pre(37); all of these
+// must emit RNONE. Only the programmable integer pre-quant modes retain
+// the RNE spelling through the trailing fallback.
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
   "BSTART.CUBE " OPCODE ", %D[DataTypeA]\n"                                      \
   ".if %c[PreQuant] == 0 && %c[CCTRL] == 0\n"                                    \
@@ -3541,6 +3547,58 @@ namespace pto_matmul_detail {
   "B.DATR %D[DataTypeB], byte0, Min, RNONE, NOSAT\n"                             \
   ".elseif %c[PreQuant] == 0 && %c[CCTRL] == 3\n"                                \
   "B.DATR %D[DataTypeB], byte0, Null, RNONE, NOSAT\n"                            \
+  ".elseif %c[PreQuant] == 1 && %c[CCTRL] == 0\n" \
+  "B.DATR %D[DataTypeB], byte0, Zero, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 1 && %c[CCTRL] == 1\n" \
+  "B.DATR %D[DataTypeB], byte0, Max, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 1 && %c[CCTRL] == 2\n" \
+  "B.DATR %D[DataTypeB], byte0, Min, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 1 && %c[CCTRL] == 3\n" \
+  "B.DATR %D[DataTypeB], byte0, Null, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 12 && %c[CCTRL] == 0\n" \
+  "B.DATR %D[DataTypeB], byte0, Zero, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 12 && %c[CCTRL] == 1\n" \
+  "B.DATR %D[DataTypeB], byte0, Max, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 12 && %c[CCTRL] == 2\n" \
+  "B.DATR %D[DataTypeB], byte0, Min, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 12 && %c[CCTRL] == 3\n" \
+  "B.DATR %D[DataTypeB], byte0, Null, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 13 && %c[CCTRL] == 0\n" \
+  "B.DATR %D[DataTypeB], byte0, Zero, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 13 && %c[CCTRL] == 1\n" \
+  "B.DATR %D[DataTypeB], byte0, Max, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 13 && %c[CCTRL] == 2\n" \
+  "B.DATR %D[DataTypeB], byte0, Min, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 13 && %c[CCTRL] == 3\n" \
+  "B.DATR %D[DataTypeB], byte0, Null, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 16 && %c[CCTRL] == 0\n" \
+  "B.DATR %D[DataTypeB], byte0, Zero, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 16 && %c[CCTRL] == 1\n" \
+  "B.DATR %D[DataTypeB], byte0, Max, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 16 && %c[CCTRL] == 2\n" \
+  "B.DATR %D[DataTypeB], byte0, Min, RNONE, NOSAT\n" \
+  ".elseif %c[PreQuant] == 16 && %c[CCTRL] == 3\n" \
+  "B.DATR %D[DataTypeB], byte0, Null, RNONE, NOSAT\n" \
+  ".elseif (%c[PreQuant] == 25 || %c[PreQuant] == 26 || " \
+  "%c[PreQuant] == 28 || %c[PreQuant] == 32 || " \
+  "%c[PreQuant] == 33 || %c[PreQuant] == 34 || " \
+  "%c[PreQuant] == 36 || %c[PreQuant] == 37) && %c[CCTRL] == 0\n" \
+  "B.DATR %D[DataTypeB], byte0, Zero, RNONE, NOSAT\n"              \
+  ".elseif (%c[PreQuant] == 25 || %c[PreQuant] == 26 || " \
+  "%c[PreQuant] == 28 || %c[PreQuant] == 32 || " \
+  "%c[PreQuant] == 33 || %c[PreQuant] == 34 || " \
+  "%c[PreQuant] == 36 || %c[PreQuant] == 37) && %c[CCTRL] == 1\n" \
+  "B.DATR %D[DataTypeB], byte0, Max, RNONE, NOSAT\n"               \
+  ".elseif (%c[PreQuant] == 25 || %c[PreQuant] == 26 || " \
+  "%c[PreQuant] == 28 || %c[PreQuant] == 32 || " \
+  "%c[PreQuant] == 33 || %c[PreQuant] == 34 || " \
+  "%c[PreQuant] == 36 || %c[PreQuant] == 37) && %c[CCTRL] == 2\n" \
+  "B.DATR %D[DataTypeB], byte0, Min, RNONE, NOSAT\n"               \
+  ".elseif (%c[PreQuant] == 25 || %c[PreQuant] == 26 || " \
+  "%c[PreQuant] == 28 || %c[PreQuant] == 32 || " \
+  "%c[PreQuant] == 33 || %c[PreQuant] == 34 || " \
+  "%c[PreQuant] == 36 || %c[PreQuant] == 37) && %c[CCTRL] == 3\n" \
+  "B.DATR %D[DataTypeB], byte0, Null, RNONE, NOSAT\n"              \
   ".elseif %c[PreQuant] != 0 && %c[CCTRL] == 0\n"                                \
   "B.DATR %D[DataTypeB], byte0, Zero, RNE, NOSAT\n"                              \
   ".elseif %c[PreQuant] != 0 && %c[CCTRL] == 1\n"                                \

@@ -390,8 +390,9 @@ TMATMUL_MX_BIAS(d, local_a, scale_a, shared_b, scale_b, bias, options, groupM);
 - Local auxiliary Tile 的 active-size/SizeCode 必须在 `128 B..256 KiB` 范围内，不会因为
   valid shape 变小而降低容量要求；
 - CScale 必须为 Local U8 `CUBE_M32` Tile，valid shape 为 `M x 1`，且 accumulator 为 FP32；
-- `B.DATR` 负责 destination conversion controls。B.FPATR 存在时，None/fixed floating/
-  fixed shift 的 RMode/Sat 组合必须符合规范；
+- `B.DATR` 负责 destination conversion controls。B.FPATR 存在时按 PreQuantMode 分派：
+  `None`、fixed floating（含 `F322F16`/`F322BF16` 及 QF322*Pre 固定舍入模式 25/26/28/32-37）
+  和 fixed shift 模式一律发射 `RMode=RNONE`；仅可编程整数模式保留 `RNE` 舍入选择；`Sat` 始终为 0；
 - 完整 bundle 的 field、B.DATR、operand count、alias、shape 和 allocation preflight 在
   消费 source 或产生 destination effect 前完成。
 
