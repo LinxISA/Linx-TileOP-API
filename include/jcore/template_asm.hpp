@@ -2398,6 +2398,10 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
     }
     }
   } else {
+  // ASL B.DIM (ADR-BLOCK-0012 Decision 014): a runtime dimension must come
+  // from a GPR (RegSrc != zero); only static dims may use the immediate
+  // form. Per-dim SS/SD/DS/DD dispatch mirrors TLOAD_CUBE.
+  if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
@@ -2409,10 +2413,59 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
     : [s0]"r"(src.data()),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
+      [VCOL]"i"(tile_shape::ValidCol), [VROW]"i"(tile_shape::ValidRow),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
+  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [d0]"=Tr"(dst.data())
+    : [s0]"r"(src.data()),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [VCOL]"i"(tile_shape::ValidCol), [VROW]"r"(valid_row),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [d0]"=Tr"(dst.data())
+    : [s0]"r"(src.data()),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"i"(tile_shape::ValidRow),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [d0]"=Tr"(dst.data())
+    : [s0]"r"(src.data()),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  }
   }
 }
 
@@ -2430,6 +2483,8 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
   SharedTile<shp> result;
   const size_t valid_col = result.GetValidCol();
   const size_t valid_row = result.GetValidRow();
+  // ASL B.DIM: dynamic dims load from a GPR; per-dim SS/SD/DS/DD dispatch.
+  if constexpr (shp::ValidCol > 0 && shp::ValidRow > 0) {
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
@@ -2442,10 +2497,62 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
       [PEMask]"i"(PEMask),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
-      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
+      [VCOL]"i"(shp::ValidCol), [VROW]"i"(shp::ValidRow),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
+  } else if constexpr (shp::ValidCol > 0 && shp::ValidRow < 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(result.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"i"(shp::ValidCol), [VROW]"r"(valid_row),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else if constexpr (shp::ValidCol < 0 && shp::ValidRow > 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(result.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"i"(shp::ValidRow),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(result.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  }
   return result;
 }
 
@@ -2459,6 +2566,8 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       "TLOAD Shared dst logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
+  // ASL B.DIM: dynamic dims load from a GPR; per-dim SS/SD/DS/DD dispatch.
+  if constexpr (shp::ValidCol > 0 && shp::ValidRow > 0) {
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
@@ -2471,10 +2580,62 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       [PEMask]"i"(PEMask),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
-      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
+      [VCOL]"i"(shp::ValidCol), [VROW]"i"(shp::ValidRow),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
+  } else if constexpr (shp::ValidCol > 0 && shp::ValidRow < 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(dst.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"i"(shp::ValidCol), [VROW]"r"(valid_row),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else if constexpr (shp::ValidCol < 0 && shp::ValidRow > 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(dst.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"i"(shp::ValidRow),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(dst.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  }
 }
 
 // TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
@@ -2618,6 +2779,8 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
     }
     }
   } else {
+  // ASL B.DIM: dynamic dims load from a GPR; per-dim SS/SD/DS/DD dispatch.
+  if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TLSU TSTORE, %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
@@ -2628,10 +2791,56 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
     :
     : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
       [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
+      [VCOL]"i"(tile_shape::ValidCol), [VROW]"i"(tile_shape::ValidRow),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(dst.GetStrideBytes(3))
       : "memory");
+  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
+  asm volatile(
+    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT %[s0], mask=1111, last\n"
+    "B.IOR [%[d0],%[GmStride]], []\n"
+    :
+    : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
+      [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [VCOL]"i"(tile_shape::ValidCol), [VROW]"r"(valid_row),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(dst.GetStrideBytes(3))
+      : "memory");
+  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
+  asm volatile(
+    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT %[s0], mask=1111, last\n"
+    "B.IOR [%[d0],%[GmStride]], []\n"
+    :
+    : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
+      [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [VCOL]"r"(valid_col), [VROW]"i"(tile_shape::ValidRow),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(dst.GetStrideBytes(3))
+      : "memory");
+  } else {
+  asm volatile(
+    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT %[s0], mask=1111, last\n"
+    "B.IOR [%[d0],%[GmStride]], []\n"
+    :
+    : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
+      [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(dst.GetStrideBytes(3))
+      : "memory");
+  }
   }
 }
 
