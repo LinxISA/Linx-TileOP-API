@@ -136,3 +136,19 @@ void vector_step(GM &gm, TileT &tile) {
 be explicit in source code, diagnostics, or compatibility tests. The unified
 entry points do not remove the CUBE checks or conversion descriptors; they only
 select the existing implementation based on `Tile::IsCubeLayout`.
+
+
+## 2026-09-09: Shared B 物理布局约定（pto-spec #257 对齐）
+
+**变更**：`SharedMatrixRight` 模板参数从逻辑 `[K, N]` 改为**物理存储形状**声明：
+
+| TransB | 旧声明（逻辑） | 新声明（物理） | 内存布局 |
+|---|---|---|---|
+| 0（非转置） | `SharedMatrixRight<K, N>` | `SharedMatrixRight<N, K>` | [N,K] RowMajor，K 连续 |
+| 1（转置） | `SharedMatrixRight<N, K>`（有效形状） | `SharedMatrixRight<K, N>` | [K,N] RowMajor，N 连续 |
+
+**影响**：仅非方阵 Shared B（方阵两布局字节等价，不受影响）。K 匹配断言语义相应变化：非转置 B 的有效 K 取声明的**第二**维。
+
+**迁移**：翻转非方阵非转置 Shared B 的两个模板实参；转置场景改为直接声明物理 `[K,N]`。Shared MX ScaleB 同步（非转置为 `[N, ceil(K/group)]`）。
+
+**依据**：`asl/block/model/dispatch/shared-cube-matrix.asl` `BundleMatrixSharedBPrimarySchemaLegal`（PTO-ISA 0.58.6）。
