@@ -398,6 +398,11 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_matrix_dtype_and_effective_shape_contract_is_centralized(self) -> None:
         tile = PTO_TILE.read_text(encoding="utf-8")
+        self.assertIn('".if %c[PreQuant] == 0 && %c[CCTRL] == 0\\n"', self.header)
+        self.assertIn(
+            '"B.DATR %D[DataTypeB], byte0, Zero, RNONE, NOSAT\\n"',
+            self.header,
+        )
         self.assertIn(
             '"B.DATR %D[DataTypeB], byte0, Zero, RNE, NOSAT\\n"', self.header
         )
