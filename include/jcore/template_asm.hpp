@@ -4230,6 +4230,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   // Local-A/Shared-B the A shard descriptor is per-PE (valid_rows == pe_m)
   // and cannot supply group_M, so the caller must pass it here.
   validate_matrix_contract<Attr, Dst, A, B>();
+  validate_cube_ctrl_contract<Attr, /*IsAccForm=*/false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
@@ -4344,6 +4345,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
                                   size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_accumulator_contract<Attr, Dst, C, A, B>();
+  validate_cube_ctrl_contract<Attr, /*IsAccForm=*/true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
@@ -5876,7 +5878,7 @@ PTO_SHARED_INLINE void emit_fixp(
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -5911,7 +5913,7 @@ PTO_SHARED_INLINE void emit_matmul_acc_fixp(
   validate_matrix_accumulator_contract<Attr, Dst, C_, A, B>();
   validate_cscale_contract<Attr, C_, CScale>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_ACC_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -5935,7 +5937,7 @@ PTO_SHARED_INLINE void emit_matmul_bias_fixp(
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_bias_contract<Attr, BiasT, A, B>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_BIAS_EMIT_LOCAL);
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -6125,7 +6127,7 @@ PTO_SHARED_INLINE void emit_gemv_fixp(
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GV_EMIT_LOCAL);
 }
 
@@ -6144,7 +6146,7 @@ PTO_SHARED_INLINE void emit_gemv_bias_fixp(
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_bias_contract<Attr, BiasT, Vec, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVB_EMIT_LOCAL);
 }
 
@@ -6163,7 +6165,7 @@ PTO_SHARED_INLINE void emit_gemv_acc_fixp(
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
-      RowIn, QuantTile, ReluTile, RowOut, GroupOut, true>();
+      RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, true>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVA_EMIT_LOCAL);
 }
 
@@ -6311,6 +6313,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   constexpr bool HasScaleB = true;                                               \
   validate_matrix_contract<Attr, Dst, A, B, true>();                                      \
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB, ScaleA, A, ScaleB, B>();      \
+  validate_cube_ctrl_contract<Attr, /*IsAccForm=*/false>();                     \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
@@ -6431,6 +6434,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
     validate_matrix_accumulator_contract<Attr, Dst, Extra, A, B, true>();                       \
   else                                                                                    \
     validate_matrix_bias_contract<Attr, Extra, A, B, true>();                                   \
+  validate_cube_ctrl_contract<Attr, IsAcc>();                                   \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
