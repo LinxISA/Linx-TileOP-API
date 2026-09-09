@@ -3923,12 +3923,18 @@ constexpr void validate_matrix_contract() {
       ? A::ValidCol : A::ValidRow;
   constexpr int AValidCols = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidRow : A::ValidCol;
+  // ASL (pto-spec #257, BundleMatrixSharedBPrimarySchemaLegal): a Shared B
+  // declares its PHYSICAL stored RowMajor shape. TransB=0 stores [N, K]
+  // (K contiguous); TransB=1 stores [K, N] (N contiguous). The logical K/N
+  // derivation is therefore symmetric with the Shared A rule above.
   constexpr int BValidRows = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidCol : B::ValidRow;
-  constexpr int BValidCols = is_shared_tile_v<B> && Attr.TransB
       ? B::ValidRow : B::ValidCol;
+  constexpr int BValidCols = is_shared_tile_v<B> && Attr.TransB
+      ? B::ValidCol : B::ValidRow;
   static_assert(AValidCols == BValidRows,
-                "Matrix effective valid K dimensions must match");
+                "Matrix effective valid K dimensions must match "
+                "(non-transposed Shared B is declared as its physical [N, K] "
+                "shape: K is the second dimension)");
   if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
     // ASL TMATMUL legality: any cooperative TMATMUL interprets LB0 as
     // core-total group_M, and PE i computes valid_M =
@@ -4041,8 +4047,10 @@ constexpr void validate_matrix_bias_contract() {
   static_assert(Bias::ValidRow != DYNAMIC && Bias::ValidCol != DYNAMIC &&
                     B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC,
                 "Matrix Bias dynamic valid shapes are not supported");
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidRow : B::ValidCol;
+      ? B::ValidCol : B::ValidRow;
   static_assert(Bias::ValidRow == 1 && Bias::ValidCol == N,
                 "Matrix Bias valid shape must be 1 x N");
 }
@@ -4063,8 +4071,10 @@ constexpr void validate_matrix_scale_contract() {
       ? A::ValidCol : A::ValidRow;
   constexpr int K = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidRow : A::ValidCol;
+  // Shared B declares its physical stored shape: [N, K] without TransB,
+  // [K, N] with it (pto-spec #257). Symmetric with the Shared A rule.
   constexpr int N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidRow : B::ValidCol;
+      ? B::ValidCol : B::ValidRow;
   constexpr int ScaleAType = matrix_mx_scale_carrier_type(ACode);
   constexpr int ScaleBType = matrix_mx_scale_carrier_type(BCode);
   constexpr int ScaleAGroup = matrix_mx_scale_group_size(ACode);
@@ -4092,8 +4102,17 @@ constexpr void validate_matrix_scale_contract() {
                   "MX ScaleB must use ordinary RowMajor layout");
     static_assert(is_shared_tile_v<ScaleB> == is_shared_tile_v<B>,
                   "MX ScaleB storage must match B storage");
-    static_assert(ScaleB::ValidRow == KBlocksB && ScaleB::ValidCol == N,
-                  "MX ScaleB valid shape must be ceil(K/groupB) x N");
+    // A Shared ScaleB follows the same B-major physical rule as its primary
+    // (pto-spec #257): stored [N, KBlocks] without TransB, [KBlocks, N] with
+    // it. Local ScaleB keeps the logical [KBlocks, N] shape.
+    if constexpr (is_shared_tile_v<ScaleB> && !Attr.TransB) {
+      static_assert(ScaleB::ValidRow == N && ScaleB::ValidCol == KBlocksB,
+                    "Shared non-transposed MX ScaleB is declared as its "
+                    "physical [N, ceil(K/groupB)] shape");
+    } else {
+      static_assert(ScaleB::ValidRow == KBlocksB && ScaleB::ValidCol == N,
+                    "MX ScaleB valid shape must be ceil(K/groupB) x N");
+    }
   }
 }
 
@@ -4121,8 +4140,10 @@ constexpr void validate_matrix_postprocess_contract() {
             type_traits<typename A::DType>::TypeCode);
   constexpr int M = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidCol : A::ValidRow;
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidRow : B::ValidCol;
+      ? B::ValidCol : B::ValidRow;
   // Reduction outputs reduce the per-PE D rows: ASL MatrixRowMaxResult
   // iterates input.valid_rows, the per-PE clamp of group_M for a
   // cooperative TMATMUL, not the core-total group_M.
@@ -4210,8 +4231,10 @@ constexpr MatmulShape resolve_matmul_shape() {
       ? A::ValidCol : A::ValidRow;
   constexpr size_t K = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidRow : A::ValidCol;
+  // Shared B declares its physical stored shape: [N, K] without TransB,
+  // [K, N] with it (pto-spec #257). Symmetric with the Shared A rule.
   constexpr size_t N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidRow : B::ValidCol;
+      ? B::ValidCol : B::ValidRow;
   return MatmulShape{M, N, K, IsGroup};
 }
 
@@ -6688,8 +6711,10 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
@@ -6793,8 +6818,10 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
@@ -6906,8 +6933,10 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_d &d, tile_shape_a &a,
   constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
   constexpr int IorMode = (HasScalarQuant ? 1 : 0) |
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   // Reduction outputs still use the per-PE clamp of group_M for cooperative
@@ -7034,8 +7063,10 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.

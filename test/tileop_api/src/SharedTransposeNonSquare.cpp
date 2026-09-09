@@ -2,10 +2,12 @@
 
 using namespace pto;
 
-// Stored A is KxM and stored B is NxK. TransA/TransB materialize the logical
-// MxK and KxN primaries; D closes against the effective 16x24 valid shape.
+// Shared primaries declare their PHYSICAL stored shapes (pto-spec #257).
+// TransA=1: A stored [K, M] = [32, 16]; TransB=1: B stored [K, N] = [32, 24].
+// TransA/TransB materialize the logical MxK and KxN primaries; D closes
+// against the effective 16x24 valid shape.
 using StoredA = SharedMatrixLeft<float, 32, 16>;
-using StoredB = SharedMatrixRight<float, 32, 32, 24, 32>;
+using StoredB = SharedMatrixRight<float, 32, 24>;
 using D = CubeAccumulatorM16<float, 16, 24>;
 using RowMax = Tile<Location::Vec, float, 16, 8,
                     BLayout::RowMajor, 16, 1>;

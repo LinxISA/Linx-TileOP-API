@@ -37,8 +37,10 @@ __attribute__((noinline)) void bias16(D16 &d, AL16 &a, BS &b, Bias &bias) {
 namespace mx_forms {
 template <typename T> using MA16 = Tile<Location::Left, T, 16, 32, BLayout::CubeM16>;
 using SA = Tile<Location::Scaling, __fp8_e8m0, 16, 1, BLayout::RowMajor>;
-template <typename T> using ShB = SharedMatrixRight<T, 32, 16>;
-using ShSB = SharedMatrixRight<__fp8_e8m0, 1, 16, 1, 16>;
+// Shared B declares its physical [N, K] shape (pto-spec #257): N=16, K=32.
+template <typename T> using ShB = SharedMatrixRight<T, 16, 32>;
+// Shared ScaleB physical [N, KBlocks] = [16, 1] (pto-spec #257).
+using ShSB = SharedMatrixRight<__fp8_e8m0, 16, 1, 16, 1>;
 using GMF = global_tensor<float, RowMajor<16, 16>>;
 using GM16 = global_tensor<__fp8_e4m3, RowMajor<16, 32>>;
 using GMB = global_tensor<__fp8_e4m3, RowMajor<32, 16>>;
@@ -62,7 +64,8 @@ __attribute__((noinline)) void mx(float *out, __fp8_e4m3 *ain, __fp8_e4m3 *bin, 
 namespace options_groupm_forms {
 // 用户报错形态: TMATMUL_ACC(tO, tO, tW, tV, pvOptions, kGroupM)
 using TW = Tile<Location::Left, __bf16, 32, 128, BLayout::CubeM32, 32, 128>;
-using TV = SharedMatrixRight<__bf16, 128, 16>;
+// Physical [N, K] = [16, 128] (pto-spec #257).
+using TV = SharedMatrixRight<__bf16, 16, 128>;
 using TO = Tile<Location::Acc, float, 32, 16, BLayout::CubeM32, 32, 16>;
 constexpr size_t kGroupM = 128;
 __attribute__((noinline)) void pv(TO &tO, TW &tW, TV &tV) {
