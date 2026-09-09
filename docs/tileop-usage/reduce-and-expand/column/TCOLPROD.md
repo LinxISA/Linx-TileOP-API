@@ -59,7 +59,8 @@ shape 必须为 `1 x C`，输出 dtype 与输入 dtype 相同。
 ### 编码字段和省略值
 
 - 省略 `B.DATR` 时，padding 值使用 `Null`。
-- `LB0` 给出 `ValidCol`，必须存在且非零；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
+- `LB0`/`LB1`/`LB2` 描述**源 Tile** 几何（源的 `ValidCol`/`ValidRow`/物理列数），且必须与源 descriptor 完全一致；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
+- 列归约的 `LB1` 必须等于**源**的有效行数（即被归约的全部行数），不是目的的单行；目的是规则推导的 `1 x N`，不参与 B.DIM 编码。
 - 显式 padding 编码 `00`、`01`、`10`、`11` 分别选择 `Zero`、`Max`、`Min`、`Null`。
 
 `fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
