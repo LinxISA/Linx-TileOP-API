@@ -2398,6 +2398,10 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
     }
     }
   } else {
+  // ASL B.DIM (ADR-BLOCK-0012 Decision 014): a runtime dimension must come
+  // from a GPR (RegSrc != zero); only static dims may use the immediate
+  // form. Per-dim SS/SD/DS/DD dispatch mirrors TLOAD_CUBE.
+  if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
@@ -2409,10 +2413,59 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
     : [s0]"r"(src.data()),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
+      [VCOL]"i"(tile_shape::ValidCol), [VROW]"i"(tile_shape::ValidRow),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
+  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [d0]"=Tr"(dst.data())
+    : [s0]"r"(src.data()),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [VCOL]"i"(tile_shape::ValidCol), [VROW]"r"(valid_row),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [d0]"=Tr"(dst.data())
+    : [s0]"r"(src.data()),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"i"(tile_shape::ValidRow),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [d0]"=Tr"(dst.data())
+    : [s0]"r"(src.data()),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  }
   }
 }
 
@@ -2430,6 +2483,8 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
   SharedTile<shp> result;
   const size_t valid_col = result.GetValidCol();
   const size_t valid_row = result.GetValidRow();
+  // ASL B.DIM: dynamic dims load from a GPR; per-dim SS/SD/DS/DD dispatch.
+  if constexpr (shp::ValidCol > 0 && shp::ValidRow > 0) {
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
@@ -2442,10 +2497,62 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
       [PEMask]"i"(PEMask),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
-      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
+      [VCOL]"i"(shp::ValidCol), [VROW]"i"(shp::ValidRow),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
+  } else if constexpr (shp::ValidCol > 0 && shp::ValidRow < 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(result.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"i"(shp::ValidCol), [VROW]"r"(valid_row),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else if constexpr (shp::ValidCol < 0 && shp::ValidRow > 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(result.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"i"(shp::ValidRow),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(result.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  }
   return result;
 }
 
@@ -2459,6 +2566,8 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       "TLOAD Shared dst logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
+  // ASL B.DIM: dynamic dims load from a GPR; per-dim SS/SD/DS/DD dispatch.
+  if constexpr (shp::ValidCol > 0 && shp::ValidRow > 0) {
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
@@ -2471,10 +2580,62 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       [PEMask]"i"(PEMask),
       [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
       [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
-      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
+      [VCOL]"i"(shp::ValidCol), [VROW]"i"(shp::ValidRow),
       [COL]"i"(shp::Cols),
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
+  } else if constexpr (shp::ValidCol > 0 && shp::ValidRow < 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(dst.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"i"(shp::ValidCol), [VROW]"r"(valid_row),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else if constexpr (shp::ValidCol < 0 && shp::ValidRow > 0) {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(dst.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"i"(shp::ValidRow),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  } else {
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    : [Shared] "=Sr"(dst.handle_ref())
+    : [s0]"r"(src.data()),
+      [PEMask]"i"(PEMask),
+      [SrcType]"i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [TileSize]"i"(tile_type_traits<shp_dtype>::TilesizeCode),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [COL]"i"(shp::Cols),
+      [GmStride]"r"(src.GetStrideBytes(3))
+      : "memory");
+  }
 }
 
 // TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
@@ -2618,6 +2779,8 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
     }
     }
   } else {
+  // ASL B.DIM: dynamic dims load from a GPR; per-dim SS/SD/DS/DD dispatch.
+  if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TLSU TSTORE, %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
@@ -2628,10 +2791,56 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
     :
     : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
       [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [VCOL]"i"(valid_col), [VROW]"i"(valid_row),
+      [VCOL]"i"(tile_shape::ValidCol), [VROW]"i"(tile_shape::ValidRow),
       [COL]"i"(tile_shape::Cols),
       [GmStride]"r"(dst.GetStrideBytes(3))
       : "memory");
+  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
+  asm volatile(
+    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT %[s0], mask=1111, last\n"
+    "B.IOR [%[d0],%[GmStride]], []\n"
+    :
+    : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
+      [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [VCOL]"i"(tile_shape::ValidCol), [VROW]"r"(valid_row),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(dst.GetStrideBytes(3))
+      : "memory");
+  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
+  asm volatile(
+    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT %[s0], mask=1111, last\n"
+    "B.IOR [%[d0],%[GmStride]], []\n"
+    :
+    : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
+      [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [VCOL]"r"(valid_col), [VROW]"i"(tile_shape::ValidRow),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(dst.GetStrideBytes(3))
+      : "memory");
+  } else {
+  asm volatile(
+    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT %[s0], mask=1111, last\n"
+    "B.IOR [%[d0],%[GmStride]], []\n"
+    :
+    : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
+      [SrcType]"i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [VCOL]"r"(valid_col), [VROW]"r"(valid_row),
+      [COL]"i"(tile_shape::Cols),
+      [GmStride]"r"(dst.GetStrideBytes(3))
+      : "memory");
+  }
   }
 }
 
@@ -3714,12 +3923,18 @@ constexpr void validate_matrix_contract() {
       ? A::ValidCol : A::ValidRow;
   constexpr int AValidCols = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidRow : A::ValidCol;
+  // ASL (pto-spec #257, BundleMatrixSharedBPrimarySchemaLegal): a Shared B
+  // declares its PHYSICAL stored RowMajor shape. TransB=0 stores [N, K]
+  // (K contiguous); TransB=1 stores [K, N] (N contiguous). The logical K/N
+  // derivation is therefore symmetric with the Shared A rule above.
   constexpr int BValidRows = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidCol : B::ValidRow;
-  constexpr int BValidCols = is_shared_tile_v<B> && Attr.TransB
       ? B::ValidRow : B::ValidCol;
+  constexpr int BValidCols = is_shared_tile_v<B> && Attr.TransB
+      ? B::ValidCol : B::ValidRow;
   static_assert(AValidCols == BValidRows,
-                "Matrix effective valid K dimensions must match");
+                "Matrix effective valid K dimensions must match "
+                "(non-transposed Shared B is declared as its physical [N, K] "
+                "shape: K is the second dimension)");
   if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
     // ASL TMATMUL legality: any cooperative TMATMUL interprets LB0 as
     // core-total group_M, and PE i computes valid_M =
@@ -3832,8 +4047,10 @@ constexpr void validate_matrix_bias_contract() {
   static_assert(Bias::ValidRow != DYNAMIC && Bias::ValidCol != DYNAMIC &&
                     B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC,
                 "Matrix Bias dynamic valid shapes are not supported");
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidRow : B::ValidCol;
+      ? B::ValidCol : B::ValidRow;
   static_assert(Bias::ValidRow == 1 && Bias::ValidCol == N,
                 "Matrix Bias valid shape must be 1 x N");
 }
@@ -3854,8 +4071,10 @@ constexpr void validate_matrix_scale_contract() {
       ? A::ValidCol : A::ValidRow;
   constexpr int K = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidRow : A::ValidCol;
+  // Shared B declares its physical stored shape: [N, K] without TransB,
+  // [K, N] with it (pto-spec #257). Symmetric with the Shared A rule.
   constexpr int N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidRow : B::ValidCol;
+      ? B::ValidCol : B::ValidRow;
   constexpr int ScaleAType = matrix_mx_scale_carrier_type(ACode);
   constexpr int ScaleBType = matrix_mx_scale_carrier_type(BCode);
   constexpr int ScaleAGroup = matrix_mx_scale_group_size(ACode);
@@ -3871,8 +4090,17 @@ constexpr void validate_matrix_scale_contract() {
                   "MX ScaleA must use ordinary RowMajor layout");
     static_assert(is_shared_tile_v<ScaleA> == is_shared_tile_v<A>,
                   "MX ScaleA storage must match A storage");
-    static_assert(ScaleA::ValidRow == M && ScaleA::ValidCol == KBlocksA,
-                  "MX ScaleA valid shape must be M x ceil(K/groupA)");
+    // A Shared ScaleA follows the same A-major physical rule as its primary
+    // (pto-spec #257): stored [M, KBlocks] without TransA, [KBlocks, M] with
+    // it. Local ScaleA keeps the logical [M, KBlocks] shape.
+    if constexpr (is_shared_tile_v<ScaleA> && Attr.TransA) {
+      static_assert(ScaleA::ValidRow == KBlocksA && ScaleA::ValidCol == M,
+                    "Shared transposed MX ScaleA is declared as its "
+                    "physical [ceil(K/groupA), M] shape");
+    } else {
+      static_assert(ScaleA::ValidRow == M && ScaleA::ValidCol == KBlocksA,
+                    "MX ScaleA valid shape must be M x ceil(K/groupA)");
+    }
   }
   if constexpr (HasScaleB) {
     static_assert(type_traits<typename ScaleB::DType>::TypeCode == ScaleBType,
@@ -3883,8 +4111,17 @@ constexpr void validate_matrix_scale_contract() {
                   "MX ScaleB must use ordinary RowMajor layout");
     static_assert(is_shared_tile_v<ScaleB> == is_shared_tile_v<B>,
                   "MX ScaleB storage must match B storage");
-    static_assert(ScaleB::ValidRow == KBlocksB && ScaleB::ValidCol == N,
-                  "MX ScaleB valid shape must be ceil(K/groupB) x N");
+    // A Shared ScaleB follows the same B-major physical rule as its primary
+    // (pto-spec #257): stored [N, KBlocks] without TransB, [KBlocks, N] with
+    // it. Local ScaleB keeps the logical [KBlocks, N] shape.
+    if constexpr (is_shared_tile_v<ScaleB> && !Attr.TransB) {
+      static_assert(ScaleB::ValidRow == N && ScaleB::ValidCol == KBlocksB,
+                    "Shared non-transposed MX ScaleB is declared as its "
+                    "physical [N, ceil(K/groupB)] shape");
+    } else {
+      static_assert(ScaleB::ValidRow == KBlocksB && ScaleB::ValidCol == N,
+                    "MX ScaleB valid shape must be ceil(K/groupB) x N");
+    }
   }
 }
 
@@ -3912,8 +4149,10 @@ constexpr void validate_matrix_postprocess_contract() {
             type_traits<typename A::DType>::TypeCode);
   constexpr int M = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidCol : A::ValidRow;
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidRow : B::ValidCol;
+      ? B::ValidCol : B::ValidRow;
   // Reduction outputs reduce the per-PE D rows: ASL MatrixRowMaxResult
   // iterates input.valid_rows, the per-PE clamp of group_M for a
   // cooperative TMATMUL, not the core-total group_M.
@@ -4001,8 +4240,10 @@ constexpr MatmulShape resolve_matmul_shape() {
       ? A::ValidCol : A::ValidRow;
   constexpr size_t K = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidRow : A::ValidCol;
+  // Shared B declares its physical stored shape: [N, K] without TransB,
+  // [K, N] with it (pto-spec #257). Symmetric with the Shared A rule.
   constexpr size_t N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidRow : B::ValidCol;
+      ? B::ValidCol : B::ValidRow;
   return MatmulShape{M, N, K, IsGroup};
 }
 
@@ -6479,8 +6720,10 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
@@ -6584,8 +6827,10 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
@@ -6697,8 +6942,10 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_d &d, tile_shape_a &a,
   constexpr int OutMask = (HasRowOut ? 1 : 0) | (HasGroupOut ? 2 : 0);
   constexpr int IorMode = (HasScalarQuant ? 1 : 0) |
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   // Reduction outputs still use the per-PE clamp of group_M for cooperative
@@ -6825,8 +7072,10 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
+  // Shared B declares its physical stored shape (pto-spec #257): [N, K]
+  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
   constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidRow : tile_shape_b::ValidCol;
+      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
