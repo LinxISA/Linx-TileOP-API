@@ -16050,6 +16050,16 @@ template <int Opcode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
   static_assert(is_assemble_v<D>,
                 "TEPL _ASS destination must be a range::assemble carrier");
+  static_assert(!is_subview_v<A>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
+  static_assert(!is_subview_v<B>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(!D::INIT,
                 "TEPL _ASS consumes an already-associated slot: the INIT "
                 "(session-opening) slot must be allocated by the plain "
@@ -16092,6 +16102,11 @@ template <int Opcode, is_tile_data_v D, is_tile_data_v S>
 PTO_SHARED_INLINE void unary(D &dst, S &src) {
   static_assert(is_assemble_v<D>,
                 "TEPL _ASS destination must be a range::assemble carrier");
+  static_assert(!is_subview_v<S>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(!D::INIT,
                 "TEPL _ASS consumes an already-associated slot: the INIT "
                 "(session-opening) slot must be allocated by the plain "
@@ -16128,6 +16143,11 @@ template <int Opcode, is_tile_data_v D, is_tile_data_v S>
 PTO_SHARED_INLINE void scalar(D &dst, S &src, typename S::DType value) {
   static_assert(is_assemble_v<D>,
                 "TEPL _ASS destination must be a range::assemble carrier");
+  static_assert(!is_subview_v<S>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(!D::INIT,
                 "TEPL _ASS consumes an already-associated slot: the INIT "
                 "(session-opening) slot must be allocated by the plain "
@@ -16197,13 +16217,17 @@ PTO_TEPL_ASS_BINARY(TSHR, 10)
 PTO_TEPL_ASS_BINARY(TMAX, 11)
 PTO_TEPL_ASS_BINARY(TMIN, 12)
 
-// Mode 0 unary operations.
-PTO_TEPL_ASS_UNARY(TABS, 18)
-PTO_TEPL_ASS_UNARY(TNOT, 19)
-PTO_TEPL_ASS_UNARY(TNEG, 20)
-PTO_TEPL_ASS_UNARY(TEXP, 21)
-PTO_TEPL_ASS_UNARY(TLOG, 22)
-PTO_TEPL_ASS_UNARY(TRECIP, 23)
+// Mode 0 unary operations. The TEPL selector packs Mode(bit5)|Function
+// (bits 0-4): these are the Mode-0 unary functions 15-20 per the ISA
+// (TABS 15, TNOT 16, TNEG 17, TEXP 18, TLOG 19, TRECIP 20). The former
+// 18-23 table was misaligned and executed the wrong op (e.g. TABS_AS
+// emitted TEXP).
+PTO_TEPL_ASS_UNARY(TABS, 15)
+PTO_TEPL_ASS_UNARY(TNOT, 16)
+PTO_TEPL_ASS_UNARY(TNEG, 17)
+PTO_TEPL_ASS_UNARY(TEXP, 18)
+PTO_TEPL_ASS_UNARY(TLOG, 19)
+PTO_TEPL_ASS_UNARY(TRECIP, 20)
 
 // Mode 1: tile/scalar elementwise operations.
 PTO_TEPL_ASS_SCALAR(TADDS, 32)
@@ -16227,6 +16251,11 @@ namespace pto_tepl_ass_detail {
 template <int Opcode, is_tile_data_v D, is_tile_data_v S>
 PTO_SHARED_INLINE void unary_special(D &dst, S &src) {
   static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(!is_subview_v<S>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL unary _ASS dtypes must match");
   asm volatile(
@@ -16247,6 +16276,16 @@ PTO_SHARED_INLINE void unary_special(D &dst, S &src) {
 template <int Opcode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 PTO_SHARED_INLINE void ternary(D &dst, A &a, B &b, A &c) {
   static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(!is_subview_v<A>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
+  static_assert(!is_subview_v<B>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(std::is_same_v<typename A::DType, typename B::DType> &&
                     std::is_same_v<typename A::DType, typename D::DType>,
                 "TEPL ternary _ASS dtypes must match");
@@ -16269,6 +16308,11 @@ PTO_SHARED_INLINE void ternary(D &dst, A &a, B &b, A &c) {
 template <int Opcode, is_tile_data_v D, is_tile_data_v S>
 PTO_SHARED_INLINE void convert(D &dst, S &src) {
   static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(!is_subview_v<S>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(D::Rows == S::Rows && D::Cols == S::Cols,
                 "TCVT_ASS source and destination physical shapes must match");
   asm volatile(
@@ -16291,6 +16335,16 @@ PTO_SHARED_INLINE void convert(D &dst, S &src) {
 template <int Opcode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 PTO_SHARED_INLINE void binary_special(D &dst, A &a, B &b) {
   static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(!is_subview_v<A>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
+  static_assert(!is_subview_v<B>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(std::is_same_v<typename A::DType, typename B::DType>,
                 "TEPL binary _ASS source dtypes must match");
   static_assert(std::is_same_v<typename D::DType, typename A::DType>,
@@ -16317,6 +16371,11 @@ PTO_SHARED_INLINE void binary_special(D &dst, A &a, B &b) {
 template <int Opcode, is_tile_data_v D, is_tile_data_v S>
 PTO_SHARED_INLINE void reduce(D &dst, S &src) {
   static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(!is_subview_v<S>,
+                "TEPL _ASS sources must not be range::subview carriers: "
+                "the _ASS emission does not attach B.SUBVIEW, so the "
+                "subview offset would be silently dropped; consume a "
+                "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL reduction _ASS dtypes must match");
   asm volatile(
