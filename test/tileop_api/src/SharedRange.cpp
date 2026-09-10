@@ -42,7 +42,7 @@ __attribute__((noinline)) void shared_destination_assemble_ass(GM &src) {
 __attribute__((noinline)) void shared_destination_assemble_runtime(
     GM &src, uintptr_t base_units) {
   Shared dst;
-  auto assembled = range::assemble_init_last<128, 3>(dst, base_units);
+  auto assembled = range::assemble_init_last<1, 3>(dst, base_units);
   TLOAD(assembled, src);
 }
 
