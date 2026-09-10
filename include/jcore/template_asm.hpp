@@ -15971,10 +15971,9 @@ void TGATHERB(tile_shape_out &dst, gm_shape &src, tile_shape_offset &offset) {
 //
 //   B.IOT src0, src1, mask=1111, last, ->dst
 //
-// is not a valid v5 instruction.  The associated form therefore feeds the
-// sources first and feeds the destination as the final B.IOT.  The operand
-// lists below intentionally keep the destination as the last C++ operand;
-// this is the positional convention used by the TEPL inline-asm ABI.
+// is not a valid v5 instruction.  The associated form therefore exposes the
+// destination as the first C++ operand while still feeding the sources first
+// and the destination as the final B.IOT in the inline-asm instruction stream.
 namespace pto_tepl_ass_detail {
 
 template <int Opcode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
@@ -16055,19 +16054,19 @@ PTO_SHARED_INLINE void scalar(D &dst, S &src, typename S::DType value) {
 
 #define PTO_TEPL_ASS_BINARY(NAME, OPCODE)                                      \
   template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>              \
-  PTO_SHARED_INLINE void NAME##_ASS(A &src0, B &src1, D &dst) {                 \
+  PTO_SHARED_INLINE void NAME##_ASS(D &dst, A &src0, B &src1) {                 \
     pto_tepl_ass_detail::binary<OPCODE>(dst, src0, src1);                       \
   }
 
 #define PTO_TEPL_ASS_UNARY(NAME, OPCODE)                                       \
   template <is_tile_data_v D, is_tile_data_v S>                                \
-  PTO_SHARED_INLINE void NAME##_ASS(S &src, D &dst) {                          \
+  PTO_SHARED_INLINE void NAME##_ASS(D &dst, S &src) {                          \
     pto_tepl_ass_detail::unary<OPCODE>(dst, src);                               \
   }
 
 #define PTO_TEPL_ASS_SCALAR(NAME, OPCODE)                                      \
   template <is_tile_data_v D, is_tile_data_v S>                                \
-  PTO_SHARED_INLINE void NAME##_ASS(S &src, typename S::DType value, D &dst) { \
+  PTO_SHARED_INLINE void NAME##_ASS(D &dst, S &src, typename S::DType value) { \
     pto_tepl_ass_detail::scalar<OPCODE>(dst, src, value);                      \
   }
 
@@ -16338,22 +16337,22 @@ PTO_SHARED_INLINE void compare_scalar(D &dst, S &src,
 
 #define PTO_TEPL_ASS_UNARY_SPECIAL(NAME, OPCODE)                                \
   template <is_tile_data_v D, is_tile_data_v S>                                 \
-  PTO_SHARED_INLINE void NAME##_ASS(S &src, D &dst) {                            \
+  PTO_SHARED_INLINE void NAME##_ASS(D &dst, S &src) {                            \
     pto_tepl_ass_detail::unary_special<OPCODE>(dst, src);                       \
   }
 #define PTO_TEPL_ASS_BINARY_SPECIAL(NAME, OPCODE)                               \
   template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>               \
-  PTO_SHARED_INLINE void NAME##_ASS(A &a, B &b, D &dst) {                        \
+  PTO_SHARED_INLINE void NAME##_ASS(D &dst, A &a, B &b) {                        \
     pto_tepl_ass_detail::binary_special<OPCODE>(dst, a, b);                     \
   }
 #define PTO_TEPL_ASS_TERNARY(NAME, OPCODE)                                      \
   template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>               \
-  PTO_SHARED_INLINE void NAME##_ASS(A &a, B &b, A &c, D &dst) {                  \
+  PTO_SHARED_INLINE void NAME##_ASS(D &dst, A &a, B &b, A &c) {                  \
     pto_tepl_ass_detail::ternary<OPCODE>(dst, a, b, c);                          \
   }
 #define PTO_TEPL_ASS_CONVERT(NAME, OPCODE)                                      \
   template <is_tile_data_v D, is_tile_data_v S>                                 \
-  PTO_SHARED_INLINE void NAME##_ASS(S &src, D &dst) {                            \
+  PTO_SHARED_INLINE void NAME##_ASS(D &dst, S &src) {                            \
     pto_tepl_ass_detail::convert<OPCODE>(dst, src);                             \
   }
 
@@ -16366,17 +16365,17 @@ PTO_TEPL_ASS_UNARY_SPECIAL(TTRANS, 110)
 
 #define PTO_TEPL_ASS_REDUCE(NAME, OPCODE)                                      \
   template <is_tile_data_v D, is_tile_data_v S>                                \
-  PTO_SHARED_INLINE void NAME##_ASS(S &src, D &dst) {                           \
+  PTO_SHARED_INLINE void NAME##_ASS(D &dst, S &src) {                           \
     pto_tepl_ass_detail::reduce<OPCODE>(dst, src);                              \
   }
 #define PTO_TEPL_ASS_EXPAND(NAME, OPCODE)                                      \
   template <is_tile_data_v D, is_tile_data_v S>                                \
-  PTO_SHARED_INLINE void NAME##_ASS(S &src, D &dst) {                           \
+  PTO_SHARED_INLINE void NAME##_ASS(D &dst, S &src) {                           \
     pto_tepl_ass_detail::expand<OPCODE>(dst, src);                              \
   }
 #define PTO_TEPL_ASS_OUTPUT_BINARY(NAME, OPCODE)                               \
   template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>              \
-  PTO_SHARED_INLINE void NAME##_ASS(A &a, B &b, D &dst) {                       \
+  PTO_SHARED_INLINE void NAME##_ASS(D &dst, A &a, B &b) {                       \
     pto_tepl_ass_detail::output_geometry_binary<OPCODE>(dst, a, b);             \
   }
 
@@ -16409,20 +16408,20 @@ PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDEXPDIF, 91)
 PTO_TEPL_ASS_OUTPUT_BINARY(TCONCAT, 96)
 
 template <CmpMode Mode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
-PTO_SHARED_INLINE void TCMP_ASS(A &a, B &b, D &dst) {
+PTO_SHARED_INLINE void TCMP_ASS(D &dst, A &a, B &b) {
   pto_tepl_ass_detail::compare<Mode>(dst, a, b);
 }
 template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
-PTO_SHARED_INLINE void TCMP_ASS(A &a, B &b, D &dst) {
-  TCMP_ASS<CmpMode::EQ>(a, b, dst);
+PTO_SHARED_INLINE void TCMP_ASS(D &dst, A &a, B &b) {
+  TCMP_ASS<CmpMode::EQ>(dst, a, b);
 }
 template <CmpMode Mode, is_tile_data_v D, is_tile_data_v S>
-PTO_SHARED_INLINE void TCMPS_ASS(S &src, typename S::DType value, D &dst) {
+PTO_SHARED_INLINE void TCMPS_ASS(D &dst, S &src, typename S::DType value) {
   pto_tepl_ass_detail::compare_scalar<Mode>(dst, src, value);
 }
 template <is_tile_data_v D, is_tile_data_v S>
-PTO_SHARED_INLINE void TCMPS_ASS(S &src, typename S::DType value, D &dst) {
-  TCMPS_ASS<CmpMode::EQ>(src, value, dst);
+PTO_SHARED_INLINE void TCMPS_ASS(D &dst, S &src, typename S::DType value) {
+  TCMPS_ASS<CmpMode::EQ>(dst, src, value);
 }
 
 #undef PTO_TEPL_ASS_UNARY_SPECIAL
