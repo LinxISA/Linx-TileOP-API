@@ -11,6 +11,15 @@ template <is_tile_data_v tile_shape>
 void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s);
 ```
 
+### Associated destination：`TORS_ASS`
+
+```cpp
+template <is_tile_data_v D, is_tile_data_v S>
+void TORS_ASS(D &assembled_dst, S &src, typename S::DType scalar);
+```
+
+destination 必须是 `range::assemble` carrier；scalar、source 和 destination dtype 必须相同，参数顺序为 destination、source、scalar。
+
 ### 支持的数据类型
 
 支持S64、S32、S16、S8、U64、U32、U16、U8类型。

@@ -65,7 +65,8 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
 - 矩阵/向量计算使用 [CUBE TMATMUL](cube/matrix-matrix/TMATMUL.md) 或相应 GEMV 页面。
 - 需要启用矩阵后处理属性时，先阅读 [`fixp::Options` 指南](options.md)。
 - 需要绑定 Tile range 或分区/组装时，阅读
-  [B.SUBVIEW / B.ASSEMBLE developer guide](range-modifiers-developer-guide.md)。
+  [B.SUBVIEW / B.ASSEMBLE developer guide](range-modifiers-developer-guide.md)，以及
+  [range modifier API](range-modifiers.md) 和各操作页中的 `*_ASS` 小节。
 - 按执行引擎或 selector 查找操作时，使用 [engine catalog](generated/engines.md)。
 
 ## 每个操作页如何使用

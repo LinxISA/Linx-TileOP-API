@@ -12,9 +12,20 @@ __attribute__((always_inline)) inline void load_shared(Shared &shared,
   TLOAD(shared, src);
 }
 
+__attribute__((always_inline)) inline void load_shared_ass(Shared &shared,
+                                                            const GM &src) {
+  TLOAD_ASS(shared, src);
+}
+
 void shared_tload(Out &out, const GM &src) {
   Shared shared;
   load_shared(shared, src);
+  TMOV_S2L_BROADCAST(out, shared);
+}
+
+void shared_tload_ass(Out &out, const GM &src) {
+  Shared shared;
+  load_shared_ass(shared, src);
   TMOV_S2L_BROADCAST(out, shared);
 }
 

@@ -233,6 +233,75 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertNotIn("C.B.IOS", self.header)
         self.assertRegex(self.header, r"B\.IOS %S\[Shared[AB]\], mask=1111")
 
+    def test_tload_ass_binds_existing_shared_handle_as_input(self) -> None:
+        local_start = self.header.index("// TLOAD_ASS:")
+        shared_start = self.header.index(
+            "// TLOAD_ASS: GM -> an already-associated Shared Tile", local_start
+        )
+        local = self.header[local_start:shared_start]
+        shared_end = self.header.index("// CUBE associated form:", shared_start)
+        shared = self.header[shared_start:shared_end]
+        self.assertEqual(local.count("void TLOAD_ASS("), 2)
+        self.assertEqual(shared.count("void TLOAD_ASS("), 2)
+        self.assertEqual(shared.count('"B.IOS %S[d0], mask=1111\\n"'), 2)
+        self.assertEqual(shared.count('[d0] "Sr"(dst.handle_ref())'), 2)
+        self.assertNotIn("->%S[d0]", shared)
+        self.assertNotIn("<%Z[TileSize]>", shared)
+        fixture = (ROOT / "test" / "tileop_api" / "src" / "SharedTLoad.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("TLOAD_ASS(shared, src);", fixture)
+
+    def test_tload_ass_covers_local_cube_and_unified_dispatch(self) -> None:
+        start = self.header.index("// CUBE associated form:")
+        cube_end = self.header.index("// TSTORE: Tile -> GM", start)
+        unified = self.header.index("// Unified transport entry points.", cube_end)
+        cube = self.header[start:cube_end]
+        dispatch_end = self.header.index("// TSTORE: Shared Tile", unified)
+        dispatch = self.header[unified:dispatch_end]
+        self.assertIn("void TLOAD_CUBE_ASS(", cube)
+        self.assertIn('"B.IOT %[Dst], mask=1111, last\\n"', cube)
+        self.assertIn('[Dst] "Tr"(dst.data())', cube)
+        self.assertNotIn("->%[Dst]", cube)
+        self.assertIn("void TLOAD_ASS(cube_shape &dst, const gm_shape &src)", dispatch)
+
+    def test_tepl_ass_surface_has_last_destination_and_split_iot(self) -> None:
+        start = self.header.index("//===--- TEPL associated forms")
+        block = self.header[start:]
+        self.assertIn("#define PTO_TEPL_ASS_BINARY", block)
+        self.assertIn("#define PTO_TEPL_ASS_UNARY", block)
+        self.assertIn("#define PTO_TEPL_ASS_SCALAR", block)
+        for name in (
+            "TADD", "TSUB", "TMUL", "TDIV", "TREM", "TAND", "TOR", "TXOR",
+            "TSHL", "TSHR", "TMAX", "TMIN", "TABS", "TNOT", "TNEG", "TEXP",
+            "TLOG", "TRECIP", "TADDS", "TSUBS", "TMULS", "TDIVS", "TREMS",
+            "TANDS", "TORS", "TXORS", "TSHLS", "TSHRS", "TMAXS", "TMINS",
+        ):
+            self.assertRegex(block, rf"PTO_TEPL_ASS_[A-Z]+\({name},")
+        self.assertIn('"B.IOT %[Src0], %[Src1], mask=1111\\n"', block)
+        self.assertIn('"B.IOT %[Dst], mask=1111, last\\n"', block)
+        # Keep the invalid legacy spelling out of actual instruction strings;
+        # the explanatory comment above names it as a negative example.
+        asm_block = block[block.index("namespace pto_tepl_ass_detail") :]
+        self.assertNotIn("last, ->", asm_block)
+        fixture = (ROOT / "test" / "tileop_api" / "src" / "TeplAss.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("TADD_ASS(a, b, ad);", fixture)
+        self.assertIn("TABS_ASS(src, ad);", fixture)
+        self.assertIn("TADDS_ASS(src, 1.0f, ad);", fixture)
+
+        special = (ROOT / "test" / "tileop_api" / "src" / "TeplAssSpecial.cpp").read_text(
+            encoding="utf-8"
+        )
+        for call in ("TCMP_ASS<CmpMode::LT>(a, b, f);",
+                     "TCMPS_ASS<CmpMode::GE>(a, 0.0f, f);",
+                     "TFMA_ASS(a, b, c, f);",
+                     "TSQRT_ASS(a, f);", "TCVT_ASS(a, d);", "TTRANS_ASS(a, f);"):
+            self.assertIn(call, special)
+        self.assertIn('"B.IOT %[C], mask=1111\\n"', block)
+        self.assertIn('"B.DATR %D[DType], RNONE\\n"', block)
+
     # --- TLSU TLOAD/TSTORE stride in bytes ---
 
     def test_tlsu_load_store_stride_is_expressed_in_bytes(self) -> None:

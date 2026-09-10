@@ -11,6 +11,17 @@ template <is_tile_data_v tile_shape>
 void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2);
 ```
 
+### Destination assembly：`TFMA_ASS`
+
+```cpp
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TFMA_ASS(D &assembled_dst, A &src0, B &src1, A &src2);
+```
+
+`assembled_dst` 必须是 `range::assemble(dst)` 或同一 session 的后续 assembly
+carrier；三个 source 的 dtype 必须满足普通 `TFMA` 的约束，且第三个 source 与
+第一个 source 使用相同的 Tile 类型。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、E4M3、E5M2、S64、S32、S16、S8、U64、U32、U16、U8类型。

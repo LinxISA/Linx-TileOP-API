@@ -33,6 +33,11 @@ __attribute__((noinline)) void assemble_dest_tload(
   TLOAD(as, src); // -> B.ASSEMBLE 1, 0, zero, 0, 12
 }
 
+__attribute__((noinline)) void assemble_ass_tload(GMDst &src, MaxDst &d) {
+  auto as = range::assemble(d);
+  TLOAD_ASS(as, src); // Existing Local tile is a B.IOT source.
+}
+
 // Assemble with explicit RegSrc=23 (r23) base-address register.
 __attribute__((noinline)) void assemble_regsrc23_tload(
     MaxGMDst &src, MaxDst &d) {

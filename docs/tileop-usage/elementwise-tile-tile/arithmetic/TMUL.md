@@ -11,6 +11,15 @@ template <is_tile_data_v tile_shape>
 void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1);
 ```
 
+### Associated destination：`TMUL_ASS`
+
+```cpp
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TMUL_ASS(D &assembled_dst, A &src0, B &src1);
+```
+
+`assembled_dst` 必须是 `range::assemble` carrier；三个 Tile 的 dtype 必须相同，参数顺序为 destination、两个 source。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、E4M3、E5M2、S64、S32、S16、S8、U64、U32、U16、U8类型。

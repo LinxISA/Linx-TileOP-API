@@ -13,6 +13,19 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCMPS(tile_shape_out &dst, tile_shape_in &src, typename tile_shape_in::DType s);
 ```
 
+### Destination assembly：`TCMPS_ASS`
+
+```cpp
+template <CmpMode Mode, is_tile_data_v D, is_tile_data_v S>
+void TCMPS_ASS(D &assembled_dst, S &src, typename S::DType scalar);
+template <is_tile_data_v D, is_tile_data_v S>
+void TCMPS_ASS(D &assembled_dst, S &src, typename S::DType scalar); // Mode = EQ
+```
+
+`assembled_dst` 必须由 `range::assemble`（或其 `middle`/`last` 形式）构造，
+scalar 类型必须为 source 的 `DType`。参数顺序与普通 `TCMPS` 相反：source、
+scalar、assembled destination。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、E4M3、E5M2、S64、S32、S16、S8、U64、U32、U16、U8类型。

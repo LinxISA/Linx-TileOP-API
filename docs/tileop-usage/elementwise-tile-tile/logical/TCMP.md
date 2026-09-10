@@ -14,6 +14,19 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1);
 ```
 
+### Destination assembly：`TCMP_ASS`
+
+```cpp
+template <CmpMode Mode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TCMP_ASS(D &assembled_dst, A &src0, B &src1);
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TCMP_ASS(D &assembled_dst, A &src0, B &src1); // Mode = EQ
+```
+
+`assembled_dst` 必须是 `range::assemble(dst)`（或同一 assembly session 的
+`range::assemble_middle`/`range::assemble_last`）返回值；参数顺序为 destination
+在前、输入在后。其余比较约束与 `TCMP` 相同。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、E4M3、E5M2、S64、S32、S16、S8、U64、U32、U16、U8类型。

@@ -25,6 +25,7 @@ void test_RowMajor(T *dst, T *src0) {
   
       tile_shape d0;
       TLOAD(d0, s0);
+      TLOAD_ASS(d0, s0);
       TSTORE(res, d0);
     }
   }

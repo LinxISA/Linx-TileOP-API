@@ -21,6 +21,40 @@ template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
 requires(cube_shape::IsCubeLayout) void TLOAD_CUBE(cube_shape &dst, gm_shape &src);
 ```
 
+### Associated destination：`TLOAD_ASS` / `TLOAD_CUBE_ASS`
+
+```cpp
+template <is_local_tile_v tile_shape, is_global_data_v gm_shape>
+requires(!tile_shape::IsCubeLayout)
+void TLOAD_ASS(tile_shape &dst, const gm_shape &src);
+
+template <is_tile_data_v shp, is_global_data_v gm_shape>
+PTO_SHARED_INLINE void TLOAD_ASS(SharedTile<shp> &dst, const gm_shape &src);
+
+template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+          unsigned OffsetUnits, unsigned RegSrc, is_global_data_v gm_shape>
+requires(is_local_tile_v<Parent> || is_shared_tile_v<Parent>)
+void TLOAD_ASS(
+    range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc> &dst,
+    const gm_shape &src);
+
+template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
+requires(cube_shape::IsCubeLayout)
+void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src);
+
+template <is_tile_data_v cube_shape, is_global_data_v gm_shape>
+requires(cube_shape::IsCubeLayout)
+void TLOAD_ASS(cube_shape &dst, const gm_shape &src);
+```
+
+这些重载把 GM 数据加载到已经关联的 Local、Shared 或 Local CUBE destination，
+不会分配新的 destination generation。与 TEPL `_ASS` 一样，TLSU load 也采用
+destination-first 的 `(dst, src)` 顺序。`range::Assemble` 在这里是现有
+parent register/handle 的 C++ view；load bundle 不重新发出 `B.ASSEMBLE`。
+普通 Local/Shared load 的容量必须为 `128 B..256 KiB`；CUBE load 还要求 GM 与
+CUBE dtype 相同、CELL storage 不超过 Local capacity，并遵循下方 CUBE layout
+转换约束。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、E2M1X2、E1M2X2、HiF4X2、S4X2、U4X2、S64、S32、S16、S8、U64、U32、U16、U8类型。

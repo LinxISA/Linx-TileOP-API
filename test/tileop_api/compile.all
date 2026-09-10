@@ -22,7 +22,7 @@ ACTIVE_FIXTURES=(
   TMatmulAccFullOptions TMatmulAccCScale TMatmulAllOptions TGEMVAllOptions TGEMVOperandOrder
   PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs
-  TAdd_mask TAdd TAdds TAnd TLoad TStore TCvt TDiv TDivs TExp TMax TMaxs
+  TAdd_mask TAdd TAdds TAnd TeplAss TeplAssSpecial TLoad TStore TCvt TDiv TDivs TExp TMax TMaxs
   TMov TMul TMuls TOr TRecip TRem TRowMax TRowSum TSqrt TSub TSubs TTrans
   RangeSubview RangeAssemble SharedRange TileRegion TileArray TileArrayCube TileArrayAssemblyOffsets TileArrayRegionAsm TileRegionUnaryAssembly TileRegionUnary TileRegionBinary TileRegionBinaryAssembly TileRegionUnarySubviewAssembly TileRegionScalarAssembly TileRegionTCVTSubviewAssembly TileRegionSharedSubview TileRegionCubeSubview
   ValidShapeImmediate ValidShapePerDim ValidShapePerDimSweep CoopGroupMOverloads TSELCanonical
