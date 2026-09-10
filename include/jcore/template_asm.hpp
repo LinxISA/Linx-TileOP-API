@@ -2216,6 +2216,16 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
   static_assert(
       tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
       "TLOAD dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
+  // The plain (allocating) TLOAD on a range::Assemble carrier is the
+  // producer that opens the assembly session: only the INIT slot may
+  // allocate the parent generation. A MIDDLE/LAST slot must reuse the
+  // already-associated register through TLOAD_ASS instead.
+  if constexpr (is_assemble_v<tile_shape>) {
+    static_assert(
+        tile_shape::INIT,
+        "plain TLOAD requires an INIT assemble carrier (the session-opening "
+        "slot); use TLOAD_ASS for the subsequent MIDDLE/LAST slots");
+  }
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   if constexpr (is_assemble_v<tile_shape>) {
@@ -2466,6 +2476,10 @@ void TLOAD_ASS(
     range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc>
         &dst,
     const gm_shape &src) {
+  static_assert(!INIT,
+                "TLOAD_ASS consumes an already-associated slot: the INIT "
+                "(session-opening) slot must be allocated by the plain "
+                "TLOAD producer, not by TLOAD_ASS");
   static_assert(tile_type_traits<typename Parent::TileDType>::IsValidActiveSize,
                 "TLOAD_ASS Local Tile size must be 128 B..256 KiB");
   const size_t valid_col = dst.GetValidCol();
@@ -2692,6 +2706,10 @@ PTO_SHARED_INLINE void TLOAD_ASS(
         &dst,
     const gm_shape &src) {
   using shp_dtype = typename Parent::TileDType;
+  static_assert(!INIT,
+                "TLOAD_ASS consumes an already-associated slot: the INIT "
+                "(session-opening) slot must be allocated by the plain "
+                "TLOAD producer, not by TLOAD_ASS");
   static_assert(tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
                 "TLOAD_ASS Shared Tile size must be 128 B..256 KB");
   const size_t valid_col = dst.GetValidCol();
@@ -15980,6 +15998,10 @@ template <int Opcode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
   static_assert(is_assemble_v<D>,
                 "TEPL _ASS destination must be a range::assemble carrier");
+  static_assert(!D::INIT,
+                "TEPL _ASS consumes an already-associated slot: the INIT "
+                "(session-opening) slot must be allocated by the plain "
+                "producer form, not by the _ASS form");
   static_assert(std::is_same_v<typename A::DType, typename B::DType>,
                 "TEPL binary _ASS sources must have matching dtypes");
   static_assert(std::is_same_v<typename D::DType, typename A::DType>,
@@ -16005,6 +16027,10 @@ template <int Opcode, is_tile_data_v D, is_tile_data_v S>
 PTO_SHARED_INLINE void unary(D &dst, S &src) {
   static_assert(is_assemble_v<D>,
                 "TEPL _ASS destination must be a range::assemble carrier");
+  static_assert(!D::INIT,
+                "TEPL _ASS consumes an already-associated slot: the INIT "
+                "(session-opening) slot must be allocated by the plain "
+                "producer form, not by the _ASS form");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL unary _ASS destination and source must have matching dtypes");
   const size_t col = src.GetValidCol();
@@ -16028,6 +16054,10 @@ template <int Opcode, is_tile_data_v D, is_tile_data_v S>
 PTO_SHARED_INLINE void scalar(D &dst, S &src, typename S::DType value) {
   static_assert(is_assemble_v<D>,
                 "TEPL _ASS destination must be a range::assemble carrier");
+  static_assert(!D::INIT,
+                "TEPL _ASS consumes an already-associated slot: the INIT "
+                "(session-opening) slot must be allocated by the plain "
+                "producer form, not by the _ASS form");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL scalar _ASS destination and source must have matching dtypes");
   const size_t col = src.GetValidCol();

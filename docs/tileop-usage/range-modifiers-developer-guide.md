@@ -132,6 +132,34 @@ B.ASSEMBLE 1, 0, <compiler-gpr>, 3, 1
 
 不传 `base_units` 时使用 `zero`；传入后由编译器选择 GPR，接口不暴露寄存器编号。
 
+### INIT slot 与后续 slot 的接口选择约束
+
+一个 assembly session 的**第一个（INIT）slot 必须由普通分配型接口写入**
+（`TLOAD`/`TLOAD_CUBE`/`TMOV_L2S_*` 等，其 destination binder 是分配语义），
+**后续（MIDDLE/LAST）slot 必须用 `_ASS` 接口追加**（destination 按 input-only
+binder 消费已关联的 register/handle，不再分配 generation）。这一约束由
+`static_assert` 在编译期强制：
+
+- 普通 `TLOAD` 收到非 INIT carrier（`assemble_middle`/`assemble_last`）会被
+  拒绝，提示改用 `TLOAD_ASS`；
+- `TLOAD_ASS` 与 TEPL `*_ASS` 收到 INIT carrier（`range::assemble` 默认形式）
+  会被拒绝，提示 INIT slot 必须用普通 producer 形式。
+
+```cpp
+void session(GM &gm_lo, GM &gm_hi, TileT &a, TileT &b) {
+  TileT parent;                                        // 类型载体
+  auto d0 = range::assemble<256, 0>(parent);           // INIT slot
+  TLOAD(d0, gm_lo);                                    // 普通 TLOAD（producer）
+  auto d1 = range::assemble_last<128, 1>(parent);      // LAST slot
+  TLOAD_ASS(d1, gm_hi);                                // _ASS 追加
+  auto d2 = range::assemble_middle<128, 2>(parent);    // MIDDLE slot
+  TADD_ASS(d2, a, b);                                  // TEPL _ASS 追加
+}
+```
+
+Shared parent 同理：先 `TLOAD(SharedTile&, ...)`（`"=Sr"` 输出建立 handle），
+再 `TLOAD_ASS` 消费同一 handle。
+
 ## 生命周期 helper
 
 `B.ASSEMBLE` 的生命周期不要通过裸的布尔模板参数表达，优先使用命名 helper：
