@@ -111,7 +111,7 @@ B.SUBVIEW 0, <allocated-gpr>, 0, <TileT::TilesizeCode>
 
 ```cpp
 void load_assembled(GM &gm, TileT &tile, uintptr_t base_units) {
-  auto destination = range::assemble<128, 3>(tile, base_units);
+  auto destination = range::assemble<1, 3>(tile, base_units);
   TLOAD(destination, gm);
 }
 ```
@@ -224,7 +224,7 @@ auto source3 = range::subview<128>(tile, base_units);
 auto destination0 = range::assemble(tile);
 auto destination1 = range::assemble(tile, base_units);
 auto destination2 = range::assemble<128, 3>(tile);
-auto destination3 = range::assemble<128, 3>(tile, base_units);
+auto destination3 = range::assemble<1, 3>(tile, base_units);
 ```
 
 对应关系：
@@ -245,7 +245,7 @@ auto destination3 = range::assemble<128, 3>(tile, base_units);
 例如：
 
 ```cpp
-auto view = range::subview<128, 3>(tile, base_units);
+auto view = range::subview<1, 3>(tile, base_units);
 ```
 
 可能生成：
@@ -280,7 +280,7 @@ INIT ASSEMBLE 使用同一张转换表：
 ```cpp
 auto zero_based = range::subview<128>(tile);
 auto runtime_based = range::subview<128>(tile, base_units);
-auto offset_based = range::subview<128, 3>(tile, base_units);
+auto offset_based = range::subview<1, 3>(tile, base_units);
 ```
 
 如果省略 `LengthBytes`，SUBVIEW 和 ASSEMBLE 都默认使用

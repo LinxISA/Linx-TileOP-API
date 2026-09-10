@@ -73,7 +73,7 @@ __attribute__((noinline)) void assemble_factory_runtime_tload(
 
 __attribute__((noinline)) void assemble_factory_offset_tload(
     GMDst &src, Dst &d, uintptr_t base_units) {
-  auto as = range::assemble<128, 3>(d, base_units);
+  auto as = range::assemble<1, 3>(d, base_units);
   TLOAD(as, src); // -> B.ASSEMBLE 1, 0, <allocated-gpr>, 3, 1
 }
 
@@ -86,7 +86,7 @@ __attribute__((noinline)) void assemble_factory_init_last_tload(
 __attribute__((noinline)) void assemble_factory_middle_tload(
     GMDst &src, Dst &d, uintptr_t base_units) {
   // Non-INIT slots are consumed by TLOAD_ASS (no B.ASSEMBLE emission).
-  auto as = range::assemble_middle<128, 3>(d, base_units);
+  auto as = range::assemble_middle<1, 3>(d, base_units);
   TLOAD_ASS(as, src);
 }
 

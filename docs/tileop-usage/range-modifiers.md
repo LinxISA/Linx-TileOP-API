@@ -78,12 +78,14 @@ byte length and an optional compile-time offset measured in 128-byte units:
 
 ```cpp
 auto full_tile = range::subview(tile);                // default length, offset 0
-auto sized = range::subview<128>(tile, base_units);   // 128 B, offset 0
-auto shifted = range::subview<128, 3>(tile, base_units);
-auto destination = range::assemble<128, 3>(tile, base_units);
+auto sized = range::subview<1>(tile, base_units);     // 128 B (1 unit), offset 0
+auto shifted = range::subview<1, 3>(tile, base_units);
+auto destination = range::assemble<1, 3>(tile, base_units);
 ```
 
-`LengthBytes` must be one of `128`, `256`, `512`, `1*1024`, ..., `256*1024`, and
+`LengthUnits`/`OffsetUnits` 都以 128 B 为单位（与编码的 uimm11 粒度一致）。
+`LengthUnits` must be one of `1`, `2`, `4`, ..., `2048`（128 B × 2 的幂，即
+128 B..256 KiB），and
 must not exceed `tile::LogicalTileBytes`. The factory converts it to the ISA
 `SubviewSizeCode` or INIT `ParentSizeCode` automatically and rejects invalid or
 oversized values at compile time.
@@ -134,8 +136,8 @@ class Subview;
 ```
 
 `Subview` 是底层 carrier 类型。普通 kernel 应优先使用统一的
-`range::subview<LengthBytes = tile capacity, OffsetUnits = 0>(tile [, base_units])`
-factory；调用者填写字节长度而不是 ISA 编码。`RegSrc` 仅用于固定 ABI 或编码测试，
+`range::subview<LengthUnits = tile capacity, OffsetUnits = 0>(tile [, base_units])`
+factory；调用者以 128 B 单位填写分片长度和偏移，而不是 ISA 编码。`RegSrc` 仅用于固定 ABI 或编码测试，
 运行时 base 的高层接口不会暴露寄存器编号。
 
 - `SubviewSizeCode` must be `1..12`; the high-level factory derives it from
@@ -164,9 +166,9 @@ The high-level API does not expose `RegSrc`:
 ```cpp
 range::subview(s);                    // zero base
 range::subview(s, base_units);         // compiler-allocated GPR
-range::subview<128>(s);                 // 128 B, zero + offset 0
-range::subview<128>(s, base_units);     // 128 B, runtime base + offset 0
-range::subview<128, 3>(s, base_units);  // 128 B, runtime base + 384 B
+range::subview<1>(s);                   // 128 B (1 unit), zero + offset 0
+range::subview<1>(s, base_units);       // 128 B, runtime base + offset 0
+range::subview<1, 3>(s, base_units);    // 128 B, runtime base + 384 B
 ```
 
 Explicit register selection is retained only for fixed ABI and encoding tests:
@@ -189,7 +191,7 @@ class Assemble;
 - `OffsetUnits` is `0..2047` and is measured in 128-byte units.
 - `RegSrc` is a low-level field. Public factories use `zero` when no
   `base_units` is supplied, or let the compiler allocate a GPR when it is.
-- INIT helpers derive `ParentSizeCode` from `LengthBytes`; MIDDLE/LAST encode
+- INIT helpers derive `ParentSizeCode` from `LengthUnits`; MIDDLE/LAST encode
   the ISA-required value `0`.
 
 ```cpp

@@ -21,7 +21,7 @@ void assemble_cannot_be_tstore_source(GM &dst, Local &src) {
 
 #if defined(SHOULD_FAIL_SUBVIEW_LENGTH)
 void subview_length_cannot_exceed_parent(GM &dst, Local &src) {
-  auto view = range::subview<256>(src);
+  auto view = range::subview<2>(src);
   TSTORE(dst, view);
 }
 #endif
