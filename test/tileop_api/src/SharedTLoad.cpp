@@ -23,8 +23,15 @@ void shared_tload(Out &out, const GM &src) {
   TMOV_S2L_BROADCAST(out, shared);
 }
 
+// TLOAD_ASS consumes an already-associated Shared handle: the producer
+// TLOAD first establishes the Shared_ABS relation through its "=Sr"
+// destination, then TLOAD_ASS reuses that handle as a source-only "Sr"
+// operand. Feeding a default-constructed SharedTile directly to TLOAD_ASS
+// is invalid: its handle is uninitialized (GR-class value) and the
+// associated form has no association to consume.
 void shared_tload_ass(Out &out, const GM &src) {
   Shared shared;
+  load_shared(shared, src); // producer: establishes the Shared handle
   load_shared_ass(shared, src);
   TMOV_S2L_BROADCAST(out, shared);
 }
