@@ -1,5 +1,5 @@
-// Associated TEPL destinations are passed last, matching the B.IOT source
-// sequence followed by the destination-only B.IOT.
+// Associated TEPL destinations are passed first at the C++ API boundary. The
+// implementation still emits source B.IOTs before the destination-only B.IOT.
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
@@ -8,44 +8,44 @@ using TileT = Tile<Location::Vec, float, 16, 16>;
 
 __attribute__((noinline)) void tepl_ass_binary(TileT &a, TileT &b, TileT &d) {
   auto ad = range::assemble(d);
-  TADD_ASS(a, b, ad);
-  TSUB_ASS(a, b, ad);
-  TMUL_ASS(a, b, ad);
-  TDIV_ASS(a, b, ad);
-  TREM_ASS(a, b, ad);
-  TAND_ASS(a, b, ad);
-  TOR_ASS(a, b, ad);
-  TXOR_ASS(a, b, ad);
-  TSHL_ASS(a, b, ad);
-  TSHR_ASS(a, b, ad);
-  TMAX_ASS(a, b, ad);
-  TMIN_ASS(a, b, ad);
+  TADD_ASS(ad, a, b);
+  TSUB_ASS(ad, a, b);
+  TMUL_ASS(ad, a, b);
+  TDIV_ASS(ad, a, b);
+  TREM_ASS(ad, a, b);
+  TAND_ASS(ad, a, b);
+  TOR_ASS(ad, a, b);
+  TXOR_ASS(ad, a, b);
+  TSHL_ASS(ad, a, b);
+  TSHR_ASS(ad, a, b);
+  TMAX_ASS(ad, a, b);
+  TMIN_ASS(ad, a, b);
 }
 
 __attribute__((noinline)) void tepl_ass_unary(TileT &src, TileT &d) {
   auto ad = range::assemble(d);
-  TABS_ASS(src, ad);
-  TNOT_ASS(src, ad);
-  TNEG_ASS(src, ad);
-  TEXP_ASS(src, ad);
-  TLOG_ASS(src, ad);
-  TRECIP_ASS(src, ad);
+  TABS_ASS(ad, src);
+  TNOT_ASS(ad, src);
+  TNEG_ASS(ad, src);
+  TEXP_ASS(ad, src);
+  TLOG_ASS(ad, src);
+  TRECIP_ASS(ad, src);
 }
 
 __attribute__((noinline)) void tepl_ass_scalar(TileT &src, TileT &d) {
   auto ad = range::assemble(d);
-  TADDS_ASS(src, 1.0f, ad);
-  TSUBS_ASS(src, 1.0f, ad);
-  TMULS_ASS(src, 1.0f, ad);
-  TDIVS_ASS(src, 1.0f, ad);
-  TREMS_ASS(src, 1.0f, ad);
-  TANDS_ASS(src, 1.0f, ad);
-  TORS_ASS(src, 1.0f, ad);
-  TXORS_ASS(src, 1.0f, ad);
-  TSHLS_ASS(src, 1.0f, ad);
-  TSHRS_ASS(src, 1.0f, ad);
-  TMAXS_ASS(src, 1.0f, ad);
-  TMINS_ASS(src, 1.0f, ad);
+  TADDS_ASS(ad, src, 1.0f);
+  TSUBS_ASS(ad, src, 1.0f);
+  TMULS_ASS(ad, src, 1.0f);
+  TDIVS_ASS(ad, src, 1.0f);
+  TREMS_ASS(ad, src, 1.0f);
+  TANDS_ASS(ad, src, 1.0f);
+  TORS_ASS(ad, src, 1.0f);
+  TXORS_ASS(ad, src, 1.0f);
+  TSHLS_ASS(ad, src, 1.0f);
+  TSHRS_ASS(ad, src, 1.0f);
+  TMAXS_ASS(ad, src, 1.0f);
+  TMINS_ASS(ad, src, 1.0f);
 }
 
 int main() {

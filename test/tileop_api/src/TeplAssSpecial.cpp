@@ -16,20 +16,20 @@ __attribute__((noinline)) void tepl_ass_special(F &a, F &b, F &c, F &fd,
   auto r = range::assemble(row);
   auto c0 = range::assemble(col);
 
-  TCMP_ASS<CmpMode::LT>(a, b, f);
-  TCMPS_ASS<CmpMode::GE>(a, 0.0f, f);
-  TFMA_ASS(a, b, c, f);
-  TSQRT_ASS(a, f);
-  TRSQRT_ASS(a, f);
-  TRELU_ASS(a, f);
-  TCVT_ASS(a, d);
-  TTRANS_ASS(a, f);
-  TROWSUM_ASS(a, r);
-  TROWMAX_ASS(a, r);
-  TCOLSUM_ASS(a, c0);
-  TROWEXPAND_ASS(row, f);
-  TCOLEXPAND_ASS(col, f);
-  TCONCAT_ASS(left, right, f);
+  TCMP_ASS<CmpMode::LT>(f, a, b);
+  TCMPS_ASS<CmpMode::GE>(f, a, 0.0f);
+  TFMA_ASS(f, a, b, c);
+  TSQRT_ASS(f, a);
+  TRSQRT_ASS(f, a);
+  TRELU_ASS(f, a);
+  TCVT_ASS(d, a);
+  TTRANS_ASS(f, a);
+  TROWSUM_ASS(r, a);
+  TROWMAX_ASS(r, a);
+  TCOLSUM_ASS(c0, a);
+  TROWEXPAND_ASS(f, row);
+  TCOLEXPAND_ASS(f, col);
+  TCONCAT_ASS(f, left, right);
 }
 
 int main() {

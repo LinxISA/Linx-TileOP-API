@@ -265,12 +265,24 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertNotIn("->%[Dst]", cube)
         self.assertIn("void TLOAD_ASS(cube_shape &dst, const gm_shape &src)", dispatch)
 
-    def test_tepl_ass_surface_has_last_destination_and_split_iot(self) -> None:
+    def test_tepl_ass_surface_is_destination_first_with_split_iot(self) -> None:
         start = self.header.index("//===--- TEPL associated forms")
         block = self.header[start:]
         self.assertIn("#define PTO_TEPL_ASS_BINARY", block)
         self.assertIn("#define PTO_TEPL_ASS_UNARY", block)
         self.assertIn("#define PTO_TEPL_ASS_SCALAR", block)
+        for signature in (
+            "void NAME##_ASS(D &dst, A &src0, B &src1)",
+            "void NAME##_ASS(D &dst, S &src)",
+            "void NAME##_ASS(D &dst, S &src, typename S::DType value)",
+            "void NAME##_ASS(D &dst, A &a, B &b)",
+            "void NAME##_ASS(D &dst, A &a, B &b, A &c)",
+        ):
+            self.assertIn(signature, block)
+        self.assertIn("void TCMP_ASS(D &dst, A &a, B &b)", block)
+        self.assertIn(
+            "void TCMPS_ASS(D &dst, S &src, typename S::DType value)", block
+        )
         for name in (
             "TADD", "TSUB", "TMUL", "TDIV", "TREM", "TAND", "TOR", "TXOR",
             "TSHL", "TSHR", "TMAX", "TMIN", "TABS", "TNOT", "TNEG", "TEXP",
@@ -287,17 +299,17 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         fixture = (ROOT / "test" / "tileop_api" / "src" / "TeplAss.cpp").read_text(
             encoding="utf-8"
         )
-        self.assertIn("TADD_ASS(a, b, ad);", fixture)
-        self.assertIn("TABS_ASS(src, ad);", fixture)
-        self.assertIn("TADDS_ASS(src, 1.0f, ad);", fixture)
+        self.assertIn("TADD_ASS(ad, a, b);", fixture)
+        self.assertIn("TABS_ASS(ad, src);", fixture)
+        self.assertIn("TADDS_ASS(ad, src, 1.0f);", fixture)
 
         special = (ROOT / "test" / "tileop_api" / "src" / "TeplAssSpecial.cpp").read_text(
             encoding="utf-8"
         )
-        for call in ("TCMP_ASS<CmpMode::LT>(a, b, f);",
-                     "TCMPS_ASS<CmpMode::GE>(a, 0.0f, f);",
-                     "TFMA_ASS(a, b, c, f);",
-                     "TSQRT_ASS(a, f);", "TCVT_ASS(a, d);", "TTRANS_ASS(a, f);"):
+        for call in ("TCMP_ASS<CmpMode::LT>(f, a, b);",
+                     "TCMPS_ASS<CmpMode::GE>(f, a, 0.0f);",
+                     "TFMA_ASS(f, a, b, c);",
+                     "TSQRT_ASS(f, a);", "TCVT_ASS(d, a);", "TTRANS_ASS(f, a);"):
             self.assertIn(call, special)
         self.assertIn('"B.IOT %[C], mask=1111\\n"', block)
         self.assertIn('"B.DATR %D[DType], RNONE\\n"', block)
