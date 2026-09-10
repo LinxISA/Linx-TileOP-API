@@ -1384,8 +1384,6 @@ LINX_FOR_EACH_NORMAL_DST(LINX_DELETE_PACKED_SRC_TO_NORMAL_DST)
 //
 //   x4 -> x4:
 //     float x4: e4m3x4, e5m2x4
-//     int   x4: u8x4, s8x4
-//===----------------------------------------------------------------------===//
 
 #define LINX_FOR_EACH_P2P_X2_SRC(M, DST_CPP, DST_TYPE, DST_REG, DST_STORAGE)  \
   M(DST_CPP, DST_TYPE, DST_REG, DST_STORAGE, __fp4_e2m1x2, "e2m1x2", "fb",    \
@@ -2433,6 +2431,60 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
   }
 }
 
+// TLOAD_ASS: GM -> an already-associated Local Tile.  Unlike TLOAD, the Tile
+// register is an input operand and no new destination generation is allocated.
+// An Assemble wrapper is accepted as a view of its existing Local parent; the
+// destination-only B.ASSEMBLE modifier is intentionally not emitted.
+template <is_local_tile_v tile_shape, is_global_data_v gm_shape>
+  requires(!tile_shape::IsCubeLayout)
+void TLOAD_ASS(tile_shape &dst, const gm_shape &src) {
+  static_assert(
+      tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
+      "TLOAD_ASS Local Tile size must be 128 B..256 KiB");
+  const size_t valid_col = dst.GetValidCol();
+  const size_t valid_row = dst.GetValidRow();
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT %[d0], mask=1111, last\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    :
+    : [d0] "Tr"(dst.data()), [s0] "r"(src.data()),
+      [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [VCOL] "i"(valid_col), [VROW] "i"(valid_row),
+      [COL] "i"(tile_shape::Cols),
+      [GmStride] "r"(src.GetStrideBytes(3))
+    : "memory");
+}
+
+template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+          unsigned OffsetUnits, unsigned RegSrc, is_global_data_v gm_shape>
+  requires(is_local_tile_v<Parent> && !Parent::IsCubeLayout)
+void TLOAD_ASS(
+    range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc>
+        &dst,
+    const gm_shape &src) {
+  static_assert(tile_type_traits<typename Parent::TileDType>::IsValidActiveSize,
+                "TLOAD_ASS Local Tile size must be 128 B..256 KiB");
+  const size_t valid_col = dst.GetValidCol();
+  const size_t valid_row = dst.GetValidRow();
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOT %[d0], mask=1111, last\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    :
+    : [d0] "Tr"(dst.data()), [s0] "r"(src.data()),
+      [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [VCOL] "i"(valid_col), [VROW] "i"(valid_row),
+      [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3))
+    : "memory");
+}
+
 // TLOAD: GM -> Shared Tile (PTO v0.58 reissue). The destination is one
 // absolute Core-local Shared register; B.IOS carries the per-PE size and PE
 // mask. B.IOR carries only the GM address operands (RegDst is zero).
@@ -2600,6 +2652,94 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       [GmStride]"r"(src.GetStrideBytes(3))
       : "memory");
   }
+}
+
+// TLOAD_ASS: GM -> an already-associated Shared Tile. Both operands are
+// inputs: B.IOS consumes the existing Shared handle as a source and does not
+// allocate a destination or carry a TileSize destination modifier.
+template <is_tile_data_v shp, is_global_data_v gm_shape>
+PTO_SHARED_INLINE void TLOAD_ASS(SharedTile<shp> &dst, const gm_shape &src) {
+  using shp_dtype = typename shp::TileDType;
+  static_assert(tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
+                "TLOAD_ASS Shared Tile size must be 128 B..256 KB");
+  const size_t valid_col = dst.GetValidCol();
+  const size_t valid_row = dst.GetValidRow();
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOS %S[d0], mask=1111\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    :
+    : [d0] "Sr"(dst.handle_ref()), [s0] "r"(src.data()),
+      [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [VCOL] "i"(valid_col), [VROW] "i"(valid_row),
+      [COL] "i"(shp::Cols), [GmStride] "r"(src.GetStrideBytes(3))
+    : "memory");
+}
+
+// The associated form is also available for an Assemble carrier whose parent
+// is Shared.  The carrier is only a C++ view of the already-associated handle;
+// it must not turn the source B.IOS into a destination or emit a TileSize
+// modifier.  B.ASSEMBLE is destination-only and is therefore deliberately not
+// emitted here.
+template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+          unsigned OffsetUnits, unsigned RegSrc, is_global_data_v gm_shape>
+  requires(is_shared_tile_v<Parent>)
+PTO_SHARED_INLINE void TLOAD_ASS(
+    range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc>
+        &dst,
+    const gm_shape &src) {
+  using shp_dtype = typename Parent::TileDType;
+  static_assert(tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
+                "TLOAD_ASS Shared Tile size must be 128 B..256 KB");
+  const size_t valid_col = dst.GetValidCol();
+  const size_t valid_row = dst.GetValidRow();
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[COL], ->lb2\n"
+    "B.IOS %S[d0], mask=1111\n"
+    "B.IOR [%[s0],%[GmStride]], []\n"
+    :
+    : [d0] "Sr"(dst.handle_ref()), [s0] "r"(src.data()),
+      [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+      [VCOL] "i"(valid_col), [VROW] "i"(valid_row),
+      [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3))
+    : "memory");
+}
+
+// CUBE associated form: preserve the existing Local CUBE register and retain
+// the same explicit GM-to-CELL layout conversion as TLOAD_CUBE.  The binder is
+// an input (Tr), so no destination arrow or SizeCode modifier is emitted.
+template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
+  requires(cube_shape::IsCubeLayout)
+void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src) {
+  static_assert(std::is_same_v<typename cube_shape::DType,
+                               typename gm_shape::DType>,
+                "TLOAD_CUBE_ASS requires matching GM and CUBE dtypes");
+  static_assert(cube_shape::CubeRequiredBytes <= cube_shape::LogicalTileBytes,
+                "TLOAD_CUBE_ASS CUBE CELL storage exceeds Local SizeCode capacity");
+  static_assert(cube_shape::IsValidActiveSize,
+                "TLOAD_CUBE_ASS Local CUBE capacity must be 128 B..256 KiB");
+  const size_t valid_col = dst.GetValidCol();
+  const size_t valid_row = dst.GetValidRow();
+  asm volatile(
+    "BSTART.TLSU TLOAD, %D[DataType]\n"
+    "B.DATR layout%c[Layout], DTYPE_NONE, Null\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.IOT %[Dst], mask=1111, last\n"
+    "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+    :
+    : [Dst] "Tr"(dst.data()), [Base] "r"(src.data()),
+      [RowStrideBytes] "r"(src.GetStrideBytes(3)),
+      [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
+      [Layout] "i"(cube_shape::CubeLoadLayout),
+      [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+    : "memory");
 }
 
 // TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
@@ -3211,6 +3351,12 @@ template <is_tile_data_v cube_shape, is_global_data_v gm_shape>
   requires(cube_shape::IsCubeLayout)
 void TLOAD(cube_shape &dst, gm_shape &src) {
   TLOAD_CUBE(dst, src);
+}
+
+template <is_tile_data_v cube_shape, is_global_data_v gm_shape>
+  requires(cube_shape::IsCubeLayout)
+void TLOAD_ASS(cube_shape &dst, const gm_shape &src) {
+  TLOAD_CUBE_ASS(dst, src);
 }
 
 template <is_global_data_v gm_shape, is_tile_data_v cube_shape>
@@ -8769,11 +8915,6 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, ScaleMtx &scale_mtx,
                                      Vec &vec, Bias &bias) {
   TGEMV_MX_BIAS(d, mtx, scale_mtx, vec, bias, fixp::Options<Attr>{});
 }
-
-
-#undef PTO_SHARED_INLINE
-
-
 //===--- TEPL Mode 0: tile-tile elementwise ops (BSTART.TEPL) ---===//
 // opcode = Mode(0) * 32 + Function. One-layer inline-asm, no __vec__ kernel.
 
@@ -15821,6 +15962,480 @@ void TGATHERB(tile_shape_out &dst, gm_shape &src, tile_shape_offset &offset) {
   static_assert(pto_dependent_false_v<tile_shape_out, gm_shape>,
                 "TGATHERB is retired in PTO ISA 0.58.3; no active replacement. Remove the call or migrate to the active surface.");
 }
+
+//===--- TEPL associated forms --------------------------------------------===//
+//
+// An associated destination is already backed by a range cell.  It must not
+// be emitted as the output of the elementwise B.IOT: doing so would make a
+// binary operation have three inputs (src0, src1 and dst).  In particular,
+//
+//   B.IOT src0, src1, mask=1111, last, ->dst
+//
+// is not a valid v5 instruction.  The associated form therefore feeds the
+// sources first and feeds the destination as the final B.IOT.  The operand
+// lists below intentionally keep the destination as the last C++ operand;
+// this is the positional convention used by the TEPL inline-asm ABI.
+namespace pto_tepl_ass_detail {
+
+template <int Opcode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
+  static_assert(is_assemble_v<D>,
+                "TEPL _ASS destination must be a range::assemble carrier");
+  static_assert(std::is_same_v<typename A::DType, typename B::DType>,
+                "TEPL binary _ASS sources must have matching dtypes");
+  static_assert(std::is_same_v<typename D::DType, typename A::DType>,
+                "TEPL binary _ASS destination and sources must have matching dtypes");
+  const size_t col = src0.GetValidCol();
+  const size_t row = src0.GetValidRow();
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src0], %[Src1], mask=1111\n"
+      "B.IOT %[Dst], mask=1111, last\n"
+      :
+      : [Type] "i"(type_traits<typename A::DType>::TypeCode),
+        [Col] "r"(col), [Row] "r"(row), [Cols] "i"(A::Cols),
+        [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+        [Opcode] "i"(Opcode), [Dst] "Tr"(dst.data())
+      : "memory");
+}
+
+template <int Opcode, is_tile_data_v D, is_tile_data_v S>
+PTO_SHARED_INLINE void unary(D &dst, S &src) {
+  static_assert(is_assemble_v<D>,
+                "TEPL _ASS destination must be a range::assemble carrier");
+  static_assert(std::is_same_v<typename D::DType, typename S::DType>,
+                "TEPL unary _ASS destination and source must have matching dtypes");
+  const size_t col = src.GetValidCol();
+  const size_t row = src.GetValidRow();
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src], mask=1111\n"
+      "B.IOT %[Dst], mask=1111, last\n"
+      :
+      : [Type] "i"(type_traits<typename S::DType>::TypeCode),
+        [Col] "r"(col), [Row] "r"(row), [Cols] "i"(S::Cols),
+        [Src] "Tr"(src.data()), [Opcode] "i"(Opcode),
+        [Dst] "Tr"(dst.data())
+      : "memory");
+}
+
+template <int Opcode, is_tile_data_v D, is_tile_data_v S>
+PTO_SHARED_INLINE void scalar(D &dst, S &src, typename S::DType value) {
+  static_assert(is_assemble_v<D>,
+                "TEPL _ASS destination must be a range::assemble carrier");
+  static_assert(std::is_same_v<typename D::DType, typename S::DType>,
+                "TEPL scalar _ASS destination and source must have matching dtypes");
+  const size_t col = src.GetValidCol();
+  const size_t row = src.GetValidRow();
+  typename S::DType scalar_value = value;
+  asm("" : "+r"(scalar_value));
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src], mask=1111\n"
+      "B.IOR [%[Scalar]],[]\n"
+      "B.IOT %[Dst], mask=1111, last\n"
+      :
+      : [Type] "i"(type_traits<typename S::DType>::TypeCode),
+        [Col] "r"(col), [Row] "r"(row), [Cols] "i"(S::Cols),
+        [Src] "Tr"(src.data()), [Scalar] "r"(scalar_value),
+        [Opcode] "i"(Opcode), [Dst] "Tr"(dst.data())
+      : "memory");
+}
+
+} // namespace pto_tepl_ass_detail
+
+#define PTO_TEPL_ASS_BINARY(NAME, OPCODE)                                      \
+  template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>              \
+  PTO_SHARED_INLINE void NAME##_ASS(A &src0, B &src1, D &dst) {                 \
+    pto_tepl_ass_detail::binary<OPCODE>(dst, src0, src1);                       \
+  }
+
+#define PTO_TEPL_ASS_UNARY(NAME, OPCODE)                                       \
+  template <is_tile_data_v D, is_tile_data_v S>                                \
+  PTO_SHARED_INLINE void NAME##_ASS(S &src, D &dst) {                          \
+    pto_tepl_ass_detail::unary<OPCODE>(dst, src);                               \
+  }
+
+#define PTO_TEPL_ASS_SCALAR(NAME, OPCODE)                                      \
+  template <is_tile_data_v D, is_tile_data_v S>                                \
+  PTO_SHARED_INLINE void NAME##_ASS(S &src, typename S::DType value, D &dst) { \
+    pto_tepl_ass_detail::scalar<OPCODE>(dst, src, value);                      \
+  }
+
+// Mode 0: tile/tile elementwise operations.
+PTO_TEPL_ASS_BINARY(TADD, 0)
+PTO_TEPL_ASS_BINARY(TSUB, 1)
+PTO_TEPL_ASS_BINARY(TMUL, 2)
+PTO_TEPL_ASS_BINARY(TDIV, 3)
+PTO_TEPL_ASS_BINARY(TREM, 4)
+PTO_TEPL_ASS_BINARY(TAND, 6)
+PTO_TEPL_ASS_BINARY(TOR, 7)
+PTO_TEPL_ASS_BINARY(TXOR, 8)
+PTO_TEPL_ASS_BINARY(TSHL, 9)
+PTO_TEPL_ASS_BINARY(TSHR, 10)
+PTO_TEPL_ASS_BINARY(TMAX, 11)
+PTO_TEPL_ASS_BINARY(TMIN, 12)
+
+// Mode 0 unary operations.
+PTO_TEPL_ASS_UNARY(TABS, 18)
+PTO_TEPL_ASS_UNARY(TNOT, 19)
+PTO_TEPL_ASS_UNARY(TNEG, 20)
+PTO_TEPL_ASS_UNARY(TEXP, 21)
+PTO_TEPL_ASS_UNARY(TLOG, 22)
+PTO_TEPL_ASS_UNARY(TRECIP, 23)
+
+// Mode 1: tile/scalar elementwise operations.
+PTO_TEPL_ASS_SCALAR(TADDS, 32)
+PTO_TEPL_ASS_SCALAR(TSUBS, 33)
+PTO_TEPL_ASS_SCALAR(TMULS, 34)
+PTO_TEPL_ASS_SCALAR(TDIVS, 35)
+PTO_TEPL_ASS_SCALAR(TREMS, 36)
+PTO_TEPL_ASS_SCALAR(TANDS, 38)
+PTO_TEPL_ASS_SCALAR(TORS, 39)
+PTO_TEPL_ASS_SCALAR(TXORS, 40)
+PTO_TEPL_ASS_SCALAR(TSHLS, 41)
+PTO_TEPL_ASS_SCALAR(TSHRS, 42)
+PTO_TEPL_ASS_SCALAR(TMAXS, 43)
+PTO_TEPL_ASS_SCALAR(TMINS, 44)
+
+// Specialized associated forms.  These deliberately use the same ABI as the
+// generic forms above: all logical inputs are consumed first and the range
+// destination is published by the final destination-only B.IOT.
+namespace pto_tepl_ass_detail {
+
+template <int Opcode, is_tile_data_v D, is_tile_data_v S>
+PTO_SHARED_INLINE void unary_special(D &dst, S &src) {
+  static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(std::is_same_v<typename D::DType, typename S::DType>,
+                "TEPL unary _ASS dtypes must match");
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src], mask=1111\n"
+      "B.IOT %[Dst], mask=1111, last\n"
+      :
+      : [Opcode] "i"(Opcode),
+        [Type] "i"(type_traits<typename S::DType>::TypeCode),
+        [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
+        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data())
+      : "memory");
+}
+
+template <int Opcode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+PTO_SHARED_INLINE void ternary(D &dst, A &a, B &b, A &c) {
+  static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(std::is_same_v<typename A::DType, typename B::DType> &&
+                    std::is_same_v<typename A::DType, typename D::DType>,
+                "TEPL ternary _ASS dtypes must match");
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[A], %[B], mask=1111\n"
+      "B.IOT %[C], mask=1111\n"
+      "B.IOT %[Dst], mask=1111, last\n"
+      :
+      : [Opcode] "i"(Opcode), [Type] "i"(type_traits<typename A::DType>::TypeCode),
+        [Col] "r"(a.GetValidCol()), [Row] "r"(a.GetValidRow()),
+        [Cols] "i"(A::Cols), [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+        [C] "Tr"(c.data()), [Dst] "Tr"(dst.data())
+      : "memory");
+}
+
+template <int Opcode, is_tile_data_v D, is_tile_data_v S>
+PTO_SHARED_INLINE void convert(D &dst, S &src) {
+  static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(D::Rows == S::Rows && D::Cols == S::Cols,
+                "TCVT_ASS source and destination physical shapes must match");
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[SType]\n"
+      "B.DATR %D[DType], RNONE\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src], mask=1111\n"
+      "B.IOT %[Dst], mask=1111, last\n"
+      :
+      : [Opcode] "i"(Opcode),
+        [SType] "i"(type_traits<typename S::DType>::TypeCode),
+        [DType] "i"(type_traits<typename D::DType>::TypeCode),
+        [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
+        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data())
+      : "memory");
+}
+
+template <int Opcode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+PTO_SHARED_INLINE void binary_special(D &dst, A &a, B &b) {
+  static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(std::is_same_v<typename A::DType, typename B::DType>,
+                "TEPL binary _ASS source dtypes must match");
+  static_assert(std::is_same_v<typename D::DType, typename A::DType>,
+                "TEPL binary _ASS destination dtype must match sources");
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[A], %[B], mask=1111\n"
+      "B.IOT %[Dst], mask=1111, last\n"
+      :
+      : [Opcode] "i"(Opcode), [Type] "i"(type_traits<typename A::DType>::TypeCode),
+        [Col] "r"(a.GetValidCol()), [Row] "r"(a.GetValidRow()),
+        [Cols] "i"(A::Cols), [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+        [Dst] "Tr"(dst.data())
+      : "memory");
+}
+
+// Mode 2 reductions use the input geometry: the output shape is derived by
+// the operation (R x 1 for row reductions, 1 x C for column reductions).
+// Keep this distinct from ordinary unary operations, whose destination has
+// the same geometry as their input.
+template <int Opcode, is_tile_data_v D, is_tile_data_v S>
+PTO_SHARED_INLINE void reduce(D &dst, S &src) {
+  static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(std::is_same_v<typename D::DType, typename S::DType>,
+                "TEPL reduction _ASS dtypes must match");
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src], mask=1111\n"
+      "B.IOT %[Dst], mask=1111, last\n"
+      :
+      : [Opcode] "i"(Opcode),
+        [Type] "i"(type_traits<typename S::DType>::TypeCode),
+        [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
+        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data())
+      : "memory");
+}
+
+// Mode 2 broadcasts, its binary broadcast variants, and Mode 3 concat all
+// describe their output geometry in B.DIM.  They nevertheless remain separate
+// helpers from normal binary operations because input shapes need not equal
+// the destination shape.
+template <int Opcode, is_tile_data_v D, is_tile_data_v S>
+PTO_SHARED_INLINE void expand(D &dst, S &src) {
+  static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(std::is_same_v<typename D::DType, typename S::DType>,
+                "TEPL expand _ASS dtypes must match");
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src], mask=1111\n"
+      "B.IOT %[Dst], mask=1111, last\n"
+      :
+      : [Opcode] "i"(Opcode),
+        [Type] "i"(type_traits<typename D::DType>::TypeCode),
+        [Col] "r"(dst.GetValidCol()), [Row] "r"(dst.GetValidRow()),
+        [Cols] "i"(D::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data())
+      : "memory");
+}
+
+template <int Opcode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+PTO_SHARED_INLINE void output_geometry_binary(D &dst, A &a, B &b) {
+  static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
+  static_assert(std::is_same_v<typename A::DType, typename B::DType> &&
+                    std::is_same_v<typename A::DType, typename D::DType>,
+                "TEPL _ASS dtypes must match");
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[A], %[B], mask=1111\n"
+      "B.IOT %[Dst], mask=1111, last\n"
+      :
+      : [Opcode] "i"(Opcode),
+        [Type] "i"(type_traits<typename D::DType>::TypeCode),
+        [Col] "r"(dst.GetValidCol()), [Row] "r"(dst.GetValidRow()),
+        [Cols] "i"(D::Cols), [A] "Tr"(a.data()), [B] "Tr"(b.data()),
+        [Dst] "Tr"(dst.data())
+      : "memory");
+}
+
+template <CmpMode Mode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+PTO_SHARED_INLINE void compare(D &dst, A &a, B &b) {
+  static_assert(is_valid_cmp_mode(Mode), "TCMP_ASS requires a valid CmpMode");
+  static_assert(is_assemble_v<D>, "TCMP_ASS destination must be assembled");
+  static_assert(std::is_same_v<typename A::DType, typename B::DType>,
+                "TCMP_ASS source dtypes must match");
+#define PTO_TCMP_ASS_CASE(CMODE)                                                \
+  if constexpr (Mode == CmpMode::CMODE) {                                      \
+    asm volatile(                                                              \
+        "BSTART.TEPL 13, %D[Type]\n"                                         \
+        "B.DATR Zero, " #CMODE "\n"                                         \
+        "B.DIM %[Col], 0, ->lb0\n"                                           \
+        "B.DIM %[Row], 0, ->lb1\n"                                           \
+        "B.DIM zero, %c[Cols], ->lb2\n"                                      \
+        "B.IOT %[A], %[B], mask=1111\n"                                     \
+        "B.IOT %[Dst], mask=1111, last\n"                                   \
+        :                                                                      \
+        : [Type] "i"(type_traits<typename A::DType>::TypeCode),               \
+          [Col] "r"(a.GetValidCol()), [Row] "r"(a.GetValidRow()),             \
+          [Cols] "i"(A::Cols), [A] "Tr"(a.data()), [B] "Tr"(b.data()),        \
+          [Dst] "Tr"(dst.data())                                              \
+        : "memory");                                                          \
+  }
+  PTO_TCMP_ASS_CASE(EQ)
+  else PTO_TCMP_ASS_CASE(NE)
+  else PTO_TCMP_ASS_CASE(LT)
+  else PTO_TCMP_ASS_CASE(GT)
+  else PTO_TCMP_ASS_CASE(LE)
+  else PTO_TCMP_ASS_CASE(GE)
+#undef PTO_TCMP_ASS_CASE
+}
+
+template <CmpMode Mode, is_tile_data_v D, is_tile_data_v S>
+PTO_SHARED_INLINE void compare_scalar(D &dst, S &src,
+                                      typename S::DType value) {
+  static_assert(is_valid_cmp_mode(Mode), "TCMPS_ASS requires a valid CmpMode");
+  static_assert(is_assemble_v<D>, "TCMPS_ASS destination must be assembled");
+  typename S::DType scalar_value = value;
+  asm("" : "+r"(scalar_value));
+#define PTO_TCMPS_ASS_CASE(CMODE)                                               \
+  if constexpr (Mode == CmpMode::CMODE) {                                      \
+    asm volatile(                                                              \
+        "BSTART.TEPL 45, %D[Type]\n"                                         \
+        "B.DATR Zero, " #CMODE "\n"                                         \
+        "B.DIM %[Col], 0, ->lb0\n"                                           \
+        "B.DIM %[Row], 0, ->lb1\n"                                           \
+        "B.DIM zero, %c[Cols], ->lb2\n"                                      \
+        "B.IOT %[Src], mask=1111\n"                                         \
+        "B.IOR [%[Scalar]],[]\n"                                             \
+        "B.IOT %[Dst], mask=1111, last\n"                                   \
+        :                                                                      \
+        : [Type] "i"(type_traits<typename S::DType>::TypeCode),               \
+          [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),         \
+          [Cols] "i"(S::Cols), [Src] "Tr"(src.data()),                        \
+          [Scalar] "r"(scalar_value), [Dst] "Tr"(dst.data())                  \
+        : "memory");                                                          \
+  }
+  PTO_TCMPS_ASS_CASE(EQ)
+  else PTO_TCMPS_ASS_CASE(NE)
+  else PTO_TCMPS_ASS_CASE(LT)
+  else PTO_TCMPS_ASS_CASE(GT)
+  else PTO_TCMPS_ASS_CASE(LE)
+  else PTO_TCMPS_ASS_CASE(GE)
+#undef PTO_TCMPS_ASS_CASE
+}
+
+} // namespace pto_tepl_ass_detail
+
+#define PTO_TEPL_ASS_UNARY_SPECIAL(NAME, OPCODE)                                \
+  template <is_tile_data_v D, is_tile_data_v S>                                 \
+  PTO_SHARED_INLINE void NAME##_ASS(S &src, D &dst) {                            \
+    pto_tepl_ass_detail::unary_special<OPCODE>(dst, src);                       \
+  }
+#define PTO_TEPL_ASS_BINARY_SPECIAL(NAME, OPCODE)                               \
+  template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>               \
+  PTO_SHARED_INLINE void NAME##_ASS(A &a, B &b, D &dst) {                        \
+    pto_tepl_ass_detail::binary_special<OPCODE>(dst, a, b);                     \
+  }
+#define PTO_TEPL_ASS_TERNARY(NAME, OPCODE)                                      \
+  template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>               \
+  PTO_SHARED_INLINE void NAME##_ASS(A &a, B &b, A &c, D &dst) {                  \
+    pto_tepl_ass_detail::ternary<OPCODE>(dst, a, b, c);                          \
+  }
+#define PTO_TEPL_ASS_CONVERT(NAME, OPCODE)                                      \
+  template <is_tile_data_v D, is_tile_data_v S>                                 \
+  PTO_SHARED_INLINE void NAME##_ASS(S &src, D &dst) {                            \
+    pto_tepl_ass_detail::convert<OPCODE>(dst, src);                             \
+  }
+
+PTO_TEPL_ASS_TERNARY(TFMA, 28)
+PTO_TEPL_ASS_CONVERT(TCVT, 27)
+PTO_TEPL_ASS_UNARY_SPECIAL(TSQRT, 21)
+PTO_TEPL_ASS_UNARY_SPECIAL(TRSQRT, 22)
+PTO_TEPL_ASS_UNARY_SPECIAL(TRELU, 23)
+PTO_TEPL_ASS_UNARY_SPECIAL(TTRANS, 110)
+
+#define PTO_TEPL_ASS_REDUCE(NAME, OPCODE)                                      \
+  template <is_tile_data_v D, is_tile_data_v S>                                \
+  PTO_SHARED_INLINE void NAME##_ASS(S &src, D &dst) {                           \
+    pto_tepl_ass_detail::reduce<OPCODE>(dst, src);                              \
+  }
+#define PTO_TEPL_ASS_EXPAND(NAME, OPCODE)                                      \
+  template <is_tile_data_v D, is_tile_data_v S>                                \
+  PTO_SHARED_INLINE void NAME##_ASS(S &src, D &dst) {                           \
+    pto_tepl_ass_detail::expand<OPCODE>(dst, src);                              \
+  }
+#define PTO_TEPL_ASS_OUTPUT_BINARY(NAME, OPCODE)                               \
+  template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>              \
+  PTO_SHARED_INLINE void NAME##_ASS(A &a, B &b, D &dst) {                       \
+    pto_tepl_ass_detail::output_geometry_binary<OPCODE>(dst, a, b);             \
+  }
+
+PTO_TEPL_ASS_REDUCE(TROWSUM, 64)
+PTO_TEPL_ASS_REDUCE(TROWMAX, 65)
+PTO_TEPL_ASS_REDUCE(TROWMIN, 66)
+PTO_TEPL_ASS_REDUCE(TROWPROD, 67)
+PTO_TEPL_ASS_REDUCE(TCOLSUM, 80)
+PTO_TEPL_ASS_REDUCE(TCOLMAX, 81)
+PTO_TEPL_ASS_REDUCE(TCOLMIN, 82)
+PTO_TEPL_ASS_REDUCE(TCOLPROD, 83)
+
+PTO_TEPL_ASS_EXPAND(TROWEXPAND, 68)
+PTO_TEPL_ASS_EXPAND(TCOLEXPAND, 84)
+
+PTO_TEPL_ASS_OUTPUT_BINARY(TROWEXPANDADD, 69)
+PTO_TEPL_ASS_OUTPUT_BINARY(TROWEXPANDSUB, 70)
+PTO_TEPL_ASS_OUTPUT_BINARY(TROWEXPANDMUL, 71)
+PTO_TEPL_ASS_OUTPUT_BINARY(TROWEXPANDDIV, 72)
+PTO_TEPL_ASS_OUTPUT_BINARY(TROWEXPANDMAX, 73)
+PTO_TEPL_ASS_OUTPUT_BINARY(TROWEXPANDMIN, 74)
+PTO_TEPL_ASS_OUTPUT_BINARY(TROWEXPANDEXPDIF, 75)
+PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDADD, 85)
+PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDSUB, 86)
+PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDMUL, 87)
+PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDDIV, 88)
+PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDMAX, 89)
+PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDMIN, 90)
+PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDEXPDIF, 91)
+PTO_TEPL_ASS_OUTPUT_BINARY(TCONCAT, 96)
+
+template <CmpMode Mode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+PTO_SHARED_INLINE void TCMP_ASS(A &a, B &b, D &dst) {
+  pto_tepl_ass_detail::compare<Mode>(dst, a, b);
+}
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+PTO_SHARED_INLINE void TCMP_ASS(A &a, B &b, D &dst) {
+  TCMP_ASS<CmpMode::EQ>(a, b, dst);
+}
+template <CmpMode Mode, is_tile_data_v D, is_tile_data_v S>
+PTO_SHARED_INLINE void TCMPS_ASS(S &src, typename S::DType value, D &dst) {
+  pto_tepl_ass_detail::compare_scalar<Mode>(dst, src, value);
+}
+template <is_tile_data_v D, is_tile_data_v S>
+PTO_SHARED_INLINE void TCMPS_ASS(S &src, typename S::DType value, D &dst) {
+  TCMPS_ASS<CmpMode::EQ>(src, value, dst);
+}
+
+#undef PTO_TEPL_ASS_UNARY_SPECIAL
+#undef PTO_TEPL_ASS_BINARY_SPECIAL
+#undef PTO_TEPL_ASS_TERNARY
+#undef PTO_TEPL_ASS_CONVERT
+#undef PTO_TEPL_ASS_REDUCE
+#undef PTO_TEPL_ASS_EXPAND
+#undef PTO_TEPL_ASS_OUTPUT_BINARY
+
+#undef PTO_TEPL_ASS_BINARY
+#undef PTO_TEPL_ASS_UNARY
+#undef PTO_TEPL_ASS_SCALAR
 
 
 #endif // TEMPLATE_ASM_HPP

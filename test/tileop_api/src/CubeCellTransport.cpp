@@ -32,6 +32,11 @@ void cube_acc_roundtrip(GMA &ga, GMB &gb, GMD &gd, AAcc &a, BAcc &b,
   TSTORE(gd, d);
 }
 
+void cube_associated_load(GM &ga, A &a) {
+  TLOAD_CUBE_ASS(a, ga);
+  TLOAD_ASS(a, ga);
+}
+
 int main() {
   float a32_data[32 * 32] = {};
   float b32_data[32 * 32] = {};
@@ -45,5 +50,6 @@ int main() {
   GMA ga2(a16_data); GMB gb2(b16_data); GMD gd2(d16_data);
   AAcc a2; BAcc b2; CAcc c2; DAcc d2;
   cube_acc_roundtrip(ga2, gb2, gd2, a2, b2, c2, d2);
+  cube_associated_load(ga, a);
   return 0;
 }

@@ -14,6 +14,15 @@ template <
 void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1);
 ```
 
+### Associated destination：`TCOLEXPANDMUL_ASS`
+
+```cpp
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TCOLEXPANDMUL_ASS(D &assembled_dst, A &src0, B &src1);
+```
+
+destination 必须是 `range::assemble` carrier；参数顺序为 destination、两个 source，dtype 和 expand shape 规则与普通接口相同。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、E4M3、E5M2、S64、S32、S16、S8、U64、U32、U16、U8类型。

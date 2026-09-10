@@ -14,6 +14,16 @@ template <
 void TCONCAT(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1);
 ```
 
+### Destination assembly：`TCONCAT_ASS`
+
+```cpp
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TCONCAT_ASS(D &assembled_dst, A &src0, B &src1);
+```
+
+`assembled_dst` 必须由 `range::assemble` 系列 factory 构造；输入在前、destination
+在后，源与目标的 dtype、layout 和拼接形状约束沿用 `TCONCAT`。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、E2M1X2、E1M2X2、S4X2、U4X2、S64、S32、S16、S8、U64、U32、U16、U8类型。

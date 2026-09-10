@@ -13,6 +13,17 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TTRANS(tile_shape_out &dst, tile_shape_in &src);
 ```
 
+### Destination assembly：`TTRANS_ASS`
+
+```cpp
+template <is_tile_data_v D, is_tile_data_v S>
+void TTRANS_ASS(D &assembled_dst, S &src);
+```
+
+这是历史接口对应的 assembly 版本；`assembled_dst` 必须是 `range::assemble`
+carrier，参数顺序为 destination、source。该接口与普通 `TTRANS` 一样受当前
+ISA catalog 状态约束，不改变本页关于该操作已移除的兼容性说明。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、E2M1X2、E1M2X2、S4X2、U4X2、S64、S32、S16、S8、U64、U32、U16、U8类型。

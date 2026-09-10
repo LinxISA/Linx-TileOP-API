@@ -9,6 +9,17 @@ template <is_tile_data_v DstTile, is_tile_data_v SrcTile>
 void TCVT(DstTile &dst, SrcTile &src);
 ```
 
+### Destination assembly：`TCVT_ASS`
+
+```cpp
+template <is_tile_data_v D, is_tile_data_v S>
+void TCVT_ASS(D &assembled_dst, S &src);
+```
+
+destination 必须是 `range::assemble` carrier；与普通 `TCVT` 一样，source 和
+destination 的物理 shape 必须匹配，目标 dtype 由 assembled destination 的 Tile
+类型决定。参数顺序为 destination、source。
+
 开发者需要提供具有明确类型的源 Tile 和目标 Tile。无需手动传入 ISA 编码值、Tile 寄存器编号或 TSize code。
 
 ## 普通布局

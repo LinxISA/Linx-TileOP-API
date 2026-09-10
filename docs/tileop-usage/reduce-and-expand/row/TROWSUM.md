@@ -11,6 +11,16 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWSUM(tile_shape_out &dst, tile_shape_in &src);
 ```
 
+### Destination assembly：`TROWSUM_ASS`
+
+```cpp
+template <is_tile_data_v D, is_tile_data_v S>
+void TROWSUM_ASS(D &assembled_dst, S &src);
+```
+
+`assembled_dst` 必须是 `range::assemble` carrier；输入为 `R x C` 时 destination
+的 valid shape 为 `R x 1`，其余归约约束不变。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、E4M3、E5M2、S64、S32、S16、S8、U64、U32、U16、U8类型。

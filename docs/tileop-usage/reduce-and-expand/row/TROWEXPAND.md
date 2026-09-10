@@ -11,6 +11,16 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src);
 ```
 
+### Destination assembly：`TROWEXPAND_ASS`
+
+```cpp
+template <is_tile_data_v D, is_tile_data_v S>
+void TROWEXPAND_ASS(D &assembled_dst, S &src);
+```
+
+输入为 `R x 1`，destination 为 `R x C`；destination 必须是
+`range::assemble`/`assemble_middle`/`assemble_last` carrier。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、E4M3、E5M2、S64、S32、S16、S8、U64、U32、U16、U8类型。

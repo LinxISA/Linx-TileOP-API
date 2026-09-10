@@ -207,6 +207,71 @@ auto as = range::assemble_last<128, 2047>(d);
 TLOAD(as, gm);  // B.ASSEMBLE 0, 1, zero, 2047, 0
 ```
 
+## Vector `*_ASS` 接口
+
+Vector TEPL 操作提供带 `_ASS` 后缀的 destination-assembly 版本。它们与同名
+普通接口的主要区别是：destination 必须是 `range::assemble(...)` 返回的 carrier，
+并且参数顺序统一为“assembled destination 在前、输入在后”。`range::assemble`
+只描述 destination 的 assembly range，不复制 Tile 数据。`_ASS` 将已经关联的
+destination 作为第一个 C++ 参数对应的 input-only destination binder 使用，不分配新的 Tile generation，
+也不在该计算 bundle 中重新发出 `B.ASSEMBLE`。
+
+```cpp
+using TileT = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
+
+TileT a, b, c, result;
+auto assembled = range::assemble(result);       // INIT=1, LAST=0
+TFMA_ASS(assembled, a, b, c);
+```
+
+需要描述一次 assembly session 的多个 fragment 时，carrier 仍按
+`INIT -> MIDDLE* -> LAST` 构造（例如 `range::assemble`、
+`range::assemble_middle` 和 `range::assemble_last`）。这些字段描述关联关系；
+TEPL `_ASS` 只消费该 carrier 的现有 parent register。不能把普通 Tile 直接作为
+TEPL `*_ASS` 的 destination，也不能把 `range::subview` 当作 destination。
+
+### 接口形式
+
+当前新增的 vector `_ASS` 接口按参数类别分为：
+
+| 类别 | 接口形式 |
+| --- | --- |
+| tile/tile | `TADD_ASS`、`TSUB_ASS`、`TMUL_ASS`、`TDIV_ASS`、`TREM_ASS`、`TAND_ASS`、`TOR_ASS`、`TXOR_ASS`、`TSHL_ASS`、`TSHR_ASS`、`TMAX_ASS`、`TMIN_ASS(assembled_dst, src0, src1)` |
+| 一元 | `TABS_ASS`、`TNOT_ASS`、`TNEG_ASS`、`TEXP_ASS`、`TLOG_ASS`、`TRECIP_ASS(assembled_dst, src)` |
+| tile/scalar | `TADDS_ASS`、`TSUBS_ASS`、`TMULS_ASS`、`TDIVS_ASS`、`TREMS_ASS`、`TANDS_ASS`、`TORS_ASS`、`TXORS_ASS`、`TSHLS_ASS`、`TSHRS_ASS`、`TMAXS_ASS`、`TMINS_ASS(assembled_dst, src, scalar)` |
+| 比较 | `TCMP_ASS<Mode>(assembled_dst, src0, src1)`、`TCMPS_ASS<Mode>(assembled_dst, src, scalar)`；省略 `Mode` 时默认为 `CmpMode::EQ` |
+| 三元/一元/转换 | `TFMA_ASS(assembled_dst, a, b, c)`；`TSQRT_ASS`、`TRSQRT_ASS`、`TRELU_ASS`、`TTRANS_ASS`、`TCVT_ASS(assembled_dst, src)` |
+| 归约 | `TROWSUM_ASS`、`TROWMAX_ASS`、`TROWMIN_ASS`、`TROWPROD_ASS`、`TCOLSUM_ASS`、`TCOLMAX_ASS`、`TCOLMIN_ASS`、`TCOLPROD_ASS(assembled_dst, src)` |
+| 广播 | `TROWEXPAND_ASS(assembled_dst, src)`、`TCOLEXPAND_ASS(assembled_dst, src)` |
+| 广播复合 | `TROWEXPAND{ADD,SUB,MUL,DIV,MAX,MIN,EXPDIF}_ASS`、`TCOLEXPAND{ADD,SUB,MUL,DIV,MAX,MIN,EXPDIF}_ASS(assembled_dst, src0, src1)` |
+| 拼接 | `TCONCAT_ASS(assembled_dst, left, right)` |
+
+`TCMP_ASS` 的两个输入 dtype 必须相同；`TCMPS_ASS` 的 scalar 必须是 source
+的 `DType`；普通逐元素、归约和广播接口要求 source 与 destination dtype 匹配。
+`TCVT_ASS` 允许转换 dtype，但 source 和 destination 的物理 shape 必须相同。
+其余形状规则与对应普通接口页面相同。
+
+### 生成的 TEPL bundle
+
+`_ASS` wrapper 生成的共同结构如下；具体 opcode 由操作决定：
+
+```asm
+BSTART.TEPL <opcode>, <source-dtype>
+B.DIM      <valid-col>, 0, ->lb0
+B.DIM      <valid-row>, 0, ->lb1
+B.DIM      zero, <physical-cols>, ->lb2
+B.IOT      <source-operands>, mask=1111
+B.IOT      <assembled-destination>, mask=1111, last
+```
+
+`TCVT_ASS` 另外发出 `B.DATR <destination-dtype>, RNONE`；比较接口另外发出
+`B.DATR zero, <CmpMode>`，标量比较还发出 `B.IOR [<scalar>], []`。因此，
+`range::assemble` 提供已有 destination 的关联描述，而 `_ASS` 负责 TEPL 计算
+bundle；上述 bundle 中没有 destination arrow、Tile SizeCode 或 `B.ASSEMBLE`。
+此前验证的 14 个特殊接口均生成了对应的 `BSTART.TEPL`：
+`TCMP`、`TCMPS`、`TFMA`、`TSQRT`、`TRSQRT`、`TRELU`、`TCVT`、`TTRANS`、
+`TROWSUM`、`TROWMAX`、`TCOLSUM`、`TROWEXPAND`、`TCOLEXPAND` 和 `TCONCAT`。
+
 ## Forwarded members
 
 Both carriers expose every tile-shaped static member of `Parent`

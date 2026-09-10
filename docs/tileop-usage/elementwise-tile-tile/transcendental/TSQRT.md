@@ -11,6 +11,16 @@ template <is_tile_data_v tile_shape>
 void TSQRT(tile_shape &dst, tile_shape &src);
 ```
 
+### Destination assembly：`TSQRT_ASS`
+
+```cpp
+template <is_tile_data_v D, is_tile_data_v S>
+void TSQRT_ASS(D &assembled_dst, S &src);
+```
+
+`assembled_dst` 必须由 `range::assemble`（或 `middle`/`last` carrier）构造；
+source/destination 的 dtype、shape 和 location 约束沿用 `TSQRT`。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、E4M3、E5M2类型。
