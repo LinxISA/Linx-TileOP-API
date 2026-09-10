@@ -1906,6 +1906,7 @@ public:
   static constexpr int byteSize = SourceTile::byteSize;
   // Physical storage identity: the view occupies exactly the source bytes.
   static constexpr int kBytes = SourceTile::kBytes;
+  static constexpr int StorageBytes = SourceTile::StorageBytes;
   static constexpr int LogicalTileBytes = SourceTile::LogicalTileBytes;
   static constexpr int TilesizeCode = SourceTile::TilesizeCode;
   static constexpr bool IsValidActiveSize = SourceTile::IsValidActiveSize;
