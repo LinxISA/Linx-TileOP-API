@@ -220,6 +220,48 @@ struct FixpAttr {
   constexpr bool operator==(const FixpAttr &) const = default;
 };
 
+// PTO-ISA #260 (TileCarrierWidthCompatible): a comparison/select source
+// may back data of a different type than the operation type when element
+// widths are equal and neither side is a packed 4-bit type. The packed
+// containers (FP4X2/S4X2/U4X2) carry two elements per 8-bit lane and are
+// excluded from reinterpretation.
+constexpr int type_traits_code_bits(int Code) {
+  switch (Code) {
+  case __type_fp64:
+  case __type_int64:
+  case __type_uint64: return 64;
+  case __type_fp32:
+  case __type_tf32:
+  case __type_hf32:
+  case __type_int32:
+  case __type_uint32: return 32;
+  case __type_fp16:
+  case __type_bf16:
+  case __type_int16:
+  case __type_uint16: return 16;
+  case __type_hif8:
+  case __type_fp8_e4m3:
+  case __type_fp8_e5m2:
+  case __type_int8:
+  case __type_uint8:
+  case __type_fp8_e8m0: return 8;
+  default: return -1;
+  }
+}
+
+constexpr bool tile_carrier_width_compatible(int StoredCode, int OperationCode) {
+  if (StoredCode == OperationCode)
+    return true;
+  constexpr int Packed4BitCodes[] = {
+      __type_fp4_e2m1x2, __type_fp4_e1m2x2, __type_fp4_hif4x2,
+      __type_int4x2, __type_uint4x2};
+  for (int Code : Packed4BitCodes) {
+    if (StoredCode == Code || OperationCode == Code)
+      return false;
+  }
+  return type_traits_code_bits(StoredCode) == type_traits_code_bits(OperationCode);
+}
+
 constexpr bool is_valid_fixp_pre_quant(FixpPreQuantMode Mode) {
   switch (Mode) {
   case FixpPreQuantMode::None:
