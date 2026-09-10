@@ -230,6 +230,11 @@ TFMA_ASS(assembled, a, b, c);
 TEPL `_ASS` 只消费该 carrier 的现有 parent register。不能把普通 Tile 直接作为
 TEPL `*_ASS` 的 destination，也不能把 `range::subview` 当作 destination。
 
+**接口选择约束**（编译期 `static_assert` 强制）：session 的 INIT slot 必须用
+普通分配型接口（`TLOAD` 等）写入，后续 MIDDLE/LAST slot 才用 `_ASS` 追加——
+`_ASS` 收到 INIT carrier、或普通 `TLOAD` 收到非 INIT carrier 都会被拒绝。
+详见开发者指南的"INIT slot 与后续 slot 的接口选择约束"。
+
 ### 接口形式
 
 当前新增的 vector `_ASS` 接口按参数类别分为：

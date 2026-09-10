@@ -31,7 +31,11 @@ __attribute__((noinline)) void shared_destination_assemble(GM &src) {
 
 __attribute__((noinline)) void shared_destination_assemble_ass(GM &src) {
   Shared dst;
-  auto assembled = range::assemble_init_last(dst);
+  // The INIT slot is written by the plain allocating TLOAD; TLOAD_ASS only
+  // consumes a non-INIT (middle/last) carrier of the same parent.
+  auto init = range::assemble(dst);
+  TLOAD(init, src);
+  auto assembled = range::assemble_last(dst);
   TLOAD_ASS(assembled, src); // Existing Shared handle is a B.IOS source.
 }
 
