@@ -55,6 +55,25 @@ parent register/handle 的 C++ view；load bundle 不重新发出 `B.ASSEMBLE`�
 CUBE dtype 相同、CELL storage 不超过 Local capacity，并遵循下方 CUBE layout
 转换约束。
 
+**Associated destination 的前提是 handle/register 已经由 producer 建立**。
+第一次落到一个 assembly range 的 load 必须使用普通 `TLOAD`/`TLOAD_CUBE`
+（或 `TMOV_L2S_*`）分配 destination generation；后续 slot 才能用 `_ASS`
+形式追加。不要把默认构造的 `SharedTile` 直接传给 `TLOAD_ASS`：其 handle
+尚未初始化，也没有可消费的关联关系（`_ASS` 的 `"Sr"` 输入只接受已建立
+Shared 关联的 handle）。正确形态：
+
+```cpp
+void shared_tload_ass(Out &out, const GM &src) {
+  Shared shared;
+  TLOAD(shared, src);       // producer：建立 Shared handle（"=Sr" 输出）
+  TLOAD_ASS(shared, src);   // 追加：源侧 "Sr" 消费同一 handle
+  TMOV_S2L_BROADCAST(out, shared);
+}
+```
+
+Local parent 的等价形态是先对 `range::assemble<...>(parent)` 的第一个 slot
+用普通 `TLOAD`，后续 slot 用 `TLOAD_ASS` + `range::assemble_last`/`assemble_middle`。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、E2M1X2、E1M2X2、HiF4X2、S4X2、U4X2、S64、S32、S16、S8、U64、U32、U16、U8类型。
