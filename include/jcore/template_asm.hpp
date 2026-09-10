@@ -2484,19 +2484,61 @@ void TLOAD_ASS(
                 "TLOAD_ASS Local Tile size must be 128 B..256 KiB");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
-  asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
-    "B.DIM zero, %c[VCOL], ->lb0\n"
-    "B.DIM zero, %c[VROW], ->lb1\n"
-    "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOT %[d0], mask=1111, last\n"
-    "B.IOR [%[s0],%[GmStride]], []\n"
-    :
-    : [d0] "Tr"(dst.data()), [s0] "r"(src.data()),
-      [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
-      [VCOL] "i"(valid_col), [VROW] "i"(valid_row),
-      [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3))
-    : "memory");
+  // Destination-only B.ASSEMBLE carries the MIDDLE/LAST session state.
+  if constexpr (RegSrc == 0 || RegSrc == range::AutoRegSrc) {
+    const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
+    asm volatile(
+      "BSTART.TLSU TLOAD, %D[SrcType]\n"
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
+      "B.DIM zero, %c[COL], ->lb2\n"
+      "B.IOT %[d0], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.IOR [%[s0],%[GmStride]], []\n"
+      :
+      : [d0] "Tr"(dst.data()), [s0] "r"(src.data()),
+        [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+        [VCOL] "i"(valid_col), [VROW] "i"(valid_row),
+        [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3)),
+        [RegSrc] "r"(range_base),
+        [Init] "i"(static_cast<int>(INIT)), [Last] "i"(static_cast<int>(LAST)),
+        [Off] "i"(OffsetUnits), [ParentSize] "i"(ParentSizeCode)
+      : "memory");
+  } else {
+#define PTO_TLOAD_ASS_REG_CASE(N)                                             \
+  if constexpr (RegSrc == N) {                                                \
+    register uintptr_t range_base asm("r" #N) =                               \
+        static_cast<uintptr_t>(dst.GetRangeBase());                           \
+    asm volatile(                                                             \
+      "BSTART.TLSU TLOAD, %D[SrcType]\n"                                      \
+      "B.DIM zero, %c[VCOL], ->lb0\n"                                         \
+      "B.DIM zero, %c[VROW], ->lb1\n"                                         \
+      "B.DIM zero, %c[COL], ->lb2\n"                                          \
+      "B.IOT %[d0], mask=1111, last\n"                                        \
+      "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[ParentSize]\n"     \
+      "B.IOR [%[s0],%[GmStride]], []\n"                                       \
+      :                                                                       \
+      : [d0] "Tr"(dst.data()), [s0] "r"(src.data()),                          \
+        [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),       \
+        [VCOL] "i"(valid_col), [VROW] "i"(valid_row),                         \
+        [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3)),       \
+        [Init] "i"(static_cast<int>(INIT)), [Last] "i"(static_cast<int>(LAST)), \
+        [Off] "i"(OffsetUnits), [ParentSize] "i"(ParentSizeCode)              \
+      : "memory");                                                            \
+  }
+    PTO_TLOAD_ASS_REG_CASE(2) else PTO_TLOAD_ASS_REG_CASE(3) else
+    PTO_TLOAD_ASS_REG_CASE(4) else PTO_TLOAD_ASS_REG_CASE(5) else
+    PTO_TLOAD_ASS_REG_CASE(6) else PTO_TLOAD_ASS_REG_CASE(7) else
+    PTO_TLOAD_ASS_REG_CASE(8) else PTO_TLOAD_ASS_REG_CASE(9) else
+    PTO_TLOAD_ASS_REG_CASE(10) else PTO_TLOAD_ASS_REG_CASE(11) else
+    PTO_TLOAD_ASS_REG_CASE(12) else PTO_TLOAD_ASS_REG_CASE(13) else
+    PTO_TLOAD_ASS_REG_CASE(14) else PTO_TLOAD_ASS_REG_CASE(15) else
+    PTO_TLOAD_ASS_REG_CASE(16) else PTO_TLOAD_ASS_REG_CASE(17) else
+    PTO_TLOAD_ASS_REG_CASE(18) else PTO_TLOAD_ASS_REG_CASE(19) else
+    PTO_TLOAD_ASS_REG_CASE(20) else PTO_TLOAD_ASS_REG_CASE(21) else
+    PTO_TLOAD_ASS_REG_CASE(22) else PTO_TLOAD_ASS_REG_CASE(23)
+#undef PTO_TLOAD_ASS_REG_CASE
+  }
 }
 
 // TLOAD: GM -> Shared Tile (PTO v0.58 reissue). The destination is one
@@ -2696,8 +2738,8 @@ PTO_SHARED_INLINE void TLOAD_ASS(SharedTile<shp> &dst, const gm_shape &src) {
 // The associated form is also available for an Assemble carrier whose parent
 // is Shared.  The carrier is only a C++ view of the already-associated handle;
 // it must not turn the source B.IOS into a destination or emit a TileSize
-// modifier.  B.ASSEMBLE is destination-only and is therefore deliberately not
-// emitted here.
+// modifier.  A destination-only B.ASSEMBLE is emitted so the MIDDLE/LAST
+// session state reaches the model.
 template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
           unsigned OffsetUnits, unsigned RegSrc, is_global_data_v gm_shape>
   requires(is_shared_tile_v<Parent>)
@@ -2714,18 +2756,28 @@ PTO_SHARED_INLINE void TLOAD_ASS(
                 "TLOAD_ASS Shared Tile size must be 128 B..256 KB");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
+  // Destination-only B.ASSEMBLE carries the MIDDLE/LAST session state so
+  // the model can close the Shared assembly session.
+  static_assert(RegSrc == 0 || RegSrc == range::AutoRegSrc,
+                "TLOAD_ASS with an explicit B.ASSEMBLE RegSrc selector is "
+                "not supported; use the default or *_at_reg plain forms");
+  const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     "B.IOS %S[d0], mask=1111\n"
+    "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
     :
     : [d0] "Sr"(dst.handle_ref()), [s0] "r"(src.data()),
       [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
       [VCOL] "i"(valid_col), [VROW] "i"(valid_row),
-      [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3))
+      [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3)),
+      [RegSrc] "r"(range_base),
+      [Init] "i"(static_cast<int>(INIT)), [Last] "i"(static_cast<int>(LAST)),
+      [Off] "i"(OffsetUnits), [ParentSize] "i"(ParentSizeCode)
     : "memory");
 }
 
@@ -16008,6 +16060,15 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
                 "TEPL binary _ASS destination and sources must have matching dtypes");
   const size_t col = src0.GetValidCol();
   const size_t row = src0.GetValidRow();
+  // The destination-only B.IOT must carry the session state (MIDDLE/LAST)
+  // in a destination-only B.ASSEMBLE so the model can close the session.
+  // The range base flows through a GPR for the zero/AutoRegSrc forms; the
+  // explicit low-level register selectors are rejected here (they need the
+  // macro-case emission used by the plain carrier forms).
+  static_assert(D::RegSrc == 0 || D::RegSrc == range::AutoRegSrc,
+                "TEPL _ASS with an explicit B.ASSEMBLE RegSrc selector is "
+                "not supported; use the default or *_at_reg plain forms");
+  const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -16015,11 +16076,15 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src0], %[Src1], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Type] "i"(type_traits<typename A::DType>::TypeCode),
         [Col] "r"(col), [Row] "r"(row), [Cols] "i"(A::Cols),
         [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
-        [Opcode] "i"(Opcode), [Dst] "Tr"(dst.data())
+        [Opcode] "i"(Opcode), [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(range_base),
+        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
@@ -16035,6 +16100,11 @@ PTO_SHARED_INLINE void unary(D &dst, S &src) {
                 "TEPL unary _ASS destination and source must have matching dtypes");
   const size_t col = src.GetValidCol();
   const size_t row = src.GetValidRow();
+  // Destination-only B.ASSEMBLE carries the MIDDLE/LAST session state.
+  static_assert(D::RegSrc == 0 || D::RegSrc == range::AutoRegSrc,
+                "TEPL _ASS with an explicit B.ASSEMBLE RegSrc selector is "
+                "not supported; use the default or *_at_reg plain forms");
+  const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -16042,11 +16112,15 @@ PTO_SHARED_INLINE void unary(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Type] "i"(type_traits<typename S::DType>::TypeCode),
         [Col] "r"(col), [Row] "r"(row), [Cols] "i"(S::Cols),
         [Src] "Tr"(src.data()), [Opcode] "i"(Opcode),
-        [Dst] "Tr"(dst.data())
+        [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(range_base),
+        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
@@ -16064,6 +16138,11 @@ PTO_SHARED_INLINE void scalar(D &dst, S &src, typename S::DType value) {
   const size_t row = src.GetValidRow();
   typename S::DType scalar_value = value;
   asm("" : "+r"(scalar_value));
+  // Destination-only B.ASSEMBLE carries the MIDDLE/LAST session state.
+  static_assert(D::RegSrc == 0 || D::RegSrc == range::AutoRegSrc,
+                "TEPL _ASS with an explicit B.ASSEMBLE RegSrc selector is "
+                "not supported; use the default or *_at_reg plain forms");
+  const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -16072,11 +16151,15 @@ PTO_SHARED_INLINE void scalar(D &dst, S &src, typename S::DType value) {
       "B.IOT %[Src], mask=1111\n"
       "B.IOR [%[Scalar]],[]\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Type] "i"(type_traits<typename S::DType>::TypeCode),
         [Col] "r"(col), [Row] "r"(row), [Cols] "i"(S::Cols),
         [Src] "Tr"(src.data()), [Scalar] "r"(scalar_value),
-        [Opcode] "i"(Opcode), [Dst] "Tr"(dst.data())
+        [Opcode] "i"(Opcode), [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(range_base),
+        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
