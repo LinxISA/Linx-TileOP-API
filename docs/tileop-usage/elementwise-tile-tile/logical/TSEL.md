@@ -8,10 +8,14 @@
 当前 API 中可用的调用形式：
 
 ```cpp
-template <is_tile_data_v tile_shape>
-void TSEL(tile_shape &dst, tile_shape &predicate,
-          tile_shape &src_true);
-```
+template <is_tile_data_v tile_shape, is_tile_data_v mask_shape = tile_shape,
+          is_tile_data_v true_shape = tile_shape>
+void TSEL(tile_shape &dst, mask_shape &predicate, true_shape &src_true);
+``
+### 跨类型载体（PTO-ISA 0.58.6，pto-spec #260）
+
+src_true（数值源）可使用**等元素位宽、非打包 4-bit** 的异类型载体（对齐目的/操作类型校验），选中位按原始载体数据拷贝。predicate 是 predicate 载体（典型为 TCMP 产生的 U8 载体），**不做位宽校验**。`mask_shape`/`true_shape` 缺省为 `tile_shape`（同类型旧行为不变）。
+`
 
 ### 支持的数据类型
 

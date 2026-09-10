@@ -13,7 +13,8 @@ using Bias = Tile<Location::Bias, float, 8, 16,
                   BLayout::RowMajor, 1, 16>;
 
 using A128 = SharedMatrixLeft<float, 128, 64>;
-using B128 = SharedMatrixRight<float, 64, 32>;
+// Shared B declares its physical [N, K] shape (pto-spec #257): N=32, K=64.
+using B128 = SharedMatrixRight<float, 32, 64>;
 using C128 = CubeAccumulatorM32<float, 32, 32>;
 
 __attribute__((noinline)) void group_basic(C &c, A &a, B &b) {

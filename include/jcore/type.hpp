@@ -164,7 +164,13 @@ public:
 // SizeCode while data() exposes the canonical v1024i32-compatible payload.
 template <int LogicalBytes>
 struct linx_tile_carrier {
-  using RegisterType = uint32_t tile_size(1024);
+  // The on-object placeholder must cover the full logical tile capacity so
+  // that stores/loads of the Tile object (including stack spills) transfer
+  // the whole tile. The size is the logical capacity in 32-bit elements
+  // (128 B -> 32 .. 256 KB -> 65536); 1024 elements only covers 4 KB and
+  // silently truncated larger tiles (toolchain-build #14).
+  static constexpr unsigned kElements = LogicalBytes / 4;
+  using RegisterType = uint32_t tile_size(kElements);
   RegisterType Register;
 };
 

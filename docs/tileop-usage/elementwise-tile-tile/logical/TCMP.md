@@ -8,9 +8,14 @@
 当前 API 中可用的调用形式：
 
 ```cpp
-template <CmpMode Mode, is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1);
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+template <CmpMode Mode, is_tile_data_v tile_shape_out,
+          is_tile_data_v tile_shape_in0, is_tile_data_v tile_shape_in1 = tile_shape_in0>
+void TCMP(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1);
+te
+### 跨类型载体（PTO-ISA 0.58.6，pto-spec #260）
+
+两个源可使用**等元素位宽、非打包 4-bit** 的异类型载体（如 FP32 操作数用 U32 tile 承载）：源 backing 类型与操作类型分离，各自独立校验；精确同类型保持合法。打包容器（FP4X2/S4X2/U4X2）不参与重解释。`tile_shape_in1` 缺省为 `tile_shape_in0`（同类型旧行为不变）。
+mplate <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1);
 ```
 

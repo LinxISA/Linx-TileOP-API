@@ -160,6 +160,7 @@ void load_vector_cubes(float *data16, float *data32,
 
 - 省略 `B.DATR` 时使用该操作规定的默认编码；若显式提供该描述符，未使用的字段必须保持为零。
 - `LB0` 给出 `ValidCol`，必须存在且非零；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
+- `ValidRow`/`ValidCol` 为运行期（`DYNAMIC`）时，对应 `B.DIM` 使用寄存器源形式（`B.DIM <gpr>, 0, ->lbN`，RegSrc 为绝对 GPR 0..23），不使用立即数/压缩形式；仅静态维度使用 `C.B.DIMI`/立即数形式（ADR-BLOCK-0012 Decision 013/014）。每个 `LB0/LB1/LB2` 只写一次。
 - 省略 `B.IOR` 时使用本操作规定的寄存器或控制默认值；显式编码为零表示实际的零值，不等同于省略该描述符。
 
 `fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
