@@ -10115,15 +10115,17 @@ void TPRELU(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 template <is_tile_data_v tile_shape, is_tile_data_v mask_shape = tile_shape,
           is_tile_data_v true_shape = tile_shape>
 void TSEL(tile_shape &dst, mask_shape &mask, true_shape &true_src) {
+  // PTO-ISA #260: the equal-width reinterpretation rule applies to the
+  // NUMERIC sources (true/false payload). The mask is a predicate carrier
+  // (model-side TileStorage_Predicate, checked by TilePredicateValuesLegal)
+  // and is NOT width-checked against the operation type — the canonical
+  // usage is a U8-backed predicate produced by TCMP with any payload width.
   static_assert(
       tile_carrier_width_compatible(
-          type_traits<typename mask_shape::DType>::TypeCode,
-          type_traits<typename tile_shape::DType>::TypeCode) &&
-          tile_carrier_width_compatible(
-              type_traits<typename true_shape::DType>::TypeCode,
-              type_traits<typename tile_shape::DType>::TypeCode),
-      "TSEL cross-type carriers require equal element width and no packed "
-      "4-bit types (PTO-ISA #260)");
+          type_traits<typename true_shape::DType>::TypeCode,
+          type_traits<typename tile_shape::DType>::TypeCode),
+      "TSEL cross-type numeric sources require equal element width and no "
+      "packed 4-bit types (PTO-ISA #260)");
   static_assert(mask_shape::ValidRow == tile_shape::ValidRow &&
                     mask_shape::ValidCol == tile_shape::ValidCol &&
                     true_shape::ValidRow == tile_shape::ValidRow &&
