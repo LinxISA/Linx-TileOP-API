@@ -2,11 +2,12 @@
 
 using namespace pto;
 
-using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
-using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using Parent = CubeTileM32<float, 32, 64>;
+using Fragment = CubeTileM32<float, 32, 16>;
+using Result = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
 
 __attribute__((noinline)) void binary_region_sources(Parent &parent,
-                                                     Fragment &result) {
+                                                     Result &result) {
   auto fragments = TPARTVIEW<Fragment, 1, 4>(parent);
   auto lhs = fragments[0][1];
   auto rhs = fragments[0][2];
@@ -25,7 +26,7 @@ __attribute__((noinline)) void binary_region_sources(Parent &parent,
 
 int main() {
   Parent parent;
-  Fragment result;
+  Result result;
   binary_region_sources(parent, result);
   asm volatile("" : : "Tr"(result.data()));
   return 0;

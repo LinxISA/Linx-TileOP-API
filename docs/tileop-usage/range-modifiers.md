@@ -21,6 +21,13 @@ surface is `pto::range::subview(parent, base)` and
 `pto::range::assemble(parent, base)`. The lower-level `Subview` and `Assemble`
 carrier types remain available for unusual compile-time contracts.
 
+At the current PTO-ISA 0.58.6 authority, `B.SUBVIEW` is legal for an assigned
+**Local or Shared Matrix** parent (`Mat`, `Left`, `Right`, or `Acc`) using a
+persistent CUBE CELL layout. Shared sources attach to `B.IOS` and use the
+0.58.5+ per-PE offset semantics. RowMajor/ColMajor parents and
+`Location::Vec` parents (including Vec+CUBE) remain rejected at compile time.
+This restriction does not apply to a `B.ASSEMBLE` destination.
+
 ## Syntax and encoding
 
 | Field | B.SUBVIEW | B.ASSEMBLE |
@@ -49,8 +56,8 @@ The common case derives the range size from the tile type and does not require
 the caller to spell out a carrier type or size code:
 
 ```cpp
-using TileT = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
-using GM = global_tensor<float, RowMajor<4, 8>>;
+using TileT = CubeTileM16<float, 16, 16>;
+using GM = global_tensor<float, RowMajor<16, 16>>;
 
 TileT tile;
 GM gm;
@@ -145,13 +152,13 @@ factory；调用者填写字节长度而不是 ISA 编码。`RegSrc` 仅用于�
   use `zero` or compiler allocation and do not expose this field.
 
 ```cpp
-using Src = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
-using GM = global_tensor<float, RowMajor<4, 8>>;
+using Src = CubeTileM16<float, 16, 16>;
+using GM = global_tensor<float, RowMajor<16, 16>>;
 
 Src s;
 GM gm;
 auto zero_based = range::subview(s);
-TSTORE(gm, zero_based);  // B.SUBVIEW 0, zero, 0, 1
+TSTORE(gm, zero_based);  // source B.IOT; B.SUBVIEW 0, zero, 0, 4
 
 auto runtime_based = range::subview(s, base_units);
 TSTORE(gm, runtime_based); // compiler selects the encoded GPR
@@ -173,7 +180,7 @@ Explicit register selection is retained only for fixed ABI and encoding tests:
 
 ```cpp
 auto sv = range::subview_sized_at_reg<12, 2047, 23>(s, base_units);
-TSTORE(gm, sv);  // B.SUBVIEW 0, r23, 2047, 12
+TSTORE(gm, sv);  // source B.IOT; B.SUBVIEW 0, r23, 2047, 12
 ```
 
 ## `range::Assemble` — destination-side range carrier
@@ -337,19 +344,17 @@ in the disassembler (`<unknown>`).
 
 ## Shared Tile ranges
 
-Range carriers over a `SharedTile` parent bind through the Shared `B.IOS`
-binder instead of `B.IOT`, and expose `handle()` / `handle_ref()` instead of
-`data()`. The wrapper template arguments are identical; the base value is
-again passed to the constructor.
+`B.SUBVIEW` may modify a Shared binder in the 0.58.5+ contract. A
+`SharedTile` source passed to `range::subview` emits `B.IOS` followed
+immediately by `B.SUBVIEW`; the range base is resolved independently for each
+PE. `TPARTVIEW` remains Local-only until its multi-PE Shared array transport
+is implemented. `B.ASSEMBLE` may still bind a Shared destination through
+`B.IOS`.
 
 ```cpp
 using Local = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
 using Shared = SharedTile<Local>;
 using GM = global_tensor<float, RowMajor<4, 8>>;
-
-// Shared source emits B.IOS then B.SUBVIEW.
-auto view = range::subview<128, 3>(src, base_units);
-TSTORE(gm, view);  // B.IOS ... / B.SUBVIEW 0, <compiler-gpr>, 3, 1
 
 // Shared destination emits B.IOS then B.ASSEMBLE.
 auto assembled = range::assemble<128, 3>(dst, base_units);
@@ -361,14 +366,12 @@ SizeCode `1..12`) rather than the Local `B.IOT` `1..10` range.
 
 ## Lineage and status
 
-- **Implemented**: Local source `Subview` over `TSTORE` and Local
+- **Implemented**: Local Matrix+CUBE source `Subview` and Local
   destination `Assemble` over `TLOAD`, with zero-base and compiler-allocated
   runtime-base paths. LLVM MC round-trips every legal combination and rejects the
   illegal matrices (`v5-subview-assemble{-neg,-encoding}.s`).
-- **Implemented**: `SharedTile` range carriers through the Shared `B.IOS`
-  binder (`TLOAD`/`TSTORE` Shared overloads with an `Assemble`/`Subview`
-  operand), covered by `SharedRange.cpp` and the `RangeNegatives.cpp`
-  role-mismatch cases (`Subview` on a TLOAD destination and `Assemble` on a
-  TSTORE source are rejected).
+- **Implemented**: Shared source `Subview` through `B.IOS` and Shared
+  destination `Assemble` through `B.IOS`. RowMajor and Vec+CUBE source
+  `Subview` forms remain compile-negative tests.
 - Range modifiers do not change the PE-mask contract, the Tile size code,
   or the logical shape of the bound operand.

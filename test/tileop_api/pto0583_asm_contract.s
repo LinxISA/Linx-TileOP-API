@@ -36,8 +36,6 @@ B.IOT t#3, mask=1111, last, ->t<1KB>
 # adjacent to the binder and uses the binder's storage class and role.
 B.IOT t#4, mask=1111, last, ->t<1KB>
 B.SUBVIEW 0, a0, 0, 1
-B.IOS S1, mask=1111
-B.SUBVIEW 1, r23, 2047, 12
 B.IOS mask=1111, ->S2<1KB>
 B.ASSEMBLE 1, 0, zero, 100, 12
 B.ASSEMBLE 1, 0, a0, 100, 12

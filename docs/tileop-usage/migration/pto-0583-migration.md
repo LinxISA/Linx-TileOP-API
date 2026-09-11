@@ -34,6 +34,13 @@ content hashes.
 
 ## Range modifier interface
 
+PTO-ISA 0.58.4 introduced the source-side contract; 0.58.5/0.58.6 extend it
+to Shared `B.IOS` carriers:
+`B.SUBVIEW`/`TPARTVIEW` accepts only assigned Local Matrix Tiles at locations
+`Mat`, `Left`, `Right`, or `Acc`, with a CUBE CELL layout. Shared, RowMajor and
+Vec+CUBE parents must be migrated away from SUBVIEW and now fail at compile
+time. `B.ASSEMBLE` is destination-side and does not inherit this restriction.
+
 新版 `SUBVIEW/ASSEMBLE` 接口统一使用实际字节长度和 128B 单位地址参数：
 
 ```cpp

@@ -59,7 +59,7 @@ Assemble = destination 侧的范围描述
 无运行时基地址时：
 
 ```cpp
-void store_subview(GM &gm, TileT &tile) {
+void consume_subview(GM &gm, MatrixCubeTile &tile) {
   auto view = range::subview(tile);
   TSTORE(gm, view);
 }
@@ -74,7 +74,8 @@ B.SUBVIEW 0, zero, 0, <TileT::TilesizeCode>
 有运行时基地址时：
 
 ```cpp
-void store_subview(GM &gm, TileT &tile, uintptr_t base_units) {
+void consume_subview(GM &gm, MatrixCubeTile &tile,
+                     uintptr_t base_units) {
   auto view = range::subview(tile, base_units);
   TSTORE(gm, view);
 }
@@ -83,14 +84,14 @@ void store_subview(GM &gm, TileT &tile, uintptr_t base_units) {
 编译器为 `base_units` 分配一个可用 GPR，并把同一个寄存器写入 `B.SUBVIEW`：
 
 ```asm
-B.SUBVIEW 0, <allocated-gpr>, 0, <TileT::TilesizeCode>
+B.SUBVIEW 0, <allocated-gpr>, 0, <MatrixCubeTile::TilesizeCode>
 ```
 
 各个参数的含义如下：
 
 | 参数 | 如何填写 | 含义 |
 | --- | --- | --- |
-| `tile` | 要写回的 Local/Shared Tile | 被描述的 source Tile，不会被复制 |
+| `tile` | Local/Shared Matrix+CUBE Tile | 被描述的 source Tile，不会被复制；Shared 使用 `B.IOS`，RowMajor、Vec+CUBE 均非法 |
 | `base_units` | 可选的运行时 128B 单位基址值 | 不填时使用 `zero`；填写时由编译器自动分配 GPR；寄存器值按 128B 计数 |
 | `LengthBytes` | 可省略 | 实际范围长度；省略时使用 parent Tile 容量，自动转换为 `SubviewSizeCode` |
 | `OffsetUnits` | 默认是 `0` | 编码到 `B.SUBVIEW` 的 `uimm11` 立即数，单位为 128B，范围 `0..2047` |
@@ -299,17 +300,15 @@ TLOAD(destination_view, gm);
 
 ## Local 与 Shared
 
-Local Tile carrier 通过 `B.IOT` 绑定，Shared Tile carrier 通过 `B.IOS` 绑定：
+`B.SUBVIEW` 允许 assigned Local 或 Shared Matrix+CUBE source。Local source
+通过 `B.IOT` 绑定，Shared source 通过 `B.IOS` 绑定并遵循 0.58.5+ 的逐 PE
+range-base 语义。`B.ASSEMBLE` 是独立的 destination contract，仍可通过
+`B.IOS` 绑定 Shared destination：
 
 ```cpp
 using LocalTile = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
 using SharedTileT = SharedTile<LocalTile>;
 using GM = global_tensor<float, RowMajor<4, 8>>;
-
-void shared_source(GM &gm, SharedTileT &shared, uintptr_t base_units) {
-  auto view = range::subview(shared, base_units);
-  TSTORE(gm, view);  // B.IOS ... / B.SUBVIEW ...
-}
 
 void shared_destination(GM &gm, SharedTileT &shared, uintptr_t base_units) {
   auto destination = range::assemble(shared, base_units);
@@ -317,7 +316,8 @@ void shared_destination(GM &gm, SharedTileT &shared, uintptr_t base_units) {
 }
 ```
 
-Shared carrier 使用 Shared handle，不提供 Local Tile 的普通 `data()` 语义。
+Shared `Subview`/`Assemble` carrier 使用 Shared handle，不提供 Local Tile 的普通
+`data()` 语义。
 不要把 `Subview` 用在 destination，也不要把 `Assemble` 用在 source；这两种
 角色错误应在编译期被拒绝。
 
@@ -353,8 +353,8 @@ region、PE mask 或 Tile size contract。若这些属性本身不满足消费�
 `TPARTVIEW` 和 `TASSEMBLY` 适合 parent Tile 的连续分区场景：
 
 ```cpp
-using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
-using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using Parent = CubeTileM32<float, 32, 64>;
+using Fragment = CubeTileM32<float, 32, 16>;
 
 Parent parent;
 auto parts = TPARTVIEW<Fragment, 1, 4>(parent);
@@ -397,8 +397,8 @@ auto TPARTVIEW(Parent &parent)
 例如将 `32 x 64` 的 Tile 按列切成四个 `32 x 16` 的 fragment：
 
 ```cpp
-using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
-using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using Parent = CubeTileM32<float, 32, 64>;
+using Fragment = CubeTileM32<float, 32, 16>;
 
 Parent parent;
 auto parts = TPARTVIEW<Fragment, 1, 4>(parent);
@@ -645,10 +645,10 @@ TileArray 的 parent 和 fragment 必须匹配：
 - physical shape 与 valid shape 完整覆盖；
 - 每个 fragment 的容量必须是 128 B 的整数倍。
 
-当前 TileOP region inline-asm producer 的已验证范围仍是
-`RowMajor + NoneBox`。因此上面的 M16/M32 类型示例目前用于类型和分区合同验证，
-不能据此宣称 `TROWMAX`、`TMULS`、`TEXP` 或所有 TileOP 已经支持 Cube region
-inline asm。Cube region 的 CELL 顺序、offset 和 producer 汇编需要单独完成并验证。
+`B.SUBVIEW` parent 必须是 Local 或 Shared Matrix+CUBE；region
+inline-asm source fixtures 使用 M16/M32 类型验证 CELL offset 和 binder adjacency；
+destination `B.ASSEMBLE` 不继承这一 source 限制，仍按目标算子的 layout contract
+选择类型。
 
 ### 当前 inline-asm 的 range 计算
 

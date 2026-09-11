@@ -1,4 +1,4 @@
-// PTO-ISA 0.58.4 ADR-0098 Shared range modifier coverage.
+// PTO-ISA 0.58.5+ Shared per-PE range modifier coverage.
 // Shared source uses B.IOS followed immediately by B.SUBVIEW; Shared
 // destination uses B.IOS followed immediately by B.ASSEMBLE.
 

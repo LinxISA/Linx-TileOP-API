@@ -7,6 +7,39 @@
 
 namespace pto {
 
+// PTO-ISA GMOVTypeLegal. Keep this based on architectural TypeCode values,
+// not C++ sizeof: several packed formats use an 8-bit carrier but have their
+// own legal GMOV encodings.
+constexpr bool is_gmov_type_code(int type_code) {
+  switch (type_code) {
+  case __type_fp32:
+  case __type_tf32:
+  case __type_hf32:
+  case __type_fp16:
+  case __type_bf16:
+  case __type_hif8:
+  case __type_fp8_e4m3:
+  case __type_fp8_e5m2:
+  case __type_fp6_e3m2:
+  case __type_fp5_e2m3:
+  case __type_fp4_e2m1x2:
+  case __type_fp4_e1m2x2:
+  case __type_fp8_e8m0:
+  case __type_fp4_hif4x2:
+  case __type_int32:
+  case __type_int16:
+  case __type_int8:
+  case __type_int4x2:
+  case __type_uint32:
+  case __type_uint16:
+  case __type_uint8:
+  case __type_uint4x2:
+    return true;
+  default:
+    return false;
+  }
+}
+
 /// comparison predicates
 /// 
 /// Example usage:
@@ -1989,6 +2022,38 @@ constexpr std::size_t subview_bytes_for_size_code(unsigned code) {
              : 0;
 }
 
+constexpr bool is_matrix_location(Location loc) {
+  return loc == Location::Mat || loc == Location::Left ||
+         loc == Location::Right || loc == Location::Acc;
+}
+
+template <typename Parent, bool IsShared = is_shared_tile<Parent>::value>
+struct subview_parent_location {
+  static constexpr Location value = Parent::Loc;
+};
+template <typename Parent>
+struct subview_parent_location<Parent, true> {
+  static constexpr Location value = Parent::Role;
+};
+
+// PTO-ISA BundleRangeSubviewLegal: B.SUBVIEW is defined for an assigned
+// Local or Shared Matrix operand using persistent CUBE CELL storage.  The
+// Shared form is the 0.58.5+ B.IOS carrier form; Vec and RowMajor carriers
+// remain illegal.
+template <typename Parent, typename = void>
+struct is_legal_subview_parent : std::false_type {};
+
+template <typename Parent>
+struct is_legal_subview_parent<
+    Parent, std::void_t<decltype(Parent::Loc), decltype(Parent::IsCubeLayout)>>
+    : std::bool_constant<
+          is_matrix_location(subview_parent_location<Parent>::value) &&
+          Parent::IsCubeLayout> {};
+
+template <typename Parent>
+inline constexpr bool is_legal_subview_parent_v =
+    is_legal_subview_parent<Parent>::value;
+
 /// Source-side range carrier. Forwards every tile-shaped static member of
 /// Parent so it can be bound as a Local operand; the B.SUBVIEW line is
 /// emitted after the source binder by the consuming operation.
@@ -2001,6 +2066,9 @@ constexpr std::size_t subview_bytes_for_size_code(unsigned code) {
 template <typename Parent, unsigned SubviewSizeCode_, unsigned OffsetUnits_ = 0,
           unsigned RegSrc_ = 2>
 class Subview {
+  static_assert(is_legal_subview_parent_v<Parent>,
+                "B.SUBVIEW parent must be an assigned Local Matrix Tile with "
+                "a CUBE layout");
   static_assert(is_valid_subview_size_code(SubviewSizeCode_),
                 "B.SUBVIEW SubviewSizeCode must be 1..12 (128B..256KB per PE)");
   static_assert(is_valid_uimm11(OffsetUnits_),
@@ -2046,22 +2114,16 @@ public:
   Subview(Parent &parent, uintptr_t range_base = 0)
       : ParentValue(parent), RangeBaseValue(range_base) {}
 
-  // A range carrier over an ordinary Local Tile binds through data(); a
-  // carrier over a SharedTile binds through handle() (Shared uses the B.IOS
-  // binder with the compiler's dedicated S register constraint, and has no
-  // conventional data()).
+  // Local sources bind through data(); Shared sources bind through their
+  // opaque S-register handle and are emitted as B.IOS by the consumer.
   decltype(auto) data()
-      requires(!is_shared_tile_v<Parent>) {
-    return ParentValue.data();
-  }
+      requires(!is_shared_tile_v<Parent>) { return ParentValue.data(); }
+  decltype(auto) data() const
+      requires(!is_shared_tile_v<Parent>) { return ParentValue.data(); }
   unsigned long handle()
-      requires(is_shared_tile_v<Parent>) {
-    return ParentValue.handle();
-  }
-  unsigned long &handle_ref()
-      requires(is_shared_tile_v<Parent>) {
-    return ParentValue.handle_ref();
-  }
+      requires(is_shared_tile_v<Parent>) { return ParentValue.handle(); }
+  unsigned long handle() const
+      requires(is_shared_tile_v<Parent>) { return ParentValue.handle(); }
 
   int GetValidRow() const { return ParentValue.GetValidRow(); }
   int GetValidCol() const { return ParentValue.GetValidCol(); }
@@ -2140,7 +2202,15 @@ public:
       requires(!is_shared_tile_v<Parent>) {
     return ParentValue.data();
   }
+  decltype(auto) data() const
+      requires(!is_shared_tile_v<Parent>) {
+    return ParentValue.data();
+  }
   unsigned long handle()
+      requires(is_shared_tile_v<Parent>) {
+    return ParentValue.handle();
+  }
+  unsigned long handle() const
       requires(is_shared_tile_v<Parent>) {
     return ParentValue.handle();
   }
@@ -2162,6 +2232,7 @@ private:
 // the wrapped tile and keeps the descriptor details out of the call site.
 template <std::size_t LengthBytes_ = 0, unsigned OffsetUnits_ = 0,
           typename Parent>
+  requires(is_legal_subview_parent_v<Parent>)
 auto subview(Parent &parent)
     -> Subview<Parent,
                subview_size_code_for_bytes(
@@ -2178,6 +2249,7 @@ auto subview(Parent &parent)
 
 template <std::size_t LengthBytes_ = 0, unsigned OffsetUnits_ = 0,
           typename Parent>
+  requires(is_legal_subview_parent_v<Parent>)
 auto subview(Parent &parent, uintptr_t range_base_units)
     -> Subview<Parent,
                subview_size_code_for_bytes(
@@ -2193,12 +2265,14 @@ auto subview(Parent &parent, uintptr_t range_base_units)
 }
 
 template <unsigned SubviewSizeCode_, typename Parent>
+  requires(is_legal_subview_parent_v<Parent>)
 auto subview_sized(Parent &parent)
     -> Subview<Parent, SubviewSizeCode_, 0, 0> {
   return {parent, 0};
 }
 
 template <unsigned SubviewSizeCode_, typename Parent>
+  requires(is_legal_subview_parent_v<Parent>)
 auto subview_sized(Parent &parent, uintptr_t range_base)
     -> Subview<Parent, SubviewSizeCode_, 0, AutoRegSrc> {
   return {parent, range_base};
@@ -2253,30 +2327,35 @@ PTO_DEFINE_ASSEMBLE_FACTORY(assemble_last, false, true)
 
 // Compatibility aliases for callers using the earlier *_at spelling.
 template <unsigned Offset_, typename Parent>
+  requires(is_legal_subview_parent_v<Parent>)
 auto subview_at(Parent &parent)
     -> decltype(subview<0, Offset_>(parent)) {
   return subview<0, Offset_>(parent);
 }
 
 template <unsigned Offset_, typename Parent>
+  requires(is_legal_subview_parent_v<Parent>)
 auto subview_at(Parent &parent, uintptr_t range_base)
     -> decltype(subview<0, Offset_>(parent, range_base)) {
   return subview<0, Offset_>(parent, range_base);
 }
 
 template <unsigned SubviewSizeCode_, unsigned Offset_, typename Parent>
+  requires(is_legal_subview_parent_v<Parent>)
 auto subview_sized_at(Parent &parent)
     -> Subview<Parent, SubviewSizeCode_, Offset_, 0> {
   return {parent, 0};
 }
 
 template <unsigned SubviewSizeCode_, unsigned Offset_, typename Parent>
+  requires(is_legal_subview_parent_v<Parent>)
 auto subview_sized_at(Parent &parent, uintptr_t range_base)
     -> Subview<Parent, SubviewSizeCode_, Offset_, AutoRegSrc> {
   return {parent, range_base};
 }
 
 template <unsigned Offset_, unsigned RegSrc_, typename Parent>
+  requires(is_legal_subview_parent_v<Parent>)
 auto subview_at_reg(Parent &parent, uintptr_t range_base = 0)
     -> Subview<Parent, Parent::TilesizeCode, Offset_, RegSrc_> {
   return {parent, range_base};
@@ -2284,6 +2363,7 @@ auto subview_at_reg(Parent &parent, uintptr_t range_base = 0)
 
 template <unsigned SubviewSizeCode_, unsigned Offset_, unsigned RegSrc_,
           typename Parent>
+  requires(is_legal_subview_parent_v<Parent>)
 auto subview_sized_at_reg(Parent &parent, uintptr_t range_base = 0)
     -> Subview<Parent, SubviewSizeCode_, Offset_, RegSrc_> {
   return {parent, range_base};

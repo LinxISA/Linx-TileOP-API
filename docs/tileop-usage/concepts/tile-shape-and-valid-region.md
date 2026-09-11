@@ -24,8 +24,8 @@ using VecTileM32 = Tile<Location::Vec, T, R, C, BLayout::CubeM32>;
 对于需要按连续区域处理一个 parent Tile 的算法，可以使用 TileOP 的分区接口：
 
 ```cpp
-using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
-using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using Parent = CubeTileM32<float, 32, 64>;
+using Fragment = CubeTileM32<float, 32, 16>;
 
 Parent parent;
 auto parts = TPARTVIEW<Fragment, 1, 4>(parent);
@@ -37,8 +37,9 @@ auto slot = output[0][j];
 
 `TPARTVIEW` 返回 parent 的借用分区视图，不复制 parent Tile；`j` 可以是运行时
 索引。分区维度、布局、dtype、物理 shape、valid shape 和 byte coverage 在编译期
-检查。当前 inline-asm 快速路径要求 Local、rank-2、连续 RowMajor、编译期固定的
-分区尺寸。
+PTO-ISA 0.58.6 要求 `TPARTVIEW` parent 是 Local Matrix+CUBE；Shared、
+RowMajor 和 Vec+CUBE parent 均不合法。该 source 限制不适用于 `TASSEMBLY` 的
+destination。
 
 `TileArray<SubTile, Rows, Cols>` 是组装过程中的二维 slot 容器，`array[row][col]`
 返回 `TileArrayOutputRef<SubTile>`。slot 通常作为写入型 TileOP 的 destination，

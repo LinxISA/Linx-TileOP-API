@@ -3,8 +3,9 @@
 
 using namespace pto;
 
-using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
-using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using Parent = CubeTileM32<float, 32, 64>;
+using Fragment = CubeTileM32<float, 32, 16>;
+using ResultFragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
 using RowState =
     Tile<Location::Vec, float, 32, 8, BLayout::RowMajor, 32, 1>;
 using ProbabilityFragment = TileLeft<__bf16, 32, 16>;
@@ -15,7 +16,7 @@ tile_region_inline_asm(Parent &parent, Fragment &normalized, int index) {
   auto parts = TPARTVIEW<Fragment, 1, 4>(parent);
   SubTileView<Parent, Fragment> source = parts[0][index];
 
-  Fragment scaled;
+  ResultFragment scaled;
   RowState row_max;
   TMULS(scaled, source, 0.125f);
   TROWMAX(row_max, source);

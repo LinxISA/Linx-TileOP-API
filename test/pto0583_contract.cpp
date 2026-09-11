@@ -13,6 +13,39 @@ static_assert(is_valid_pe_mask(15));
 static_assert(!is_valid_pe_mask(3));
 static_assert(!is_valid_pe_mask(5));
 static_assert(pe_mode_from_mask(15) == 7);
+static_assert(is_valid_gmov_pe_mask(3));
+static_assert(is_valid_gmov_pe_mask(5));
+static_assert(is_valid_gmov_pe_mask(10));
+static_assert(is_valid_gmov_pe_mask(13));
+static_assert(is_valid_gmov_pe_mask(15));
+static_assert(!is_valid_gmov_pe_mask(0));
+static_assert(!is_valid_gmov_pe_mask(16));
+
+static_assert(!is_gmov_type_code(__type_fp64));
+static_assert(is_gmov_type_code(__type_fp32));
+static_assert(is_gmov_type_code(__type_tf32));
+static_assert(is_gmov_type_code(__type_hf32));
+static_assert(is_gmov_type_code(__type_fp16));
+static_assert(is_gmov_type_code(__type_bf16));
+static_assert(is_gmov_type_code(__type_hif8));
+static_assert(is_gmov_type_code(__type_fp8_e4m3));
+static_assert(is_gmov_type_code(__type_fp8_e5m2));
+static_assert(is_gmov_type_code(__type_fp6_e3m2));
+static_assert(is_gmov_type_code(__type_fp5_e2m3));
+static_assert(is_gmov_type_code(__type_fp4_e2m1x2));
+static_assert(is_gmov_type_code(__type_fp4_e1m2x2));
+static_assert(is_gmov_type_code(__type_fp8_e8m0));
+static_assert(is_gmov_type_code(__type_fp4_hif4x2));
+static_assert(!is_gmov_type_code(__type_int64));
+static_assert(is_gmov_type_code(__type_int32));
+static_assert(is_gmov_type_code(__type_int16));
+static_assert(is_gmov_type_code(__type_int8));
+static_assert(is_gmov_type_code(__type_int4x2));
+static_assert(!is_gmov_type_code(__type_uint64));
+static_assert(is_gmov_type_code(__type_uint32));
+static_assert(is_gmov_type_code(__type_uint16));
+static_assert(is_gmov_type_code(__type_uint8));
+static_assert(is_gmov_type_code(__type_uint4x2));
 
 static_assert(static_cast<unsigned>(LayoutCvtEnum::ND2M32) == 21);
 static_assert(static_cast<unsigned>(LayoutCvtEnum::ND2M16) == 22);
@@ -31,6 +64,15 @@ using NarrowRow = Tile<Location::Vec, float, 2, 1,
 using VecM16 = VecTileM16<float, 16, 32>;
 using VecM16Partial = VecTileM16<float, 8, 32, 7, 31>;
 using VecM32 = VecTileM32<float, 32, 32>;
+using RowMajorMatrix =
+    Tile<Location::Left, float, 16, 32, BLayout::RowMajor>;
+using SharedCubeMatrix = SharedTile<M16>;
+static_assert(range::is_legal_subview_parent_v<M16>);
+static_assert(range::is_legal_subview_parent_v<M32>);
+static_assert(range::is_legal_subview_parent_v<N8>);
+static_assert(!range::is_legal_subview_parent_v<VecM16>);
+static_assert(!range::is_legal_subview_parent_v<RowMajorMatrix>);
+static_assert(range::is_legal_subview_parent_v<SharedCubeMatrix>);
 static_assert(M16::CubeCellBytes == 128);
 static_assert(M16::CubeRequiredBytes == 2048);
 static_assert(M16Partial::CubeRequiredBytes == 2048);
@@ -77,9 +119,11 @@ static_assert(Local256K::IsValidActiveSize);
 static_assert(tile_type_traits<typename Shared256K::TileDType>::
                   IsValidSharedActiveSize);
 #ifdef __linx
-static_assert(sizeof(typename M16::TileDType) == 4096);
-static_assert(sizeof(typename M16::TileDType::RegisterType) == 4096);
-static_assert(sizeof(typename Local64K::TileDType) == 4096);
+static_assert(sizeof(typename M16::TileDType) == M16::LogicalTileBytes);
+static_assert(sizeof(typename M16::TileDType::RegisterType) ==
+              M16::LogicalTileBytes);
+static_assert(sizeof(typename Local64K::TileDType) ==
+              Local64K::LogicalTileBytes);
 static_assert(M16::LogicalTileBytes == 2048);
 static_assert(tile_type_traits<typename M16::TileDType>::TilesizeCode ==
               __tilesize_2KB);
