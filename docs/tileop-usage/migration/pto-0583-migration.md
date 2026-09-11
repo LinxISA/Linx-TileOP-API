@@ -6,6 +6,12 @@ standard release `v0.58.3` at commit `e599a3d36ebfad43362ff591ea5e128816c684c7`.
 The generated contract records both repositories' exact commits, trees, and
 content hashes.
 
+This is a historical migration document. The range-modifier section also
+describes the later 0.58.4--0.58.6 extensions and is not limited to the
+original 0.58.3 release. For current range-modifier legality, use the
+`PTO-ISA/pto-spec` `main` contract; this text was checked against commit
+`ab6d11c740e13c2d9cddea4af72cd25ccca3e6b2`.
+
 ## Source changes
 
 - The semantic engine inventory is exactly 31 VEC, 56 SFU, 10 TLSU, and 12
@@ -34,12 +40,22 @@ content hashes.
 
 ## Range modifier interface
 
-PTO-ISA 0.58.4 introduced the source-side contract; 0.58.5/0.58.6 extend it
-to Shared `B.IOS` carriers:
-`B.SUBVIEW`/`TPARTVIEW` accepts only assigned Local Matrix Tiles at locations
-`Mat`, `Left`, `Right`, or `Acc`, with a CUBE CELL layout. Shared, RowMajor and
-Vec+CUBE parents must be migrated away from SUBVIEW and now fail at compile
-time. `B.ASSEMBLE` is destination-side and does not inherit this restriction.
+PTO-ISA 0.58.4 introduced the source-side contract; 0.58.5/0.58.6 extend the
+low-level contract to Shared `B.IOS` carriers. `B.SUBVIEW`/`range::subview`
+accepts assigned Local or Shared Matrix+CUBE parents at locations `Mat`,
+`Left`, `Right`, or `Acc`; Shared sources use the `B.IOS` carrier and the
+per-PE range-base semantics. RowMajor and Vec+CUBE source parents remain
+illegal.
+
+The high-level `TPARTVIEW` API is narrower in the current implementation: it
+accepts Local Matrix+CUBE parents only. Shared parents must not be described as
+supported `TPARTVIEW` inputs; the Shared `TPARTVIEW` form remains a compile-time
+negative case. This distinction is important because Shared `range::subview`
+support does not imply Shared high-level array transport.
+
+`B.ASSEMBLE` is destination-side and does not inherit the `B.SUBVIEW` source
+restriction. It may be used with Local `B.IOT` or Shared `B.IOS` destinations,
+subject to the destination operation and size-code contract.
 
 新版 `SUBVIEW/ASSEMBLE` 接口统一使用实际字节长度和 128B 单位地址参数：
 
