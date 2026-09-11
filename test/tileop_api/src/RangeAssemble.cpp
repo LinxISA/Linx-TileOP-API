@@ -34,7 +34,11 @@ __attribute__((noinline)) void assemble_dest_tload(
 }
 
 __attribute__((noinline)) void assemble_ass_tload(GMDst &src, MaxDst &d) {
-  auto as = range::assemble(d);
+  // The INIT slot is written by the plain allocating TLOAD; TLOAD_ASS only
+  // consumes a non-INIT (middle/last) carrier of the same parent.
+  auto init = range::assemble(d);
+  TLOAD(init, src);
+  auto as = range::assemble_last(d);
   TLOAD_ASS(as, src); // Existing Local tile is a B.IOT source.
 }
 
@@ -51,7 +55,7 @@ __attribute__((noinline)) void assemble_size0_tload(
     GMDst &src, Dst &d) {
   range::Assemble<Dst, 0, /*INIT*/ false, /*LAST*/ true, /*Off*/ 2047,
                   /*RegSrc*/ 2> as(d, 2);
-  TLOAD(as, src); // -> B.ASSEMBLE 0, 1, 2, 2047, 0
+  TLOAD_ASS(as, src); // non-INIT slot: no B.ASSEMBLE emission
 }
 
 // The factory derives the INIT parent size from Dst for the common case.
@@ -69,7 +73,7 @@ __attribute__((noinline)) void assemble_factory_runtime_tload(
 
 __attribute__((noinline)) void assemble_factory_offset_tload(
     GMDst &src, Dst &d, uintptr_t base_units) {
-  auto as = range::assemble<128, 3>(d, base_units);
+  auto as = range::assemble<1, 3>(d, base_units);
   TLOAD(as, src); // -> B.ASSEMBLE 1, 0, <allocated-gpr>, 3, 1
 }
 
@@ -81,21 +85,22 @@ __attribute__((noinline)) void assemble_factory_init_last_tload(
 
 __attribute__((noinline)) void assemble_factory_middle_tload(
     GMDst &src, Dst &d, uintptr_t base_units) {
-  auto as = range::assemble_middle<128, 3>(d, base_units);
-  TLOAD(as, src); // -> B.ASSEMBLE 0, 0, <allocated-gpr>, 3, 0
+  // Non-INIT slots are consumed by TLOAD_ASS (no B.ASSEMBLE emission).
+  auto as = range::assemble_middle<1, 3>(d, base_units);
+  TLOAD_ASS(as, src);
 }
 
 __attribute__((noinline)) void assemble_factory_last_tload(
     GMDst &src, Dst &d) {
   auto as = range::assemble_last_at<2047>(d);
-  TLOAD(as, src); // -> B.ASSEMBLE 0, 1, zero, 2047, 0
+  TLOAD_ASS(as, src);
 }
 
 // Explicit register selection remains a low-level ABI/testing interface.
 __attribute__((noinline)) void assemble_factory_explicit_reg_tload(
     GMDst &src, Dst &d) {
   auto as = range::assemble_last_at_reg<3, 23>(d, 23);
-  TLOAD(as, src); // -> B.ASSEMBLE 0, 1, r23, 3, 0
+  TLOAD_ASS(as, src);
 }
 
 void use(void *) {}

@@ -85,12 +85,14 @@ byte length and an optional compile-time offset measured in 128-byte units:
 
 ```cpp
 auto full_tile = range::subview(tile);                // default length, offset 0
-auto sized = range::subview<128>(tile, base_units);   // 128 B, offset 0
-auto shifted = range::subview<128, 3>(tile, base_units);
-auto destination = range::assemble<128, 3>(tile, base_units);
+auto sized = range::subview<1>(tile, base_units);     // 128 B (1 unit), offset 0
+auto shifted = range::subview<1, 3>(tile, base_units);
+auto destination = range::assemble<1, 3>(tile, base_units);
 ```
 
-`LengthBytes` must be one of `128`, `256`, `512`, `1*1024`, ..., `256*1024`, and
+`LengthUnits`/`OffsetUnits` 都以 128 B 为单位（与编码的 uimm11 粒度一致）。
+`LengthUnits` must be one of `1`, `2`, `4`, ..., `2048`（128 B × 2 的幂，即
+128 B..256 KiB），and
 must not exceed `tile::LogicalTileBytes`. The factory converts it to the ISA
 `SubviewSizeCode` or INIT `ParentSizeCode` automatically and rejects invalid or
 oversized values at compile time.
@@ -141,8 +143,8 @@ class Subview;
 ```
 
 `Subview` 是底层 carrier 类型。普通 kernel 应优先使用统一的
-`range::subview<LengthBytes = tile capacity, OffsetUnits = 0>(tile [, base_units])`
-factory；调用者填写字节长度而不是 ISA 编码。`RegSrc` 仅用于固定 ABI 或编码测试，
+`range::subview<LengthUnits = tile capacity, OffsetUnits = 0>(tile [, base_units])`
+factory；调用者以 128 B 单位填写分片长度和偏移，而不是 ISA 编码。`RegSrc` 仅用于固定 ABI 或编码测试，
 运行时 base 的高层接口不会暴露寄存器编号。
 
 - `SubviewSizeCode` must be `1..12`; the high-level factory derives it from
@@ -171,9 +173,9 @@ The high-level API does not expose `RegSrc`:
 ```cpp
 range::subview(s);                    // zero base
 range::subview(s, base_units);         // compiler-allocated GPR
-range::subview<128>(s);                 // 128 B, zero + offset 0
-range::subview<128>(s, base_units);     // 128 B, runtime base + offset 0
-range::subview<128, 3>(s, base_units);  // 128 B, runtime base + 384 B
+range::subview<1>(s);                   // 128 B (1 unit), zero + offset 0
+range::subview<1>(s, base_units);       // 128 B, runtime base + offset 0
+range::subview<1, 3>(s, base_units);    // 128 B, runtime base + 384 B
 ```
 
 Explicit register selection is retained only for fixed ABI and encoding tests:
@@ -196,7 +198,7 @@ class Assemble;
 - `OffsetUnits` is `0..2047` and is measured in 128-byte units.
 - `RegSrc` is a low-level field. Public factories use `zero` when no
   `base_units` is supplied, or let the compiler allocate a GPR when it is.
-- INIT helpers derive `ParentSizeCode` from `LengthBytes`; MIDDLE/LAST encode
+- INIT helpers derive `ParentSizeCode` from `LengthUnits`; MIDDLE/LAST encode
   the ISA-required value `0`.
 
 ```cpp
@@ -236,6 +238,11 @@ TFMA_ASS(assembled, a, b, c);
 `range::assemble_middle` 和 `range::assemble_last`）。这些字段描述关联关系；
 TEPL `_ASS` 只消费该 carrier 的现有 parent register。不能把普通 Tile 直接作为
 TEPL `*_ASS` 的 destination，也不能把 `range::subview` 当作 destination。
+
+**接口选择约束**（编译期 `static_assert` 强制）：session 的 INIT slot 必须用
+普通分配型接口（`TLOAD` 等）写入，后续 MIDDLE/LAST slot 才用 `_ASS` 追加——
+`_ASS` 收到 INIT carrier、或普通 `TLOAD` 收到非 INIT carrier 都会被拒绝。
+详见开发者指南的"INIT slot 与后续 slot 的接口选择约束"。
 
 ### 接口形式
 

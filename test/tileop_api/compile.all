@@ -31,7 +31,7 @@ ACTIVE_FIXTURES=(
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs
   TAdd_mask TAdd TAdds TAnd TeplAss TeplAssSpecial TLoad TStore TCvt TDiv TDivs TExp TMax TMaxs
   TMov GMov TMul TMuls TOr TRecip TRem TRowMax TRowSum TSqrt TSub TSubs TTrans
-  RangeSubview RangeAssemble TileArray TileArrayCube TileArrayAssemblyOffsets TileArrayRegionAsm TileRegionUnaryAssembly TileRegion TileRegionUnary TileRegionBinary TileRegionBinaryAssembly TileRegionUnarySubviewAssembly TileRegionScalarAssembly TileRegionTCVTSubviewAssembly TileRegionCubeSubview
+  RangeSubview RangeAssemble SharedRange TileRegionSharedSubview TileArray TileArrayCube TileArrayAssemblyOffsets TileArrayRegionAsm TileRegionUnaryAssembly TileRegion TileRegionUnary TileRegionBinary TileRegionBinaryAssembly TileRegionUnarySubviewAssembly TileRegionScalarAssembly TileRegionTCVTSubviewAssembly TileRegionCubeSubview
   ValidShapeImmediate ValidShapePerDim ValidShapePerDimSweep CoopGroupMOverloads CubeInternalAcc TSELCanonical
 )
 

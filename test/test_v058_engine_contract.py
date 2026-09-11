@@ -136,8 +136,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_tcvt_emits_dimensions_before_terminating_iot(self) -> None:
         tcvt = re.search(
-            r'(?s)template <is_tile_data_v tile_shape_out, '
-            r'is_tile_data_v tile_shape_in>\n'
+            r'(?s)template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,'
+            r'\s*is_tile_data_v tile_shape_in>\n'
             r'void TCVT_T\(.*?\n}\n\n\n// PTO ISA 0.58 generic Local-to-Local TMOV',
             self.header,
         )
@@ -146,7 +146,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         ordinary_branch = carrier.split('} else {', 1)[1]
         for instruction in (
                 '"BSTART.TEPL 27, %D1\\n"',
-                '"B.DATR %D2, RNONE\\n"',
+                '".if %c[RMode] == 0\\nB.DATR %D2, RNONE\\n"',
                 '"B.DIM zero, %c5, ->lb0\\n"',
                 '"B.DIM zero, %c6, ->lb1\\n"',
                 '"B.DIM zero, %c7, ->lb2\\n"',
@@ -155,8 +155,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_tcvt_cube_layout_closure_uses_destination_tsize(self) -> None:
         tcvt = re.search(
-            r'(?s)template <is_tile_data_v tile_shape_out, '
-            r'is_tile_data_v tile_shape_in>\n'
+            r'(?s)template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,'
+            r'\s*is_tile_data_v tile_shape_in>\n'
             r'void TCVT_T\(.*?\n}\n\n\n// PTO ISA 0.58 generic Local-to-Local TMOV',
             self.header,
         )
@@ -181,18 +181,18 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
                     "RangeAssemble.cpp").read_text(encoding="utf-8")
         self.assertIn("auto sv = range::subview(s);", tile)
         self.assertIn("auto sv = range::subview(s, base_units);", tile)
-        self.assertIn("auto sv = range::subview<128, 3>(s);", tile)
-        self.assertIn("auto sv = range::subview<128, 3>(s, base_units);", tile)
+        self.assertIn("auto sv = range::subview<1, 3>(s);", tile)
+        self.assertIn("auto sv = range::subview<1, 3>(s, base_units);", tile)
         self.assertIn("auto sv = range::subview_at_reg<3, 23>(s, 23);", tile)
         self.assertIn("auto as = range::assemble(d);", assemble)
         self.assertIn("auto as = range::assemble(d, base_units);", assemble)
-        self.assertIn("auto as = range::assemble<128, 3>(d, base_units);", assemble)
+        self.assertIn("auto as = range::assemble<1, 3>(d, base_units);", assemble)
         self.assertIn("auto as = range::assemble_last_at<2047>(d);", assemble)
         self.assertIn("auto as = range::assemble_init_last(d);", assemble)
-        self.assertIn("auto as = range::assemble_middle<128, 3>(d, base_units);", assemble)
+        self.assertIn("auto as = range::assemble_middle<1, 3>(d, base_units);", assemble)
         self.assertIn("auto as = range::assemble_last_at_reg<3, 23>(d, 23);", assemble)
         self.assertIn("auto subview(Parent &parent", tile_header)
-        self.assertIn("LengthBytes_ = 0, unsigned OffsetUnits_ = 0", tile_header)
+        self.assertIn("LengthUnits_ = 0, unsigned OffsetUnits_ = 0", tile_header)
         self.assertIn("PTO_DEFINE_ASSEMBLE_FACTORY(assemble", tile_header)
         self.assertIn("PTO_DEFINE_ASSEMBLE_FACTORY(assemble_last", tile_header)
         self.assertIn("auto subview_at(Parent &parent", tile_header)

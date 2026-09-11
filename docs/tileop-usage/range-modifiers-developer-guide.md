@@ -112,7 +112,7 @@ B.SUBVIEW 0, <allocated-gpr>, 0, <MatrixCubeTile::TilesizeCode>
 
 ```cpp
 void load_assembled(GM &gm, TileT &tile, uintptr_t base_units) {
-  auto destination = range::assemble<128, 3>(tile, base_units);
+  auto destination = range::assemble<1, 3>(tile, base_units);
   TLOAD(destination, gm);
 }
 ```
@@ -132,6 +132,34 @@ B.ASSEMBLE 1, 0, <compiler-gpr>, 3, 1
 ```
 
 不传 `base_units` 时使用 `zero`；传入后由编译器选择 GPR，接口不暴露寄存器编号。
+
+### INIT slot 与后续 slot 的接口选择约束
+
+一个 assembly session 的**第一个（INIT）slot 必须由普通分配型接口写入**
+（`TLOAD`/`TLOAD_CUBE`/`TMOV_L2S_*` 等，其 destination binder 是分配语义），
+**后续（MIDDLE/LAST）slot 必须用 `_ASS` 接口追加**（destination 按 input-only
+binder 消费已关联的 register/handle，不再分配 generation）。这一约束由
+`static_assert` 在编译期强制：
+
+- 普通 `TLOAD` 收到非 INIT carrier（`assemble_middle`/`assemble_last`）会被
+  拒绝，提示改用 `TLOAD_ASS`；
+- `TLOAD_ASS` 与 TEPL `*_ASS` 收到 INIT carrier（`range::assemble` 默认形式）
+  会被拒绝，提示 INIT slot 必须用普通 producer 形式。
+
+```cpp
+void session(GM &gm_lo, GM &gm_hi, TileT &a, TileT &b) {
+  TileT parent;                                        // 类型载体
+  auto d0 = range::assemble<256, 0>(parent);           // INIT slot
+  TLOAD(d0, gm_lo);                                    // 普通 TLOAD（producer）
+  auto d1 = range::assemble_last<128, 1>(parent);      // LAST slot
+  TLOAD_ASS(d1, gm_hi);                                // _ASS 追加
+  auto d2 = range::assemble_middle<128, 2>(parent);    // MIDDLE slot
+  TADD_ASS(d2, a, b);                                  // TEPL _ASS 追加
+}
+```
+
+Shared parent 同理：先 `TLOAD(SharedTile&, ...)`（`"=Sr"` 输出建立 handle），
+再 `TLOAD_ASS` 消费同一 handle。
 
 ## 生命周期 helper
 
@@ -197,7 +225,7 @@ auto source3 = range::subview<128>(tile, base_units);
 auto destination0 = range::assemble(tile);
 auto destination1 = range::assemble(tile, base_units);
 auto destination2 = range::assemble<128, 3>(tile);
-auto destination3 = range::assemble<128, 3>(tile, base_units);
+auto destination3 = range::assemble<1, 3>(tile, base_units);
 ```
 
 对应关系：
@@ -218,7 +246,7 @@ auto destination3 = range::assemble<128, 3>(tile, base_units);
 例如：
 
 ```cpp
-auto view = range::subview<128, 3>(tile, base_units);
+auto view = range::subview<1, 3>(tile, base_units);
 ```
 
 可能生成：
@@ -253,7 +281,7 @@ INIT ASSEMBLE 使用同一张转换表：
 ```cpp
 auto zero_based = range::subview<128>(tile);
 auto runtime_based = range::subview<128>(tile, base_units);
-auto offset_based = range::subview<128, 3>(tile, base_units);
+auto offset_based = range::subview<1, 3>(tile, base_units);
 ```
 
 如果省略 `LengthBytes`，SUBVIEW 和 ASSEMBLE 都默认使用

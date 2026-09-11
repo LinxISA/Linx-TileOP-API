@@ -1939,6 +1939,7 @@ public:
   static constexpr int byteSize = SourceTile::byteSize;
   // Physical storage identity: the view occupies exactly the source bytes.
   static constexpr int kBytes = SourceTile::kBytes;
+  static constexpr int StorageBytes = SourceTile::StorageBytes;
   static constexpr int LogicalTileBytes = SourceTile::LogicalTileBytes;
   static constexpr int TilesizeCode = SourceTile::TilesizeCode;
   static constexpr bool IsValidActiveSize = SourceTile::IsValidActiveSize;
@@ -2228,39 +2229,47 @@ private:
   uintptr_t RangeBaseValue;
 };
 
-// Ergonomic range factories. The common case derives the modifier size from
-// the wrapped tile and keeps the descriptor details out of the call site.
-template <std::size_t LengthBytes_ = 0, unsigned OffsetUnits_ = 0,
+// Ergonomic range factories. Both the length and the offset are expressed
+// in 128-byte range units (the uimm11 granularity), so a call site counts
+// fragments and positions in the same unit. Length 0 derives the parent's
+// full capacity.
+template <std::size_t LengthUnits_ = 0, unsigned OffsetUnits_ = 0,
           typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
 auto subview(Parent &parent)
     -> Subview<Parent,
                subview_size_code_for_bytes(
-                   LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_),
+                   LengthUnits_ == 0
+                       ? Parent::LogicalTileBytes
+                       : LengthUnits_ * 128),
                OffsetUnits_, 0> {
   constexpr std::size_t LengthBytes =
-      LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_;
+      LengthUnits_ == 0 ? Parent::LogicalTileBytes : LengthUnits_ * 128;
   static_assert(LengthBytes <= Parent::LogicalTileBytes,
                 "B.SUBVIEW length cannot exceed the parent Tile capacity");
   static_assert(subview_size_code_for_bytes(LengthBytes) != 0,
-                "B.SUBVIEW length must be 128 B..256 KiB and a supported capacity");
+                "B.SUBVIEW length must be a power-of-two multiple of 128 B "
+                "up to 256 KiB");
   return {parent, 0};
 }
 
-template <std::size_t LengthBytes_ = 0, unsigned OffsetUnits_ = 0,
+template <std::size_t LengthUnits_ = 0, unsigned OffsetUnits_ = 0,
           typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
 auto subview(Parent &parent, uintptr_t range_base_units)
     -> Subview<Parent,
                subview_size_code_for_bytes(
-                   LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_),
+                   LengthUnits_ == 0
+                       ? Parent::LogicalTileBytes
+                       : LengthUnits_ * 128),
                OffsetUnits_, AutoRegSrc> {
   constexpr std::size_t LengthBytes =
-      LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_;
+      LengthUnits_ == 0 ? Parent::LogicalTileBytes : LengthUnits_ * 128;
   static_assert(LengthBytes <= Parent::LogicalTileBytes,
                 "B.SUBVIEW length cannot exceed the parent Tile capacity");
   static_assert(subview_size_code_for_bytes(LengthBytes) != 0,
-                "B.SUBVIEW length must be 128 B..256 KiB and a supported capacity");
+                "B.SUBVIEW length must be a power-of-two multiple of 128 B "
+                "up to 256 KiB");
   return {parent, range_base_units};
 }
 
@@ -2278,42 +2287,49 @@ auto subview_sized(Parent &parent, uintptr_t range_base)
   return {parent, range_base};
 }
 
-template <std::size_t LengthBytes_, typename Parent>
+/// Resolves the fragment length in bytes from 128-byte units (0 = the
+/// parent's full capacity) and validates it against the B.ASSEMBLE size
+/// code table.
+template <std::size_t LengthUnits_, typename Parent>
 constexpr std::size_t assemble_length_bytes() {
   constexpr std::size_t LengthBytes =
-      LengthBytes_ == 0 ? Parent::LogicalTileBytes : LengthBytes_;
+      LengthUnits_ == 0 ? Parent::LogicalTileBytes : LengthUnits_ * 128;
   static_assert(LengthBytes <= Parent::LogicalTileBytes,
                 "B.ASSEMBLE length cannot exceed the parent Tile capacity");
   static_assert(subview_size_code_for_bytes(LengthBytes) != 0,
-                "B.ASSEMBLE length must be 128 B..256 KiB and a supported capacity");
+                "B.ASSEMBLE length must be a power-of-two multiple of 128 B "
+                "up to 256 KiB");
   return LengthBytes;
 }
 
+// Length and offset are both 128-byte units: LengthUnits_ counts the
+// fragment size and OffsetUnits_ the fragment position, in the same
+// granularity as the encoded uimm11.
 #define PTO_DEFINE_ASSEMBLE_FACTORY(Name, Init, Last)                         \
-  template <std::size_t LengthBytes_ = 0, unsigned OffsetUnits_ = 0,          \
+  template <std::size_t LengthUnits_ = 0, unsigned OffsetUnits_ = 0,          \
             typename Parent>                                                  \
   auto Name(Parent &parent)                                                    \
       -> Assemble<Parent,                                                      \
                   Init ? subview_size_code_for_bytes(                          \
-                             assemble_length_bytes<LengthBytes_, Parent>())    \
+                             assemble_length_bytes<LengthUnits_, Parent>())    \
                        : 0,                                                    \
                   Init, Last, OffsetUnits_, 0> {                               \
     constexpr std::size_t CheckedLength =                                     \
-        assemble_length_bytes<LengthBytes_, Parent>();                         \
+        assemble_length_bytes<LengthUnits_, Parent>();                         \
     (void)CheckedLength;                                                        \
     return {parent, 0};                                                        \
   }                                                                            \
                                                                                \
-  template <std::size_t LengthBytes_ = 0, unsigned OffsetUnits_ = 0,          \
+  template <std::size_t LengthUnits_ = 0, unsigned OffsetUnits_ = 0,          \
             typename Parent>                                                  \
   auto Name(Parent &parent, uintptr_t range_base_units)                        \
       -> Assemble<Parent,                                                      \
                   Init ? subview_size_code_for_bytes(                          \
-                             assemble_length_bytes<LengthBytes_, Parent>())    \
+                             assemble_length_bytes<LengthUnits_, Parent>())    \
                        : 0,                                                    \
                   Init, Last, OffsetUnits_, AutoRegSrc> {                      \
     constexpr std::size_t CheckedLength =                                     \
-        assemble_length_bytes<LengthBytes_, Parent>();                         \
+        assemble_length_bytes<LengthUnits_, Parent>();                         \
     (void)CheckedLength;                                                        \
     return {parent, range_base_units};                                         \
   }
