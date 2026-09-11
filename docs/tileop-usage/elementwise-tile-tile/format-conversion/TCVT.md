@@ -5,9 +5,39 @@
 ## C++ 接口
 
 ```cpp
-template <is_tile_data_v DstTile, is_tile_data_v SrcTile>
+template <int RMode = LINX_RNONE, is_tile_data_v DstTile,
+          is_tile_data_v SrcTile>
 void TCVT(DstTile &dst, SrcTile &src);
+
+template <int RMode = LINX_RNONE, is_tile_data_v DstTile,
+          is_tile_data_v SrcTile>
+void TCVT_T(DstTile &dst, SrcTile &src);  // 同上（兼容别名）
 ```
+
+### 舍入模式（RMode）
+
+`RMode` 选择 `B.DATR` 的舍入模式，取 `LinxRMode` 枚举值（与 ISA
+`RMode` 字段 bits[17:15] 一一对应）：
+
+| RMode | 编码 | 含义 |
+| --- | --- | --- |
+| `LINX_RNONE`（默认） | RNONE | 操作默认（对 TCVT 即 RNE），保持历史编码不变 |
+| `LINX_RNE` | RNE | 舍入到最近偶数 |
+| `LINX_RTZ` | RTZ | 向零舍入 |
+| `LINX_RDN` | RTM | **向下取整（floor）**——MX E8M0 block scale 量化（OCP MX §6.3 的 `floor(log2(amax))`）必须用此模式 |
+| `LINX_RUP` | RTP | 向上取整 |
+| `LINX_RNA` | RNA | 舍入到最近、away from zero |
+| `LINX_RTO` | RTO | odd 舍入 |
+| `LINX_RHB` | RHB | half-away 舍入 |
+
+```cpp
+// MX 量化场景：E8M0 scale 需要 floor
+TCVT<LINX_RDN>(scale_e8m0, scale_bf16);   // -> B.DATR ..., RTM
+```
+
+注意 E8M0 的 RNE 语义是几何中点（√2），不等价于 floor；尾数在
+(√2, 2) 区间的输入用默认 RNE 会进位到 ceil，因此 MX scale 链路必须
+显式选择 `LINX_RDN`。
 
 ### Destination assembly：`TCVT_ASS`
 
