@@ -27,6 +27,9 @@ constexpr int tile_size_code_for_bytes(std::size_t bytes) {
 
 template <typename Parent, typename SubTile, int Rows, int Cols>
 struct partition_contract {
+  static_assert(is_tile<Parent>::value && range::is_legal_subview_parent_v<Parent>,
+                "TPARTVIEW parent must be an assigned Local Matrix Tile with "
+                "a CUBE layout");
   static_assert(Rows > 0 && Cols > 0,
                 "Tile partition extents must be positive");
   static_assert(std::is_same_v<typename Parent::DType, typename SubTile::DType>,
@@ -52,6 +55,9 @@ struct partition_contract {
 
 template <typename Parent, typename SubTile>
 class SubTileView {
+  static_assert(range::is_legal_subview_parent_v<Parent>,
+                "B.SUBVIEW parent must be an assigned Local Matrix Tile with "
+                "a CUBE layout");
 public:
   using ParentTile = Parent;
   using SubTileType = SubTile;
@@ -95,14 +101,6 @@ public:
   int GetValidRow() const { return SubTile::ValidRow; }
   int GetValidCol() const { return SubTile::ValidCol; }
   decltype(auto) data() { return parent_->data(); }
-  unsigned long handle()
-      requires(is_shared_tile_v<Parent>) {
-    return parent_->handle();
-  }
-  unsigned long &handle_ref()
-      requires(is_shared_tile_v<Parent>) {
-    return parent_->handle_ref();
-  }
 
 private:
   Parent *parent_;
@@ -328,6 +326,7 @@ inline constexpr bool is_tile_array_output_ref_v =
     is_tile_array_output_ref<T>::value;
 
 template <typename SubTile, int Rows, int Cols, typename Parent>
+  requires(range::is_legal_subview_parent_v<Parent>)
 auto TPARTVIEW(Parent &parent)
     -> region::BorrowedTileArray<Parent, SubTile, Rows, Cols> {
   return region::BorrowedTileArray<Parent, SubTile, Rows, Cols>(parent);

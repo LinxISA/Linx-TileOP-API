@@ -1,8 +1,8 @@
 #include <common/pto_tile_region_inline_asm.hpp>
 #include <utility>
 using namespace pto;
-using SourceParent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
-using SourceFragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using SourceParent = CubeTileM32<float, 32, 64>;
+using SourceFragment = CubeTileM32<float, 32, 16>;
 using DestinationFragment = Tile<Location::Vec, __bf16, 32, 16, BLayout::RowMajor>;
 using DestinationParent = Tile<Location::Vec, __bf16, 32, 64, BLayout::RowMajor>;
 __attribute__((noinline)) DestinationParent convert_subviews(SourceParent &parent) {

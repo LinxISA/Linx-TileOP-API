@@ -4,11 +4,13 @@
 
 using namespace pto;
 
+using SourceParent = CubeTileM32<float, 32, 64>;
+using SourceFragment = CubeTileM32<float, 32, 16>;
 using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
 using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
 
-__attribute__((noinline)) Parent scalar_assemble(Parent &parent, float scalar) {
-  auto views = TPARTVIEW<Fragment, 1, 4>(parent);
+__attribute__((noinline)) Parent scalar_assemble(SourceParent &parent, float scalar) {
+  auto views = TPARTVIEW<SourceFragment, 1, 4>(parent);
   auto source = views[0][1];
   Fragment scratch;
 
@@ -39,7 +41,7 @@ __attribute__((noinline)) Parent scalar_assemble(Parent &parent, float scalar) {
 }
 
 int main() {
-  Parent parent;
+  SourceParent parent;
   Parent result = scalar_assemble(parent, 1.0f);
   asm volatile("" : : "Tr"(result.data()));
   return 0;

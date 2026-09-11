@@ -35,8 +35,15 @@ require_disassembly 'B\.DATR[[:space:]]+N82ND\.normal, Null' \
   'N82ND CUBE store layout'
 require_disassembly 'B\.SUBVIEW[[:space:]]+0, a0, 0, 1' \
   'B.SUBVIEW range modifier'
-require_disassembly 'B\.SUBVIEW[[:space:]]+1, x3, 2047, 12' \
-  'Shared-source B.SUBVIEW range modifier'
+if ! awk '
+  /B\.IOT[[:space:]]+t#4, mask=1111, last/ { binder=NR; next }
+  /B\.SUBVIEW[[:space:]]+0, a0, 0, 1/ { if (NR == binder + 1) adjacent=1 }
+  END { exit adjacent ? 0 : 1 }
+' "$OUT/contract.diss"; then
+  echo 'FAIL: B.SUBVIEW is not immediately adjacent to its Local B.IOT binder' >&2
+  sed -n '1,120p' "$OUT/contract.diss" >&2
+  exit 1
+fi
 require_disassembly 'B\.ASSEMBLE[[:space:]]+1, 0, a0, 100, 12' \
   'B.ASSEMBLE range modifier'
 require_disassembly 'B\.ASSEMBLE[[:space:]]+1, 0, zero, 100, 12' \

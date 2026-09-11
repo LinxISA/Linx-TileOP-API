@@ -10,33 +10,15 @@ namespace pto {
 template <int Opcode, typename Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void
 pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
+  static_assert(range::is_legal_subview_parent_v<Parent>,
+                "B.SUBVIEW source must be an assigned Local Matrix Tile with "
+                "a CUBE layout");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
   const uintptr_t region_base_units = src.GetRangeBase();
-  if constexpr (is_shared_tile_v<Parent>) {
-    static_assert(tile_type_traits<typename Parent::TileDType>::IsValidSharedActiveSize,
-                  "Shared B.SUBVIEW source size must be 128 B..256 KB");
-    asm volatile(
-        "BSTART.TEPL %c8, %D1\n"
-        "B.DIM zero, %c3, ->lb0\n"
-        "B.DIM zero, %c4, ->lb1\n"
-        "B.DIM zero, %c5, ->lb2\n"
-        "B.IOS %S[s0], mask=1111\n"
-        "B.SUBVIEW 0, %9, 0, %c7\n"
-        : [Dst] "=Tr"(dst.data())
-        : "i"(type_traits<typename SubTile::DType>::TypeCode),
-          [s0] "Sr"(src.handle()),
-          "i"(std::remove_reference_t<decltype(src)>::ValidCol),
-          "i"(std::remove_reference_t<decltype(src)>::ValidRow),
-          "i"(SubTile::Cols),
-          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-          "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-          "i"(Opcode), "r"(region_base_units)
-        : "memory");
-  } else {
-    static_assert(SubTile::BFractal == BLayout::RowMajor ||
-                      SubTile::IsCubeLayout,
-                  "inline Tile region path requires RowMajor or Cube fragments");
+  {
+    static_assert(SubTile::IsCubeLayout,
+                  "B.SUBVIEW source fragment must use a CUBE layout");
     asm volatile(
         "BSTART.TEPL %c8, %D1\n"
         "B.DIM zero, %c3, ->lb0\n"
@@ -64,31 +46,12 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar(
                 "inline Tile region path requires unboxed fragments");
   volatile typename SubTile::DType value = scalar;
   const uintptr_t region_base_units = src.GetRangeBase();
-  if constexpr (is_shared_tile_v<Parent>) {
-    static_assert(tile_type_traits<typename Parent::TileDType>::IsValidSharedActiveSize,
-                  "Shared B.SUBVIEW source size must be 128 B..256 KB");
-    asm volatile(
-        "BSTART.TEPL %c10, %D1\n"
-        "B.DIM zero, %c3, ->lb0\n"
-        "B.DIM zero, %c4, ->lb1\n"
-        "B.DIM zero, %c5, ->lb2\n"
-        "B.IOS %S[s0], mask=1111\n"
-        "B.SUBVIEW 0, %9, 0, %c7\n"
-        "B.IOR [%8],[]\n"
-        : [Dst] "=Tr"(dst.data())
-        : "i"(type_traits<typename SubTile::DType>::TypeCode),
-          [s0] "Sr"(src.handle()),
-          "i"(std::remove_reference_t<decltype(src)>::ValidCol),
-          "i"(std::remove_reference_t<decltype(src)>::ValidRow),
-          "i"(SubTile::Cols),
-          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-          "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-          "r"(value), "r"(region_base_units), "i"(Opcode)
-        : "memory");
-  } else {
-    static_assert(SubTile::BFractal == BLayout::RowMajor ||
-                      SubTile::IsCubeLayout,
-                  "inline Tile region path requires RowMajor or Cube fragments");
+  {
+    static_assert(range::is_legal_subview_parent_v<Parent>,
+                  "B.SUBVIEW source must be an assigned Local Matrix Tile with "
+                  "a CUBE layout");
+    static_assert(SubTile::IsCubeLayout,
+                  "B.SUBVIEW source fragment must use a CUBE layout");
     asm volatile(
         "BSTART.TEPL %c10, %D1\n"
         "B.DIM zero, %c3, ->lb0\n"
@@ -314,8 +277,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
     region::SubTileView<Parent, SourceSubTile> &src,
     typename SourceSubTile::DType scalar) {
   static_assert(SubTile::BFractal == BLayout::RowMajor &&
-                    SourceSubTile::BFractal == BLayout::RowMajor,
-                "inline Tile region path requires RowMajor fragments");
+                    SourceSubTile::IsCubeLayout,
+                "B.ASSEMBLE destination must be RowMajor and B.SUBVIEW "
+                "source must use a CUBE layout");
   static_assert(SubTile::SFractal == SLayout::NoneBox &&
                     SourceSubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
@@ -422,8 +386,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
     region::TileArrayOutputRef<SubTile> &dst,
     region::SubTileView<Parent, SourceSubTile> &src) {
   static_assert(SubTile::BFractal == BLayout::RowMajor &&
-                    SourceSubTile::BFractal == BLayout::RowMajor,
-                "inline Tile region path requires RowMajor fragments");
+                    SourceSubTile::IsCubeLayout,
+                "B.ASSEMBLE destination must be RowMajor and B.SUBVIEW "
+                "source must use a CUBE layout");
   static_assert(SubTile::SFractal == SLayout::NoneBox &&
                     SourceSubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
@@ -708,8 +673,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
     region::TileArrayOutputRef<SubTile> &dst,
     region::SubTileView<Parent, SourceSubTile> &src) {
   static_assert(SubTile::BFractal == BLayout::RowMajor &&
-                    SourceSubTile::BFractal == BLayout::RowMajor,
-                "inline Tile region path requires RowMajor fragments");
+                    SourceSubTile::IsCubeLayout,
+                "B.ASSEMBLE destination must be RowMajor and B.SUBVIEW "
+                "source must use a CUBE layout");
   static_assert(SubTile::SFractal == SLayout::NoneBox &&
                     SourceSubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
@@ -902,9 +868,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
     region::SubTileView<Parent0, SubTile0> &src0,
     region::SubTileView<Parent1, SubTile1> &src1) {
   static_assert(SubTile::BFractal == BLayout::RowMajor &&
-                    SubTile0::BFractal == BLayout::RowMajor &&
-                    SubTile1::BFractal == BLayout::RowMajor,
-                "inline Tile region path requires RowMajor fragments");
+                    SubTile0::IsCubeLayout && SubTile1::IsCubeLayout,
+                "B.ASSEMBLE destination must be RowMajor and B.SUBVIEW "
+                "sources must use CUBE layouts");
   static_assert(SubTile::SFractal == SLayout::NoneBox &&
                     SubTile0::SFractal == SLayout::NoneBox &&
                     SubTile1::SFractal == SLayout::NoneBox,

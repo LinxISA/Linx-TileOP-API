@@ -2,8 +2,8 @@
 
 using namespace pto;
 
-using Local = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
-using GM = global_tensor<float, RowMajor<4, 8>>;
+using Local = CubeTileM16<float, 16, 16>;
+using GM = global_tensor<float, RowMajor<16, 16>>;
 
 #if defined(SHOULD_FAIL_SUBVIEW_DEST)
 void subview_cannot_be_tload_destination(GM &src, Local &dst) {
@@ -21,7 +21,7 @@ void assemble_cannot_be_tstore_source(GM &dst, Local &src) {
 
 #if defined(SHOULD_FAIL_SUBVIEW_LENGTH)
 void subview_length_cannot_exceed_parent(GM &dst, Local &src) {
-  auto view = range::subview<2>(src);
+  auto view = range::subview<2048>(src);
   TSTORE(dst, view);
 }
 #endif

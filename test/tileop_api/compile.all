@@ -13,7 +13,14 @@ export PLAT LINX_TARGET
 if [[ "$PLAT" == "linx" ]]; then
   : "${COMPILER_DIR:?set COMPILER_DIR to the matching Linx LLVM bin directory}"
   : "${LINX_SYSROOT:?set LINX_SYSROOT to the phase-C/app musl C++ sysroot}"
-  export COMPILER_DIR LINX_SYSROOT
+  RESOURCE_OVERLAY=$(mktemp -d "${TMPDIR:-/tmp}/tileop-resource.XXXXXX")
+  trap 'rm -rf "$RESOURCE_OVERLAY"' EXIT
+  cp -R "$("$COMPILER_DIR/clang++" -print-resource-dir)"/. "$RESOURCE_OVERLAY/"
+  rm -rf "$RESOURCE_OVERLAY/include/tileop-api"
+  cp -R "$(cd "$(dirname "$0")/../.." && pwd)/include" \
+    "$RESOURCE_OVERLAY/include/tileop-api"
+  CC_OPTS="${CC_OPTS:-} -resource-dir $RESOURCE_OVERLAY"
+  export COMPILER_DIR LINX_SYSROOT CC_OPTS
 fi
 
 ACTIVE_FIXTURES=(
@@ -23,8 +30,8 @@ ACTIVE_FIXTURES=(
   PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs
   TAdd_mask TAdd TAdds TAnd TeplAss TeplAssSpecial TLoad TStore TCvt TDiv TDivs TExp TMax TMaxs
-  TMov TMul TMuls TOr TRecip TRem TRowMax TRowSum TSqrt TSub TSubs TTrans
-  RangeSubview RangeAssemble SharedRange TileRegion TileArray TileArrayCube TileArrayAssemblyOffsets TileArrayRegionAsm TileRegionUnaryAssembly TileRegionUnary TileRegionBinary TileRegionBinaryAssembly TileRegionUnarySubviewAssembly TileRegionScalarAssembly TileRegionTCVTSubviewAssembly TileRegionSharedSubview TileRegionCubeSubview
+  TMov GMov TMul TMuls TOr TRecip TRem TRowMax TRowSum TSqrt TSub TSubs TTrans
+  RangeSubview RangeAssemble SharedRange TileRegionSharedSubview TileArray TileArrayCube TileArrayAssemblyOffsets TileArrayRegionAsm TileRegionUnaryAssembly TileRegion TileRegionUnary TileRegionBinary TileRegionBinaryAssembly TileRegionUnarySubviewAssembly TileRegionScalarAssembly TileRegionTCVTSubviewAssembly TileRegionCubeSubview
   ValidShapeImmediate ValidShapePerDim ValidShapePerDimSweep CoopGroupMOverloads CubeInternalAcc TSELCanonical
 )
 

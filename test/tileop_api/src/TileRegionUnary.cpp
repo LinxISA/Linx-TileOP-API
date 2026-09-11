@@ -2,8 +2,8 @@
 
 using namespace pto;
 
-using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
-using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using Parent = CubeTileM32<float, 32, 64>;
+using Fragment = CubeTileM32<float, 32, 16>;
 using Result = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
 
 __attribute__((noinline)) void unary_region_sources(Parent &parent,

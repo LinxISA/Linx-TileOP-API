@@ -110,6 +110,14 @@ constexpr bool is_valid_pe_mask(unsigned mask) {
          mask == 12 || mask == 14 || mask == 15;
 }
 
+// GMOV consumes the raw four-bit PE mask.  Unlike the legacy PE-mode users,
+// its 0.58.6 contract accepts every nonzero mask; zero is handled by GMOV as
+// its architectural strict no-op.  Keep this predicate separate so widening
+// GMOV does not accidentally change older APIs that still encode PEMode.
+constexpr bool is_valid_gmov_pe_mask(unsigned mask) {
+  return mask >= 1 && mask <= 15;
+}
+
 constexpr unsigned pe_mode_from_mask(unsigned mask) {
   return mask == 0  ? 0 :
          mask == 8  ? 1 :

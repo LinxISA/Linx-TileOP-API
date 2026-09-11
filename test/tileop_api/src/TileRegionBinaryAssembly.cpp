@@ -4,11 +4,13 @@
 
 using namespace pto;
 
+using SourceParent = CubeTileM32<float, 32, 64>;
+using SourceFragment = CubeTileM32<float, 32, 16>;
 using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
 using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
 
-__attribute__((noinline)) Parent assemble_binary_fragments(Parent &parent) {
-  auto views = TPARTVIEW<Fragment, 1, 4>(parent);
+__attribute__((noinline)) Parent assemble_binary_fragments(SourceParent &parent) {
+  auto views = TPARTVIEW<SourceFragment, 1, 4>(parent);
   auto lhs = views[0][1];
   auto rhs = views[0][2];
   TileArray<Fragment, 1, 4> fragments;
@@ -22,7 +24,7 @@ __attribute__((noinline)) Parent assemble_binary_fragments(Parent &parent) {
 }
 
 int main() {
-  Parent parent;
+  SourceParent parent;
   Parent result = assemble_binary_fragments(parent);
   asm volatile("" : : "Tr"(result.data()));
   return 0;

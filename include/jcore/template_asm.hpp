@@ -16,9 +16,17 @@ using namespace pto;
 #define PTO_PE_MASK_ASM(PREFIX, SUFFIX)                                        \
   ".if %c[PEMask] == 1\n" PREFIX "0001" SUFFIX                             \
   ".elseif %c[PEMask] == 2\n" PREFIX "0010" SUFFIX                         \
+  ".elseif %c[PEMask] == 3\n" PREFIX "0011" SUFFIX                         \
   ".elseif %c[PEMask] == 4\n" PREFIX "0100" SUFFIX                         \
+  ".elseif %c[PEMask] == 5\n" PREFIX "0101" SUFFIX                         \
+  ".elseif %c[PEMask] == 6\n" PREFIX "0110" SUFFIX                         \
+  ".elseif %c[PEMask] == 7\n" PREFIX "0111" SUFFIX                         \
   ".elseif %c[PEMask] == 8\n" PREFIX "1000" SUFFIX                         \
+  ".elseif %c[PEMask] == 9\n" PREFIX "1001" SUFFIX                         \
+  ".elseif %c[PEMask] == 10\n" PREFIX "1010" SUFFIX                       \
+  ".elseif %c[PEMask] == 11\n" PREFIX "1011" SUFFIX                       \
   ".elseif %c[PEMask] == 12\n" PREFIX "1100" SUFFIX                        \
+  ".elseif %c[PEMask] == 13\n" PREFIX "1101" SUFFIX                       \
   ".elseif %c[PEMask] == 14\n" PREFIX "1110" SUFFIX                        \
   ".elseif %c[PEMask] == 15\n" PREFIX "1111" SUFFIX                        \
   ".endif\n"
@@ -2898,7 +2906,8 @@ void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src) {
 
 // TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
-  requires(!tile_shape::IsCubeLayout)
+  requires(!tile_shape::IsCubeLayout || is_subview_v<tile_shape> ||
+           is_assemble_v<tile_shape>)
 void TSTORE(gm_shape &dst, tile_shape &src) {
   static_assert(!is_assemble_v<tile_shape>,
                 "B.ASSEMBLE is destination-only and cannot wrap a TSTORE source");
@@ -2909,6 +2918,9 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
   const size_t valid_row = src.GetValidRow();
   if constexpr (is_subview_v<tile_shape>) {
     using ParentTile = typename tile_shape::ParentTile;
+    static_assert(range::is_legal_subview_parent_v<ParentTile>,
+                  "B.SUBVIEW source must be an assigned Local Matrix Tile with "
+                  "a CUBE layout");
     if constexpr (is_shared_tile_v<ParentTile>) {
       static_assert(tile_type_traits<typename ParentTile::TileDType>::
                         IsValidSharedActiveSize,
@@ -3108,6 +3120,8 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
 template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
   requires(cube_shape::IsCubeLayout)
 void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
+  static_assert(!is_subview_v<cube_shape>,
+                "B.SUBVIEW is source-only and cannot wrap a TLOAD destination");
   static_assert(std::is_same_v<typename cube_shape::DType,
                                typename gm_shape::DType>,
                 "TLOAD_CUBE requires matching GM and CUBE dtypes");
@@ -3313,6 +3327,8 @@ asm volatile(
 template <is_global_data_v gm_shape, is_local_tile_v cube_shape>
   requires(cube_shape::IsCubeLayout)
 void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
+  static_assert(!is_assemble_v<cube_shape>,
+                "B.ASSEMBLE is destination-only and cannot wrap a TSTORE source");
   static_assert(std::is_same_v<typename cube_shape::DType,
                                typename gm_shape::DType>,
                 "TSTORE_CUBE requires matching GM and CUBE dtypes");
@@ -3514,7 +3530,8 @@ void TLOAD_ASS(cube_shape &dst, const gm_shape &src) {
 }
 
 template <is_global_data_v gm_shape, is_tile_data_v cube_shape>
-  requires(cube_shape::IsCubeLayout)
+  requires(cube_shape::IsCubeLayout && !is_subview_v<cube_shape> &&
+           !is_assemble_v<cube_shape>)
 void TSTORE(gm_shape &dst, const cube_shape &src) {
   TSTORE_CUBE(dst, src);
 }
@@ -3844,21 +3861,27 @@ asm volatile(
 template <int PEMask = 15, is_tile_data_v tile_shape_dst,
           is_tile_data_v tile_shape_src>
 void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
-  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
-                "GMOV PEMask must be one of 1,2,4,8,12,14,15");
+  static_assert(is_valid_gmov_pe_mask(PEMask),
+                "GMOV PEMask must be a nonzero four-bit mask (1..15)");
   static_assert(std::is_same_v<typename tile_shape_dst::DType,
                                typename tile_shape_src::DType>,
                 "GMOV source and destination dtypes must match");
+  static_assert(
+      is_gmov_type_code(
+          type_traits<typename tile_shape_src::DType>::TypeCode),
+      "GMOV supports the 17 non-packed carrier types up to 32 bits and the "
+      "five packed 4-bit types; FP64, S64 and U64 are not legal");
+  static_assert(tile_shape_dst::Loc == Location::Vec &&
+                    tile_shape_src::Loc == Location::Vec,
+                "GMOV source and destination must be Local Vec Tiles");
   static_assert(tile_shape_dst::Rows == tile_shape_src::Rows &&
                     tile_shape_dst::Cols == tile_shape_src::Cols &&
-                    (tile_shape_dst::ValidRow == DYNAMIC ||
-                     tile_shape_src::ValidRow == DYNAMIC ||
-                     tile_shape_dst::ValidRow == tile_shape_src::ValidRow) &&
-                    (tile_shape_dst::ValidCol == DYNAMIC ||
-                     tile_shape_src::ValidCol == DYNAMIC ||
-                     tile_shape_dst::ValidCol == tile_shape_src::ValidCol) &&
+                    tile_shape_dst::ValidRow == tile_shape_src::ValidRow &&
+                    tile_shape_dst::ValidCol == tile_shape_src::ValidCol &&
                     tile_shape_dst::BFractal == tile_shape_src::BFractal &&
-                    tile_shape_dst::SFractal == tile_shape_src::SFractal,
+                    tile_shape_dst::SFractal == tile_shape_src::SFractal &&
+                    tile_shape_dst::SFractalSize ==
+                        tile_shape_src::SFractalSize,
                 "GMOV source and destination descriptors must match");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
