@@ -136,8 +136,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_tcvt_emits_dimensions_before_terminating_iot(self) -> None:
         tcvt = re.search(
-            r'(?s)template <is_tile_data_v tile_shape_out, '
-            r'is_tile_data_v tile_shape_in>\n'
+            r'(?s)template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,'
+            r'\s*is_tile_data_v tile_shape_in>\n'
             r'void TCVT_T\(.*?\n}\n\n\n// PTO ISA 0.58 generic Local-to-Local TMOV',
             self.header,
         )
@@ -146,7 +146,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         ordinary_branch = carrier.split('} else {', 1)[1]
         for instruction in (
                 '"BSTART.TEPL 27, %D1\\n"',
-                '"B.DATR %D2, RNONE\\n"',
+                '".if %c[RMode] == 0\\nB.DATR %D2, RNONE\\n"',
                 '"B.DIM zero, %c5, ->lb0\\n"',
                 '"B.DIM zero, %c6, ->lb1\\n"',
                 '"B.DIM zero, %c7, ->lb2\\n"',
@@ -155,8 +155,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_tcvt_cube_layout_closure_uses_destination_tsize(self) -> None:
         tcvt = re.search(
-            r'(?s)template <is_tile_data_v tile_shape_out, '
-            r'is_tile_data_v tile_shape_in>\n'
+            r'(?s)template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,'
+            r'\s*is_tile_data_v tile_shape_in>\n'
             r'void TCVT_T\(.*?\n}\n\n\n// PTO ISA 0.58 generic Local-to-Local TMOV',
             self.header,
         )

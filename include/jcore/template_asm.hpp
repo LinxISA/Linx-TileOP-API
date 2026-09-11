@@ -32,6 +32,20 @@ using namespace pto;
   ".elseif %c[RMode] == 7\nB.DATR %D[__pto_DstType], RHB" SUFFIX                \
   ".endif\n"
 
+// Rounding-mode selector shared by the scalar cvt helpers and the
+// tile-level TCVT (the ISA B.DATR RMode field is bits[17:15]; the
+// enumeration values match the ISA codes one-to-one).
+enum LinxRMode {
+  LINX_RNONE = 0,
+  LINX_RNE   = 1,
+  LINX_RTZ   = 2,
+  LINX_RDN   = 3,
+  LINX_RUP   = 4,
+  LINX_RNA   = 5,
+  LINX_RTO   = 6,
+  LINX_RHB   = 7,
+};
+
 template <class...>
 inline constexpr bool pto_dependent_false_v = false;
 
@@ -62,8 +76,16 @@ void ACCCVT_RMAX_SCALE_NZ2DN(tile_shape_max &, tile_shape_out &,
       "to the active TMATMUL operation with B.FPATR and its RowMax operands");
 }
 
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
+// RMode selects the B.DATR rounding mode (LinxRMode values; the ISA field
+// is bits[17:15] and the enumeration matches one-to-one). The default
+// LINX_RNONE keeps the historical TCVT encoding (operation default, i.e.
+// RNE). LINX_RDN is the RTM floor needed by MX E8M0 scale quantization
+// (OCP MX 6.3).
+template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,
+          is_tile_data_v tile_shape_in>
+void TCVT_T(tile_shape_out &dst, tile_shape_in &src) {
+  static_assert(RMode >= LINX_RNONE && RMode <= LINX_RHB,
+                "TCVT RMode must be a LinxRMode value");
   static_assert((tile_shape_out::ValidRow == DYNAMIC ||
                  tile_shape_out::Rows >= tile_shape_out::ValidRow) &&
                     (tile_shape_out::ValidCol == DYNAMIC ||
@@ -96,7 +118,15 @@ void TCVT_T(tile_shape_out &dst,  tile_shape_in &src) {
     if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      "B.DATR %D2, RNONE\n"
+      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
+      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
+      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
+      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
+      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
+      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
+      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
+      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
+      ".endif\n"
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
@@ -106,12 +136,21 @@ asm volatile(
         "Tr"(src.data()),
         "i"(tile_shape_out::TilesizeCode),
         "i"(tile_shape_in::ValidCol),
-        "i"(tile_shape_in::ValidRow)
+        "i"(tile_shape_in::ValidRow),
+        [RMode] "i"(RMode)
     );    }
     else if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow < 0) {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      "B.DATR %D2, RNONE\n"
+      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
+      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
+      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
+      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
+      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
+      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
+      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
+      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
+      ".endif\n"
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM %[tcvt_row], 0, ->lb1\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
@@ -121,12 +160,21 @@ asm volatile(
         "Tr"(src.data()),
         "i"(tile_shape_out::TilesizeCode),
         "i"(tile_shape_in::ValidCol),
-        [tcvt_row] "r"(src.GetValidRow())
+        [tcvt_row] "r"(src.GetValidRow()),
+        [RMode] "i"(RMode)
     );    }
     else if constexpr (tile_shape_in::ValidCol < 0 && tile_shape_in::ValidRow > 0) {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      "B.DATR %D2, RNONE\n"
+      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
+      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
+      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
+      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
+      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
+      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
+      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
+      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
+      ".endif\n"
       "B.DIM %[tcvt_col], 0, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
@@ -136,12 +184,21 @@ asm volatile(
         "Tr"(src.data()),
         "i"(tile_shape_out::TilesizeCode),
         [tcvt_col] "r"(src.GetValidCol()),
-        "i"(tile_shape_in::ValidRow)
+        "i"(tile_shape_in::ValidRow),
+        [RMode] "i"(RMode)
     );    }
     else {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      "B.DATR %D2, RNONE\n"
+      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
+      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
+      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
+      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
+      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
+      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
+      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
+      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
+      ".endif\n"
       "B.DIM %[tcvt_col], 0, ->lb0\n"
       "B.DIM %[tcvt_row], 0, ->lb1\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
@@ -151,7 +208,8 @@ asm volatile(
         "Tr"(src.data()),
         "i"(tile_shape_out::TilesizeCode),
         [tcvt_col] "r"(src.GetValidCol()),
-        [tcvt_row] "r"(src.GetValidRow())
+        [tcvt_row] "r"(src.GetValidRow()),
+        [RMode] "i"(RMode)
     );    }
   } else {
     static_assert(!tile_shape_out::IsCubeLayout,
@@ -190,7 +248,15 @@ asm volatile(
     if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      "B.DATR %D2, RNONE\n"
+      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
+      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
+      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
+      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
+      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
+      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
+      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
+      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
+      ".endif\n"
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
       "B.DIM zero, %c7, ->lb2\n"
@@ -202,12 +268,21 @@ asm volatile(
         "i"(tile_shape_out::TilesizeCode),
         "i"(tile_shape_in::ValidCol),
         "i"(tile_shape_in::ValidRow),
-        "i"(tile_shape_out::Cols)
+        "i"(tile_shape_out::Cols),
+        [RMode] "i"(RMode)
     );    }
     else if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow < 0) {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      "B.DATR %D2, RNONE\n"
+      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
+      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
+      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
+      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
+      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
+      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
+      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
+      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
+      ".endif\n"
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM %[tcvt_row], 0, ->lb1\n"
       "B.DIM zero, %c7, ->lb2\n"
@@ -219,12 +294,21 @@ asm volatile(
         "i"(tile_shape_out::TilesizeCode),
         "i"(tile_shape_in::ValidCol),
         [tcvt_row] "r"(src.GetValidRow()),
-        "i"(tile_shape_out::Cols)
+        "i"(tile_shape_out::Cols),
+        [RMode] "i"(RMode)
     );    }
     else if constexpr (tile_shape_in::ValidCol < 0 && tile_shape_in::ValidRow > 0) {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      "B.DATR %D2, RNONE\n"
+      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
+      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
+      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
+      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
+      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
+      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
+      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
+      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
+      ".endif\n"
       "B.DIM %[tcvt_col], 0, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
       "B.DIM zero, %c7, ->lb2\n"
@@ -236,12 +320,21 @@ asm volatile(
         "i"(tile_shape_out::TilesizeCode),
         [tcvt_col] "r"(src.GetValidCol()),
         "i"(tile_shape_in::ValidRow),
-        "i"(tile_shape_out::Cols)
+        "i"(tile_shape_out::Cols),
+        [RMode] "i"(RMode)
     );    }
     else {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      "B.DATR %D2, RNONE\n"
+      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
+      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
+      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
+      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
+      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
+      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
+      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
+      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
+      ".endif\n"
       "B.DIM %[tcvt_col], 0, ->lb0\n"
       "B.DIM %[tcvt_row], 0, ->lb1\n"
       "B.DIM zero, %c7, ->lb2\n"
@@ -253,7 +346,8 @@ asm volatile(
         "i"(tile_shape_out::TilesizeCode),
         [tcvt_col] "r"(src.GetValidCol()),
         [tcvt_row] "r"(src.GetValidRow()),
-        "i"(tile_shape_out::Cols)
+        "i"(tile_shape_out::Cols),
+        [RMode] "i"(RMode)
     );    }
   }
 }
@@ -1028,16 +1122,6 @@ asm volatile(
 #define LINX_CVT_DST_PREFIX ", ->%0."
 #endif
 
-enum LinxRMode {
-  LINX_RNONE = 0,
-  LINX_RNE   = 1,
-  LINX_RTZ   = 2,
-  LINX_RDN   = 3,
-  LINX_RUP   = 4,
-  LINX_RNA   = 5,
-  LINX_RTO   = 6,
-  LINX_RHB   = 7,
-};
 
 enum LinxSat {
   LINX_NOSAT = 0,
@@ -11038,9 +11122,10 @@ void TSUBC(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2
 
 // TCVT: elementwise type conversion (opcode 27, already has TCVT_T)
 // Use TCVT_T(dst, src) for this; TCVT is aliased below for convenience.
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,
+          is_tile_data_v tile_shape_in>
 void TCVT(tile_shape_out &dst, tile_shape_in &src) {
-  TCVT_T(dst, src);
+  TCVT_T<RMode>(dst, src);
 }
 //===--- TEPL Mode 1: tile-scalar elementwise ops (BSTART.TEPL) ---===//
 // opcode = Mode(1) * 32 + Function = 32 + Function.
