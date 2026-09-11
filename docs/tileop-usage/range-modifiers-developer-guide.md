@@ -3,7 +3,9 @@
 本文面向 TileOP kernel 开发者，介绍当前可用的新版 TileArray region C++ 接口。
 推荐通过 `TPARTVIEW` 和 `TileArray`/`TASSEMBLY` 描述 parent Tile 的分区与组装，
 由 TileOP inline asm 将其附着到 binder 后的 `B.SUBVIEW`/`B.ASSEMBLE`。旧的
-`range::subview`/`range::assemble` 仅作为底层兼容与测试接口，不是新的业务代码主入口。
+`range::subview`/`range::assemble` 是单个 binder 的底层 range carrier，仍用于
+兼容代码、Shared `B.IOS` 绑定、固定 ABI 和 MC/encoding 回归测试；新的
+parent/fragment 业务代码不应把它们作为主要分区/组装抽象。
 
 ## 适用范围
 
@@ -36,8 +38,8 @@ modifier 必须紧跟同一 bundle 中对应的 `B.IOT` 或 `B.IOS` binder。调
 不要混淆以下两层接口：
 
 - `TPARTVIEW/TASSEMBLY`：开发者推荐使用的 parent Tile 分区/组装 API；
-- `range::subview/assemble`：封装单个 binder 的底层 ISA range modifier，主要供
-  兼容代码、底层实现和 MC 回归测试使用。
+- `range::subview/assemble`：封装单个 binder 的底层 ISA range modifier。它们
+  仍支持 Shared `B.IOS` source 等低层场景，但不等同于 Shared `TPARTVIEW`。
 
 ## 推荐写法
 
@@ -51,8 +53,10 @@ Assemble = destination 侧的范围描述
 二者都不是数据副本。它们只是把“哪个 Tile、使用哪个基地址寄存器、使用
 哪个范围参数”打包成一个可以传给 TileOP 的对象。
 
-### Source：`range::subview`
+### Source：`range::subview`（低层单 binder 接口）
 
+该接口适合一次 TileOP 的单个 source binder，包括 Shared `B.IOS` source、兼容
+代码和固定 ABI/编码测试。普通 parent/fragment 分区应使用 `TPARTVIEW`。
 普通场景只需要表达“是否有运行时基地址”，不需要选择具体 GPR。range size code
 仍然从 parent Tile 的 `TilesizeCode` 自动推导。
 
@@ -105,9 +109,9 @@ B.SUBVIEW 0, <allocated-gpr>, 0, <MatrixCubeTile::TilesizeCode>
 不填写 `base_units` 时，`GPR[RegSrc]` 是 `zero`；填写后，`base_units` 是运行时
 输入值，具体使用哪个 GPR 由编译器决定。`OffsetUnits` 始终是编译期的 128B 单位立即数。
 
-### Destination：`range::assemble`
+### Destination：`range::assemble`（低层单 binder 接口）
 
-普通 destination 使用 `range::assemble`。它与 `subview` 使用完全相同的
+一次 destination binder 的低层 range 描述使用 `range::assemble`。它与 `subview` 使用完全相同的
 `LengthBytes`、`OffsetUnits` 和 `base_units` 语义，区别只是它描述 destination：
 
 ```cpp
@@ -673,8 +677,10 @@ TileArray 的 parent 和 fragment 必须匹配：
 - physical shape 与 valid shape 完整覆盖；
 - 每个 fragment 的容量必须是 128 B 的整数倍。
 
-`B.SUBVIEW` parent 必须是 Local 或 Shared Matrix+CUBE；region
-inline-asm source fixtures 使用 M16/M32 类型验证 CELL offset 和 binder adjacency；
+低层 `B.SUBVIEW` parent 必须是 Local 或 Shared Matrix+CUBE；Shared 形式使用
+`B.IOS`。当前 `TPARTVIEW` 则只接受 Local Matrix+CUBE parent，Shared、RowMajor
+和 Vec+CUBE parent 都是该高层 API 的 compile-negative cases。region inline-asm
+source fixtures 使用 M16/M32 类型验证 CELL offset 和 binder adjacency；
 destination `B.ASSEMBLE` 不继承这一 source 限制，仍按目标算子的 layout contract
 选择类型。
 
