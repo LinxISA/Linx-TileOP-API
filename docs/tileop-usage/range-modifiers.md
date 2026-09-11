@@ -16,17 +16,28 @@ compiler-allocated GPR and uses `uimm11=0`; this preserves the ISA's
 `GPR[RegSrc] + uimm11` semantics without exposing register numbers.
 
 The API exposes a small view-building layer, inspired by block-pointer APIs:
-create a range view once and pass it to the consuming operation. The ordinary
-surface is `pto::range::subview(parent, base)` and
-`pto::range::assemble(parent, base)`. The lower-level `Subview` and `Assemble`
-carrier types remain available for unusual compile-time contracts.
+create a range view once and pass it to the consuming operation. The low-level
+single-binder carrier surface is `pto::range::subview(parent, base)` and
+`pto::range::assemble(parent, base)`. These factories remain supported for
+compatibility code, Shared `B.IOS` bindings, fixed-ABI tests, and instruction
+encoding tests. For parent/fragment business code, prefer `TPARTVIEW` for
+source partitioning and `TileArray`/`TASSEMBLY` for destination assembly. The
+lower-level `Subview` and `Assemble` carrier types remain available for unusual
+compile-time contracts.
 
-At the current PTO-ISA 0.58.6 authority, `B.SUBVIEW` is legal for an assigned
-**Local or Shared Matrix** parent (`Mat`, `Left`, `Right`, or `Acc`) using a
-persistent CUBE CELL layout. Shared sources attach to `B.IOS` and use the
-0.58.5+ per-PE offset semantics. RowMajor/ColMajor parents and
+At the current PTO-ISA 0.58.6 authority, the low-level `B.SUBVIEW` contract is
+legal for an assigned **Local or Shared Matrix** parent (`Mat`, `Left`, `Right`,
+or `Acc`) using a persistent CUBE CELL layout. Shared sources attach to `B.IOS`
+and use the 0.58.5+ per-PE offset semantics. RowMajor/ColMajor parents and
 `Location::Vec` parents (including Vec+CUBE) remain rejected at compile time.
-This restriction does not apply to a `B.ASSEMBLE` destination.
+
+The high-level `TPARTVIEW` API is narrower in the current implementation: it
+currently accepts Local Matrix+CUBE parents only. A Shared `B.IOS` source through
+`range::subview` is therefore not evidence that Shared `TPARTVIEW` is supported;
+the latter remains a compile-time negative case until its multi-PE array
+transport is implemented. The source restriction does not apply to a
+`B.ASSEMBLE` destination, whose legality is determined separately by the
+destination operation and carrier contract.
 
 ## Syntax and encoding
 
@@ -106,29 +117,32 @@ needs every descriptor field visible in the type.
 For a parent Tile split into fixed-size fragments, prefer the region API:
 
 ```cpp
-using Parent = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor>;
-using Fragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+// TPARTVIEW currently requires a Local Matrix+CUBE parent.
+using Parent = CubeTileM16<float, 16, 64>;
+using Fragment = CubeTileM16<float, 16, 16>;
+using GM = global_tensor<float, RowMajor<16, 64>>;
 
 Parent parent;
+GM gm;
 auto source_tile = TPARTVIEW<Fragment, 1, 4>(parent)[0][2];
-
-TileArray<Fragment, 1, 4> destinations;
-TCVT(destinations[0][2], source_tile);
-Parent result = TASSEMBLY<Parent>(std::move(destinations));
+TSTORE(gm, source_tile);
 ```
 
 `TPARTVIEW` returns a borrowed view and does not allocate another Tile register.
-`TileArray` owns the destination carrier. `TASSEMBLY` materializes the carrier as
-the requested parent Tile; it does not emit a second standalone instruction.
-When a producer writes a destination slot, the inline-asm wrapper emits the
-corresponding `B.ASSEMBLE` lifecycle form and the slot range. For slot `ordinal`,
-the range base is `ordinal * (FragmentBytes / 128)` and is supplied through a
-compiler-allocated GPR.
+For destination assembly, `TileArray` owns the destination carrier and
+`TASSEMBLY` materializes it as the requested parent Tile; it does not emit a
+second standalone instruction. When a producer writes a destination slot, the
+inline-asm wrapper emits the corresponding `B.ASSEMBLE` lifecycle form and the
+slot range. For slot `ordinal`, the range base is
+`ordinal * (FragmentBytes / 128)` and is supplied through a compiler-allocated
+GPR.
 
 `CubeTileM16` and `CubeTileM32` are supported by the Tile type and partition
 contract checks. The current region producer inline-asm path is intentionally
 limited to `RowMajor + NoneBox`; do not use `TCVT` or row-wise region producers
 with Cube fragments until the Cube binder/CELL ordering path is implemented and
+validated. The example above documents the high-level type contract; it must not
+be read as evidence that the Cube producer/runtime path has already been
 validated.
 
 For a developer-oriented guide with complete lifecycle, Local/Shared, validation,
