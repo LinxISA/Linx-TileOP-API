@@ -1,4 +1,4 @@
-# TCONCAT
+# TCONCAT (unreleased)
 
 `TCONCAT` 沿列维度连接左、右源 Tile。
 
@@ -6,7 +6,7 @@
 
 当前 API 中可用的调用形式：
 
-```cpp
+```text
 template <
     is_tile_data_v tile_shape_out,
     is_tile_data_v tile_shape_in0,
@@ -96,7 +96,7 @@ BSTOP
 
 ## 使用示例
 
-```cpp
+```text
 #include <jcore/template_asm.hpp>
 
 using namespace pto;

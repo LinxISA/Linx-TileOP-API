@@ -1,4 +1,4 @@
-# TINSERT
+# TINSERT (unreleased)
 
 `TINSERT` 按编码偏移将源 Tile 插入目标 Tile 的旧值快照。
 
@@ -6,7 +6,7 @@
 
 当前 API 中可用的调用形式：
 
-```cpp
+```text
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t indexCol);
 ```
@@ -85,7 +85,7 @@ BSTOP
 
 ## 使用示例
 
-```cpp
+```text
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

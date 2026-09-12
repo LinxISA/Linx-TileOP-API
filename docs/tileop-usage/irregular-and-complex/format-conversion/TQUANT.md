@@ -1,4 +1,4 @@
-# TQUANT
+# TQUANT (unreleased)
 
 `TQUANT` 对 Local FP32 Tile 执行仿射量化，生成新的 Local S8 或 U8 Tile。
 
@@ -6,7 +6,7 @@
 
 当前 API 中可用的调用形式：
 
-```cpp
+```text
 template <
     RoundMode Mode = RoundMode::RNE,
     bool Saturate = false,
@@ -101,7 +101,7 @@ BSTOP
 
 ## 使用示例
 
-```cpp
+```text
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

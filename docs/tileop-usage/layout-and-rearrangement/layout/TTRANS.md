@@ -8,7 +8,7 @@
 
 当前 API 中可用的调用形式：
 
-```cpp
+```text
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TTRANS(tile_shape_out &dst, tile_shape_in &src);
 ```
@@ -95,7 +95,7 @@ BSTOP
 
 ## 使用示例
 
-```cpp
+```text
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

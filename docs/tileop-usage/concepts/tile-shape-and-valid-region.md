@@ -29,10 +29,10 @@ using Fragment = CubeTileM32<float, 32, 16>;
 
 Parent parent;
 auto parts = TPARTVIEW<Fragment, 1, 4>(parent);
-auto part = parts[0][j];
+auto part = parts[0][2];
 
 TileArray<Fragment, 1, 4> output;
-auto slot = output[0][j];
+auto slot = output[0][2];
 ```
 
 `TPARTVIEW` 返回 parent 的借用分区视图，不复制 parent Tile；`j` 可以是运行时
@@ -48,7 +48,7 @@ destination。
 ```cpp
 using OutputParent = TileLeft<__bf16, 32, 64>;
 using OutputFragment = TileLeft<__bf16, 32, 16>;
-using InputFragment = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using InputFragment = TileLeft<__bf16, 32, 16>;
 
 TileArray<OutputFragment, 1, 4> fragments;
 InputFragment input;

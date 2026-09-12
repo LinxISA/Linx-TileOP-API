@@ -119,21 +119,21 @@ BSTOP       or the next BSTART completion boundary
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using Vec = CubeTileM16<float, 1, 64>;
+using Vec = CubeTileM16<float, 1, 32>;
 using Matrix = CubeTileN8<float, 64, 32>;
-using Result = CubeAccumulatorM16<float, 1, 32>;
-using Bias = Tile<Location::Bias, float, 8, 32,
-                  BLayout::RowMajor, 1, 32>;
+using D = CubeAccumulatorM16<float, 1, 64>;
+using Bias = Tile<Location::Bias, float, 1, 64,
+                  BLayout::RowMajor, 1, 64>;
 using GM = global_tensor<float, RowMajor<64, 32>>;
-using GMVec = global_tensor<float, RowMajor<1, 64>>;
-using GMOut = global_tensor<float, RowMajor<1, 32>>;
-using GMBias = global_tensor<float, RowMajor<8, 32>>;
+using GMVec = global_tensor<float, RowMajor<1, 32>>;
+using GMOut = global_tensor<float, RowMajor<1, 64>>;
+using GMBias = global_tensor<float, RowMajor<1, 64>>;
 
 void gemv_bias(float *out, const float *matrix_data, const float *vector_data,
                const float *bias_data) {
   GM matrix_gm(matrix_data); GMVec vector_gm(vector_data); GMOut out_gm(out);
   GMBias bias_gm(bias_data);
-  Matrix matrix; Vec vec; Result result; Bias bias;
+  Matrix matrix; Vec vec; D result; Bias bias;
   TLOAD_CUBE(matrix, matrix_gm);
   TLOAD_CUBE(vec, vector_gm);
   TLOAD(bias, bias_gm);
