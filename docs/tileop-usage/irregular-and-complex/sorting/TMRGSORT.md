@@ -1,4 +1,4 @@
-# TMRGSORT
+# TMRGSORT (unreleased)
 
 `TMRGSORT` 稳定合并两个已排序的单行 Local RowMajor 数据流。
 
@@ -6,7 +6,7 @@
 
 当前 API 中可用的调用形式：
 
-```cpp
+```text
 template <is_tile_data_v DstTile, is_tile_data_v LeftTile, is_tile_data_v RightTile>
 void TMRGSORT(DstTile &dst, LeftTile &left, RightTile &right, bool descending = false);
 ```
@@ -96,7 +96,7 @@ BSTOP
 
 ## 使用示例
 
-```cpp
+```text
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

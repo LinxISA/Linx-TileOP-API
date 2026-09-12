@@ -1,4 +1,4 @@
-# TSORT
+# TSORT (unreleased)
 
 `TSORT` 稳定地排序相互独立的行组，并发布带有组内原始 U32 索引的值。
 
@@ -6,7 +6,7 @@
 
 当前 API 中可用的调用形式：
 
-```cpp
+```text
 template <is_tile_data_v ValueDstTile, is_tile_data_v IndexDstTile, is_tile_data_v SourceTile>
 void TSORT(
     ValueDstTile &valueDst,
@@ -101,7 +101,7 @@ BSTOP
 
 ## 使用示例
 
-```cpp
+```text
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

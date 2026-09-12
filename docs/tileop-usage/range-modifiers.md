@@ -118,6 +118,10 @@ For a parent Tile split into fixed-size fragments, prefer the region API:
 
 ```cpp
 // TPARTVIEW currently requires a Local Matrix+CUBE parent.
+#include <common/pto_tileop.hpp>
+
+using namespace pto;
+
 using Parent = CubeTileM16<float, 16, 64>;
 using Fragment = CubeTileM16<float, 16, 16>;
 using GM = global_tensor<float, RowMajor<16, 64>>;
@@ -297,8 +301,8 @@ B.IOT      <assembled-destination>, mask=1111, last
 `range::assemble` 提供已有 destination 的关联描述，而 `_ASS` 负责 TEPL 计算
 bundle；上述 bundle 中没有 destination arrow、Tile SizeCode 或 `B.ASSEMBLE`。
 此前验证的 14 个特殊接口均生成了对应的 `BSTART.TEPL`：
-`TCMP`、`TCMPS`、`TFMA`、`TSQRT`、`TRSQRT`、`TRELU`、`TCVT`、`TTRANS`、
-`TROWSUM`、`TROWMAX`、`TCOLSUM`、`TROWEXPAND`、`TCOLEXPAND` 和 `TCONCAT`。
+`TCMP`、`TCMPS`、`TFMA`、`TSQRT`、`TRSQRT`、`TRELU`、`TCVT`、`TTRANS (unreleased)`、
+`TROWSUM`、`TROWMAX`、`TCOLSUM`、`TROWEXPAND`、`TCOLEXPAND` 和 `TCONCAT (unreleased)`。
 
 ## Forwarded members
 

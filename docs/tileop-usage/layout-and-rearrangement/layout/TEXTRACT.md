@@ -1,4 +1,4 @@
-# TEXTRACT
+# TEXTRACT (unreleased)
 
 `TEXTRACT` 从编码的行、列偏移起始位置，将矩形区域复制到目标 Tile。
 
@@ -6,7 +6,7 @@
 
 当前 API 中可用的调用形式：
 
-```cpp
+```text
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TEXTRACT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t indexCol);
 ```
@@ -85,7 +85,7 @@ BSTOP
 
 ## 使用示例
 
-```cpp
+```text
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

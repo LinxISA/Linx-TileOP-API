@@ -181,13 +181,13 @@ BSTOP       or the next BSTART completion boundary
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using Vec = CubeTileM16<__fp8_e4m3, 1, 32>;
+using Vec = CubeTileM16<__fp8_e4m3, 1, 16>;
 using Matrix = CubeTileN8<__fp8_e4m3, 32, 16>;
-using Acc = CubeAccumulatorM16<float, 1, 16>;
+using Acc = CubeAccumulatorM16<float, 1, 32>;
 using ScaleVec = Tile<Location::Scaling, __fp8_e8m0, 16, 8,
-                       BLayout::RowMajor, 1, 1>;
-using ScaleMatrix = Tile<Location::Scaling, __fp8_e8m0, 8, 16,
-                           BLayout::RowMajor, 1, 16>;
+                             BLayout::RowMajor, 1, 1>;
+using ScaleMatrix = Tile<Location::Scaling, __fp8_e8m0, 8, 32,
+                             BLayout::RowMajor, 1, 32>;
 
 void gemv_mx_acc(Acc &d, Acc &c, Matrix &matrix, ScaleMatrix &scale_matrix,
                  Vec &vec, ScaleVec &scale_vec) {

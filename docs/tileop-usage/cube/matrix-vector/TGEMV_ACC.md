@@ -119,12 +119,12 @@ BSTOP       or the next BSTART completion boundary
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using Vec = CubeTileM16<float, 1, 64>;
+using Vec = CubeTileM16<float, 1, 32>;
 using Matrix = CubeTileN8<float, 64, 32>;
-using Acc = CubeAccumulatorM16<float, 1, 32>;
+using Acc = CubeAccumulatorM16<float, 1, 64>;
 
 void gemv_acc(Acc &d, Acc &c, Matrix &matrix, Vec &vec) {
-  // d = c + vec[1x64] * matrix[64x32]。
+  // d = c + vec[1x32] * matrix[32x64]。
   TGEMV_ACC(d, c, matrix, vec);
 }
 ```

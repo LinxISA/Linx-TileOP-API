@@ -390,10 +390,10 @@ using Fragment = CubeTileM32<float, 32, 16>;
 
 Parent parent;
 auto parts = TPARTVIEW<Fragment, 1, 4>(parent);
-auto fragment = parts[0][j];
+auto fragment = parts[0][2];
 
-TileArray<Fragment, 1, 4> fragments;
-auto slot = fragments[0][j];
+TileArray<Fragment, 1, 4> destinations;
+auto slot = destinations[0][2];
 ```
 
 这类 region API 会根据 fragment ordinal 管理连续区域和 assembly slot；开发者
@@ -592,14 +592,17 @@ auto TASSEMBLY(TileArray<SubTile, Rows, Cols> &&array) -> Parent;
 using Parent = TileLeft<__bf16, 32, 64>;
 using Fragment = TileLeft<__bf16, 32, 16>;
 
-TileArray<Fragment, 1, 4> fragments;
+using InputFragment = TileLeft<__bf16, 32, 16>;
+
+TileArray<Fragment, 1, 4> destinations;
+InputFragment input;
 
 for (int col = 0; col < 4; ++col) {
-  auto slot = fragments[0][col];
-  TCVT(slot, input[col]);
+  auto slot = destinations[0][col];
+  TCVT(slot, input);
 }
 
-Parent result = TASSEMBLY<Parent>(std::move(fragments));
+Parent result = TASSEMBLY<Parent>(std::move(destinations));
 ```
 
 `Parent` 是最终返回的完整 Tile；`SubTile`、`Rows` 和 `Cols` 必须与

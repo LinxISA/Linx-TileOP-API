@@ -280,9 +280,10 @@ Row row_in;
 TMATMUL(d, a, b, fixp::keep_acc().row_max(row_in, row_out)); // RowMaxInit=1
 ```
 
-Local auxiliary Tile 的物理 active size 必须处于当前实现允许的 `128 B..256 KiB` 范围内，
-但具体操作还可能有更严格的限制。valid shape 变小不会降低物理容量要求；可以增大物理
-shape，并用 `ValidCol=1` 表示有效区域。
+RowMax 输出必须使用当前 API 支持的物理 one-column carrier：物理 shape 的列数必须为 1，
+并且 valid shape 必须为 `M x 1`。不能通过扩大物理 `M x N` shape、再用 `ValidCol=1`
+来替代 one-column carrier。Local auxiliary Tile 的物理 active size 仍必须处于当前实现
+允许的 `128 B..256 KiB` 范围内，但具体操作还可能有更严格的限制。
 
 GroupN 必须是 `8, 16, 32, 48, 64, 80, 96, 112, 128` 之一，对应 `GroupNCode=1..9`；
 编码 0 表示关闭 GroupMax。
@@ -435,7 +436,7 @@ using namespace pto;
 using D = CubeAccumulatorM32<float, 32, 32>;
 using Ds8 = CubeAccumulatorM32<int8_t, 32, 32>;
 using A = CubeTileM32<float, 32, 64>;
-using B = CubeTileN8<float, 64, 32>;
+using B = CubeTileN8<float, 32, 64>;
 using Param = Tile<Location::Vec, unsigned long, 2, 32,
                    BLayout::RowMajor, 1, 32>;
 using Row = Tile<Location::Vec, float, 32, 32,
