@@ -181,8 +181,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
                     "RangeAssemble.cpp").read_text(encoding="utf-8")
         self.assertIn("auto sv = range::subview(s);", tile)
         self.assertIn("auto sv = range::subview(s, base_units);", tile)
-        self.assertIn("auto sv = range::subview<1, 3>(s);", tile)
-        self.assertIn("auto sv = range::subview<1, 3>(s, base_units);", tile)
+        self.assertIn("auto sv = range::subview<128, 3>(s);", tile)
+        self.assertIn("auto sv = range::subview<128, 3>(s, base_units);", tile)
         self.assertIn("auto sv = range::subview_at_reg<3, 23>(s, 23);", tile)
         self.assertIn("auto as = range::assemble(d);", assemble)
         self.assertIn("auto as = range::assemble(d, base_units);", assemble)
@@ -692,6 +692,10 @@ int main() { return sizeof(Bad); }
             environment.update(
                 {
                     "MAKE": str(fake_make),
+                    # This test exercises compile.all's aggregation logic with
+                    # a fake make command; do not enter the Linx compiler
+                    # setup path, which requires a real clang++ toolchain.
+                    "PLAT": "cpu",
                     "COMPILER_DIR": temporary,
                     "LINX_SYSROOT": temporary,
                 }
