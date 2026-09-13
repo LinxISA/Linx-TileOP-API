@@ -137,10 +137,10 @@ BSTOP       or the next BSTART completion boundary
 
 using namespace pto;
 using A = CubeTileM16<float, 16, 16>;
-using B = CubeTileN8<float, 16, 8>;
+using B = CubeTileN8<float, 8, 16>;
 using Acc = CubeAccumulatorM16<float, 16, 8>;
 using GM16 = global_tensor<float, RowMajor<16, 16>>;
-using GM8 = global_tensor<float, RowMajor<16, 8>>;
+using GM8 = global_tensor<float, RowMajor<8, 16>>;
 
 void matmul_acc(float *out, const float *accumulator,
                 const float *a_data, const float *b_data) {

@@ -1,4 +1,4 @@
-# THISTOGRAM
+# THISTOGRAM (unreleased)
 
 `THISTOGRAM` 为每个源行构造包含 256 个 U32 bin 的前缀直方图。
 
@@ -6,7 +6,7 @@
 
 当前 API 中可用的调用形式：
 
-```cpp
+```text
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void THISTOGRAM(tile_shape_out &dst, tile_shape_in &src, tile_shape_in &Idx, int ByteId);
 ```
@@ -91,7 +91,7 @@ BSTOP
 
 ## 使用示例
 
-```cpp
+```text
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

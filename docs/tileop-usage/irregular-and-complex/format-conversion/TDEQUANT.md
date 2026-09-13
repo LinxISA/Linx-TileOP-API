@@ -1,4 +1,4 @@
-# TDEQUANT
+# TDEQUANT (unreleased)
 
 `TDEQUANT` 对每个有效的 S8 或 U8 源元素计算 FP32 结果 `(q - zero_point) * multiplier`。
 
@@ -6,7 +6,7 @@
 
 当前 API 中可用的调用形式：
 
-```cpp
+```text
 template <
     RoundMode Mode = RoundMode::RNE,
     is_tile_data_v tile_shape_out,
@@ -105,7 +105,7 @@ BSTOP
 
 ## 使用示例
 
-```cpp
+```text
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

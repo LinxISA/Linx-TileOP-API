@@ -188,7 +188,7 @@ BSTOP       or the next BSTART completion boundary
 
 using namespace pto;
 using A = CubeTileM16<__half, 16, 32>;
-using B = CubeTileN8<__fp8_e4m3, 32, 16>;
+using B = CubeTileN8<__fp8_e4m3, 16, 32>;
 using D = CubeAccumulatorM16<float, 16, 16>;
 using ScaleB = Tile<Location::Scaling, __fp8_e8m0, 8, 16,
                      BLayout::RowMajor, 1, 16>;

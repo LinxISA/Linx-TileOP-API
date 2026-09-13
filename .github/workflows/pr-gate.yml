@@ -194,6 +194,13 @@ jobs:
           set -euo pipefail
           git show --check --format= HEAD -- include/jcore/template_asm.hpp
 
+      - name: Run complete TileOP API check
+        working-directory: tileop-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          make check
+
       - name: Run template_asm.hpp contract checks
         working-directory: tileop-api
         run: |

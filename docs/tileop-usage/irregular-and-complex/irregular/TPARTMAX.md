@@ -8,7 +8,7 @@
 
 当前 API 中可用的调用形式：
 
-```cpp
+```text
 template <is_tile_data_v tile_shape>
 void TPARTMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1);
 ```
@@ -87,7 +87,7 @@ BSTOP
 
 ## 使用示例
 
-```cpp
+```text
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

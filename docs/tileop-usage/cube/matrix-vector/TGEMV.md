@@ -112,11 +112,11 @@ BSTOP       or the next BSTART completion boundary
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using Vec = CubeTileM16<float, 1, 64>;
-using Matrix = CubeTileN8<float, 64, 32>;
+using Vec = CubeTileM16<float, 1, 32>;
+using Matrix = CubeTileN8<float, 32, 32>;
 using Result = CubeAccumulatorM16<float, 1, 32>;
-using GMVec = global_tensor<float, RowMajor<1, 64>>;
-using GMMatrix = global_tensor<float, RowMajor<64, 32>>;
+using GMVec = global_tensor<float, RowMajor<1, 32>>;
+using GMMatrix = global_tensor<float, RowMajor<32, 32>>;
 using GMResult = global_tensor<float, RowMajor<1, 32>>;
 
 void gemv(float *out, const float *matrix_data, const float *vector_data) {
@@ -124,7 +124,7 @@ void gemv(float *out, const float *matrix_data, const float *vector_data) {
   Matrix matrix; Vec vec; Result result;
   TLOAD_CUBE(matrix, matrix_gm);
   TLOAD_CUBE(vec, vector_gm);
-  // result[1x32] = vec[1x64] * matrix[64x32]。
+  // result[1x32] = vec[1x32] * matrix[32x32]。
   TGEMV(result, matrix, vec);
   TSTORE_CUBE(out_gm, result);
 }
