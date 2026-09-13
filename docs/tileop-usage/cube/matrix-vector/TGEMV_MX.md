@@ -167,8 +167,8 @@ BSTOP       or the next BSTART completion boundary
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using Vec = CubeTileM16<__fp8_e4m3, 1, 16>;
-using Matrix = CubeTileN8<__fp8_e4m3, 32, 16>;
+using Vec = CubeTileM16<__fp8_e4m3, 1, 32>;
+using Matrix = CubeTileN8<__fp8_e4m3, 32, 32>;
 using D = CubeAccumulatorM16<float, 1, 32>;
 using ScaleVec = Tile<Location::Scaling, __fp8_e8m0, 16, 8,
                             BLayout::RowMajor, 1, 1>;

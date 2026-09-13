@@ -120,14 +120,14 @@ BSTOP       or the next BSTART completion boundary
 
 using namespace pto;
 using Vec = CubeTileM16<float, 1, 32>;
-using Matrix = CubeTileN8<float, 64, 32>;
-using D = CubeAccumulatorM16<float, 1, 64>;
-using Bias = Tile<Location::Bias, float, 1, 64,
-                  BLayout::RowMajor, 1, 64>;
-using GM = global_tensor<float, RowMajor<64, 32>>;
+using Matrix = CubeTileN8<float, 32, 32>;
+using D = CubeAccumulatorM16<float, 1, 32>;
+using Bias = Tile<Location::Bias, float, 1, 32,
+                  BLayout::RowMajor, 1, 32>;
+using GM = global_tensor<float, RowMajor<32, 32>>;
 using GMVec = global_tensor<float, RowMajor<1, 32>>;
-using GMOut = global_tensor<float, RowMajor<1, 64>>;
-using GMBias = global_tensor<float, RowMajor<1, 64>>;
+using GMOut = global_tensor<float, RowMajor<1, 32>>;
+using GMBias = global_tensor<float, RowMajor<1, 32>>;
 
 void gemv_bias(float *out, const float *matrix_data, const float *vector_data,
                const float *bias_data) {
