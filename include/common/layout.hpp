@@ -81,6 +81,12 @@ enum LayoutCvtEnum : uint64_t {
   M322ND = 24,
   M162ND = 25,
   N82ND = 26,
+  // PTO-ISA #291 direct-Local layout selectors (B.DATR Layout 29/31). Unlike
+  // the ND2M32..N82ND transport conversions above, these name the operand's
+  // physical Local layout itself instead of a GM<->Local transfer, so they are
+  // legal on every operation that selects a Local operand layout.
+  CUBE_M32 = 29,
+  CUBE_M16 = 31,
 };
 
 enum PadValueEnum : uint64_t {

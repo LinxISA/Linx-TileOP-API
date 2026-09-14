@@ -188,8 +188,7 @@ using ScaleVec = Tile<Location::Scaling, __fp8_e8m0, 16, 8,
                             BLayout::RowMajor, 1, 1>;
 using ScaleMatrix = Tile<Location::Scaling, __fp8_e8m0, 8, 32,
                               BLayout::RowMajor, 1, 32>;
-using Bias = Tile<Location::Bias, float, 1, 32,
-                  BLayout::RowMajor, 1, 32>;
+using Bias = CubeBias<float, 32>;
 
 void gemv_mx_bias(D &d, Matrix &matrix, ScaleMatrix &scale_matrix, Vec &vec,
                   ScaleVec &scale_vec, Bias &bias) {

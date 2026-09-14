@@ -199,6 +199,98 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("length cannot exceed the parent Tile capacity", tile_header)
         self.assertIn("auto assemble_last_at_reg(Parent &parent", tile_header)
 
+    def test_elementwise_tepl_selects_the_operand_local_layout(self) -> None:
+        # PTO-ISA #291: an elementwise TEPL operation selects its Local operand
+        # layout through B.DATR.Layout, so CUBE_M16/M32 keeps its physical CUBE
+        # representation. RowMajor stays on the NORM default and must keep
+        # emitting no B.DATR at all.
+        self.assertIn(
+            'template <typename Tile>\n'
+            'inline constexpr int elementwise_layout_code_v =',
+            self.header)
+        self.assertIn('".if %c[ElemLayout] == 29\\nB.DATR CUBE_M32, Null\\n"',
+                      self.header)
+        self.assertIn('".elseif %c[ElemLayout] == 31\\nB.DATR CUBE_M16, Null\\n"',
+                      self.header)
+        # Every TEPL elementwise wrapper carries both the selector and the
+        # operand that feeds it.
+        for op in ("TADD", "TMUL", "TABS", "TMULS", "TEXPANDS", "TFMA"):
+            match = re.search(
+                r'void ' + op + r'\(.*?\n}\n', self.header, re.S)
+            self.assertIsNotNone(match, op)
+            body = match.group(0)
+            self.assertIn('PTO_ELEMENTWISE_LAYOUT_ASM', body)
+            self.assertIn('[ElemLayout] "i"(elementwise_layout_code_v<', body)
+        self.assertIn(
+            '[ElemLayout] "i"(elementwise_layout_code_v<tile_shape_out>)',
+            self.header)
+        fixture = (ROOT / 'test' / 'tileop_api' / 'src' /
+                   'DirectCubeLayout.cpp').read_text(encoding='utf-8')
+        self.assertIn('CubeBias<float, 16>', fixture)
+        self.assertIn('tcvt_vec_m32', fixture)
+        self.assertIn('gmov_cube_m32', fixture)
+
+    def test_tcvt_cube_m_layout_is_location_independent(self) -> None:
+        # PTO-ISA #291 retires the Matrix-location half of the TCVT CUBE
+        # legality predicate (issue #267): a Vec-location CUBE_M16/M32 tile is
+        # convertible, and only the CUBE layout and valid shape are preserved.
+        tcvt = re.search(
+            r'(?s)template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,'
+            r'\s*is_tile_data_v tile_shape_in>\n'
+            r'void TCVT_T\(.*?\n}\n\n\n// PTO ISA 0.58 generic Local-to-Local TMOV',
+            self.header,
+        )
+        self.assertIsNotNone(tcvt)
+        carrier = tcvt.group(0)
+        cube_branch = carrier.split('if constexpr (IsCubeMSource) {', 1)[1].split(
+            '} else {', 1)[0]
+        self.assertNotIn('Location::Left', cube_branch)
+        self.assertNotIn('Location::Acc', cube_branch)
+        self.assertIn('tile_shape_out::BFractal == tile_shape_in::BFractal',
+                      cube_branch)
+        self.assertIn('tile_shape_out::ValidRow == tile_shape_in::ValidRow',
+                      cube_branch)
+
+    def test_matrix_bias_carries_the_resolved_m_layout(self) -> None:
+        # PTO-ISA #291: Bias uses the resolver-selected M layout ML and must
+        # match D (Bias.layout == ML == D.layout), so it is a CUBE_M16/M32
+        # Tile rather than an ordinary RowMajor rectangle.
+        self.assertIn(
+            'static_assert(Bias::BFractal == Dst::BFractal && is_cube_m_layout_v<Bias>',
+            self.header)
+        self.assertIn('using CubeBias =', PTO_TILE.read_text(encoding='utf-8'))
+        for fixture in ("TMatmulAllOptions.cpp", "TGEMVAllOptions.cpp",
+                        "GroupMatmul.cpp", "SharedMatrixForms.cpp",
+                        "MXScaleVariants.cpp", "MatrixIntegerDtypes.cpp",
+                        "CoopGroupMOverloads.cpp", "PostProcessCombos.cpp"):
+            text = (ROOT / 'test' / 'tileop_api' / 'src' / fixture).read_text(
+                encoding='utf-8')
+            self.assertIn('CubeBias<', text, fixture)
+            self.assertNotIn('Location::Bias', text, fixture)
+        for doc in ("TMATMUL_BIAS.md", "TMATMUL_MX_BIAS.md",
+                    "TGEMV_BIAS.md", "TGEMV_MX_BIAS.md"):
+            path = next((ROOT / 'docs').rglob(doc))
+            self.assertIn('CubeBias<', path.read_text(encoding='utf-8'), doc)
+
+    def test_gmov_preserves_one_selected_local_layout(self) -> None:
+        # PTO-ISA #291: GMOV copies Local RowMajor/CUBE_M16/CUBE_M32 peers that
+        # preserve one selected layout; CUBE_N8 stays transport-only.
+        gmov = re.search(r'(?s)void GMOV\(.*?\n}\n', self.header)
+        self.assertIsNotNone(gmov)
+        body = gmov.group(0)
+        self.assertIn('PTO_GMOV_LAYOUT_ASM', body)
+        self.assertIn('tile_shape_src::BFractal != BLayout::CubeN8', body)
+        self.assertIn(
+            '[ElemLayout] "i"(elementwise_layout_code_v<tile_shape_src>)', body)
+
+    def test_cube_load_ass_uses_the_canonical_layout_name(self) -> None:
+        # The CUBE transport selectors have no numeric B.DATR spelling: the
+        # parser reads the Layout field as a BArgFormat identifier, so the
+        # previous `layout%c[Layout]` form never assembled.
+        self.assertNotIn('layout%c', self.header)
+        self.assertIn('PTO_CUBE_LOAD_LAYOUT_ASM', self.header)
+        self.assertIn('"B.DATR ND2M32.normal, Zero\\n"', self.header)
+
     def test_range_modifier_types_and_aliases_remain_supported(self) -> None:
         header = PTO_TILE.read_text(encoding="utf-8")
         docs = (ROOT / "docs" / "tileop-usage" / "range-modifiers.md").read_text(

@@ -16,8 +16,7 @@ using SA = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
 using SB = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
                 BLayout::RowMajor, 2, 32>;
 using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
-using Bias = Tile<Location::Bias, float, 8, 32,
-                  BLayout::RowMajor, 1, 32>;
+using Bias = CubeBias<float, 32, 32>;
 
 void all_variants(D &d, D &c, Bias &bias, A &a, B &b, MXA &mxa, MXB &mxb,
                   SA &sa, SB &sb, R &rout, R &rin) {

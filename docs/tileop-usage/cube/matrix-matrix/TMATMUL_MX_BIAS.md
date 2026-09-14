@@ -192,8 +192,7 @@ using B = CubeTileN8<__fp8_e4m3, 16, 32>;
 using D = CubeAccumulatorM16<float, 16, 16>;
 using ScaleB = Tile<Location::Scaling, __fp8_e8m0, 8, 16,
                      BLayout::RowMajor, 1, 16>;
-using Bias = Tile<Location::Bias, float, 8, 16,
-                  BLayout::RowMajor, 1, 16>;
+using Bias = CubeBias<float, 16>;
 
 void matmul_mx_bias(D &d, A &a, B &b, ScaleB &scale_b, Bias &bias) {
   TMATMUL_MX_BIAS(d, a, b, scale_b, bias);

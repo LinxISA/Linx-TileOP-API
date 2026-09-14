@@ -40,6 +40,46 @@ using namespace pto;
   ".elseif %c[RMode] == 7\nB.DATR %D[__pto_DstType], RHB" SUFFIX                \
   ".endif\n"
 
+// PTO-ISA #291: an elementwise TEPL operation selects its Local operand
+// layout through B.DATR.Layout, so a CUBE_M16/M32 source keeps its physical
+// CUBE representation instead of collapsing to the NORM (RowMajor) default.
+// RowMajor stays on the NORM default and emits no B.DATR at all, so the
+// historical encoding of ordinary tiles is unchanged.
+//
+// The pad value is spelled out because an explicit B.DATR encodes every
+// field; Null is the same padding an omitted B.DATR selects.
+#define PTO_ELEMENTWISE_LAYOUT_ASM                                             \
+  ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32, Null\n"                          \
+  ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Null\n"                      \
+  ".endif\n"
+
+// B.DATR.Layout code for an elementwise operand's physical Local layout:
+// 29 CUBE_M32, 31 CUBE_M16, and NORM (0) for the RowMajor default.
+template <typename Tile>
+inline constexpr int elementwise_layout_code_v =
+    Tile::BFractal == BLayout::CubeM32 ? LayoutCvtEnum::CUBE_M32
+    : Tile::BFractal == BLayout::CubeM16 ? LayoutCvtEnum::CUBE_M16
+                                         : LayoutCvtEnum::NORM;
+
+// PTO-ISA #291 GMOV accepts Local RowMajor, CUBE_M16, and CUBE_M32 peer copies
+// that preserve one selected layout; CUBE_N8 and Shared are illegal.  GMOV's
+// B.DATR carries only Layout with must-zero padding, so the explicit form
+// spells PadValue=Zero.
+#define PTO_GMOV_LAYOUT_ASM                                                    \
+  ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32, Zero\n"                          \
+  ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Zero\n"                      \
+  ".endif\n"
+
+// The CUBE transport selectors have no numeric B.DATR spelling: the parser
+// reads the Layout field as a BArgFormat identifier, so `layout<code>` never
+// matches. Select the canonical GM->Local name from the numeric code instead.
+// Only the three TLOAD selectors are reachable from a CUBE load.
+#define PTO_CUBE_LOAD_LAYOUT_ASM                                               \
+  ".if %c[Layout] == 21\nB.DATR ND2M32.normal, Zero\n"                         \
+  ".elseif %c[Layout] == 22\nB.DATR ND2M16.normal, Zero\n"                     \
+  ".elseif %c[Layout] == 23\nB.DATR ND2N8.normal, Zero\n"                      \
+  ".endif\n"
+
 // Rounding-mode selector shared by the scalar cvt helpers and the
 // tile-level TCVT (the ISA B.DATR RMode field is bits[17:15]; the
 // enumeration values match the ISA codes one-to-one).
@@ -111,12 +151,6 @@ void TCVT_T(tile_shape_out &dst, tile_shape_in &src) {
     static_assert(tile_shape_out::ValidRow == tile_shape_in::ValidRow &&
                       tile_shape_out::ValidCol == tile_shape_in::ValidCol,
                   "TCVT CUBE_M16/M32 conversion must preserve the valid shape");
-    static_assert(tile_shape_out::Loc == Location::Left ||
-                      tile_shape_out::Loc == Location::Acc,
-                  "TCVT CUBE_M16/M32 destination must have Matrix location");
-    static_assert(tile_shape_in::Loc == Location::Left ||
-                      tile_shape_in::Loc == Location::Acc,
-                  "TCVT CUBE_M16/M32 source must have Matrix location");
     static_assert(tile_shape_in::TilesizeCode >= __tilesize_128B &&
                       tile_shape_in::TilesizeCode <= __tilesize_64KB,
                   "TCVT CUBE_M16/M32 source TSize must be 128 B..64 KiB");
@@ -2886,11 +2920,14 @@ void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src) {
                 "TLOAD_CUBE_ASS CUBE CELL storage exceeds Local SizeCode capacity");
   static_assert(cube_shape::IsValidActiveSize,
                 "TLOAD_CUBE_ASS Local CUBE capacity must be 128 B..256 KiB");
+  static_assert(cube_shape::CubeLoadLayout >= LayoutCvtEnum::ND2M32 &&
+                    cube_shape::CubeLoadLayout <= LayoutCvtEnum::ND2N8,
+                "TLOAD_CUBE_ASS requires a GM->Local CUBE load selector");
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
     "BSTART.TLSU TLOAD, %D[DataType]\n"
-    "B.DATR layout%c[Layout], DTYPE_NONE, Null\n"
+    PTO_CUBE_LOAD_LAYOUT_ASM
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.IOT %[Dst], mask=1111, last\n"
@@ -3881,6 +3918,12 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
                     tile_shape_dst::SFractalSize ==
                         tile_shape_src::SFractalSize,
                 "GMOV source and destination descriptors must match");
+  // PTO-ISA #291: the peer copy preserves one selected Local layout. Only
+  // RowMajor, CUBE_M16, and CUBE_M32 are elementwise-representable; CUBE_N8
+  // stays a transport-only representation and is illegal here.
+  static_assert(tile_shape_src::BFractal != BLayout::CubeN8,
+                "GMOV rejects CUBE_N8 peer copies (Local RowMajor, CUBE_M16, "
+                "and CUBE_M32 only)");
   static_assert(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "GMOV logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
@@ -3889,6 +3932,7 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
                 "GMOV source and destination logical sizes must match");
   asm volatile(
       "BSTART.GMOV %D[DataType]\n"
+      PTO_GMOV_LAYOUT_ASM
       PTO_PE_MASK_ASM("B.IOT %[src], mask=",
                       ", last, ->%[dst]<%Z[TileSize]>\n")
       "B.IOR [%[peer]],[]\n"
@@ -3896,6 +3940,7 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
       : [src] "Tr"(src.data()), [peer] "r"(peer_tid),
         [PEMask] "i"(PEMask),
         [DataType] "i"(type_traits<typename tile_shape_src::DType>::TypeCode),
+        [ElemLayout] "i"(elementwise_layout_code_v<tile_shape_src>),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_dst::TileDType>::TilesizeCode)
       : "memory");
@@ -4159,6 +4204,14 @@ template <typename T>
 inline constexpr bool is_cube_m_layout_v =
     T::BFractal == BLayout::CubeM16 || T::BFractal == BLayout::CubeM32;
 
+// PTO-ISA #291 TileMatrixMLayoutLegal: a CUBE_M16 representation spans at
+// most 16 logical M rows and CUBE_M32 at most 32, so the resolved M layout
+// ML and the operand's M extent must agree.
+template <typename Tile, int M>
+inline constexpr bool is_m_layout_legal_v =
+    (Tile::BFractal == BLayout::CubeM16 && M <= 16) ||
+    (Tile::BFractal == BLayout::CubeM32 && M <= 32);
+
 constexpr int cooperative_group_m_rows_per_pe(int group_m) {
   return group_m <= 64 ? 16 : 32;
 }
@@ -4252,6 +4305,14 @@ constexpr void validate_matrix_contract() {
                       Dst::ValidCol == BValidCols,
                   "Matrix D valid shape must match effective M x N");
   }
+  // ASL BundleMatrixCooperativeMLayout resolves ML from the Local A/C layout
+  // when present and from per-PE M otherwise; TileMatrixMLayoutLegal then
+  // requires M16 to span at most 16 rows and M32 at most 32. D is always the
+  // per-PE MxN block, so its layout must agree with its own valid rows.
+  if constexpr (Dst::ValidRow != DYNAMIC)
+    static_assert(is_m_layout_legal_v<Dst, Dst::ValidRow>,
+                  "Matrix D M layout must span its per-PE valid rows "
+                  "(CUBE_M16 requires M <= 16, CUBE_M32 requires M <= 32)");
 }
 
 template <FixpAttr Attr, typename Dst, typename Acc, typename A, typename B,
@@ -4322,13 +4383,19 @@ constexpr void validate_cube_ctrl_contract() {
                 "raw accumulator D (CCTRL[0]) forbids MaxAbs reduction");
 }
 
-template <FixpAttr Attr, typename Bias, typename A, typename B, bool MX = false>
+template <FixpAttr Attr, typename Dst, typename Bias, typename A, typename B,
+          bool MX = false>
 constexpr void validate_matrix_bias_contract() {
   static_assert(matrix_accumulator_type_legal<A, B, Bias, MX>(),
                 "Matrix Bias dtype must match the derived accumulator type");
-  static_assert(Bias::BFractal == BLayout::RowMajor &&
+  // PTO-ISA #291: Bias carries the resolver-selected M layout ML
+  // (asl/block/model/dispatch/shared-cube-matrix.asl
+  // BundleMatrixCooperativeMLayout), so it matches D and Local A rather than
+  // an ordinary RowMajor rectangle: Bias.layout == ML == D.layout.
+  static_assert(Bias::BFractal == Dst::BFractal && is_cube_m_layout_v<Bias> &&
                     Bias::SFractal == SLayout::NoneBox,
-                "Matrix Bias must use ordinary RowMajor layout");
+                "Matrix Bias must use the resolved M layout (CUBE_M16 or "
+                "CUBE_M32) matching the destination");
   static_assert(Bias::ValidRow != DYNAMIC && Bias::ValidCol != DYNAMIC &&
                     B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC,
                 "Matrix Bias dynamic valid shapes are not supported");
@@ -4603,7 +4670,7 @@ template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B,     
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 \
                             size_t M, size_t N, size_t K) {                      \
   validate_matrix_contract<Attr, Dst, A, B>();                                            \
-  validate_matrix_bias_contract<Attr, Extra, A, B>();                                           \
+  validate_matrix_bias_contract<Attr, Dst, Extra, A, B>();                                           \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                 \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
@@ -6256,7 +6323,7 @@ PTO_SHARED_INLINE void emit_matmul_bias_fixp(
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
-  validate_matrix_bias_contract<Attr, BiasT, A, B>();
+  validate_matrix_bias_contract<Attr, Dst, BiasT, A, B>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
@@ -6358,7 +6425,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
   constexpr bool HasScaleA = (ScaleMask & 1) != 0;
   constexpr bool HasScaleB = (ScaleMask & 2) != 0;
   validate_matrix_contract<Attr, Dst, A, B, true>();
-  validate_matrix_bias_contract<Attr, BiasT, A, B, true>();
+  validate_matrix_bias_contract<Attr, Dst, BiasT, A, B, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
@@ -6465,7 +6532,7 @@ PTO_SHARED_INLINE void emit_gemv_bias_fixp(
     RowOut &row_out, GroupOut &group_out,
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
-  validate_matrix_bias_contract<Attr, BiasT, Vec, Mtx>();
+  validate_matrix_bias_contract<Attr, Dst, BiasT, Vec, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVB_EMIT_LOCAL);
@@ -6535,7 +6602,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
   constexpr bool HasScaleA = (ScaleMask & 1) != 0;
   constexpr bool HasScaleB = (ScaleMask & 2) != 0;
   validate_gemv_contract<Attr, Dst, Vec, Mtx, true>();
-  validate_matrix_bias_contract<Attr, BiasT, Vec, Mtx, true>();
+  validate_matrix_bias_contract<Attr, Dst, BiasT, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
   validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
@@ -6754,7 +6821,7 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   if constexpr (IsAcc)                                                                    \
     validate_matrix_accumulator_contract<Attr, Dst, Extra, A, B, true>();                       \
   else                                                                                    \
-    validate_matrix_bias_contract<Attr, Extra, A, B, true>();                                   \
+    validate_matrix_bias_contract<Attr, Dst, Extra, A, B, true>();                                   \
   validate_cube_ctrl_contract<Attr, IsAcc>();                                   \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
@@ -9099,6 +9166,7 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 0, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9111,10 +9179,12 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 0, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9127,10 +9197,12 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 0, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9143,10 +9215,12 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 0, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9159,7 +9233,8 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9169,6 +9244,7 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 1, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9181,10 +9257,12 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 1, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9197,10 +9275,12 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 1, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9213,10 +9293,12 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 1, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9229,7 +9311,8 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9239,6 +9322,7 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 2, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9251,11 +9335,13 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   const size_t valid_row = src0.GetValidRow();
   asm volatile(
     "BSTART.TEPL 2, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[valid_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9268,11 +9354,13 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   const size_t valid_col = src0.GetValidCol();
   asm volatile(
     "BSTART.TEPL 2, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[valid_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9285,12 +9373,14 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   const size_t valid_col = src0.GetValidCol();
   const size_t valid_row = src0.GetValidRow();
   asm volatile(
     "BSTART.TEPL 2, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[valid_col], 0, ->lb0\n"
     "B.DIM %[valid_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9303,7 +9393,8 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9313,6 +9404,7 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 3, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9325,10 +9417,12 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 3, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9341,10 +9435,12 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 3, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9357,10 +9453,12 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 3, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9373,7 +9471,8 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9383,6 +9482,7 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 4, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9395,10 +9495,12 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 4, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9411,10 +9513,12 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 4, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9427,10 +9531,12 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 4, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9443,7 +9549,8 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9461,6 +9568,7 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 6, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9473,10 +9581,12 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 6, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9489,10 +9599,12 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 6, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9505,10 +9617,12 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 6, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9521,7 +9635,8 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9531,6 +9646,7 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 7, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9543,10 +9659,12 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 7, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9559,10 +9677,12 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 7, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9575,10 +9695,12 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 7, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9591,7 +9713,8 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9601,6 +9724,7 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 8, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9613,10 +9737,12 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 8, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9629,10 +9755,12 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 8, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9645,10 +9773,12 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 8, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9661,7 +9791,8 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9671,6 +9802,7 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 9, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9683,10 +9815,12 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 9, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9699,10 +9833,12 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 9, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9715,10 +9851,12 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 9, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9731,7 +9869,8 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9741,6 +9880,7 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 10, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9753,10 +9893,12 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 10, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9769,10 +9911,12 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 10, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9785,10 +9929,12 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 10, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9801,7 +9947,8 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9811,6 +9958,7 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 11, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9823,10 +9971,12 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 11, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9839,10 +9989,12 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 11, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9855,10 +10007,12 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 11, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9871,7 +10025,8 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -9881,6 +10036,7 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 12, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9893,10 +10049,12 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
     asm volatile(
     "BSTART.TEPL 12, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9909,10 +10067,12 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 12, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9925,10 +10085,12 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 12, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -9941,7 +10103,8 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       "i"(tile_shape::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -10536,6 +10699,7 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 15, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10547,10 +10711,12 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
       "i"(tile_shape_in::ValidRow),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow < 0) {
   asm volatile(
     "BSTART.TEPL 15, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10562,10 +10728,12 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_in::ValidCol < 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 15, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10577,10 +10745,12 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
       "i"(tile_shape_in::ValidRow),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape_out>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 15, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10592,7 +10762,8 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape_in::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape_out>)
   );  }
 }
 
@@ -10602,6 +10773,7 @@ void TNOT(tile_shape &dst, tile_shape &src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 16, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10613,10 +10785,12 @@ void TNOT(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   asm volatile(
     "BSTART.TEPL 16, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10628,10 +10802,12 @@ void TNOT(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 16, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10643,10 +10819,12 @@ void TNOT(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 16, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10658,7 +10836,8 @@ void TNOT(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -10668,6 +10847,7 @@ void TNEG(tile_shape &dst, tile_shape &src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 17, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10679,10 +10859,12 @@ void TNEG(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   asm volatile(
     "BSTART.TEPL 17, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10694,10 +10876,12 @@ void TNEG(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 17, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10709,10 +10893,12 @@ void TNEG(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 17, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10724,7 +10910,8 @@ void TNEG(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -10734,6 +10921,7 @@ void TEXP(tile_shape &dst, tile_shape &src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 18, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10745,10 +10933,12 @@ void TEXP(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   asm volatile(
     "BSTART.TEPL 18, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10760,10 +10950,12 @@ void TEXP(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 18, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10775,10 +10967,12 @@ void TEXP(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 18, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10790,7 +10984,8 @@ void TEXP(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -10800,6 +10995,7 @@ void TLOG(tile_shape &dst, tile_shape &src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 19, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10811,10 +11007,12 @@ void TLOG(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   asm volatile(
     "BSTART.TEPL 19, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10826,10 +11024,12 @@ void TLOG(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 19, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10841,10 +11041,12 @@ void TLOG(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 19, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10856,7 +11058,8 @@ void TLOG(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -10868,6 +11071,7 @@ void TRECIP(tile_shape &dst, tile_shape &src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
 asm volatile(
     "BSTART.TEPL 20, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10878,11 +11082,13 @@ asm volatile(
       "i"(tile_shape::ValidCol), "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
   else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
 asm volatile(
     "BSTART.TEPL 20, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10893,11 +11099,13 @@ asm volatile(
       "i"(tile_shape::ValidCol), [dyn_row] "r"(valid_row),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
   else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
 asm volatile(
     "BSTART.TEPL 20, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10908,11 +11116,13 @@ asm volatile(
       [dyn_col] "r"(valid_col), "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
   else {
 asm volatile(
     "BSTART.TEPL 20, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10923,7 +11133,8 @@ asm volatile(
       [dyn_col] "r"(valid_col), [dyn_row] "r"(valid_row),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -10933,6 +11144,7 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 21, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10944,10 +11156,12 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   asm volatile(
     "BSTART.TEPL 21, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10959,10 +11173,12 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 21, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10974,10 +11190,12 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 21, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -10989,7 +11207,8 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -10999,6 +11218,7 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 22, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11010,10 +11230,12 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   asm volatile(
     "BSTART.TEPL 22, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11025,10 +11247,12 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 22, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11040,10 +11264,12 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 22, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11055,7 +11281,8 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11065,6 +11292,7 @@ void TRELU(tile_shape &dst, tile_shape &src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 23, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11076,10 +11304,12 @@ void TRELU(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   asm volatile(
     "BSTART.TEPL 23, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11091,10 +11321,12 @@ void TRELU(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 23, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11106,10 +11338,12 @@ void TRELU(tile_shape &dst, tile_shape &src) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 23, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11121,7 +11355,8 @@ void TRELU(tile_shape &dst, tile_shape &src) {
       [src____dimrow] "r"(src.GetValidRow()),
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11163,6 +11398,7 @@ void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
 asm volatile(
     "BSTART.TEPL 32, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11175,11 +11411,13 @@ asm volatile(
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
   else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
 asm volatile(
     "BSTART.TEPL 32, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11192,11 +11430,13 @@ asm volatile(
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
   else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
 asm volatile(
     "BSTART.TEPL 32, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11209,11 +11449,13 @@ asm volatile(
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
   else {
 asm volatile(
     "BSTART.TEPL 32, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11226,7 +11468,8 @@ asm volatile(
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11240,6 +11483,7 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 33, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11253,7 +11497,8 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11261,6 +11506,7 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 33, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11274,7 +11520,8 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11282,6 +11529,7 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 33, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11295,7 +11543,8 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11303,6 +11552,7 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 33, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11316,7 +11566,8 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11332,6 +11583,7 @@ void TMULS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
 asm volatile(
     "BSTART.TEPL 34, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11344,11 +11596,13 @@ asm volatile(
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
   else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
 asm volatile(
     "BSTART.TEPL 34, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11361,11 +11615,13 @@ asm volatile(
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
   else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
 asm volatile(
     "BSTART.TEPL 34, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11378,11 +11634,13 @@ asm volatile(
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
   else {
 asm volatile(
     "BSTART.TEPL 34, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11395,7 +11653,8 @@ asm volatile(
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11409,6 +11668,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 35, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11422,7 +11682,8 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11430,6 +11691,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 35, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11443,7 +11705,8 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11451,6 +11714,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 35, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11464,7 +11728,8 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11472,6 +11737,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 35, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11485,7 +11751,8 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11499,6 +11766,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 36, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11512,7 +11780,8 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11520,6 +11789,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 36, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11533,7 +11803,8 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11541,6 +11812,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 36, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11554,7 +11826,8 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11562,6 +11835,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 36, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11575,7 +11849,8 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11597,6 +11872,7 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 38, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11610,7 +11886,8 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11618,6 +11895,7 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 38, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11631,7 +11909,8 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11639,6 +11918,7 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 38, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11652,7 +11932,8 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11660,6 +11941,7 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 38, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11673,7 +11955,8 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11687,6 +11970,7 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 39, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11700,7 +11984,8 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11708,6 +11993,7 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 39, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11721,7 +12007,8 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11729,6 +12016,7 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 39, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11742,7 +12030,8 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11750,6 +12039,7 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 39, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11763,7 +12053,8 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11777,6 +12068,7 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 40, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11790,7 +12082,8 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11798,6 +12091,7 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 40, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11811,7 +12105,8 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11819,6 +12114,7 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 40, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11832,7 +12128,8 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11840,6 +12137,7 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 40, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11853,7 +12151,8 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11867,6 +12166,7 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 41, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11880,7 +12180,8 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11888,6 +12189,7 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 41, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11901,7 +12203,8 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11909,6 +12212,7 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 41, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11922,7 +12226,8 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11930,6 +12235,7 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 41, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11943,7 +12249,8 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -11957,6 +12264,7 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 42, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11970,7 +12278,8 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11978,6 +12287,7 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 42, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -11991,7 +12301,8 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -11999,6 +12310,7 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 42, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12012,7 +12324,8 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -12020,6 +12333,7 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 42, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12033,7 +12347,8 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -12047,6 +12362,7 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 43, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12060,7 +12376,8 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -12068,6 +12385,7 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 43, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12081,7 +12399,8 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -12089,6 +12408,7 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 43, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12102,7 +12422,8 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -12110,6 +12431,7 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 43, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12123,7 +12445,8 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -12137,6 +12460,7 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 44, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12150,7 +12474,8 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -12158,6 +12483,7 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 44, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12171,7 +12497,8 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -12179,6 +12506,7 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 44, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12192,7 +12520,8 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -12200,6 +12529,7 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 44, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12213,7 +12543,8 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
       "i"(tile_shape::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -12827,6 +13158,7 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 59, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12839,7 +13171,8 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -12847,6 +13180,7 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 59, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12859,7 +13193,8 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape::Cols),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -12867,6 +13202,7 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 59, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12879,7 +13215,8 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
       "i"(tile_shape::ValidRow),
       "i"(tile_shape::Cols),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -12887,6 +13224,7 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
   asm("" : "+r"(sv));
   asm volatile(
     "BSTART.TEPL 59, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12899,7 +13237,8 @@ void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape::Cols),
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      "r"(sv)
+      "r"(sv),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 
@@ -12912,6 +13251,7 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 28, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12926,10 +13266,12 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "Tr"(src2.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   asm volatile(
     "BSTART.TEPL 28, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12944,10 +13286,12 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "Tr"(src2.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 28, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12962,10 +13306,12 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "Tr"(src2.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 28, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -12980,7 +13326,8 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "Tr"(src2.data()),
-      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode)
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(elementwise_layout_code_v<tile_shape>)
   );  }
 }
 

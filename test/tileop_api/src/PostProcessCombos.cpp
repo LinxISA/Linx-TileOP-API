@@ -23,8 +23,7 @@ using P = Tile<Location::Vec, uint64_t, 2, 32, BLayout::RowMajor, 1, 32>;
 // RowMaxOut (Mx1) / GroupMaxOut (Mx2 for GroupN=16, N=32)
 using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
 using G = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 2>;
-using Bias = Tile<Location::Bias, float, 8, 32,
-                  BLayout::RowMajor, 1, 32>;
+using Bias = CubeBias<float, 32, 32>;
 
 // TGEMV shapes: d 1xN, vec 1xK, mtx KxN
 using GV_D = CubeAccumulatorM16<float, 1, 32>;

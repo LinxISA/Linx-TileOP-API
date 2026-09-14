@@ -122,8 +122,7 @@ using namespace pto;
 using Vec = CubeTileM16<float, 1, 32>;
 using Matrix = CubeTileN8<float, 32, 32>;
 using D = CubeAccumulatorM16<float, 1, 32>;
-using Bias = Tile<Location::Bias, float, 1, 32,
-                  BLayout::RowMajor, 1, 32>;
+using Bias = CubeBias<float, 32>;
 using GM = global_tensor<float, RowMajor<32, 32>>;
 using GMVec = global_tensor<float, RowMajor<1, 32>>;
 using GMOut = global_tensor<float, RowMajor<1, 32>>;
