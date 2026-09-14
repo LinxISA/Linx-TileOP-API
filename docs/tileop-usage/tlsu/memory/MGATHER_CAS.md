@@ -114,7 +114,7 @@ BSTOP
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using Transfer = Tile<Location::Vec, float, 8, 256, BLayout::RowMajor>;
+using Transfer = Tile<Location::Vec, uint32_t, 8, 256, BLayout::RowMajor>;
 using ElementIndices = Tile<Location::Vec, int16_t, 8, 256, BLayout::RowMajor>;
 
 void compare_exchange(Transfer &observed_old, ElementIndices &element_indices,
