@@ -312,7 +312,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
                      "TSQRT_ASS(f, a);", "TCVT_ASS(d, a);", "TTRANS_ASS(f, a);"):
             self.assertIn(call, special)
         self.assertIn('"B.IOT %[C], mask=1111\\n"', block)
-        self.assertIn('"B.DATR %D[DType], RNONE\\n"', block)
+        self.assertIn('"B.DATR %D[__pto_DstType], RNONE\\n"', block)
+        self.assertNotIn("[DType]", block)
 
     # --- TLSU TLOAD/TSTORE stride in bytes ---
 
