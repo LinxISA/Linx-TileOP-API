@@ -1,6 +1,6 @@
 # MGATHER
 
-`MGATHER` 是由 TLSU 执行的选择器编码 Tile 操作：它将每个整数索引作为有符号或无符号的 GM 字节位移，并把寻址得到的元素收集到新的 Local Tile 中；其当前指令 contract 规定了确切的 bundle 形式和发布边界。
+`MGATHER` 是由 TLSU 执行的选择器编码 Tile 操作：它将每个整数索引作为有符号或无符号的逻辑线性元素下标，并把寻址得到的元素收集到新的 Local Tile 中；`B.IOR` 的行跨度使用元素数。其当前指令 contract 规定了确切的 bundle 形式和发布边界。
 
 ## C++ 接口
 
@@ -30,7 +30,7 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src, const tile_shape_o
 | --- | --- |
 | `dst` | 输出 Tile；成功调用后写入操作结果。 |
 | `src` | 输入 Tile 或源数据。 |
-| `offset` | 以元素或字节计的偏移；具体单位由该重载和本页约束定义。 |
+| `offset` | 逻辑线性元素下标；`ValidCol` 将下标拆分为逻辑行和列。 |
 
 
 
@@ -43,7 +43,7 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src, const tile_shape_o
 
 ## 约束
 
-内存地址、byte displacement、mask 和 PE 参与集合必须符合 TLSU contract；地址单位和 fault 行为见本页的异常和边界行为说明。
+内存地址、logical element index、mask 和 PE 参与集合必须符合 TLSU contract；地址单位和 fault 行为见本页的异常和边界行为说明。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
@@ -65,7 +65,7 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src, const tile_shape_o
 
 - 省略 `B.DATR` 时，padding 值使用 `Null`，布局使用 `NORM`。
 - `LB0` 给出 `ValidCol`，必须存在且非零；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
-- `B.IOR` 是必需描述符；未使用的选择器和字段必须编码为零。
+- `B.IOR` 是必需描述符；`RegSrc0` 是 GM 基地址，`RegSrc1` 是以元素计的 GM 行跨度；未使用的选择器和字段必须编码为零。
 
 `fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
 
@@ -88,7 +88,7 @@ B.DIM       rValidCol, 0, ->LB0
 B.DIM       rValidRow, 0, ->LB1  ; (optional)
 B.DIM       rCol, 0, ->LB2  ; (optional)
 B.IOT       IndexTile, mask=PE_MASK, last, ->DstTile<TSize>
-B.IOR       BaseGPR, zero, zero, ->zero
+B.IOR       BaseGPR, StrideGPR, zero, ->zero
 BSTOP
 ```
 
@@ -99,18 +99,18 @@ BSTOP
 
 using namespace pto;
 using Values = Tile<Location::Vec, float, 8, 32, BLayout::RowMajor>;
-using ByteOffsets = Tile<Location::Vec, uint32_t, 8, 32, BLayout::RowMajor>;
+using ElementIndices = Tile<Location::Vec, uint32_t, 8, 32, BLayout::RowMajor>;
 using GM = global_tensor<float, RowMajor<8, 1024>>;
 using GMOut = global_tensor<float, RowMajor<8, 32>>;
 
-void gather(float *out, const float *base, const uint32_t *offsets) {
+void gather(float *out, const float *base, const uint32_t *indices) {
   GM base_gm(base);
   GMOut out_gm(out);
-  ByteOffsets offset;
+  ElementIndices offset;
   Values dst;
-  global_tensor<uint32_t, RowMajor<8, 32>> offsets_gm(offsets);
+  global_tensor<uint32_t, RowMajor<8, 32>> offsets_gm(indices);
   TLOAD(offset, offsets_gm);
-  // offset 中的每个元素是相对于 GM base 的字节位移。
+  // offset 中的每个元素是相对于 GM base 的逻辑线性元素下标。
   MGATHER(dst, base_gm, offset);
   TSTORE(out_gm, dst);
 }
