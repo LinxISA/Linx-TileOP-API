@@ -624,10 +624,10 @@ int main() { return sizeof(Bad); }
 
     def test_mgather_cas_bundle_is_two_b_iot_with_base_ior(self) -> None:
         # MGATHER_CAS: IndexTile+ExpectedTile (TwoSrc_NoDst) then
-        # ReplacementTile+last -> Dst; B.IOR carries only base.
+        # ReplacementTile+last -> Dst; B.IOR carries base and element stride.
         self.assertRegex(self.header, r"B\.IOT %\[Idx\], %\[Exp\], mask=1111\\n")
         self.assertRegex(self.header, r"B\.IOT %\[Rep\], mask=1111, last, ->%\[Dst\]")
-        self.assertRegex(self.header, r"B\.IOR \[%\[Base\]\]")
+        self.assertRegex(self.header, r"B\.IOR \[%\[Base\], %\[Stride\]\]")
 
     def test_timg2col_bundle_has_gm_and_parameter_iors(self) -> None:
         self.assertIn('"BSTART.TIMG2COL %D[DataType]', self.header)

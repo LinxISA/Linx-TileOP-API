@@ -15,7 +15,7 @@ template <
 void MGATHER_CAS(
     DstTile &observedOld,
     uint64_t base,
-    IndexTile &byteDisplacements,
+    IndexTile &elementIndices,
     ExpectedTile &expected,
     ReplacementTile &replacement,
     uint32_t validCol,
@@ -24,12 +24,12 @@ void MGATHER_CAS(
 
 ### 支持的数据类型
 
-支持索引 Tile 类型 S32、U32、S64、U64；支持传输数据 Tile 类型 FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、S64、S32、S16、S8、U64、U32、U16、U8。
+索引 Tile 支持整数类型；原子传输数据 Tile 仅支持 U16、U32、U64。
 
 | 操作数角色 | 类型要求 |
 | --- | --- |
-| 数据 Tile | 支持索引 Tile 类型 S32、U32、S64、U64；支持传输数据 Tile 类型 FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、S64、S32、S16、S8、U64、U32、U16、U8。 |
-| 索引 / 地址位移 Tile | 必须使用该操作 contract 允许的整数 dtype 与单位。 |
+| 数据 Tile | `observedOld`、`expected`、`replacement` 必须使用同一种 U16、U32 或 U64 类型。 |
+| 索引 Tile | 必须使用整数 dtype；每个值是逻辑线性元素下标。 |
 
 ### 参数说明
 
@@ -37,10 +37,10 @@ void MGATHER_CAS(
 | --- | --- |
 | `observedOld` | 保存每个位置观察到的旧值的输出 Tile。 |
 | `base` | GM 基地址。 |
-| `byteDisplacements` | 以字节为单位的地址位移索引 Tile。 |
+| `elementIndices` | 逻辑线性元素下标索引 Tile。 |
 | `expected` | 比较交换操作的期望值 Tile。 |
 | `replacement` | 比较成功时写入 GM 的替换值 Tile。 |
-| `validCol` | 有效区域的列数。 |
+| `validCol` | 有效区域的列数；当前连续行接口同时将其作为以元素计的 GM 行跨度。 |
 | `validRow` | 有效区域的行数，省略时使用接口/规范默认值。 |
 
 
@@ -54,7 +54,7 @@ void MGATHER_CAS(
 
 ## 约束
 
-内存地址、byte displacement、mask 和 PE 参与集合必须符合 TLSU contract；地址单位和 fault 行为见本页的异常和边界行为说明。
+内存地址、logical element indices、mask 和 PE 参与集合必须符合 TLSU contract；地址单位和 fault 行为见本页的异常和边界行为说明。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
@@ -80,7 +80,7 @@ void MGATHER_CAS(
 
 - 省略 `B.DATR` 时，padding 值使用 `Null`，布局使用 `NORM`。
 - `LB0` 给出 `ValidCol`，必须存在且非零；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
-- `B.IOR` 是必需描述符；未使用的选择器和字段必须编码为零。
+- `B.IOR` 是必需描述符；`RegSrc0` 是 GM 基地址，`RegSrc1` 是以元素计的 GM 行跨度；未使用的选择器和字段必须编码为零。
 
 `fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
 
@@ -104,7 +104,7 @@ B.DIM       rValidRow, 0, ->LB1  ; (optional)
 B.DIM       rCol, 0, ->LB2  ; (optional)
 B.IOT       IndexTile, ExpectedTile, mask=PE_MASK
 B.IOT       ReplacementTile, mask=PE_MASK, last, ->DstTile<TSize>
-B.IOR       BaseGPR, zero, zero, ->zero
+B.IOR       BaseGPR, StrideGPR, zero, ->zero
 BSTOP
 ```
 
@@ -114,13 +114,13 @@ BSTOP
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using Transfer = Tile<Location::Vec, float, 8, 256, BLayout::RowMajor>;
-using ByteOffsets = Tile<Location::Vec, int16_t, 8, 256, BLayout::RowMajor>;
+using Transfer = Tile<Location::Vec, uint32_t, 8, 256, BLayout::RowMajor>;
+using ElementIndices = Tile<Location::Vec, int16_t, 8, 256, BLayout::RowMajor>;
 
-void compare_exchange(Transfer &observed_old, ByteOffsets &byte_offsets,
+void compare_exchange(Transfer &observed_old, ElementIndices &element_indices,
                       Transfer &expected, Transfer &replacement) {
-  // 每个 offset 是相对于 base 的字节位移；返回值是交换前读到的值。
-  MGATHER_CAS(observed_old, 0x1000ull, byte_offsets, expected, replacement,
+  // 每个 index 是相对于 base 的逻辑线性元素下标；返回值是交换前读到的值。
+  MGATHER_CAS(observed_old, 0x1000ull, element_indices, expected, replacement,
               256, 2);
 }
 ```

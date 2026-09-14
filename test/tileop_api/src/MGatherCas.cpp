@@ -1,10 +1,10 @@
-// MGATHER_CAS: atomic compare-and-swap at byte displacements
-// (PTO ISA 0.58.3 TLSU function 8; canonical BSTART.TLSU MGATHER.CAS).
+// MGATHER_CAS: atomic compare-and-swap at logical element indices
+// (PTO ISA 0.58.6 TLSU function 8; canonical BSTART.TLSU MGATHER.CAS).
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
 
-using D = Tile<Location::Vec, float, 8, 256, BLayout::RowMajor>;
+using D = Tile<Location::Vec, uint32_t, 8, 256, BLayout::RowMajor>;
 using Idx16 = Tile<Location::Vec, int16_t, 8, 256, BLayout::RowMajor>;
 using Idx4 = Tile<Location::Vec, __int4x2, 8, 256, BLayout::RowMajor>;
 

@@ -790,7 +790,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStrideBytes(3))
+        [GmStride] "r"(src.GetStride(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -810,7 +810,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStrideBytes(3))
+        [GmStride] "r"(src.GetStride(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -830,7 +830,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStrideBytes(3))
+        [GmStride] "r"(src.GetStride(3))
       : "memory");  }
   else {
 asm volatile(
@@ -850,7 +850,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStrideBytes(3))
+        [GmStride] "r"(src.GetStride(3))
       : "memory");  }
 }
 
@@ -876,7 +876,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStrideBytes(3))
+        [GmStride] "r"(dst.GetStride(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -893,7 +893,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStrideBytes(3))
+        [GmStride] "r"(dst.GetStride(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -910,7 +910,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStrideBytes(3))
+        [GmStride] "r"(dst.GetStride(3))
       : "memory");  }
   else {
 asm volatile(
@@ -927,7 +927,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStrideBytes(3))
+        [GmStride] "r"(dst.GetStride(3))
       : "memory");  }
 }
 
@@ -960,7 +960,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStrideBytes(3))
+        [GmStride] "r"(src.GetStride(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -981,7 +981,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStrideBytes(3))
+        [GmStride] "r"(src.GetStride(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -1002,7 +1002,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStrideBytes(3))
+        [GmStride] "r"(src.GetStride(3))
       : "memory");  }
   else {
 asm volatile(
@@ -1023,7 +1023,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStrideBytes(3))
+        [GmStride] "r"(src.GetStride(3))
       : "memory");  }
 }
 
@@ -1052,7 +1052,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStrideBytes(3))
+        [GmStride] "r"(dst.GetStride(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -1070,7 +1070,7 @@ asm volatile(
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStrideBytes(3))
+        [GmStride] "r"(dst.GetStride(3))
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -1088,7 +1088,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStrideBytes(3))
+        [GmStride] "r"(dst.GetStride(3))
       : "memory");  }
   else {
 asm volatile(
@@ -1106,7 +1106,7 @@ asm volatile(
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStrideBytes(3))
+        [GmStride] "r"(dst.GetStride(3))
       : "memory");  }
 }
 
@@ -3741,18 +3741,18 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
   }
 }
 
-// MGATHER_CAS: atomic compare-and-swap at byte displacements (PTO ISA 0.58.3
+// MGATHER_CAS: atomic compare-and-swap at logical element indices (PTO ISA
 // TLSU function 8; canonical BSTART.MGATHER.CAS). Exactly two Local B.IOT
 // bindings: IndexTile+ExpectedTile (TwoSrc_NoDst, no destination, L=0) then
-// ReplacementTile+last ->DstTile (L=1); B.IOR carries only the byte-address
-// base. Each lane atomically reads BaseGPR+displacement, compares with
-// Expected, stores Replacement on match, and publishes the observed old value
-// to the destination. The destination must be an early-clobbered output so
-// the allocator keeps it distinct from the replacement source.
+// ReplacementTile+last ->DstTile (L=1); B.IOR carries the GM base and row
+// stride in elements. Each lane atomically reads the indexed GM element,
+// compares with Expected, stores Replacement on match, and publishes the
+// observed old value to the destination. The destination must be an
+// early-clobbered output so the allocator keeps it distinct from replacement.
 template <is_tile_data_v DstTile, is_tile_data_v IndexTile,
           is_tile_data_v ExpectedTile, is_tile_data_v ReplacementTile>
 void MGATHER_CAS(DstTile &observedOld, uint64_t base,
-                 IndexTile &byteDisplacements, ExpectedTile &expected,
+                 IndexTile &elementIndices, ExpectedTile &expected,
                  ReplacementTile &replacement, uint32_t validCol,
                  uint32_t validRow = 1) {
   static_assert(std::is_same_v<typename ExpectedTile::DType,
@@ -3770,13 +3770,11 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
           IndexType == __type_int32 || IndexType == __type_uint32 ||
           IndexType == __type_int64 || IndexType == __type_uint64,
       "MGATHER_CAS index tile must use an S/U 4X2, 8, 16, 32, or 64-bit "
-      "integer byte-displacement type");
-  static_assert(
-      TransferType != __type_fp4_e2m1x2 &&
-          TransferType != __type_fp4_e1m2x2 &&
-          TransferType != __type_fp4_hif4x2 &&
-          TransferType != __type_int4x2 && TransferType != __type_uint4x2,
-      "MGATHER_CAS transfer DataType must not be a packed four-bit type");
+      "integer logical element-index type");
+  static_assert(TransferType == __type_uint16 ||
+                    TransferType == __type_uint32 ||
+                    TransferType == __type_uint64,
+                "MGATHER_CAS transfer DataType must be U16, U32, or U64");
   static_assert(IndexTile::Rows == ExpectedTile::Rows &&
                     IndexTile::Cols == ExpectedTile::Cols &&
                     DstTile::Rows == ExpectedTile::Rows &&
@@ -3790,11 +3788,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base]], []\n"
+    "B.IOR [%[Base], %[Stride]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base),
+      [Base] "r"(base), [Stride] "r"(validCol),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [VCOL] "i"(DstTile::ValidCol), [VROW] "i"(DstTile::ValidRow),
       [Col] "i"(DstTile::Cols),
@@ -3808,11 +3806,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base]], []\n"
+    "B.IOR [%[Base], %[Stride]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base),
+      [Base] "r"(base), [Stride] "r"(validCol),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [VCOL] "i"(DstTile::ValidCol), [VROW] "r"(validRow),
       [Col] "i"(DstTile::Cols),
@@ -3826,11 +3824,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base]], []\n"
+    "B.IOR [%[Base], %[Stride]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base),
+      [Base] "r"(base), [Stride] "r"(validCol),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [VCOL] "r"(validCol), [VROW] "i"(DstTile::ValidRow),
       [Col] "i"(DstTile::Cols),
@@ -3844,11 +3842,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base]], []\n"
+    "B.IOR [%[Base], %[Stride]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base),
+      [Base] "r"(base), [Stride] "r"(validCol),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [VCOL] "r"(validCol), [VROW] "r"(validRow),
       [Col] "i"(DstTile::Cols),
