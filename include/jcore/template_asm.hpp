@@ -16423,7 +16423,7 @@ PTO_SHARED_INLINE void convert(D &dst, S &src) {
                 "TCVT_ASS source and destination physical shapes must match");
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[SType]\n"
-      "B.DATR %D[DType], RNONE\n"
+      "B.DATR %D[__pto_DstType], RNONE\n"
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
@@ -16432,7 +16432,7 @@ PTO_SHARED_INLINE void convert(D &dst, S &src) {
       :
       : [Opcode] "i"(Opcode),
         [SType] "i"(type_traits<typename S::DType>::TypeCode),
-        [DType] "i"(type_traits<typename D::DType>::TypeCode),
+        [__pto_DstType] "i"(type_traits<typename D::DType>::TypeCode),
         [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
         [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data())
       : "memory");

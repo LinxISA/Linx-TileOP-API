@@ -194,12 +194,15 @@ jobs:
           set -euo pipefail
           git show --check --format= HEAD -- include/jcore/template_asm.hpp
 
-      - name: Run complete TileOP API check
+      - name: Run DType macro regression with associated APIs
         working-directory: tileop-api
+        env:
+          COMPILER_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl/bin
+          SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
         shell: bash
         run: |
           set -euo pipefail
-          make check
+          test/tileop_api/verify_dtypemacro.sh
 
       - name: Run template_asm.hpp contract checks
         working-directory: tileop-api
