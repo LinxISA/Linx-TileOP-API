@@ -140,11 +140,11 @@ __attribute__((noinline)) void shuf_cube_m16(CellM16F &d, CellM16F &s,
 
 __attribute__((noinline)) void pack_cube_m32(CellM32U32 &d, CellM32U32 &a,
                                              CellM32U32 &b) {
-  TPACK(d, a, b, 0);
+  TPACK(d, a, b, 0x00000202);
 }
 
 __attribute__((noinline)) void unpack_cube_m32(CellM32U32 &d, CellM32U32 &a) {
-  TUNPACK(d, a, 0);
+  TUNPACK(d, a, 0x00000201);
 }
 
 // --- 4. Matrix Bias carries the resolved M layout ---
