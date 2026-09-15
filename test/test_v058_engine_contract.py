@@ -206,7 +206,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         # emitting no B.DATR at all.
         self.assertIn(
             'template <typename Tile>\n'
-            'inline constexpr int elementwise_layout_code_v =',
+            'inline constexpr int local_layout_code_v =',
             self.header)
         self.assertIn('".if %c[ElemLayout] == 29\\nB.DATR CUBE_M32, Null\\n"',
                       self.header)
@@ -220,15 +220,80 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             self.assertIsNotNone(match, op)
             body = match.group(0)
             self.assertIn('PTO_ELEMENTWISE_LAYOUT_ASM', body)
-            self.assertIn('[ElemLayout] "i"(elementwise_layout_code_v<', body)
+            self.assertIn('[ElemLayout] "i"(local_layout_code_v<', body)
         self.assertIn(
-            '[ElemLayout] "i"(elementwise_layout_code_v<tile_shape_out>)',
+            '[ElemLayout] "i"(local_layout_code_v<tile_shape_out>)',
             self.header)
         fixture = (ROOT / 'test' / 'tileop_api' / 'src' /
                    'DirectCubeLayout.cpp').read_text(encoding='utf-8')
         self.assertIn('CubeBias<float, 16>', fixture)
         self.assertIn('tcvt_vec_m32', fixture)
         self.assertIn('gmov_cube_m32', fixture)
+
+    def test_reduce_expand_and_rearrangement_carry_the_layout_selector(
+            self) -> None:
+        # The ISA datr_contract allows Layout for the reduce/expand (SFU) and
+        # CELL-rearrangement families too, so they must not leave B.DATR.Layout
+        # on the NORM default: the model rejects a mismatched destination
+        # layout (reduction-and-expansion.asl destination.layout != source.layout).
+        reduce_ops = (
+            "TROWSUM", "TROWMAX", "TROWMIN", "TROWPROD", "TROWARGMAX",
+            "TROWARGMIN", "TCOLSUM", "TCOLMAX", "TCOLMIN", "TCOLPROD",
+            "TCOLARGMAX", "TCOLARGMIN", "TROWEXPAND", "TCOLEXPAND",
+            "TROWEXPANDADD", "TROWEXPANDSUB", "TROWEXPANDMUL",
+            "TROWEXPANDDIV", "TROWEXPANDMAX", "TROWEXPANDMIN",
+            "TROWEXPANDEXPDIF", "TCOLEXPANDADD", "TCOLEXPANDSUB",
+            "TCOLEXPANDMUL", "TCOLEXPANDDIV", "TCOLEXPANDMAX",
+            "TCOLEXPANDMIN", "TCOLEXPANDEXPDIF",
+        )
+        for op in reduce_ops:
+            match = re.search(r'^void ' + op + r'\(.*?\n}\n', self.header,
+                              re.S | re.M)
+            self.assertIsNotNone(match, op)
+            body = match.group(0)
+            self.assertEqual(body.count("PTO_ELEMENTWISE_LAYOUT_ASM"), 4, op)
+            self.assertIn('[ElemLayout] "i"(local_layout_code_v<', body, op)
+        # Reductions read the source geometry through B.DIM and require the
+        # destination layout to match, so the selector comes from the source.
+        for op in ("TROWSUM", "TCOLMAX", "TCOLARGMIN"):
+            match = re.search(r'^void ' + op + r'\(.*?\n}\n', self.header,
+                              re.S | re.M)
+            body = match.group(0)
+            self.assertIn('local_layout_code_v<tile_shape_in>', body, op)
+            self.assertIn(
+                'destination layout must match the source', body, op)
+        # Expansions derive the geometry from the destination and require both
+        # sources to share its layout.
+        for op in ("TROWEXPAND", "TCOLEXPANDEXPDIF", "TROWEXPANDADD"):
+            match = re.search(r'^void ' + op + r'\(.*?\n}\n', self.header,
+                              re.S | re.M)
+            body = match.group(0)
+            self.assertIn('local_layout_code_v<tile_shape_out>', body, op)
+        # CELL rearrangement is CUBE-only, so it always emits the selector and
+        # uses the must-zero padding convention.
+        for op, opcode in (("TPERMUTE", 117), ("TSHUF", 118), ("TPACK", 119),
+                           ("TUNPACK", 120)):
+            match = re.search(r'^void ' + op + r'\(.*?\n}\n', self.header,
+                              re.S | re.M)
+            self.assertIsNotNone(match, op)
+            body = match.group(0)
+            self.assertIn(f'"BSTART.TEPL {opcode}, %D[Type]\\n"', body, op)
+            self.assertIn("PTO_ZERO_PAD_LAYOUT_ASM", body, op)
+            self.assertIn('[ElemLayout] "i"(local_layout_code_v<D>)', body, op)
+
+    def test_zero_pad_layout_selector_spells_zero(self) -> None:
+        # The must-zero family (GMOV plus CELL rearrangement) keeps PadValue
+        # zero while the pad-value family spells Null; both match the padding
+        # an omitted B.DATR would select.
+        self.assertIn(
+            '".if %c[ElemLayout] == 29\\nB.DATR CUBE_M32, Zero\\n"',
+            self.header)
+        self.assertIn(
+            '".elseif %c[ElemLayout] == 31\\nB.DATR CUBE_M16, Zero\\n"',
+            self.header)
+        self.assertIn(
+            '".if %c[ElemLayout] == 29\\nB.DATR CUBE_M32, Null\\n"',
+            self.header)
 
     def test_tcvt_cube_m_layout_is_location_independent(self) -> None:
         # PTO-ISA #291 retires the Matrix-location half of the TCVT CUBE
@@ -278,10 +343,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         gmov = re.search(r'(?s)void GMOV\(.*?\n}\n', self.header)
         self.assertIsNotNone(gmov)
         body = gmov.group(0)
-        self.assertIn('PTO_GMOV_LAYOUT_ASM', body)
+        self.assertIn('PTO_ZERO_PAD_LAYOUT_ASM', body)
         self.assertIn('tile_shape_src::BFractal != BLayout::CubeN8', body)
         self.assertIn(
-            '[ElemLayout] "i"(elementwise_layout_code_v<tile_shape_src>)', body)
+            '[ElemLayout] "i"(local_layout_code_v<tile_shape_src>)', body)
 
     def test_cube_load_ass_uses_the_canonical_layout_name(self) -> None:
         # The CUBE transport selectors have no numeric B.DATR spelling: the

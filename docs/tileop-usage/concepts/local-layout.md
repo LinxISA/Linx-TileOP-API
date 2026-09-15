@@ -42,6 +42,44 @@ void scale(M32 &dst, M32 &src) {
 
 源与目标必须使用同一 layout，形状与 valid region 逐项匹配。
 
+### 1a. 归约/广播（SFU）与 CELL 重排同样需要该选择器
+
+`B.DATR.Layout` 不是逐元素操作专属。ISA 的 `datr_contract` 里
+`allowed_nonzero_fields` 含 `Layout` 的操作都会读这个字段，TileOP 里另外两组需要注意：
+
+**归约与广播**（TROWSUM/TROWMAX/TROWMIN/TROWPROD、TROWARGMAX/TROWARGMIN、
+TROWEXPAND* 及其 7 个二元形式，以及对应的 TCOL* 族，共 28 个）。ISA 允许
+RowMajor / CUBE_M16 / CUBE_M32，并且要求目的端 layout 与源一致：
+
+```cpp
+using Src = VecTileM32<float, 32, 32>;
+using Dst = VecTileM32<float, 32, 1>;   // N x 1
+
+void reduce(Dst &dst, Src &src) {
+  TROWMAX(dst, src);   // B.DATR CUBE_M32, Null
+}
+```
+
+裸的 `TROWMAX(RedRM&, RM&)` 走 NORM 默认；但**如果源是 CUBE 布局而 B.DATR 被省略**，
+模型会按 NORM 分配目的端，随即因 `destination.layout != source.layout` 触发
+`Fault_TileLegality`。所以 TileOP 现在按**源**的 layout 发选择器，并在编译期要求
+源与目的端同 layout（广播形式则要求两个源都等于目的端）。CUBE_M16 的 valid rows
+上限为 16、CUBE_M32 为 32，超限由 `TileReductionAndExpansionRowLimitLegal` 在模型侧拒绝。
+
+**CELL 重排**（TPERMUTE/TSHUF/TPACK/TUNPACK）只接受 CUBE_M16/CUBE_M32，没有 RowMajor
+形态，所以这 4 个操作永远发出显式的布局选择器：
+
+```cpp
+using M32 = CubeTileM32<float, 32, 32>;
+
+void permute(M32 &dst, M32 &a, M32 &b, M32 &idx) {
+  TPERMUTE(dst, a, b, idx);   // B.DATR CUBE_M32, Zero
+}
+```
+
+它们的 `datr_contract` 是 must-zero，因此显式形式写 `Zero`（与 GMOV 同一约定）；
+归约族是 pad-value，显式形式写 `Null`——两者都等价于各自省略 `B.DATR` 时的默认 padding。
+
 ## 2. Vec 位置的 CUBE 布局 TCVT（issue #267）
 
 `TCVT` 的 CUBE 分支不再要求 Matrix location：`VecTileM16`/`VecTileM32` 现在可以直接
@@ -106,10 +144,27 @@ void bias_add(D &d, A &a, B &b, Bias &bias) {
 第二个是逻辑 N（`ValidCol`），第三个是物理 CELL 行数并据此选择 M16/M32。
 Bias 的 `ValidRow` 恒为 1。
 
+## 尚未覆盖
+
+以下操作在 ISA 里同样读 `B.DATR.Layout`，但 TileOP 目前还没有按操作数布局发出该字段
+（RowMajor 默认值之外的形态会静默退化）：
+
+- `MGATHER` / `MGATHER_MASK` / `MGATHER_CAS` / `MSCATTER` / `MSCATTER_MASK`：
+  ISA 对这几个操作要求目的端/源与索引 Tile 使用**非 CUBE** 布局
+  （`TileDescriptorLegal` → `TileGenericIndexingPermitted` 要求 `!TileLayoutIsCube`），
+  所以有意义的选择器只有 RowMajor/ColumnMajor 两种。当前包装器发出的是固定的
+  `B.DATR Null`（等价 `Layout=NORM`），既没有覆盖 ColumnMajor，也顺带忽略了
+  `MGATHER`/`MGATHER_MASK` 的 `Pad` 模板参数——`Pad=Zero/Max` 与默认的 `Null`
+  编码相同，参数实际上不生效。
+- 18 个 GM atomic/reduction 操作（`MGATHER_EXCH/MAX/MIN/ADD/INC/DEC/AND/OR/XOR`、
+  `MSCATTER_MAX/MIN/ADD/INC/DEC/AND/OR/XOR/POPC`）在 TileOP 里还没有包装器，
+  补齐时需要一并携带布局选择器。
+
 ## 迁移提示
 
 - 原来写 `Tile<Location::Bias, T, Rows, Cols, BLayout::RowMajor, 1, N>` 的 Bias，
   改为 `CubeBias<T, N>`（或 `CubeBias<T, N, 32>`）。
 - 原来因为 location 断言而绕开 CUBE 布局、改走 GM 往返或 Matrix 转换的 kernel，
-  现在可以直接对 `VecTileM16/M32` 调用 TCVT 与逐元素算子。
-- 具体的 `B.DATR` 布局编码以上表为准；`CUBE_N8` 仍然不可用于逐元素操作与 GMOV。
+  现在可以直接对 `VecTileM16/M32` 调用 TCVT、逐元素算子与归约/广播算子；
+  CELL 重排（TPERMUTE/TSHUF/TPACK/TUNPACK）本来就只接受 CUBE 布局。
+- 具体的 `B.DATR` 布局编码以上表为准；`CUBE_N8` 仍然不可用于逐元素操作、归约与 GMOV。

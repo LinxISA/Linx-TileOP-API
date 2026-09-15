@@ -88,6 +88,65 @@ __attribute__((noinline)) void gmov_cube_m32(CubeM32Vec &d, CubeM32Vec &s) {
   GMOV<15>(d, 0, s);
 }
 
+// --- 3a. reduce/expand (SFU) selects the operand layout too ---
+using Red32 = VecTileM32<float, 32, 1>;
+using Red16 = VecTileM16<float, 16, 1>;
+using RedRowMajor = Tile<Location::Vec, float, 32, 1, BLayout::RowMajor>;
+using RedCol32 = VecTileM32<float, 1, 32>;   // 1 x N for TCOL*
+
+__attribute__((noinline)) void rowmax_cube_m32(Red32 &d, CubeM32Vec &s) {
+  TROWMAX(d, s);
+}
+
+__attribute__((noinline)) void rowsum_cube_m16(Red16 &d, CubeM16Vec &s) {
+  TROWSUM(d, s);
+}
+
+__attribute__((noinline)) void rowargmax_cube_m32(Red32 &d, CubeM32Vec &s) {
+  TROWARGMAX(d, s);
+}
+
+__attribute__((noinline)) void colmin_cube_m32(RedCol32 &d, CubeM32Vec &s) {
+  TCOLMIN(d, s);
+}
+
+__attribute__((noinline)) void rowexpandadd_cube_m32(CubeM32Vec &d,
+                                                     CubeM32Vec &s,
+                                                     Red32 &broadcast) {
+  TROWEXPANDADD(d, s, broadcast);
+}
+
+__attribute__((noinline)) void rowmax_rowmajor(RedRowMajor &d,
+                                               RowMajorVec &s) {
+  TROWMAX(d, s);
+}
+
+// --- 3b. CELL rearrangement always carries a CUBE layout ---
+using CellM32F = CubeTileM32<float, 32, 32>;
+using CellM32U8 = CubeTileM32<uint8_t, 32, 32>;
+using CellM32U32 = CubeTileM32<uint32_t, 32, 32>;
+using CellM16F = CubeTileM16<float, 16, 16>;
+using CellM16U32 = CubeTileM16<uint32_t, 16, 16>;
+
+__attribute__((noinline)) void permute_cube_m32(CellM32F &d, CellM32F &a,
+                                                CellM32F &b, CellM32U8 &idx) {
+  TPERMUTE(d, a, b, idx);
+}
+
+__attribute__((noinline)) void shuf_cube_m16(CellM16F &d, CellM16F &s,
+                                             CellM16U32 &ctrl) {
+  TSHUF(d, s, ctrl, 0);
+}
+
+__attribute__((noinline)) void pack_cube_m32(CellM32U32 &d, CellM32U32 &a,
+                                             CellM32U32 &b) {
+  TPACK(d, a, b, 0);
+}
+
+__attribute__((noinline)) void unpack_cube_m32(CellM32U32 &d, CellM32U32 &a) {
+  TUNPACK(d, a, 0);
+}
+
 // --- 4. Matrix Bias carries the resolved M layout ---
 using M16A = CubeTileM16<float, 16, 16>;
 using M16B = CubeTileN8<float, 16, 16>;
@@ -142,6 +201,27 @@ int main() {
   gmov_rowmajor(rm_d, rm_a);
   gmov_cube_m16(m16_d, m16_a);
   gmov_cube_m32(m32_d, m32_a);
+
+  Red32 red32;
+  Red16 red16;
+  RedRowMajor red_rm;
+  rowmax_cube_m32(red32, m32_a);
+  rowsum_cube_m16(red16, m16_a);
+  rowargmax_cube_m32(red32, m32_a);
+  RedCol32 redcol32;
+  colmin_cube_m32(redcol32, m32_a);
+  rowexpandadd_cube_m32(m32_d, m32_a, red32);
+  rowmax_rowmajor(red_rm, rm_a);
+
+  CellM32F cell_f_d, cell_f_a, cell_f_b;
+  CellM32U8 cell_u8;
+  CellM32U32 cell_u32_d, cell_u32_a, cell_u32_b;
+  CellM16F cell16_f_d, cell16_f_a;
+  CellM16U32 cell16_u32;
+  permute_cube_m32(cell_f_d, cell_f_a, cell_f_b, cell_u8);
+  shuf_cube_m16(cell16_f_d, cell16_f_a, cell16_u32);
+  pack_cube_m32(cell_u32_d, cell_u32_a, cell_u32_b);
+  unpack_cube_m32(cell_u32_d, cell_u32_a);
 
   M16A a16;
   M16B b16;
