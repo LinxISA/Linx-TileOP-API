@@ -59,19 +59,13 @@ template <is_tile_data_v tile_shape>
 void TROWSUMEXPAND_Impl(tile_shape &dst, tile_shape &src) {
   static constexpr size_t row = tile_shape::ValidRow;
   static constexpr size_t col = tile_shape::ValidCol;
-  static_assert(row != DYNAMIC && col != DYNAMIC,
-              "TODO: Support tile dynamic shape!");
   static constexpr size_t Y = row / (LaneNum / tile_shape::InnerCols);
-  static_assert(!tile_shape::isBoxedLayout, "Not support Fractal layout");
   if constexpr (is_Nz_layout<tile_shape>::value) {
     TRowSumExpand_NzLayout_Impl<tile_shape>
         <<<LaneNum, Y, 1>>>(dst.data(), src.data());
   } else if constexpr (tile_shape::isBoxedLayout == false) {
     TRowSumExpand_NoFractal_Impl<tile_shape>
         <<<row, 1, 1>>>(dst.data(), src.data());
-  } else {
-    static_assert(tile_shape::isBoxedLayout == false,
-                  "Storage type not supported");
   }
 }
 

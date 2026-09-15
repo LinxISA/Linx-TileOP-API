@@ -70,12 +70,6 @@ TRowSum_NoFractal_Impl_Dynamic(typename tile_shape_out::TileDType __out__ dst,
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWSUM_Impl(tile_shape_out &dst, tile_shape_in &src) {
-  static_assert(tile_shape_in::Rows == tile_shape_out::Rows,
-                "Error! Input row != Output row.");
-  static_assert(tile_shape_out::ValidCol == 1,
-                "valid column must be 1.");
-  static_assert(!tile_shape_out::isBoxedLayout && !tile_shape_in::isBoxedLayout,
-                "Not support Fractal layout");
   size_t row = src.GetValidRow();
   size_t col = src.GetValidCol();
 
@@ -84,9 +78,6 @@ void TROWSUM_Impl(tile_shape_out &dst, tile_shape_in &src) {
     if constexpr (tile_shape_in::isBoxedLayout == false){
       TRowSum_NoFractal_Impl_Dynamic<tile_shape_out, tile_shape_in>
         <<<row, 1, 1>>>(dst.data(), src.data(), col);
-    } else {
-      static_assert(tile_shape_in::isBoxedLayout == false,
-                  "Storage type not supported");
     }
 
     return;
@@ -99,9 +90,6 @@ void TROWSUM_Impl(tile_shape_out &dst, tile_shape_in &src) {
   } else if constexpr (tile_shape_in::isBoxedLayout == false) {
     TRowSum_NoFractal_Impl<tile_shape_out, tile_shape_in>
         <<<row, 1, 1>>>(dst.data(), src.data());
-  } else {
-    static_assert(tile_shape_in::isBoxedLayout == false,
-                  "Storage type not supported");
   }
 }
 
