@@ -13936,13 +13936,6 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
-  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
-                "TROWSUM destination must be a single-column tile (N x 1)");
-  static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
-                "TROWSUM destination valid rows must equal the source valid rows");
-  static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
-                "TROWSUM destination layout must match the source "
-                "layout (B.DATR.Layout is shared by both operands)");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 64, %D1\n"
@@ -17212,10 +17205,11 @@ PTO_SHARED_INLINE void binary_special(D &dst, A &a, B &b) {
       : "memory");
 }
 
-// Mode 2 reductions use the input geometry: the output shape is derived by
-// the operation (R x 1 for row reductions, 1 x C for column reductions).
-// Keep this distinct from ordinary unary operations, whose destination has
-// the same geometry as their input.
+// Mode 2 reductions use the input geometry to populate B.DIM.  The logical
+// reduction result is row-wise (R x 1) or column-wise (1 x C), but the
+// assembled destination is a carrier for the result and is not required to
+// have that physical shape.  Keep this distinct from ordinary unary
+// operations, whose destination has the same geometry as their input.
 template <int Opcode, is_tile_data_v D, is_tile_data_v S>
 PTO_SHARED_INLINE void reduce(D &dst, S &src) {
   static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");

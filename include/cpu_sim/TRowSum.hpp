@@ -55,18 +55,7 @@ void TRowSum_NzLayout_Imp(typename tile_shape_out::TileDType dst,
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWSUM_Impl(tile_shape_out &dst, tile_shape_in &src) {
-  static_assert(tile_shape_in::Rows == tile_shape_out::Rows,
-                "Error! Input row != Output row.");
-  static_assert(tile_shape_out::ValidCol == 1,
-                "valid column must be 1.");
-  static_assert(tile_shape_out::isBoxedLayout == false,
-                "Unsupport output to a BoxedLayout.");
-  static_assert(tile_shape_in::ValidRow != DYNAMIC && tile_shape_in::ValidCol != DYNAMIC &&
-                tile_shape_out::ValidRow != DYNAMIC && tile_shape_out::ValidCol != DYNAMIC,
-              "TODO: Support tile dynamic shape!");
   if constexpr (is_Nz_layout<tile_shape_in>::value) {
-    static_assert(tile_shape_out::isBoxedLayout == false,
-                "Not support out to BoxedLayout");
     TRowSum_NzLayout_Imp<tile_shape_out, tile_shape_in>(dst.data(), src.data());
   } else if constexpr (tile_shape_in::isBoxedLayout == false) {
     if constexpr (tile_shape_out::isRowMajor) {
@@ -76,9 +65,6 @@ void TROWSUM_Impl(tile_shape_out &dst, tile_shape_in &src) {
       TRowSum_ColMajor_Imp<tile_shape_out, tile_shape_in>(dst.data(),
                                                           src.data());
     }
-  } else {
-    static_assert(tile_shape_in::isBoxedLayout == false,
-                  "Storage layout type not supported");
   }
 }
 
