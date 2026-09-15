@@ -16774,6 +16774,25 @@ void TSHUF(D &dst, S &src, C &controls, uint64_t control) {
         [ElemLayout] "i"(local_layout_code_v<D>));
 }
 
+// PTO-ISA layout-and-rearrangement control words: bits [63:32] must be zero
+// and only the low two control bytes carry the pack/unpack fields.
+constexpr bool tpack_control_legal_v(uint64_t control) {
+  if (control >> 32)
+    return false;
+  const unsigned left_bytes = control & 0xff;
+  const unsigned right_bytes = (control >> 8) & 0xff;
+  return left_bytes >= 1 && left_bytes <= 3 && right_bytes >= 1 &&
+         right_bytes <= 3 && left_bytes + right_bytes <= 4;
+}
+
+constexpr bool tunpack_control_legal_v(uint64_t control) {
+  if (control >> 32)
+    return false;
+  const unsigned offset = control & 0xff;
+  const unsigned count = (control >> 8) & 0xff;
+  return offset <= 3 && count >= 1 && count <= 4 && offset + count <= 4;
+}
+
 template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
   static_assert(type_traits<typename D::DType>::TypeCode == __type_uint32 &&
@@ -16786,6 +16805,8 @@ void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
                 "TPACK requires matching CUBE_M16 or CUBE_M32 layouts");
   static_assert(D::ValidRow > 0 && D::ValidCol > 0,
                 "TPACK currently requires a static valid shape");
+  if (!tpack_control_legal_v(control))
+    __builtin_trap();
   uint64_t controlValue = control;
   asm("" : "+r"(controlValue));
   asm volatile(
@@ -16815,6 +16836,8 @@ void TUNPACK(D &dst, S &src, uint64_t control) {
                 "TUNPACK requires matching CUBE_M16 or CUBE_M32 layouts");
   static_assert(D::ValidRow > 0 && D::ValidCol > 0,
                 "TUNPACK currently requires a static valid shape");
+  if (!tunpack_control_legal_v(control))
+    __builtin_trap();
   uint64_t controlValue = control;
   asm("" : "+r"(controlValue));
   asm volatile(
