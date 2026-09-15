@@ -370,9 +370,15 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_cube_load_ass_uses_the_canonical_layout_name(self) -> None:
         # The CUBE transport selectors have no numeric B.DATR spelling: the
         # parser reads the Layout field as a BArgFormat identifier, so the
-        # previous `layout%c[Layout]` form never assembled.
-        self.assertNotIn('layout%c', self.header)
-        self.assertIn('PTO_CUBE_LOAD_LAYOUT_ASM', self.header)
+        # previous `layout%c[Layout]` form never assembled. Scope the check to
+        # the CUBE associated-load wrapper: it is the only emitter of a CUBE
+        # transport selector, and other wrappers spell their own layout.
+        match = re.search(r'^void TLOAD_CUBE_ASS\(.*?\n}\n', self.header,
+                          re.S | re.M)
+        self.assertIsNotNone(match)
+        body = match.group(0)
+        self.assertNotIn('layout%c', body)
+        self.assertIn('PTO_CUBE_LOAD_LAYOUT_ASM', body)
         self.assertIn('"B.DATR ND2M32.normal, Zero\\n"', self.header)
 
     def test_range_modifier_types_and_aliases_remain_supported(self) -> None:
@@ -790,6 +796,11 @@ int main() { return sizeof(Bad); }
             self.assertNotIn(spelling, impl)
 
     # --- new-operation bundle fixtures ---
+
+    def test_mgather_cas_signature_separates_row_stride(self) -> None:
+        self.assertIn("uint32_t rowStride", self.header)
+        self.assertIn('[Stride] "r"(rowStride)', self.header)
+        self.assertNotIn('[Stride] "r"(validCol)', self.header)
 
     def test_tsort_bundle_has_two_destinations(self) -> None:
         # TSORT/TMRGSORT are retired (PTO-ISA 0.58.5 deleted_names): they
