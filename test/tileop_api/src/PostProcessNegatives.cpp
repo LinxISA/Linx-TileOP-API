@@ -35,8 +35,7 @@ using UnsignedB = CubeTileN8<uint16_t, 32, 16>;
 using UnsignedQ = CubeAccumulatorM16<int8_t, 16, 16>;
 using BadDValid = CubeAccumulatorM32<float, 32, 32, 32, 16>;
 using BadAcc = CubeAccumulatorM32<int32_t, 32, 32>;
-using BadBias = Tile<Location::Bias, int32_t, 8, 32,
-                     BLayout::RowMajor, 1, 32>;
+using BadBias = CubeBias<int32_t, 32, 32>;
 using NegMXA = CubeTileM32<__fp8_e4m3, 32, 64>;
 using NegMXB = CubeTileN8<__fp8_e4m3, 64, 32>;
 using PlainMXA = CubeTileM32<__half, 32, 64>;

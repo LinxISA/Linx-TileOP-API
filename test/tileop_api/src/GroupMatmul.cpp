@@ -9,8 +9,7 @@ using A = SharedMatrixLeft<float, 64, 16>;
 using B = SharedMatrixRight<float, 16, 16>;
 using C = CubeAccumulatorM16<float, 16, 16>;
 using AC = CubeAccumulatorM16<float, 16, 16>;
-using Bias = Tile<Location::Bias, float, 8, 16,
-                  BLayout::RowMajor, 1, 16>;
+using Bias = CubeBias<float, 16>;
 
 using A128 = SharedMatrixLeft<float, 128, 64>;
 // Shared B declares its physical [N, K] shape (pto-spec #257): N=32, K=64.

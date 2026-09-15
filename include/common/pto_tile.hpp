@@ -1215,6 +1215,16 @@ using CubeAccumulatorM32 =
   Tile<Location::Acc, Element_, Rows_, Cols_, BLayout::CubeM32,
        RowValid_, ColValid_>;
 
+// PTO-ISA #291: Matrix Bias carries the resolver-selected M layout ML and
+// must match D, so it is a logical 1xN CUBE_M16/M32 Tile rather than an
+// ordinary RowMajor rectangle. The physical rows are the CELL height (16 for
+// M16, 32 for M32) and select which M layout the Bias declares.
+template <typename Element_, const int Cols_, const int Rows_ = 16,
+          const int ColValid_ = Cols_>
+using CubeBias =
+  Tile<Location::Bias, Element_, Rows_, Cols_,
+       Rows_ == 32 ? BLayout::CubeM32 : BLayout::CubeM16, 1, ColValid_>;
+
 // Cooperative Shared matrix primaries are published as ordinary RowMajor
 // rectangles. Their Left/Right role controls CUBE operand ordering; CELL
 // layout is materialized only for Local matrix storage and destinations.

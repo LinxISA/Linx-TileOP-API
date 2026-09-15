@@ -3,8 +3,7 @@
 using namespace pto;
 
 using D = CubeAccumulatorM16<float, 16, 16>;
-using Bias = Tile<Location::Bias, float, 8, 16,
-                  BLayout::RowMajor, 1, 16>;
+using Bias = CubeBias<float, 16>;
 using SA = Tile<Location::Scaling, __fp8_e8m0, 16, 8,
                 BLayout::RowMajor, 16, 1>;
 using SB = Tile<Location::Scaling, __fp8_e8m0, 8, 16,

@@ -3,6 +3,11 @@
 所有接口都必须满足 dtype、shape、valid region、layout、capacity、location 和 PE mask 约束。
 具体操作的约束以对应页面和 `template_asm.hpp` 为准。
 
+PTO-ISA #291 之后 Local Tile 不再有独立的 location 维度：RowMajor / CUBE_M16 /
+CUBE_M32 由 layout 单独决定，逐元素操作通过 `B.DATR.Layout` 选择操作数的物理布局，
+`TCVT` 也不再限制 Matrix location。完整契约见
+[统一 Local layout 模型](local-layout.md)。
+
 ## 使用要求
 
 在调用操作前检查输入和输出 Tile 的数据类型、物理 shape、valid region、layout、capacity、location 以及 PE participation mask。

@@ -52,6 +52,13 @@ void reject(uint64_t peer) {
   SharedTile<Vec<float>> s;
   GMOV(d, peer, s);
 }
+#elif defined(SHOULD_FAIL_GMOV_CUBE_N8)
+// PTO-ISA #291: GMOV preserves Local RowMajor, CUBE_M16, and CUBE_M32 peer
+// copies; CUBE_N8 stays transport-only and must reject.
+void reject(uint64_t peer) {
+  Tile<Location::Vec, float, 8, 16, BLayout::CubeN8> d, s;
+  GMOV(d, peer, s);
+}
 #endif
 
 int main() { return 0; }

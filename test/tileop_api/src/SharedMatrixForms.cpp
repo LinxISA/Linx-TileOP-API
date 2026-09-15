@@ -10,8 +10,7 @@ using B = SharedMatrixRight<float, 16, 16>;
 using SA = Tile<Location::Scaling, float, 16, 16, BLayout::RowMajor>;
 using SB = SharedMatrixRight<float, 16, 16>;
 using C = CubeAccumulatorM16<float, 16, 16>;
-using Bias = Tile<Location::Bias, float, 8, 16,
-                  BLayout::RowMajor, 1, 16>;
+using Bias = CubeBias<float, 16>;
 
 using GroupA = SharedMatrixLeft<float, 16, 16>;
 using GroupB = SharedMatrixRight<float, 16, 16>;

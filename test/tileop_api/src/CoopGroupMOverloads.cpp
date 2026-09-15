@@ -15,7 +15,7 @@ using AL32 = Tile<Location::Left, float, 32, 16, BLayout::CubeM32>;
 using BS = SharedMatrixRight<float, 16, 16>;
 using D16 = Tile<Location::Acc, float, 16, 16, BLayout::CubeM16>;
 using D32 = Tile<Location::Acc, float, 32, 16, BLayout::CubeM32>;
-using Bias = Tile<Location::Bias, float, 1, 16, BLayout::RowMajor>;
+using Bias = CubeBias<float, 16>;
 
 __attribute__((noinline)) void acc16(D16 &d, D16 &c, AL16 &a, BS &b) {
   auto sb = TMOV_L2S_INSERT(b);
@@ -46,7 +46,7 @@ using GM16 = global_tensor<__fp8_e4m3, RowMajor<16, 32>>;
 using GMB = global_tensor<__fp8_e4m3, RowMajor<32, 16>>;
 using GMSB = global_tensor<__fp8_e8m0, RowMajor<1, 16>>;
 using D16 = Tile<Location::Acc, float, 16, 16, BLayout::CubeM16>;
-using Bias = Tile<Location::Bias, float, 1, 16, BLayout::RowMajor>;
+using Bias = CubeBias<float, 16>;
 
 __attribute__((noinline)) void mx(float *out, __fp8_e4m3 *ain, __fp8_e4m3 *bin, __fp8_e8m0 *sbin) {
   GMF gm_d(out); GM16 gm_a(ain); GMB gm_b(bin); GMSB gm_sb(sbin);

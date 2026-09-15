@@ -43,7 +43,7 @@ CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_trans
 TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_large"
 RANGE_CASES="subview_dest assemble_source subview_length"
 SUBVIEW_LEGALITY_CASES="subview_rowmajor subview_vec_cube tpartview_rowmajor tpartview_shared tpartview_vec_cube"
-GMOV_CASES="fp64 s64 u64 dtype shape valid_shape layout capacity location shared"
+GMOV_CASES="fp64 s64 u64 dtype shape valid_shape layout capacity location shared cube_n8"
 TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape"
 PASS=0; FAIL=0
 
@@ -121,6 +121,7 @@ for c in $GMOV_CASES; do
     capacity) pattern='GMOV source and destination logical sizes must match' ;;
     location) pattern='GMOV source and destination must be Local Vec Tiles' ;;
     shared) pattern='does not satisfy .is_tile_data_v.' ;;
+    cube_n8) pattern='GMOV rejects CUBE_N8 peer copies' ;;
   esac
   expect_rejected "gmov_$c" "$define" GMovNegatives.cpp "$pattern"
 done
