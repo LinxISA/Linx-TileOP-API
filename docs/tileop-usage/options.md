@@ -265,7 +265,15 @@ PRelu prelu;
 TMATMUL(d, a, b, fixp::f16().prelu(prelu));
 ```
 
-## 7. RowMax、GroupMax 和 MaxAbs
+## 6.1 Reduction result prefix views
+
+PTO #311 row-reduction results may retain a wide physical CUBE carrier while
+publishing only `ValidCol=1`. Use `TREDUCEPREFIXVIEW<OneCellTile>(reduction)`
+to borrow the first 128-byte CELL without a `TCVT` copy. The view is accepted
+as either source of the binary region wrappers and emits a source-selecting
+`B.SUBVIEW`. It requires persistent CUBE storage, matching dtype/valid rows,
+and a one-CELL view; it does not relax ordinary `TPARTVIEW` partition checks.
+
 
 RowMax 在 ReLU、quant 和 convert **之前**基于 FullAcc 计算，输入/输出 dtype 必须是 FP32
 或 S32 AccType，valid shape 必须是 `M x 1`，且输入输出 dtype/valid shape 一致。
