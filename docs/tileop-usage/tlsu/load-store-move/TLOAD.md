@@ -9,6 +9,7 @@
 ```cpp
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
 requires(!tile_shape::IsCubeLayout) void TLOAD(tile_shape &dst, gm_shape &src);
+
 template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
 PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src);
 template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
@@ -19,7 +20,94 @@ requires(cube_shape::IsCubeLayout) void TLOAD(cube_shape &dst, gm_shape &src);
 // Explicit CUBE layout-conversion spelling.
 template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
 requires(cube_shape::IsCubeLayout) void TLOAD_CUBE(cube_shape &dst, gm_shape &src);
+
+// Convolution weight conversion: GM OHWI/OIHW -> Shared row-major [N][K].
+template <WeightLayoutEnum WeightLayout, int PEMask = 1,
+          is_tile_data_v shp, is_global_data_v gm_shape>
+PTO_SHARED_INLINE void TLOAD(
+    SharedTile<shp> &dst, const gm_shape &src, WeightTLOADParams params);
 ```
+
+### Convolution weight 到 Shared NK
+
+显式指定 `OHWI2NK` 或 `OIHW2NK` 时，三参数 `TLOAD` overload 将 GM 中的卷积权重
+转换为已有的 row-major Shared `[N][K]` 视图。该形式复用 `BSTART.TLOAD`，不会改变
+普通矩形 `TLOAD`、`TLOAD_ASS` 或 TMATMUL 的语义。
+
+支持的布局码只有：
+
+| C++ 枚举 | B.DATR layout | GM 源布局 | Shared 目标视图 |
+| --- | ---: | --- | --- |
+| `OHWI2NK` | `10` | `[Cout][KernelH][KernelW][Cin]` | `[N][K]` |
+| `OIHW2NK` | `11` | `[Cout][Cin][KernelH][KernelW]` | `[N][K]` |
+
+`OHWI2KN` 和 `OIHW2KN` 尚未分配，因此不属于公开 API。目标必须是非 boxed、非
+CUBE 的 row-major `SharedTile`，且 Shared payload 容量为 `128 B..256 KiB`
+（`SizeCode=1..12`）。
+
+#### 权重参数
+
+使用 `make_weight_tload_params` 构造 `ShapeGPR` 和 `StartGPR`：
+
+```cpp
+constexpr WeightTLOADParams make_weight_tload_params(
+    uint16_t cin, uint16_t cout, uint8_t kernel_h, uint8_t kernel_w,
+    uint32_t n_start = 0, uint32_t k_start = 0);
+```
+
+字段编码如下：
+
+| 字段 | 位段 | 说明 |
+| --- | --- | --- |
+| `Cin` | `ShapeGPR[15:0]` | 输入通道数，非零 |
+| `Cout` | `ShapeGPR[31:16]` | 输出通道数，非零 |
+| `KernelH` | `ShapeGPR[39:32]` | kernel 高度，`1..255` |
+| `KernelW` | `ShapeGPR[47:40]` | kernel 宽度，`1..255` |
+| `NStart` | `StartGPR[31:0]` | 输出通道窗口起始行 |
+| `KStart` | `StartGPR[63:32]` | K 窗口起始位置 |
+
+`ShapeGPR[63:48]` 保留并编码为零。`LB0`、`LB1`、`LB2` 在该模式下分别表示
+`ValidK`、`ValidN` 和 `TotalK`；当前 C++ overload 从 Shared 目标的物理列数提供
+`TotalK`。`ValidK`/`ValidN` 来自目标 Shared view 的运行时有效区域。
+
+OHWI 与 OIHW 都投影到相同的 canonical K 顺序：`[kh][kw][c1][c0]`，其中 `c0`
+最快。`Cin` 不足一个 `c0` 时，补齐的通道 lane 定义为 raw zero，且不会访问 GM。
+`KStart` 和 `ValidK` 必须按所选 dtype 的 `C0` 对齐；`NStart` 和 `ValidN` 选择
+`Cout` 行窗口，不要求 `C0` 对齐。该首版接口不支持 batch 大于一、grouped/depthwise
+convolution、Local/CUBE 目标或新的 assembly/publication 协议。
+
+#### PE participation 与 Shared generation
+
+该 overload 默认 `PEMask=1`，表示单 PE 发布完整 Shared generation；不带
+`B.ASSEMBLE` carrier 时只能使用单 bit mask。公开的非零 PE mask 为
+`1, 2, 4, 8, 12, 14, 15`。多 PE 分片需要由规范定义的 `B.ASSEMBLE` range
+carrier 负责显式范围和最终 LAST publication，不能仅将 `PEMask` 改成多 bit
+值来替代 assemble。
+
+共享 generation metadata 的字段编码可通过
+`encode_weight_tload_generation_metadata` 生成；它是 metadata 编码辅助函数，
+不会自动创建或发布 assemble carrier。
+
+示例：
+
+```cpp
+using WeightLocal = Tile<Location::Right, float, 16, 128,
+                         BLayout::RowMajor, -1, -1>;
+using WeightShared = SharedTile<WeightLocal>;
+using WeightGM = global_tensor<float, RowMajor<16, 16>>;
+
+void load_weights(WeightShared &dst, const WeightGM &src) {
+  auto params = make_weight_tload_params(
+      /*Cin=*/16, /*Cout=*/16, /*KernelH=*/1, /*KernelW=*/1);
+  TLOAD<OHWI2NK>(dst, src, params);
+}
+```
+
+该调用生成一个权重模式 bundle：`B.DATR layout=10, DTYPE_NONE, Zero`，
+`LB0=ValidK`、`LB1=ValidN`、`LB2=TotalK`，一个包含 `GMBase/ShapeGPR/StartGPR`
+的 `B.IOR`，以及一个 Shared `B.IOS` destination。`DTYPE_NONE` 表示继承
+`BSTART.TLOAD` 的源数据类型；其它 DATR 字段固定为 `EQ`、默认舍入、禁用饱和和
+禁用 canonicalization。
 
 ### Associated destination：`TLOAD_ASS` / `TLOAD_CUBE_ASS`
 
