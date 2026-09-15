@@ -2802,6 +2802,54 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
   }
 }
 
+// Weight-mode TLOAD: GM OHWI/OIHW -> an existing row-major Shared [N][K]
+// destination.  This is intentionally a separate three-argument overload:
+// ordinary TLOAD keeps the generic rectangle contract and byte row stride.
+//
+// PTO-BSTART-TLOAD-WEIGHT-NK-CONTRACT-001:
+//   B.DATR layout 10/11, DTYPE_NONE, Zero, EQ, Default, Sat=0,
+//   Canonicalize=0; LB0=ValidK, LB1=ValidN, LB2=TotalK; one B.IOR binds
+//   GMBase, ShapeGPR, StartGPR and has a zero destination selector.
+// ShapeWord/StartWord are architectural packed words, not metadata handles.
+template <WeightLayoutEnum WeightLayout, int PEMask = 1,
+          is_tile_data_v shp, is_global_data_v gm_shape>
+PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src,
+                             WeightTLOADParams params) {
+  using shp_dtype = typename shp::TileDType;
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "weight TLOAD PEMask must be a nonzero four-bit mask");
+  static_assert((PEMask & (PEMask - 1)) == 0,
+                "weight TLOAD without an Assemble carrier supports one PE; "
+                "use the Shared Assemble form for cooperative publication");
+  static_assert(WeightLayout == OHWI2NK || WeightLayout == OIHW2NK,
+                "weight TLOAD layout must be OHWI2NK or OIHW2NK");
+  static_assert(shp::isRowMajor && !shp::isBoxedLayout &&
+                    !shp::IsCubeLayout,
+                "weight TLOAD destination must be a row-major Shared tile");
+  static_assert(tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
+                "weight TLOAD Shared destination size must be 128 B..256 KB");
+
+  const size_t valid_k = dst.GetValidCol();
+  const size_t valid_n = dst.GetValidRow();
+  asm volatile(
+      "BSTART.TLSU TLOAD, %D[SrcType]\n"
+      "B.DATR layout%c[WeightLayout], DTYPE_NONE, Zero\n"
+      "B.DIM %[ValidK], 0, ->lb0\n"
+      "B.DIM %[ValidN], 0, ->lb1\n"
+      "B.DIM zero, %c[TotalK], ->lb2\n"
+      PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
+      "B.IOR [%[Base],%[Shape],%[Start]], []\n"
+      : [Shared] "=Sr"(dst.handle_ref())
+      : [Base] "r"(src.data()), [Shape] "r"(params.shape_word),
+        [Start] "r"(params.start_word), [PEMask] "i"(PEMask),
+        [WeightLayout] "i"(static_cast<int>(WeightLayout)),
+        [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+        [TileSize] "i"(tile_type_traits<shp_dtype>::TilesizeCode),
+        [ValidK] "r"(valid_k), [ValidN] "r"(valid_n),
+        [TotalK] "i"(shp::Cols)
+      : "memory");
+}
+
 // TLOAD_ASS: GM -> an already-associated Shared Tile. Both operands are
 // inputs: B.IOS consumes the existing Shared handle as a source and does not
 // allocate a destination or carry a TileSize destination modifier.
