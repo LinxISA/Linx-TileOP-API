@@ -11,12 +11,29 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMAX(tile_shape_out &dst, tile_shape_in &src);
 ```
 
-### Destination assembly：`TROWMAX_ASS`
+### Zero-copy reduction prefix view
+
+When a CUBE row-reduction result uses a wide physical carrier but has
+`ValidCol=1`, the first 128-byte CELL can be consumed without a copy:
 
 ```cpp
-template <is_tile_data_v D, is_tile_data_v S>
-void TROWMAX_ASS(D &assembled_dst, S &src);
+using Reduction = VecTileM32<float, 32, 128, 32, 1>;
+using Row = VecTileM32<float, 32, 1, 32, 1>;
+Reduction reduction;
+Row state, result;
+
+auto prefix = TREDUCEPREFIXVIEW<Row>(reduction);
+TMAX(result, state, prefix);  // emits B.SUBVIEW for source 1
 ```
+
+`TREDUCEPREFIXVIEW` requires persistent CUBE storage, matching dtype and valid
+rows, `ValidCol=1`, and a one-CELL (`128B`) view. It is a source view only;
+it does not allocate or copy a Tile. The binary region wrappers also accept the
+view in the first source position, in which case `B.SUBVIEW SrcSelect=0` is
+emitted. Use this API for PTO #311 reduction carriers; ordinary `TPARTVIEW`
+continues to require an exact physical and valid-shape partition.
+### Destination assembly：`TROWMAX_ASS`
+
 
 destination 必须由 `range::assemble` 系列 factory 构造；输入 `R x C` 归约到
 `R x 1`，其余约束沿用 `TROWMAX`。

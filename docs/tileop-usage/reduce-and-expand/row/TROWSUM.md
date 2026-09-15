@@ -11,7 +11,15 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWSUM(tile_shape_out &dst, tile_shape_in &src);
 ```
 
-### Destination assembly：`TROWSUM_ASS`
+### Zero-copy reduction prefix view
+
+For a CUBE row-reduction result with a wide physical carrier and `ValidCol=1`,
+`TREDUCEPREFIXVIEW<Row>(reduction)` exposes its first 128-byte CELL without a
+copy. It can be passed as either source of the binary region operations; the
+wrapper emits `B.SUBVIEW SrcSelect=0` or `1` for the selected source. The view
+requires matching dtype/valid rows, persistent CUBE storage, and a one-CELL
+view type. Ordinary `TPARTVIEW` exact-partition rules are unchanged.
+
 
 ```cpp
 template <is_tile_data_v D, is_tile_data_v S>
