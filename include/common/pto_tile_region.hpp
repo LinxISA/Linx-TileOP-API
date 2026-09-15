@@ -56,8 +56,8 @@ struct partition_contract {
 template <typename Parent, typename SubTile>
 class SubTileView {
   static_assert(range::is_legal_subview_parent_v<Parent>,
-                "B.SUBVIEW parent must be an assigned Local Matrix Tile with "
-                "a CUBE layout");
+                "B.SUBVIEW parent must use an assigned Local or Shared CUBE "
+                "tile layout");
 public:
   using ParentTile = Parent;
   using SubTileType = SubTile;

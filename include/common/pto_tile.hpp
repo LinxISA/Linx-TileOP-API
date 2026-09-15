@@ -2092,18 +2092,15 @@ struct subview_parent_location<Parent, true> {
 };
 
 // PTO-ISA BundleRangeSubviewLegal: B.SUBVIEW is defined for an assigned
-// Local or Shared Matrix operand using persistent CUBE CELL storage.  The
-// Shared form is the 0.58.5+ B.IOS carrier form; Vec and RowMajor carriers
-// remain illegal.
+// Local or Shared tile using persistent CUBE CELL storage. The Local form is
+// selected by layout; Location::Vec is a valid Local CUBE carrier.
 template <typename Parent, typename = void>
 struct is_legal_subview_parent : std::false_type {};
 
 template <typename Parent>
 struct is_legal_subview_parent<
     Parent, std::void_t<decltype(Parent::Loc), decltype(Parent::IsCubeLayout)>>
-    : std::bool_constant<
-          is_matrix_location(subview_parent_location<Parent>::value) &&
-          Parent::IsCubeLayout> {};
+    : std::bool_constant<Parent::IsCubeLayout> {};
 
 template <typename Parent>
 inline constexpr bool is_legal_subview_parent_v =
@@ -2122,8 +2119,8 @@ template <typename Parent, unsigned SubviewSizeCode_, unsigned OffsetUnits_ = 0,
           unsigned RegSrc_ = 2>
 class Subview {
   static_assert(is_legal_subview_parent_v<Parent>,
-                "B.SUBVIEW parent must be an assigned Local Matrix Tile with "
-                "a CUBE layout");
+                "B.SUBVIEW parent must use an assigned Local or Shared CUBE "
+                "tile layout");
   static_assert(is_valid_subview_size_code(SubviewSizeCode_),
                 "B.SUBVIEW SubviewSizeCode must be 1..12 (128B..256KB per PE)");
   static_assert(is_valid_uimm11(OffsetUnits_),

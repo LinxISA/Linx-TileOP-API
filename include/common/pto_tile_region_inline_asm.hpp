@@ -11,8 +11,8 @@ template <int Opcode, typename Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void
 pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
   static_assert(range::is_legal_subview_parent_v<Parent>,
-                "B.SUBVIEW source must be an assigned Local Matrix Tile with "
-                "a CUBE layout");
+                "B.SUBVIEW source must use an assigned Local or Shared CUBE "
+                "tile layout");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
   const uintptr_t region_base_units = src.GetRangeBase();

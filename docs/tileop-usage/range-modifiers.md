@@ -26,18 +26,15 @@ lower-level `Subview` and `Assemble` carrier types remain available for unusual
 compile-time contracts.
 
 At the current PTO-ISA 0.58.6 authority, the low-level `B.SUBVIEW` contract is
-legal for an assigned **Local or Shared Matrix** parent (`Mat`, `Left`, `Right`,
-or `Acc`) using a persistent CUBE CELL layout. Shared sources attach to `B.IOS`
-and use the 0.58.5+ per-PE offset semantics. RowMajor/ColMajor parents and
-`Location::Vec` parents (including Vec+CUBE) remain rejected at compile time.
+legal for an assigned **Local or Shared** tile using persistent CUBE CELL
+storage. The Local form is selected by the CUBE layout; `Location::Vec` CUBE
+carriers are legal. Shared sources attach to `B.IOS` and use the 0.58.5+ per-PE
+offset semantics. RowMajor/ColMajor parents remain rejected.
 
-The high-level `TPARTVIEW` API is narrower in the current implementation: it
-currently accepts Local Matrix+CUBE parents only. A Shared `B.IOS` source through
-`range::subview` is therefore not evidence that Shared `TPARTVIEW` is supported;
-the latter remains a compile-time negative case until its multi-PE array
-transport is implemented. The source restriction does not apply to a
-`B.ASSEMBLE` destination, whose legality is determined separately by the
-destination operation and carrier contract.
+`TPARTVIEW` currently accepts Local CUBE parents, including `Location::Vec`
+CUBE carriers. A Shared `B.IOS` source through `range::subview` remains a
+separate low-level path; Shared `TPARTVIEW` still requires its multi-PE array
+transport implementation.
 
 ## Syntax and encoding
 
