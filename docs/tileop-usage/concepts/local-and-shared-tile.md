@@ -33,6 +33,19 @@ TADD(local_dst, local_lhs, local_rhs);
 - 非零 PE mask 的部分更新先检查 descriptor 兼容性，再复制选定 quarter；完整记录
   赋值是架构提交点。`PE_MASK=0000` 是不改变状态的严格空操作。
 
+### 卷积权重 TLOAD
+
+`TLOAD<OHWI2NK>` 和 `TLOAD<OIHW2NK>` 是 Shared 专用的权重转换形式，将 GM
+卷积权重投影到 row-major `[N][K]` Shared view。它们要求目标为非 boxed、非 CUBE
+的 row-major Shared Tile，容量为 `128 B..256 KiB`，并使用单独的
+`WeightTLOADParams` 携带 `ShapeGPR`/`StartGPR` 打包字段。完整接口、K 顺序、
+`Cin` padding 和窗口对齐规则见 [TLOAD 的卷积权重小节](../tlsu/load-store-move/TLOAD.md#卷积权重到-shared-nk)。
+
+该形式默认 `PEMask=1`，不带 `B.ASSEMBLE` carrier 时拒绝多 bit mask。需要多个 PE
+协作时，必须使用规范定义的 assemble range 生命周期和 LAST publication；不能把
+普通 `SharedTile` 输出参数当作 assemble carrier。generation metadata 编码辅助函数
+只编码字段，不负责 publication。
+
 ## 生命周期和移动接口
 
 - `SharedTile` 是架构 Shared descriptor handle，不具有普通 C++ 跨函数值 ABI。

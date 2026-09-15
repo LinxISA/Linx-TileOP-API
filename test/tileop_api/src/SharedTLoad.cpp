@@ -6,6 +6,10 @@ using LocalTile = TileRight<float, 16, 16>;
 using Shared = SharedTile<LocalTile>;
 using GM = global_tensor<float, RowMajor<16, 16>>;
 using Out = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
+using WeightOut = Tile<Location::Right, float, 16, 128, BLayout::RowMajor,
+                       -1, -1>;
+using WeightShared = SharedTile<WeightOut>;
+using WeightGM = global_tensor<float, RowMajor<16, 16>>;
 
 __attribute__((always_inline)) inline void load_shared(Shared &shared,
                                                         const GM &src) {
@@ -46,6 +50,13 @@ void shared_publish(Out &out, const LocalTile &src) {
   Shared shared;
   TMOV_L2S_PUBLISH(shared, src);
   TMOV_S2L_BROADCAST(out, shared);
+}
+
+void weight_tload(WeightShared &dst, const WeightGM &src) {
+  // ShapeWord: Cin=16, Cout=16, KernelH=1, KernelW=1;
+  // StartWord: NStart=0, KStart=0.  The destination exposes a 128-column
+  // physical NK row while ValidK/ValidN come from its dynamic Shared view.
+  TLOAD<OHWI2NK>(dst, src, make_weight_tload_params(16, 16, 1, 1));
 }
 
 int main() { return 0; }

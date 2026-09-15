@@ -57,6 +57,8 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
 
 - 先了解 [Tile 约束、location、shape 和 bundle](concepts/README.md)。
 - 需要从 GM 传输数据时，阅读 [TLSU load/store/move](tlsu/load-store-move/TLOAD.md)。
+  其中卷积权重 GM 到 Shared NK 的 `OHWI2NK`/`OIHW2NK` 专用 `TLOAD` overload
+  也在该页面说明。
 - 常规逐元素算子从 [TADD](elementwise-tile-tile/arithmetic/TADD.md) 开始；按目录选择
   算术、逻辑、转换、归约、布局和不规则操作。
 - PTO ISA v0.58.5 的 CUBE layout 重排操作从

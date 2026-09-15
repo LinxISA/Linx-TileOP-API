@@ -89,6 +89,15 @@ enum LayoutCvtEnum : uint64_t {
   CUBE_M16 = 31,
 };
 
+// PTO weight-only TLOAD layouts.  These are B.DATR Layout codes, not ordinary
+// Local/Shared storage layouts.  The selected source is converted to the
+// existing row-major Shared [N][K] view; codes 12 and 13 (the future KN forms)
+// are deliberately not exposed until PTO assigns them.
+enum WeightLayoutEnum : uint64_t {
+  OHWI2NK = 10,
+  OIHW2NK = 11,
+};
+
 enum PadValueEnum : uint64_t {
   Zero = 0,
   Max = 1,

@@ -1349,6 +1349,50 @@ struct TIMG2COLParams {
   uint64_t param2 = 0;
 };
 
+// Packed operands for the PTO weight-mode TLOAD contract.  ShapeWord packs
+// Cin[15:0], Cout[31:16], KernelH[39:32], KernelW[47:40], with [63:48]
+// reserved and zero.  StartWord packs NStart[31:0] and KStart[63:32].
+// KStart and the requested K window are validated by the ISA operation;
+// callers must use C0-aligned values for the selected data type.
+struct WeightTLOADParams {
+  uint64_t shape_word = 0;
+  uint64_t start_word = 0;
+};
+
+constexpr WeightTLOADParams make_weight_tload_params(
+    uint16_t cin, uint16_t cout, uint8_t kernel_h, uint8_t kernel_w,
+    uint32_t n_start = 0, uint32_t k_start = 0) {
+  return {static_cast<uint64_t>(cin) |
+              (static_cast<uint64_t>(cout) << 16) |
+              (static_cast<uint64_t>(kernel_h) << 32) |
+              (static_cast<uint64_t>(kernel_w) << 40),
+          static_cast<uint64_t>(n_start) |
+              (static_cast<uint64_t>(k_start) << 32)};
+}
+
+// Shared-generation metadata required by the PTO weight-mode publication
+// protocol.  The bit positions intentionally mirror
+// BundleWeightTLOADGenerationMetadata: Layout[4:0], DataType[9:5],
+// ValidK[25:10], ValidN[41:26], TotalK[57:42], SizeCode[61:58].
+struct WeightTLOADGenerationMetadata {
+  uint8_t layout;
+  uint8_t data_type;
+  uint16_t valid_k;
+  uint16_t valid_n;
+  uint16_t total_k;
+  uint8_t size_code;
+};
+
+constexpr uint64_t encode_weight_tload_generation_metadata(
+    WeightTLOADGenerationMetadata metadata) {
+  return (static_cast<uint64_t>(metadata.layout) & 0x1f) |
+         ((static_cast<uint64_t>(metadata.data_type) & 0x1f) << 5) |
+         ((static_cast<uint64_t>(metadata.valid_k) & 0xffff) << 10) |
+         ((static_cast<uint64_t>(metadata.valid_n) & 0xffff) << 26) |
+         ((static_cast<uint64_t>(metadata.total_k) & 0xffff) << 42) |
+         ((static_cast<uint64_t>(metadata.size_code) & 0xf) << 58);
+}
+
 template <typename T> struct is_global : std::false_type {};
 template <typename T> struct is_tile : std::false_type {
   static constexpr SLayout layout_enum = SLayout::NoneBox;
