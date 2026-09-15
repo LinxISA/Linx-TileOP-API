@@ -295,6 +295,25 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             '".if %c[ElemLayout] == 29\\nB.DATR CUBE_M32, Null\\n"',
             self.header)
 
+    def test_mgather_pad_reaches_the_encoding(self) -> None:
+        # asl/.../MGATHER.asl: "An explicit encoded PadValue is used for every
+        # physical destination element outside ValidRow x ValidCol", so the
+        # Pad template parameter cannot be a compile-time-only descriptor.
+        self.assertIn("PTO_GATHER_PAD_ASM", self.header)
+        for directive, code, name in ((".if", 0, "Zero"), (".elseif", 1, "Max"),
+                                      (".elseif", 2, "Min")):
+            self.assertIn(
+                f'"{directive} %c[PadValue] == {code}\\nB.DATR NORM, {name}\\n"',
+                self.header)
+        self.assertIn('".else\\nB.DATR NORM, Null\\n"', self.header)
+        for op in ("MGATHER", "MGATHER_MASK"):
+            match = re.search(r'^inline void ' + op + r'\(.*?\n}\n',
+                              self.header, re.S | re.M)
+            self.assertIsNotNone(match, op)
+            body = match.group(0)
+            self.assertEqual(body.count("PTO_GATHER_PAD_ASM"), 4, op)
+            self.assertNotIn('"B.DATR Null', body, op)
+
     def test_tcvt_cube_m_layout_is_location_independent(self) -> None:
         # PTO-ISA #291 retires the Matrix-location half of the TCVT CUBE
         # legality predicate (issue #267): a Vec-location CUBE_M16/M32 tile is

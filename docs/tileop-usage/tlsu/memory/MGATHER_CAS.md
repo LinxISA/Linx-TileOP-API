@@ -18,6 +18,7 @@ void MGATHER_CAS(
     IndexTile &elementIndices,
     ExpectedTile &expected,
     ReplacementTile &replacement,
+    uint32_t rowStride,
     uint32_t validCol,
     uint32_t validRow = 1);
 ```
@@ -40,7 +41,8 @@ void MGATHER_CAS(
 | `elementIndices` | 逻辑线性元素下标索引 Tile。 |
 | `expected` | 比较交换操作的期望值 Tile。 |
 | `replacement` | 比较成功时写入 GM 的替换值 Tile。 |
-| `validCol` | 有效区域的列数；当前连续行接口同时将其作为以元素计的 GM 行跨度。 |
+| `rowStride` | 每个 PE 的 GM 行跨度，单位为元素；必须非零且不小于 `validCol`。 |
+| `validCol` | 有效区域的列数，仅用于 LB0/LB2。 |
 | `validRow` | 有效区域的行数，省略时使用接口/规范默认值。 |
 
 
@@ -121,7 +123,7 @@ void compare_exchange(Transfer &observed_old, ElementIndices &element_indices,
                       Transfer &expected, Transfer &replacement) {
   // 每个 index 是相对于 base 的逻辑线性元素下标；返回值是交换前读到的值。
   MGATHER_CAS(observed_old, 0x1000ull, element_indices, expected, replacement,
-              256, 2);
+              512, 256, 2);
 }
 ```
 

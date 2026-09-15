@@ -152,10 +152,10 @@ Bias 的 `ValidRow` 恒为 1。
 - `MGATHER` / `MGATHER_MASK` / `MGATHER_CAS` / `MSCATTER` / `MSCATTER_MASK`：
   ISA 对这几个操作要求目的端/源与索引 Tile 使用**非 CUBE** 布局
   （`TileDescriptorLegal` → `TileGenericIndexingPermitted` 要求 `!TileLayoutIsCube`），
-  所以有意义的选择器只有 RowMajor/ColumnMajor 两种。当前包装器发出的是固定的
-  `B.DATR Null`（等价 `Layout=NORM`），既没有覆盖 ColumnMajor，也顺带忽略了
-  `MGATHER`/`MGATHER_MASK` 的 `Pad` 模板参数——`Pad=Zero/Max` 与默认的 `Null`
-  编码相同，参数实际上不生效。
+  所以有意义的选择器只有 RowMajor/ColumnMajor 两种，而当前实现只发出 RowMajor
+  （`B.DATR NORM, <pad>`）。ColumnMajor（`B.DATR DN2ND...` 一侧）尚未覆盖。
+  `MGATHER`/`MGATHER_MASK` 的 `Pad` 模板参数现在会进入编码
+  （`.if/.elseif` 链展开成 `Zero/Max/Min/Null`）。
 - 18 个 GM atomic/reduction 操作（`MGATHER_EXCH/MAX/MIN/ADD/INC/DEC/AND/OR/XOR`、
   `MSCATTER_MAX/MIN/ADD/INC/DEC/AND/OR/XOR/POPC`）在 TileOP 里还没有包装器，
   补齐时需要一并携带布局选择器。

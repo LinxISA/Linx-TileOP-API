@@ -71,6 +71,20 @@ inline constexpr int local_layout_code_v =
   ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Zero\n"                      \
   ".endif\n"
 
+// MGATHER/MGATHER_MASK let B.DATR.PadValueOrByteId select the value written to
+// every physical destination element outside the valid rectangle. The operand
+// is a real field (asl/tile/memory-and-data-movement/irregular/MGATHER.asl:
+// "An explicit encoded PadValue is used for every physical destination element
+// outside ValidRow x ValidCol"), so the wrapper's Pad template parameter has to
+// reach the encoding. Layout stays NORM here: the indexed TLSU family requires
+// generic indexing, which rejects every CUBE layout.
+#define PTO_GATHER_PAD_ASM                                                     \
+  ".if %c[PadValue] == 0\nB.DATR NORM, Zero\n"                               \
+  ".elseif %c[PadValue] == 1\nB.DATR NORM, Max\n"                            \
+  ".elseif %c[PadValue] == 2\nB.DATR NORM, Min\n"                            \
+  ".else\nB.DATR NORM, Null\n"                                               \
+  ".endif\n"
+
 // The CUBE transport selectors have no numeric B.DATR spelling: the parser
 // reads the Layout field as a BArgFormat identifier, so `layout<code>` never
 // matches. Select the canonical GM->Local name from the numeric code instead.
@@ -810,7 +824,7 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
   if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU MGATHER, %D[DataType]\n"
-      "B.DATR Null\n"
+      PTO_GATHER_PAD_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -830,7 +844,7 @@ asm volatile(
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
       "BSTART.TLSU MGATHER, %D[DataType]\n"
-      "B.DATR Null\n"
+      PTO_GATHER_PAD_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -850,7 +864,7 @@ asm volatile(
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU MGATHER, %D[DataType]\n"
-      "B.DATR Null\n"
+      PTO_GATHER_PAD_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -870,7 +884,7 @@ asm volatile(
   else {
 asm volatile(
       "BSTART.TLSU MGATHER, %D[DataType]\n"
-      "B.DATR Null\n"
+      PTO_GATHER_PAD_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -979,7 +993,7 @@ inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
   if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
-      "B.DATR Null\n"
+      PTO_GATHER_PAD_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -1000,7 +1014,7 @@ asm volatile(
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
       "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
-      "B.DATR Null\n"
+      PTO_GATHER_PAD_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -1021,7 +1035,7 @@ asm volatile(
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
-      "B.DATR Null\n"
+      PTO_GATHER_PAD_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -1042,7 +1056,7 @@ asm volatile(
   else {
 asm volatile(
       "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
-      "B.DATR Null\n"
+      PTO_GATHER_PAD_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -3791,8 +3805,8 @@ template <is_tile_data_v DstTile, is_tile_data_v IndexTile,
           is_tile_data_v ExpectedTile, is_tile_data_v ReplacementTile>
 void MGATHER_CAS(DstTile &observedOld, uint64_t base,
                  IndexTile &elementIndices, ExpectedTile &expected,
-                 ReplacementTile &replacement, uint32_t validCol,
-                 uint32_t validRow = 1) {
+                 ReplacementTile &replacement, uint32_t rowStride,
+                 uint32_t validCol, uint32_t validRow = 1) {
   static_assert(std::is_same_v<typename ExpectedTile::DType,
                                typename ReplacementTile::DType> &&
                     std::is_same_v<typename ExpectedTile::DType,
@@ -3818,6 +3832,8 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
                     DstTile::Rows == ExpectedTile::Rows &&
                     DstTile::Cols == ExpectedTile::Cols,
                 "MGATHER_CAS tiles must match the resolved ValidRow x ValidCol");
+  if (rowStride == 0 || rowStride < validCol)
+    __builtin_trap();
   if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow > 0) {
 asm volatile(
     "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
@@ -3830,7 +3846,7 @@ asm volatile(
     : [Dst] "=&Tr"(observedOld.data())
     : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(validCol),
+      [Base] "r"(base), [Stride] "r"(rowStride),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [VCOL] "i"(DstTile::ValidCol), [VROW] "i"(DstTile::ValidRow),
       [Col] "i"(DstTile::Cols),
@@ -3848,7 +3864,7 @@ asm volatile(
     : [Dst] "=&Tr"(observedOld.data())
     : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(validCol),
+      [Base] "r"(base), [Stride] "r"(rowStride),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [VCOL] "i"(DstTile::ValidCol), [VROW] "r"(validRow),
       [Col] "i"(DstTile::Cols),
@@ -3866,7 +3882,7 @@ asm volatile(
     : [Dst] "=&Tr"(observedOld.data())
     : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(validCol),
+      [Base] "r"(base), [Stride] "r"(rowStride),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [VCOL] "r"(validCol), [VROW] "i"(DstTile::ValidRow),
       [Col] "i"(DstTile::Cols),
@@ -3884,7 +3900,7 @@ asm volatile(
     : [Dst] "=&Tr"(observedOld.data())
     : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(validCol),
+      [Base] "r"(base), [Stride] "r"(rowStride),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [VCOL] "r"(validCol), [VROW] "r"(validRow),
       [Col] "i"(DstTile::Cols),
