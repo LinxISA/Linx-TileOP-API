@@ -139,5 +139,17 @@ for c in $TCVT_CASES; do
     echo "PASS (rejected): tcvt_$c"; PASS=$((PASS+1))
   fi
 done
+PACK_CASES="left_zero left_too_wide sum_too_wide high_bits right_zero"
+UNPACK_CASES="offset_too_large count_zero count_too_large sum_too_wide high_bits"
+for c in $PACK_CASES; do
+  define=SHOULD_FAIL_PACK_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "pack_$c" "$define" PackUnpackNegatives.cpp \
+    'TPACK control needs two 1\.\.3 byte widths'
+done
+for c in $UNPACK_CASES; do
+  define=SHOULD_FAIL_UNPACK_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "unpack_$c" "$define" PackUnpackNegatives.cpp \
+    'TUNPACK control needs a 0\.\.3 byte offset'
+done
 echo "== $PASS passed, $FAIL failed =="
 test "$FAIL" -eq 0

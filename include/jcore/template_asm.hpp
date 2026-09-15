@@ -16791,6 +16791,35 @@ void TSHUF(D &dst, S &src, C &controls, uint64_t control) {
         [ElemLayout] "i"(local_layout_code_v<D>));
 }
 
+// PTO-ISA layout-and-rearrangement control words: bits [63:32] must be zero
+// and only the low two control bytes carry the pack/unpack fields.
+constexpr bool tpack_control_legal_v(uint64_t control) {
+  if (control >> 32)
+    return false;
+  const unsigned left_bytes = control & 0xff;
+  const unsigned right_bytes = (control >> 8) & 0xff;
+  return left_bytes >= 1 && left_bytes <= 3 && right_bytes >= 1 &&
+         right_bytes <= 3 && left_bytes + right_bytes <= 4;
+}
+
+constexpr bool tunpack_control_legal_v(uint64_t control) {
+  if (control >> 32)
+    return false;
+  const unsigned offset = control & 0xff;
+  const unsigned count = (control >> 8) & 0xff;
+  return offset <= 3 && count >= 1 && count <= 4 && offset + count <= 4;
+}
+
+// PTO-ISA layout-and-rearrangement control words: bits [63:32] must be zero
+// and only the low two control bytes carry the pack/unpack fields.
+template <uint64_t Control>
+struct tpack_control_legal
+    : std::bool_constant<tpack_control_legal_v(Control)> {};
+
+template <uint64_t Control>
+struct tunpack_control_legal
+    : std::bool_constant<tunpack_control_legal_v(Control)> {};
+
 template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
   static_assert(type_traits<typename D::DType>::TypeCode == __type_uint32 &&
@@ -16803,6 +16832,8 @@ void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
                 "TPACK requires matching CUBE_M16 or CUBE_M32 layouts");
   static_assert(D::ValidRow > 0 && D::ValidCol > 0,
                 "TPACK currently requires a static valid shape");
+  if (!tpack_control_legal_v(control))
+    __builtin_trap();
   uint64_t controlValue = control;
   asm("" : "+r"(controlValue));
   asm volatile(
@@ -16832,6 +16863,8 @@ void TUNPACK(D &dst, S &src, uint64_t control) {
                 "TUNPACK requires matching CUBE_M16 or CUBE_M32 layouts");
   static_assert(D::ValidRow > 0 && D::ValidCol > 0,
                 "TUNPACK currently requires a static valid shape");
+  if (!tunpack_control_legal_v(control))
+    __builtin_trap();
   uint64_t controlValue = control;
   asm("" : "+r"(controlValue));
   asm volatile(
@@ -17226,6 +17259,19 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
                 "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL reduction _ASS dtypes must match");
+  // The destination-only B.IOT consumes an already-associated MIDDLE/LAST
+  // slot. Carry the range metadata in a destination-only B.ASSEMBLE so the
+  // model can distinguish the closing slot and retain its parent offset.
+  static_assert(!D::INIT,
+                "TEPL reduction _ASS consumes an already-associated slot; "
+                "the INIT slot must use the plain producer form");
+  static_assert(D::RegSrc == 0 || D::RegSrc == range::AutoRegSrc,
+                "TEPL reduction _ASS with an explicit B.ASSEMBLE RegSrc "
+                "selector is not supported; use the default or *_at_reg plain "
+                "forms");
+  const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
+  const size_t col = src.GetValidCol();
+  const size_t row = src.GetValidRow();
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -17233,11 +17279,17 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [Type] "i"(type_traits<typename S::DType>::TypeCode),
-        [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
-        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data())
+        [Col] "r"(col), [Row] "r"(row), [Cols] "i"(S::Cols),
+        [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(range_base),
+        [Init] "i"(static_cast<int>(D::INIT)),
+        [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits),
+        [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
