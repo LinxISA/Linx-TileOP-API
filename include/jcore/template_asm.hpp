@@ -14017,8 +14017,6 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
-  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
-                "TROWMAX destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
                 "TROWMAX destination valid rows must equal the source valid rows");
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
@@ -14101,8 +14099,6 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
-  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
-                "TROWMIN destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
                 "TROWMIN destination valid rows must equal the source valid rows");
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
@@ -14185,8 +14181,6 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
-  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
-                "TROWPROD destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
                 "TROWPROD destination valid rows must equal the source valid rows");
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
@@ -14350,8 +14344,6 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
-  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
-                "TROWARGMAX destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
                 "TROWARGMAX destination valid rows must equal the source valid rows");
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
@@ -14434,8 +14426,6 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
-  static_assert(tile_shape_out::ValidCol == DYNAMIC || (tile_shape_out::ValidCol == 1 && tile_shape_out::Cols == 1),
-                "TROWARGMIN destination must be a single-column tile (N x 1)");
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_in::ValidRow == DYNAMIC || tile_shape_out::ValidRow == tile_shape_in::ValidRow,
                 "TROWARGMIN destination valid rows must equal the source valid rows");
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,

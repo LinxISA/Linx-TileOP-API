@@ -281,10 +281,7 @@ TEPL `*_ASS` 的 destination，也不能把 `range::subview` 当作 destination�
 `TCMP_ASS` 的两个输入 dtype 必须相同；`TCMPS_ASS` 的 scalar 必须是 source
 的 `DType`；普通逐元素、归约和广播接口要求 source 与 destination dtype 匹配。
 `TCVT_ASS` 允许转换 dtype，但 source 和 destination 的物理 shape 必须相同。
-归约 `_ASS` 接口沿用对应普通接口的逻辑归约方向和 dtype 规则，但不要求
-assembled destination 的物理 shape、物理列数或布局等于逻辑归约结果；例如
-`TROWSUM_ASS` 的输入逻辑结果为 `R x 1`，destination 不必是物理 `N x 1`
-Tile。其余通用 carrier 规则与对应普通接口页面相同。
+其余形状规则与对应普通接口页面相同。
 
 ### 生成的 TEPL bundle
 
