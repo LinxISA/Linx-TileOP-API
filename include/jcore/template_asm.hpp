@@ -3019,8 +3019,8 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
   if constexpr (is_subview_v<tile_shape>) {
     using ParentTile = typename tile_shape::ParentTile;
     static_assert(range::is_legal_subview_parent_v<ParentTile>,
-                  "B.SUBVIEW source must be an assigned Local Matrix Tile with "
-                  "a CUBE layout");
+                  "B.SUBVIEW source must use an assigned Local or Shared CUBE "
+                  "tile layout");
     if constexpr (is_shared_tile_v<ParentTile>) {
       static_assert(tile_type_traits<typename ParentTile::TileDType>::
                         IsValidSharedActiveSize,
