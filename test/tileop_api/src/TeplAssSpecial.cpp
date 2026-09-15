@@ -4,8 +4,8 @@ using namespace pto;
 
 using F = Tile<Location::Vec, float, 16, 16>;
 using B = Tile<Location::Vec, __bf16, 16, 16>;
-using R = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor, 16, 1>;
-using C = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor, 1, 16>;
+using R = Tile<Location::Vec, float, 16, 1, BLayout::RowMajor, 16, 1>;
+using C = Tile<Location::Vec, float, 1, 16, BLayout::RowMajor, 1, 16>;
 using H = Tile<Location::Vec, float, 16, 8>;
 
 __attribute__((noinline)) void tepl_ass_special(F &a, F &b, F &c, F &fd,
@@ -24,9 +24,15 @@ __attribute__((noinline)) void tepl_ass_special(F &a, F &b, F &c, F &fd,
   TRELU_ASS(f, a);
   TCVT_ASS(d, a);
   TTRANS_ASS(f, a);
-  TROWSUM_ASS(r, a);
-  TROWMAX_ASS(r, a);
-  TCOLSUM_ASS(c0, a);
+  // _ASS consumes only an already-open MIDDLE/LAST slot. Open the reduction
+  // destinations with the plain producer form, then use LAST carriers for the
+  // associated calls so their B.ASSEMBLE metadata is encoded.
+  auto r_init = range::assemble_init_last(row);
+  TROWSUM(r_init, a);
+  auto r_last = range::assemble_last(row);
+  TROWMAX_ASS(r_last, a);
+  auto c_init = range::assemble_init_last(col);
+  TCOLSUM(c_init, a);
   TROWEXPAND_ASS(f, row);
   TCOLEXPAND_ASS(f, col);
   TCONCAT_ASS(f, left, right);
