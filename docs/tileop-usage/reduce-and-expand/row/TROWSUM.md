@@ -18,8 +18,10 @@ template <is_tile_data_v D, is_tile_data_v S>
 void TROWSUM_ASS(D &assembled_dst, S &src);
 ```
 
-`assembled_dst` 必须是 `range::assemble` carrier；输入为 `R x C` 时 destination
-的 valid shape 为 `R x 1`，其余归约约束不变。
+`assembled_dst` 必须是 `range::assemble` carrier。`TROWSUM_ASS` 不要求
+assembled destination 的物理 shape、物理列数或布局为 `R x 1`；输入为
+`R x C` 时，操作的逻辑归约结果仍然是 `R x 1`。destination 只需满足
+assembled carrier、dtype 和容量等通用接口要求。
 
 ### 支持的数据类型
 
@@ -46,7 +48,9 @@ void TROWSUM_ASS(D &assembled_dst, S &src);
 ## 约束
 
 该操作沿每行的列轴归约。若输入有效 shape 为 `R x C`，输出的逻辑
-valid shape 必须为 `R x 1`；输出 dtype 与输入 dtype 相同。
+结果为 `R x 1`；输出 dtype 与输入 dtype 相同。对于 `TROWSUM_ASS`，
+assembled destination 的物理 shape、物理布局和物理列数不必等于该逻辑
+结果形状；这些属性不会改变归约计算或指令编码。
 
 源 Tile 的 allocated capacity 不得超过 **2048 bytes**。该限制针对归约源的物理分配容量，而不是输入的逻辑 valid shape；超过限制的源 Tile 不满足接口规范。
 
@@ -56,7 +60,7 @@ valid shape 必须为 `R x 1`；输出 dtype 与输入 dtype 相同。
 
 | 项目 | 规则 |
 | --- | --- |
-| 有效元素 | 输入 `R x C` 的每行产生一个元素，输出 valid shape 为 `R x 1`。 |
+| 有效元素 | 输入 `R x C` 的每行产生一个元素，逻辑结果为 `R x 1`；`TROWSUM_ASS` 的 assembled destination 不受物理 `N x 1` 形状限制。 |
 | 物理容量 / SizeCode | 只决定容量，不重新定义逻辑 shape。 |
 | 输出 padding | 除非本操作明确规定填充值或传播规则，否则视为不可依赖。 |
 

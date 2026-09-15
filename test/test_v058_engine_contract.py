@@ -253,9 +253,11 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             body = match.group(0)
             self.assertEqual(body.count("PTO_ELEMENTWISE_LAYOUT_ASM"), 4, op)
             self.assertIn('[ElemLayout] "i"(local_layout_code_v<', body, op)
-        # Reductions read the source geometry through B.DIM and require the
-        # destination layout to match, so the selector comes from the source.
-        for op in ("TROWSUM", "TCOLMAX", "TCOLARGMIN"):
+        # Reductions read the source geometry through B.DIM and normally
+        # require the destination layout to match, so the selector comes from
+        # the source. TROWSUM deliberately has no physical destination-layout
+        # restriction.
+        for op in ("TCOLMAX", "TCOLARGMIN"):
             match = re.search(r'^void ' + op + r'\(.*?\n}\n', self.header,
                               re.S | re.M)
             body = match.group(0)
