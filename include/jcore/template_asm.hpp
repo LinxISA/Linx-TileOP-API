@@ -17119,11 +17119,15 @@ PTO_SHARED_INLINE void unary_special(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [Type] "i"(type_traits<typename S::DType>::TypeCode),
         [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
-        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data())
+        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
+        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
@@ -17151,11 +17155,15 @@ PTO_SHARED_INLINE void ternary(D &dst, A &a, B &b, A &c) {
       "B.IOT %[A], %[B], mask=1111\n"
       "B.IOT %[C], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Opcode] "i"(Opcode), [Type] "i"(type_traits<typename A::DType>::TypeCode),
         [Col] "r"(a.GetValidCol()), [Row] "r"(a.GetValidRow()),
         [Cols] "i"(A::Cols), [A] "Tr"(a.data()), [B] "Tr"(b.data()),
-        [C] "Tr"(c.data()), [Dst] "Tr"(dst.data())
+        [C] "Tr"(c.data()), [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
+        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
@@ -17177,12 +17185,16 @@ PTO_SHARED_INLINE void convert(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [SType] "i"(type_traits<typename S::DType>::TypeCode),
         [__pto_DstType] "i"(type_traits<typename D::DType>::TypeCode),
         [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
-        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data())
+        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
+        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
@@ -17210,11 +17222,15 @@ PTO_SHARED_INLINE void binary_special(D &dst, A &a, B &b) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[A], %[B], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Opcode] "i"(Opcode), [Type] "i"(type_traits<typename A::DType>::TypeCode),
         [Col] "r"(a.GetValidCol()), [Row] "r"(a.GetValidRow()),
         [Cols] "i"(A::Cols), [A] "Tr"(a.data()), [B] "Tr"(b.data()),
-        [Dst] "Tr"(dst.data())
+        [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
+        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
@@ -17240,11 +17256,15 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [Type] "i"(type_traits<typename S::DType>::TypeCode),
         [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
-        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data())
+        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
+        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
@@ -17264,11 +17284,15 @@ PTO_SHARED_INLINE void expand(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [Type] "i"(type_traits<typename D::DType>::TypeCode),
         [Col] "r"(dst.GetValidCol()), [Row] "r"(dst.GetValidRow()),
-        [Cols] "i"(D::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data())
+        [Cols] "i"(D::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
+        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
@@ -17285,12 +17309,16 @@ PTO_SHARED_INLINE void output_geometry_binary(D &dst, A &a, B &b) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[A], %[B], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [Type] "i"(type_traits<typename D::DType>::TypeCode),
         [Col] "r"(dst.GetValidCol()), [Row] "r"(dst.GetValidRow()),
         [Cols] "i"(D::Cols), [A] "Tr"(a.data()), [B] "Tr"(b.data()),
-        [Dst] "Tr"(dst.data())
+        [Dst] "Tr"(dst.data()),
+        [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
+        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
+        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
       : "memory");
 }
 
@@ -17310,11 +17338,15 @@ PTO_SHARED_INLINE void compare(D &dst, A &a, B &b) {
         "B.DIM zero, %c[Cols], ->lb2\n"                                      \
         "B.IOT %[A], %[B], mask=1111\n"                                     \
         "B.IOT %[Dst], mask=1111, last\n"                                   \
+        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n" \
         :                                                                      \
         : [Type] "i"(type_traits<typename A::DType>::TypeCode),               \
           [Col] "r"(a.GetValidCol()), [Row] "r"(a.GetValidRow()),             \
           [Cols] "i"(A::Cols), [A] "Tr"(a.data()), [B] "Tr"(b.data()),        \
-          [Dst] "Tr"(dst.data())                                              \
+          [Dst] "Tr"(dst.data()),                                             \
+          [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),           \
+          [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)), \
+          [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)      \
         : "memory");                                                          \
   }
   PTO_TCMP_ASS_CASE(EQ)
@@ -17344,11 +17376,15 @@ PTO_SHARED_INLINE void compare_scalar(D &dst, S &src,
         "B.IOT %[Src], mask=1111\n"                                         \
         "B.IOR [%[Scalar]],[]\n"                                             \
         "B.IOT %[Dst], mask=1111, last\n"                                   \
+        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n" \
         :                                                                      \
         : [Type] "i"(type_traits<typename S::DType>::TypeCode),               \
           [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),         \
           [Cols] "i"(S::Cols), [Src] "Tr"(src.data()),                        \
-          [Scalar] "r"(scalar_value), [Dst] "Tr"(dst.data())                  \
+          [Scalar] "r"(scalar_value), [Dst] "Tr"(dst.data()),                 \
+          [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),           \
+          [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)), \
+          [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)      \
         : "memory");                                                          \
   }
   PTO_TCMPS_ASS_CASE(EQ)
