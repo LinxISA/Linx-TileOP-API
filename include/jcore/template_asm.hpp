@@ -3956,6 +3956,335 @@ asm volatile(
     : "memory");  }
 }
 
+// PTO ISA TLSU GM_ATOM_VALUE family (functions 9-18): atomic RMW at logical
+// element indices with observed-old-value publication. Every member shares one
+// bundle shape -- a single Local B.IOT binding (IndexTile + one operand tile,
+// last, ->DstTile) and a base-only B.IOR (the index is the full logical linear
+// address, so no row stride is carried). Only the BSTART mnemonic and the legal
+// transfer DataType differ per member; see pto-spec
+// asl/tile/model/memory/gm-atom-red.asl (GMAtomicOperationDataTypeLegal) for the
+// per-op DataType legality reproduced in each wrapper's static_assert. The
+// destination is early-clobbered so the allocator keeps it distinct from the
+// operand. MGATHER_CAS (function 8) is defined separately above because it
+// carries two B.IOT bindings and a GM row stride.
+//
+// The four constexpr branches select immediate vs. runtime B.DIM encodings for
+// static or DYNAMIC ValidCol/ValidRow, matching MGATHER_CAS.
+#define PTO_DEFINE_MGATHER_ATOM(FnName, Mnem, OperandName, TYPE_OK, TYPE_MSG)   \
+  template <is_tile_data_v DstTile, is_tile_data_v IndexTile,                   \
+            is_tile_data_v ValueTile>                                           \
+  void FnName(DstTile &observedOld, uint64_t base, IndexTile &elementIndices,   \
+              ValueTile &OperandName, uint32_t validCol,                        \
+              uint32_t validRow = 1) {                                          \
+    static_assert(std::is_same_v<typename ValueTile::DType,                     \
+                                 typename DstTile::DType>,                       \
+                  #FnName " operand/dst must share one transfer DataType");     \
+    constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode; \
+    constexpr int TransferType =                                               \
+        type_traits<typename DstTile::DType>::TypeCode;                        \
+    static_assert(                                                              \
+        IndexType == __type_int4x2 || IndexType == __type_uint4x2 ||           \
+            IndexType == __type_int8 || IndexType == __type_uint8 ||           \
+            IndexType == __type_int16 || IndexType == __type_uint16 ||         \
+            IndexType == __type_int32 || IndexType == __type_uint32 ||         \
+            IndexType == __type_int64 || IndexType == __type_uint64,           \
+        #FnName " index tile must use an integer logical element-index type"); \
+    static_assert(TYPE_OK, TYPE_MSG);                                          \
+    static_assert(IndexTile::Rows == ValueTile::Rows &&                        \
+                      IndexTile::Cols == ValueTile::Cols &&                    \
+                      DstTile::Rows == ValueTile::Rows &&                      \
+                      DstTile::Cols == ValueTile::Cols,                        \
+                  #FnName " tiles must match the resolved ValidRow x ValidCol");\
+    if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow > 0) {            \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "i"(DstTile::ValidCol),     \
+            [VROW] "i"(DstTile::ValidRow), [Col] "i"(DstTile::Cols),         \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    } else if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow < 0) {    \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "i"(DstTile::ValidCol),     \
+            [VROW] "r"(validRow), [Col] "i"(DstTile::Cols),                  \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    } else if constexpr (DstTile::ValidCol < 0 && DstTile::ValidRow > 0) {    \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "r"(validCol),              \
+            [VROW] "i"(DstTile::ValidRow), [Col] "i"(DstTile::Cols),         \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    } else {                                                                  \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "r"(validCol),              \
+            [VROW] "r"(validRow), [Col] "i"(DstTile::Cols),                  \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    }                                                                          \
+  }
+
+// Transfer-DataType legality shared by several members (see gm-atom-red.asl).
+#define PTO_ATOM_TYPES_ADD                                                     \
+  (TransferType == __type_fp16 || TransferType == __type_bf16 ||              \
+   TransferType == __type_fp32 || TransferType == __type_fp64 ||             \
+   TransferType == __type_int32 || TransferType == __type_uint32 ||          \
+   TransferType == __type_uint64)
+#define PTO_ATOM_TYPES_MINMAX                                                  \
+  (TransferType == __type_int32 || TransferType == __type_int64 ||           \
+   TransferType == __type_uint32 || TransferType == __type_uint64)
+#define PTO_ATOM_TYPES_BITWISE                                                 \
+  (TransferType == __type_uint32 || TransferType == __type_uint64)
+#define PTO_ATOM_TYPES_U32 (TransferType == __type_uint32)
+
+PTO_DEFINE_MGATHER_ATOM(MGATHER_EXCH, "MGATHER.EXCH", replacement,
+                        PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_EXCH transfer DataType must be U32 or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_MAX, "MGATHER.MAX", value, PTO_ATOM_TYPES_MINMAX,
+                        "MGATHER_MAX transfer DataType must be S32, S64, U32, "
+                        "or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_MIN, "MGATHER.MIN", value, PTO_ATOM_TYPES_MINMAX,
+                        "MGATHER_MIN transfer DataType must be S32, S64, U32, "
+                        "or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_ADD, "MGATHER.ADD", value, PTO_ATOM_TYPES_ADD,
+                        "MGATHER_ADD transfer DataType must be FP16, BF16, FP32, "
+                        "FP64, S32, U32, or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_INC, "MGATHER.INC", limit, PTO_ATOM_TYPES_U32,
+                        "MGATHER_INC transfer DataType must be U32")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_DEC, "MGATHER.DEC", limit, PTO_ATOM_TYPES_U32,
+                        "MGATHER_DEC transfer DataType must be U32")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_AND, "MGATHER.AND", value,
+                        PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_AND transfer DataType must be U32 or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_OR, "MGATHER.OR", value, PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_OR transfer DataType must be U32 or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_XOR, "MGATHER.XOR", value,
+                        PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_XOR transfer DataType must be U32 or U64")
+
+// PTO ISA TLSU GM_RED_VALUE family (functions 19-26): atomic reduction into GM
+// at logical element indices with no destination and no observed old value.
+// Same bundle as the GM_ATOM_VALUE members minus the destination: a single
+// Local B.IOT binding (IndexTile + one operand tile, last) and a base-only
+// B.IOR. The valid region is taken from the index tile, since there is no
+// destination to publish. Per-op transfer-DataType legality mirrors the
+// corresponding atom member (see GMReductionOperationDataTypeLegal).
+#define PTO_DEFINE_MSCATTER_ATOM(FnName, Mnem, OperandName, TYPE_OK, TYPE_MSG)  \
+  template <is_tile_data_v IndexTile, is_tile_data_v ValueTile>                 \
+  void FnName(uint64_t base, IndexTile &elementIndices, ValueTile &OperandName, \
+              uint32_t validCol, uint32_t validRow = 1) {                       \
+    constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode; \
+    constexpr int TransferType =                                               \
+        type_traits<typename ValueTile::DType>::TypeCode;                      \
+    static_assert(                                                              \
+        IndexType == __type_int4x2 || IndexType == __type_uint4x2 ||           \
+            IndexType == __type_int8 || IndexType == __type_uint8 ||           \
+            IndexType == __type_int16 || IndexType == __type_uint16 ||         \
+            IndexType == __type_int32 || IndexType == __type_uint32 ||         \
+            IndexType == __type_int64 || IndexType == __type_uint64,           \
+        #FnName " index tile must use an integer logical element-index type"); \
+    static_assert(TYPE_OK, TYPE_MSG);                                          \
+    static_assert(IndexTile::Rows == ValueTile::Rows &&                        \
+                      IndexTile::Cols == ValueTile::Cols,                      \
+                  #FnName " tiles must match the resolved ValidRow x ValidCol");\
+    if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow > 0) {        \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "i"(IndexTile::ValidCol),   \
+            [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)      \
+          : "memory");                                                        \
+    } else if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow < 0) { \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "i"(IndexTile::ValidCol),   \
+            [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)                 \
+          : "memory");                                                        \
+    } else if constexpr (IndexTile::ValidCol < 0 && IndexTile::ValidRow > 0) { \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "r"(validCol),              \
+            [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)      \
+          : "memory");                                                        \
+    } else {                                                                  \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "r"(validCol),              \
+            [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)                 \
+          : "memory");                                                        \
+    }                                                                          \
+  }
+
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_MAX, "MSCATTER.MAX", value,
+                         PTO_ATOM_TYPES_MINMAX,
+                         "MSCATTER_MAX transfer DataType must be S32, S64, U32, "
+                         "or U64")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_MIN, "MSCATTER.MIN", value,
+                         PTO_ATOM_TYPES_MINMAX,
+                         "MSCATTER_MIN transfer DataType must be S32, S64, U32, "
+                         "or U64")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_ADD, "MSCATTER.ADD", value,
+                         PTO_ATOM_TYPES_ADD,
+                         "MSCATTER_ADD transfer DataType must be FP16, BF16, "
+                         "FP32, FP64, S32, U32, or U64")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_INC, "MSCATTER.INC", limit, PTO_ATOM_TYPES_U32,
+                         "MSCATTER_INC transfer DataType must be U32")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_DEC, "MSCATTER.DEC", limit, PTO_ATOM_TYPES_U32,
+                         "MSCATTER_DEC transfer DataType must be U32")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_AND, "MSCATTER.AND", value,
+                         PTO_ATOM_TYPES_BITWISE,
+                         "MSCATTER_AND transfer DataType must be U32 or U64")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_OR, "MSCATTER.OR", value,
+                         PTO_ATOM_TYPES_BITWISE,
+                         "MSCATTER_OR transfer DataType must be U32 or U64")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_XOR, "MSCATTER.XOR", value,
+                         PTO_ATOM_TYPES_BITWISE,
+                         "MSCATTER_XOR transfer DataType must be U32 or U64")
+
+#undef PTO_DEFINE_MGATHER_ATOM
+#undef PTO_DEFINE_MSCATTER_ATOM
+#undef PTO_ATOM_TYPES_ADD
+#undef PTO_ATOM_TYPES_MINMAX
+#undef PTO_ATOM_TYPES_BITWISE
+#undef PTO_ATOM_TYPES_U32
+
+// MSCATTER_POPC: population-count reduction (PTO ISA TLSU function 27,
+// GM_RED_POPC). Only an index tile participates -- each valid effective GM
+// address receives one U32 increment -- so the bundle carries a single-operand
+// Local B.IOT with no value and no destination, and the reduction DataType is
+// fixed U32. See pto-spec MSCATTER_POPC.asl and gm-atom-red.asl
+// (GMReductionOperationDataTypeLegal for POPC).
+template <is_tile_data_v IndexTile>
+void MSCATTER_POPC(uint64_t base, IndexTile &elementIndices, uint32_t validCol,
+                   uint32_t validRow = 1) {
+  constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode;
+  static_assert(
+      IndexType == __type_int4x2 || IndexType == __type_uint4x2 ||
+          IndexType == __type_int8 || IndexType == __type_uint8 ||
+          IndexType == __type_int16 || IndexType == __type_uint16 ||
+          IndexType == __type_int32 || IndexType == __type_uint32 ||
+          IndexType == __type_int64 || IndexType == __type_uint64,
+      "MSCATTER_POPC index tile must use an integer logical element-index type");
+  if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow > 0) {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "B.DIM zero, %c[VCOL], ->lb0\n"
+        "B.DIM zero, %c[VROW], ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
+          [DataType] "i"(__type_uint32), [VCOL] "i"(IndexTile::ValidCol),
+          [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  } else if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow < 0) {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "B.DIM zero, %c[VCOL], ->lb0\n"
+        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
+          [DataType] "i"(__type_uint32), [VCOL] "i"(IndexTile::ValidCol),
+          [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  } else if constexpr (IndexTile::ValidCol < 0 && IndexTile::ValidRow > 0) {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "B.DIM %[VCOL], 0, ->lb0\n"
+        "B.DIM zero, %c[VROW], ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
+          [DataType] "i"(__type_uint32), [VCOL] "r"(validCol),
+          [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  } else {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "B.DIM %[VCOL], 0, ->lb0\n"
+        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
+          [DataType] "i"(__type_uint32), [VCOL] "r"(validCol),
+          [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  }
+}
+
 // Low-level v5 GMOV. All four PEs must reach the same dynamic instance;
 // PEMask only selects requesters and does not reduce the Core4 collective.
 template <int PEMask = 15, is_tile_data_v tile_shape_dst,

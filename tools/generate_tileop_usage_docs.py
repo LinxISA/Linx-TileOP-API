@@ -279,7 +279,11 @@ def asl_operation_types(name: str) -> tuple[list[str] | None, list[str] | None] 
         if values:
             return sorted(values, key=DATA_TYPES.index), None
     if name in {"TGATHER", "TSCATTER", "MGATHER", "MGATHER_MASK", "MGATHER_CAS",
-                "MSCATTER", "MSCATTER_MASK"}:
+                "MGATHER_ADD", "MGATHER_MAX", "MGATHER_MIN", "MGATHER_AND",
+                "MGATHER_OR", "MGATHER_XOR", "MGATHER_EXCH", "MGATHER_INC",
+                "MGATHER_DEC", "MSCATTER", "MSCATTER_MASK", "MSCATTER_ADD",
+                "MSCATTER_MAX", "MSCATTER_MIN", "MSCATTER_AND", "MSCATTER_OR",
+                "MSCATTER_XOR", "MSCATTER_INC", "MSCATTER_DEC", "MSCATTER_POPC"}:
         return [x for x in DATA_TYPES if x not in packed], None
     return None
 
@@ -422,7 +426,12 @@ def dtype_roles(name: str, types: str) -> str:
         return ("| 操作数角色 | 类型要求 |\n| --- | --- |\n"
                 f"| 值输入 / 值输出 | {types} |\n"
                 "| 索引输出 | `U32`，保存组内原始位置。 |")
-    if name in {"TGATHER", "TSCATTER", "MGATHER", "MGATHER_MASK", "MGATHER_CAS", "MSCATTER", "MSCATTER_MASK"}:
+    if name in {"TGATHER", "TSCATTER", "MGATHER", "MGATHER_MASK", "MGATHER_CAS",
+                "MGATHER_ADD", "MGATHER_MAX", "MGATHER_MIN", "MGATHER_AND",
+                "MGATHER_OR", "MGATHER_XOR", "MGATHER_EXCH", "MGATHER_INC",
+                "MGATHER_DEC", "MSCATTER", "MSCATTER_MASK", "MSCATTER_ADD",
+                "MSCATTER_MAX", "MSCATTER_MIN", "MSCATTER_AND", "MSCATTER_OR",
+                "MSCATTER_XOR", "MSCATTER_INC", "MSCATTER_DEC", "MSCATTER_POPC"}:
         return ("| 操作数角色 | 类型要求 |\n| --- | --- |\n"
                 f"| 数据 Tile | {types} |\n"
                 "| 索引 / 地址位移 Tile | 必须使用该操作 contract 允许的整数 dtype 与单位。 |")
