@@ -20,12 +20,13 @@ void TUNPACK(D &dst, S &src, uint64_t control);
 | --- | --- |
 | `dst` | 新的 U32 输出 Tile。 |
 | `src` | U32 输入 Tile。 |
-| `control` | 低 control byte 是源 byte offset，下一 byte 是提取 byte count。 |
+| `control` | `control[7:0]` 是源 byte offset，`control[15:8]` 是提取 byte count；运行时会拒绝高 32 位非零、offset/count 越界或 `offset + count > 4` 的 control。 |
 
 ## 约束
 
 - `src` 与 `dst` 必须是 Local U32，使用相同的 `CUBE_M16` 或 `CUBE_M32` layout 和几何。
-- offset 必须在 `0..3`，count 必须在 `1..4`，且 `offset + count <= 4`；control bits `[63:32]` 必须为零。
+- `control[7:0]` 是源 byte offset，必须在 `0..3`；`control[15:8]` 是 byte count，必须在 `1..4`；并且 `offset + count <= 4`。
+- `control[63:32]` 必须为零；非法 control 会在进入 Tile bundle 前通过 `__builtin_trap()` fail closed，不发布 destination，也不产生部分 Tile 副作用。
 - `dst` 必须是新目标，不得与 `src` alias；当前 wrapper 要求编译期已知且非零的 destination valid shape。
 - 操作按原始字节提取，不进行符号扩展或数值转换。
 
