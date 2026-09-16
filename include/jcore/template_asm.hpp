@@ -56,6 +56,15 @@ using namespace pto;
   ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Null\n"                      \
   ".endif\n"
 
+// Generic TEPL wrappers bind operands directly from `data()` and therefore do
+// not attach B.SUBVIEW.  A TPARTVIEW fragment must go through the dedicated
+// region emission paths, which preserve the fragment offset.
+#define PTO_NO_SUBTILE_VIEW_ASSERT(Operand)                                    \
+  static_assert(!pto::is_subtile_view_v<std::remove_const_t<Operand>>,         \
+                "generic TEPL emission does not attach B.SUBVIEW, so the "     \
+                "TPARTVIEW fragment offset would be silently dropped; "        \
+                "consume the SubTileView through a region path instead")
+
 // B.DATR.Layout code for a TEPL operand's physical Local layout: 29 CUBE_M32,
 // 31 CUBE_M16, and NORM (0) for the RowMajor default.
 template <typename Tile>
@@ -9583,6 +9592,7 @@ concept reduction_prefix_operand_for =
 // TADD: dst = src0 + src1
 template <is_tile_data_v tile_shape>
 void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape);
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 0, %D1\n"
@@ -14535,6 +14545,7 @@ void TPARTMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 // TROWSUM: row sum reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
@@ -14657,6 +14668,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
 // TROWMAX: row max reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
@@ -14739,6 +14751,7 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TROWMIN: row min reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
@@ -14821,6 +14834,7 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
 // TROWPROD: row product reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
@@ -14903,6 +14917,7 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
 // TROWEXPAND: broadcast first element of each row
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (expansion): row expansion broadcasts a one-column source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in::ValidCol == DYNAMIC || tile_shape_in::ValidCol == 1,
@@ -14984,6 +14999,7 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 // TROWARGMAX: row argmax (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
@@ -15066,6 +15082,7 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TROWARGMIN: row argmin (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
@@ -15148,6 +15165,7 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLSUM: col sum reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (SelectedBundleComparisonShapeMatches): B.DIM describes the SOURCE
   // geometry (ValidCol/ValidRow/Col); LB1 must equal the source valid rows.
   // The destination is rule-derived: exactly one valid row (1 x N) with the
@@ -15235,6 +15253,7 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLMAX: col max reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (SelectedBundleComparisonShapeMatches): B.DIM describes the SOURCE
   // geometry (ValidCol/ValidRow/Col); LB1 must equal the source valid rows.
   // The destination is rule-derived: exactly one valid row (1 x N) with the
@@ -15322,6 +15341,7 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLMIN: col min reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (SelectedBundleComparisonShapeMatches): B.DIM describes the SOURCE
   // geometry (ValidCol/ValidRow/Col); LB1 must equal the source valid rows.
   // The destination is rule-derived: exactly one valid row (1 x N) with the
@@ -15409,6 +15429,7 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLPROD: col product reduction
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (SelectedBundleComparisonShapeMatches): B.DIM describes the SOURCE
   // geometry (ValidCol/ValidRow/Col); LB1 must equal the source valid rows.
   // The destination is rule-derived: exactly one valid row (1 x N) with the
@@ -15496,6 +15517,7 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLEXPAND: broadcast first element of each col
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (expansion): column expansion broadcasts a one-row source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in::ValidRow == DYNAMIC || tile_shape_in::ValidRow == 1,
@@ -15577,6 +15599,7 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLARGMAX: col argmax (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (SelectedBundleComparisonShapeMatches): B.DIM describes the SOURCE
   // geometry (ValidCol/ValidRow/Col); LB1 must equal the source valid rows.
   // The destination is rule-derived: exactly one valid row (1 x N) with the
@@ -15664,6 +15687,7 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLARGMIN: col argmin (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (SelectedBundleComparisonShapeMatches): B.DIM describes the SOURCE
   // geometry (ValidCol/ValidRow/Col); LB1 must equal the source valid rows.
   // The destination is rule-derived: exactly one valid row (1 x N) with the
@@ -15754,6 +15778,8 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): row expansion broadcasts a one-column source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
@@ -15867,6 +15893,8 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): row expansion broadcasts a one-column source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
@@ -15980,6 +16008,8 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): row expansion broadcasts a one-column source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
@@ -16097,6 +16127,8 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): row expansion broadcasts a one-column source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
@@ -16210,6 +16242,8 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): row expansion broadcasts a one-column source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
@@ -16323,6 +16357,8 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): row expansion broadcasts a one-column source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
@@ -16436,6 +16472,8 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): row expansion broadcasts a one-column source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
@@ -16611,6 +16649,8 @@ PTO_PREFIX_ROW_EXPAND_WRAPPER(TROWEXPANDEXPDIF, 75)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): column expansion broadcasts a one-row source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
@@ -16724,6 +16764,8 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): column expansion broadcasts a one-row source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
@@ -16837,6 +16879,8 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): column expansion broadcasts a one-row source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
@@ -16950,6 +16994,8 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): column expansion broadcasts a one-row source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
@@ -17063,6 +17109,8 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): column expansion broadcasts a one-row source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
@@ -17176,6 +17224,8 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): column expansion broadcasts a one-row source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
@@ -17289,6 +17339,8 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1>
 void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
+  PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   // ASL (expansion): column expansion broadcasts a one-row source; the
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
