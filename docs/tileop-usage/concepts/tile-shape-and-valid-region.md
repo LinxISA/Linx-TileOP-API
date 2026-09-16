@@ -65,7 +65,7 @@ OutputParent output = TASSEMBLY<OutputParent>(std::move(fragments));
 对应的 `B.ASSEMBLE`，slot ordinal 自动决定 INIT/MIDDLE/LAST 生命周期。
 
 `TPARTVIEW/TASSEMBLY` 的 ISA modifier 编码和 binder 附着规则见
-[B.SUBVIEW/B.ASSEMBLE range modifiers](../range-modifiers.md)。
+[B.SUBVIEW/B.ASSEMBLE 使用指南](../b-subview-b-assemble.md)。
 
 ## Range modifier 的统一接口
 

@@ -67,8 +67,8 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
 - 矩阵/向量计算使用 [CUBE TMATMUL](cube/matrix-matrix/TMATMUL.md) 或相应 GEMV 页面。
 - 需要启用矩阵后处理属性时，先阅读 [`fixp::Options` 指南](options.md)。
 - 需要绑定 Tile range 或分区/组装时，阅读
-  [B.SUBVIEW / B.ASSEMBLE developer guide](range-modifiers-developer-guide.md)，以及
-  [range modifier API](range-modifiers.md) 和各操作页中的 `*_ASS` 小节。
+  [B.SUBVIEW / B.ASSEMBLE 使用指南](b-subview-b-assemble.md) 和各操作页中的
+  `*_ASS` 小节。
 - 按执行引擎或 selector 查找操作时，使用 [engine catalog](generated/engines.md)。
 
 ## 每个操作页如何使用
@@ -89,4 +89,4 @@ Tile 的物理容量；Shared Tile、CUBE layout、PE mask 和 range lifecycle �
   `INIT → MIDDLE* → LAST` 的 assembly 生命周期。
 
 仍无法定位时，生成 `.s` 并检查 `BSTART`、binder 与相关 modifier 的顺序；详细命令见
-[range modifier 指南](range-modifiers-developer-guide.md#生成代码检查)。
+[B.SUBVIEW / B.ASSEMBLE 使用指南](b-subview-b-assemble.md#开发者自检)。

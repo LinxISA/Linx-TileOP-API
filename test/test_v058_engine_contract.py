@@ -389,7 +389,9 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_range_modifier_types_and_aliases_remain_supported(self) -> None:
         header = PTO_TILE.read_text(encoding="utf-8")
-        docs = (ROOT / "docs" / "tileop-usage" / "range-modifiers.md").read_text(
+        docs = (
+            ROOT / "docs" / "tileop-usage" / "b-subview-b-assemble.md"
+        ).read_text(
             encoding="utf-8"
         )
         for spelling in (
