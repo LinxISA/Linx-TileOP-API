@@ -14538,6 +14538,47 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
+  // PTO-ISA pto-spec#265 (issue #145): on a range::Assemble carrier the
+  // plain producer opens the session with an allocating destination B.IOT
+  // (parent capacity) plus a contiguous B.ASSEMBLE INIT whose final field
+  // is this fragment's WriterSizeCode; it must be nonzero and may not reuse
+  // the parent code.
+  if constexpr (is_assemble_v<tile_shape_out>) {
+    static_assert(
+        tile_shape_out::INIT,
+        "plain TROWSUM requires an INIT assemble carrier (the session-"
+        "opening slot); use TROWSUM_ASS for the subsequent MIDDLE/LAST slots");
+    static_assert(tile_shape_out::ParentSizeCode != 0,
+                  "TROWSUM assemble INIT requires a nonzero parent capacity");
+    constexpr unsigned FragmentBytes =
+        static_cast<unsigned>(sizeof(typename tile_shape_out::TileDType));
+    constexpr unsigned WriterSizeCode =
+        range::subview_size_code_for_bytes(FragmentBytes);
+    static_assert(WriterSizeCode != 0,
+                  "TROWSUM fragment must be a power-of-two multiple of 128 B");
+    const uintptr_t range_base =
+        static_cast<uintptr_t>(dst.GetRangeBase());
+    asm volatile(
+    "BSTART.TEPL 64, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.ASSEMBLE 1, %c8, %[RegSrc], %c7, %c[WriterSize]\n"
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
+      "Tr"(src.data()),
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape_in>),
+      [Off] "i"(tile_shape_out::OffsetUnits),
+      [Last] "i"(static_cast<int>(tile_shape_out::LAST)),
+      [RegSrc] "r"(range_base),
+      [WriterSize] "i"(WriterSizeCode)
+    );  } else
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 64, %D1\n"
@@ -17912,6 +17953,21 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
                 "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL reduction _ASS dtypes must match");
+  static_assert(!D::INIT,
+                "TEPL reduction _ASS consumes an already-associated slot; "
+                "the INIT slot must use the plain producer form");
+  // PTO-ISA pto-spec#265 (issue #145): the destination-only B.IOT keeps the
+  // final source-form ParentRef carrier, but the B.ASSEMBLE slot 5 is the
+  // current writer extent (WriterSizeCode), not the parent capacity. Encode
+  // this fragment's extent instead of the stale ParentSizeCode so MIDDLE/LAST
+  // writers stay legal.
+  constexpr unsigned FragmentBytes =
+      static_cast<unsigned>(sizeof(typename D::TileDType));
+  constexpr unsigned WriterSizeCode =
+      range::subview_size_code_for_bytes(FragmentBytes);
+  static_assert(WriterSizeCode != 0,
+                "TEPL reduction _ASS fragment must be a power-of-two multiple "
+                "of 128 B");
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -17919,7 +17975,7 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [Type] "i"(type_traits<typename S::DType>::TypeCode),
@@ -17927,7 +17983,7 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
         [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
