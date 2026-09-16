@@ -7,6 +7,22 @@ namespace pto {
 
 #define PTO_REGION_ALWAYS_INLINE __attribute__((always_inline)) inline
 
+// PTO-ISA #291 elementwise closure (issue #155): CUBE_M16/M32 sources must
+// select their direct-Local layout on the block. Mirrors the jcore
+// PTO_ELEMENTWISE_LAYOUT_ASM contract for the region wrapper path.
+#ifndef PTO_REGION_ELEMENTWISE_LAYOUT_ASM
+#define PTO_REGION_ELEMENTWISE_LAYOUT_ASM                                      \
+  ".if %c11 == 29\nB.DATR CUBE_M32, Null\n"                          \
+  ".elseif %c11 == 31\nB.DATR CUBE_M16, Null\n"                      \
+  ".endif\n"
+#endif
+
+template <typename Tile>
+inline constexpr int region_prefix_layout_code_v =
+    Tile::BFractal == BLayout::CubeM32
+        ? 29
+        : Tile::BFractal == BLayout::CubeM16 ? 31 : 0;
+
 template <int Opcode, typename Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void
 pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
@@ -873,20 +889,27 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
   static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
                 "reduction prefix sources require matching element types");
   const uintptr_t prefix_base_units = src1.GetRangeBase();
+  // PTO-ISA #291 elementwise closure (issue #155): a CUBE_M16/M32 source
+  // pair must select the shared direct-Local layout on the block, exactly
+  // like the ordinary jcore binary wrappers. NORM is not a CUBE layout, so
+  // the block carries B.DATR <layout> whenever the sources are CUBE_M.
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
-      "B.DIM zero, %c4, ->lb0\n"
-      "B.DIM zero, %c5, ->lb1\n"
-      "B.DIM zero, %c6, ->lb2\n"
-      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
-      "B.SUBVIEW 1, %8, 0, %c10\n"
+      "BSTART.TEPL %c[Opcode], %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
+      "B.DIM zero, %c[COL], ->lb2\n"
+      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%0<%Z[OutSize]>\n"
+      "B.SUBVIEW 1, %[Prefix], 0, %c[PrefixSize]\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode),
-        "Tr"(src0.data()), "Tr"(src1.data()),
-        "i"(Tile::ValidCol), "i"(Tile::ValidRow), "i"(Tile::Cols),
-        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "r"(prefix_base_units), "i"(Opcode),
-        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode)
+        [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+        [VCOL] "i"(Tile::ValidCol), [VROW] "i"(Tile::ValidRow),
+        [COL] "i"(Tile::Cols),
+        [OutSize] "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        [Prefix] "r"(prefix_base_units), [Opcode] "i"(Opcode),
+        [PrefixSize] "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        [ElemLayout] "i"(region_prefix_layout_code_v<Tile>)
       : "memory");
 }
 
@@ -905,20 +928,26 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
   static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
                 "reduction prefix sources require matching element types");
   const uintptr_t prefix_base_units = src0.GetRangeBase();
+  // PTO-ISA #291 elementwise closure (issue #155): same-layout requirement
+  // covers both source orders; the block must carry B.DATR <layout> for
+  // CUBE_M16/M32 sources.
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
-      "B.DIM zero, %c4, ->lb0\n"
-      "B.DIM zero, %c5, ->lb1\n"
-      "B.DIM zero, %c6, ->lb2\n"
-      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
-      "B.SUBVIEW 0, %8, 0, %c10\n"
+      "BSTART.TEPL %c[Opcode], %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
+      "B.DIM zero, %c[VCOL], ->lb0\n"
+      "B.DIM zero, %c[VROW], ->lb1\n"
+      "B.DIM zero, %c[COL], ->lb2\n"
+      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%0<%Z[OutSize]>\n"
+      "B.SUBVIEW 0, %[Prefix], 0, %c[PrefixSize]\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
-        "Tr"(src0.data()), "Tr"(src1.data()),
-        "i"(SubTile::ValidCol), "i"(SubTile::ValidRow), "i"(SubTile::Cols),
-        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "r"(prefix_base_units), "i"(Opcode),
-        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode)
+        [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+        [VCOL] "i"(SubTile::ValidCol), [VROW] "i"(SubTile::ValidRow),
+        [COL] "i"(SubTile::Cols),
+        [OutSize] "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        [Prefix] "r"(prefix_base_units), [Opcode] "i"(Opcode),
+        [PrefixSize] "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        [ElemLayout] "i"(region_prefix_layout_code_v<SubTile>)
       : "memory");
 }
 
