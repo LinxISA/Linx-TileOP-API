@@ -251,7 +251,11 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
                               re.S | re.M)
             self.assertIsNotNone(match, op)
             body = match.group(0)
-            self.assertEqual(body.count("PTO_ELEMENTWISE_LAYOUT_ASM"), 4, op)
+            # TROWSUM additionally carries a session-opening INIT branch
+            # (issue #145), so its plain form has five asm blocks.
+            expected_blocks = 5 if op == "TROWSUM" else 4
+            self.assertEqual(body.count("PTO_ELEMENTWISE_LAYOUT_ASM"),
+                             expected_blocks, op)
             self.assertIn('[ElemLayout] "i"(local_layout_code_v<', body, op)
         # Reductions read the source geometry through B.DIM and normally
         # require the destination layout to match, so the selector comes from
