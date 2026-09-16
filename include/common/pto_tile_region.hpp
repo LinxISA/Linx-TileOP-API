@@ -56,7 +56,7 @@ struct partition_contract {
 template <typename Parent, typename SubTile>
 class SubTileView {
   static_assert(range::is_legal_subview_parent_v<Parent>,
-                "B.SUBVIEW parent must use an assigned Local or Shared CUBE "
+                "B.SUBVIEW parent must be an assigned Local CUBE or Shared RowMajor "
                 "tile layout");
 public:
   using ParentTile = Parent;
@@ -145,6 +145,8 @@ public:
   static constexpr bool IsValidActiveSize = SubTile::IsValidActiveSize;
 
   explicit ReductionPrefixView(Parent &parent) : parent_(&parent) {}
+
+  using reduction_prefix_parent = Parent;
 
   Parent &parent() const { return *parent_; }
   decltype(auto) data() { return parent_->data(); }
@@ -366,6 +368,16 @@ struct is_subtile_view<region::ReductionPrefixView<Parent, SubTile>>
     : std::true_type {};
 template <typename T>
 inline constexpr bool is_subtile_view_v = is_subtile_view<T>::value;
+
+// Range-modifier trait for the reduction-prefix source carrier: borrows the
+// first CELL of a wide CUBE reduction destination as a zero-copy source
+// (PTO #311).
+template <typename T> struct is_reduction_prefix_view : std::false_type {};
+template <typename Parent, typename SubTile>
+struct is_reduction_prefix_view<region::ReductionPrefixView<Parent, SubTile>>
+    : std::true_type {};
+template <typename T>
+concept is_reduction_prefix_view_v = is_reduction_prefix_view<T>::value;
 
 template <typename T>
 struct is_tile_array_output_ref : std::false_type {};
