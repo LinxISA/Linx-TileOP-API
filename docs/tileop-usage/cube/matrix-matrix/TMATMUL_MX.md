@@ -97,6 +97,21 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
 - **基础重载**：不传 `options`，使用该操作的默认后处理属性。
 - **带 `Options` 的重载**：需要量化、激活、转置、scale 或辅助输出时传入 `options`。它不是重复声明，而是在相同核心操作数上增加显式属性；仅可启用本操作支持的属性。详见 [fixp::Options 指南](../../options.md)。
 
+- **ScaleMask 是什么**：`ScaleMask` 是带 `Options` 的 MX 重载使用的编译期模板参数，用 2 个 bit 记录 A/B 主输入是否携带 MX scale tile。`bit0` 表示 ScaleA 是否存在，`bit1` 表示 ScaleB 是否存在：
+
+  ```cpp
+  constexpr bool HasScaleA = (ScaleMask & 1) != 0;  // bit0: A 有 scale
+  constexpr bool HasScaleB = (ScaleMask & 2) != 0;  // bit1: B 有 scale
+  ```
+
+  | ScaleMask | 含义 | 发射的源流 |
+  | --- | --- | --- |
+  | 0 | A、B 都无 scale | `B.IOT A` + `B.IOT B` |
+  | 1 | 仅 A 有 | `B.IOT A, ScaleA`（合在一条记录） + `B.IOT B` |
+  | 2 | 仅 B 有 | `B.IOT A` + `B.IOT B, ScaleB`（合在一条记录） |
+  | 3 | 都有 | 完整 `A, ScaleA, B, ScaleB` 源流（含 `B.IOS` 变体） |
+
+  使用 `ScaleMask` 时，不要把它当作独立开关来随意裁剪参数。它必须与 A/B dtype 的 PTO MX contract 一致：普通 MX scaled 类型要求对应 bit 为 1，非 scaled 类型要求对应 bit 为 0；ScaleA/ScaleB 仍必须传入 `ascale`/`bscale` 参数位并满足 shape、dtype、layout 和 storage 约束。默认值 `3` 假设 A/B 都是 scaled MX 输入；A、B 只有部分为 scaled MX 类型时必须显式指定对应掩码。
 
 - **带 `groupM` 的重载**（basic 与 `options`+`groupM` 两种形式）：仅用于 cooperative 的 `Local-A/Shared-B` 语义；`groupM` 显式提供 LB0 的 core-total `group_M`，而不是从 Local A shard 推导。`D`（以及 ACC 形式的 `C`）的 valid 行数必须等于 per-PE A shard 大小（`M_per_PE`：CubeM16 对应 `group_M <= 64`，CubeM32 对应 `group_M > 64`）。MX 形式的 scale 操作数与其主操作数存储一致（Local A 配 Local scale，Shared B 配 Shared scale）。
 ## 使用要求
