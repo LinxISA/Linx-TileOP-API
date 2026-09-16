@@ -369,6 +369,14 @@ struct is_subtile_view<region::ReductionPrefixView<Parent, SubTile>>
 template <typename T>
 inline constexpr bool is_subtile_view_v = is_subtile_view<T>::value;
 
+// A TPARTVIEW fragment is a tile-shaped source operand: it carries the
+// fragment's static geometry and supplies the B.SUBVIEW offset itself.
+template <typename Parent, typename SubTile>
+requires(range::is_legal_subview_parent_v<Parent>)
+struct is_tile<region::SubTileView<Parent, SubTile>> : std::true_type {
+  static constexpr SLayout layout_enum = SubTile::SFractal;
+};
+
 // Range-modifier trait for the reduction-prefix source carrier: borrows the
 // first CELL of a wide CUBE reduction destination as a zero-copy source
 // (PTO #311).

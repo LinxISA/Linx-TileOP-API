@@ -152,9 +152,9 @@ offset_units = ordinal * (Fragment::LogicalTileBytes / 128)   // 单位 128B
 ### 支持的 parent 类型
 
 `TPARTVIEW` 当前只接受 Local Matrix+CUBE parent（`CubeTileM16` /
-`CubeTileM32`，含 `Location::Vec` CUBE 载体）。Shared、RowMajor、Vec+ND
-parent 是编译期拒绝的负例；Shared 多 PE 数组传输实现之前，Shared source
-分区继续走下面的 `range::subview` 低层路径。
+`CubeTileM32`，含 `Location::Vec` CUBE 载体）。Shared CUBE source 可先用
+`range::subview` 走 `B.IOS` 低层路径；RowMajor 和 Vec+ND parent 仍会被
+编译期拒绝。
 
 ## range::subview：单 binder 的 source 范围
 
@@ -427,8 +427,8 @@ auto last        = range::assemble_last_at_reg<3, 23>(tile, base_units);
 ## Shared Tile 范围
 
 `B.SUBVIEW` 允许 Shared source（0.58.5+ 逐 PE range-base 语义）：`SharedTile`
-source 走 `B.IOS` 后紧跟 `B.SUBVIEW`。`B.ASSEMBLE` 也可通过 `B.IOS` 绑定
-Shared destination：
+source 走 `B.IOS` 后紧跟 `B.SUBVIEW`，且 wrapped parent 必须保持 CUBE
+layout。`B.ASSEMBLE` 也可通过 `B.IOS` 绑定 Shared destination：
 
 ```cpp
 using Local  = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
