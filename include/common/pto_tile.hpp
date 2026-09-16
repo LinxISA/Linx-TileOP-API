@@ -2098,11 +2098,18 @@ using subview_parent_tile_t = typename subview_parent_tile<Parent>::type;
 template <typename Parent, typename = void>
 struct is_legal_subview_parent : std::false_type {};
 
+// The Local B.SUBVIEW contract (ASL BundleCubeSubviewDescriptorOf) requires a
+// persistent CUBE layout. The Shared B.SUBVIEW contract
+// (ASL BundleSharedSubviewMatrixMetadataLegalForPE) instead requires a
+// RowMajor Shared carrier, so the layout predicate follows the carrier kind.
 template <typename Parent>
 struct is_legal_subview_parent<
     Parent,
     std::void_t<decltype(subview_parent_tile_t<Parent>::IsCubeLayout)>>
-    : std::bool_constant<subview_parent_tile_t<Parent>::IsCubeLayout> {};
+    : std::bool_constant<
+          pto::is_shared_tile<Parent>::value
+              ? !subview_parent_tile_t<Parent>::IsCubeLayout
+              : subview_parent_tile_t<Parent>::IsCubeLayout> {};
 
 template <typename Parent>
 inline constexpr bool is_legal_subview_parent_v =
@@ -2121,7 +2128,7 @@ template <typename Parent, unsigned SubviewSizeCode_, unsigned OffsetUnits_ = 0,
           unsigned RegSrc_ = 2>
 class Subview {
   static_assert(is_legal_subview_parent_v<Parent>,
-                "B.SUBVIEW parent must use an assigned Local or Shared CUBE "
+                "B.SUBVIEW parent must be an assigned Local CUBE or Shared RowMajor "
                 "tile layout");
   static_assert(is_valid_subview_size_code(SubviewSizeCode_),
                 "B.SUBVIEW SubviewSizeCode must be 1..12 (128B..256KB per PE)");

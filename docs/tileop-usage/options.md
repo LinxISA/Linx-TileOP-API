@@ -270,9 +270,30 @@ TMATMUL(d, a, b, fixp::f16().prelu(prelu));
 PTO #311 row-reduction results may retain a wide physical CUBE carrier while
 publishing only `ValidCol=1`. Use `TREDUCEPREFIXVIEW<OneCellTile>(reduction)`
 to borrow the first 128-byte CELL without a `TCVT` copy. The view is accepted
-as either source of the binary region wrappers and emits a source-selecting
-`B.SUBVIEW`. It requires persistent CUBE storage, matching dtype/valid rows,
-and a one-CELL view; it does not relax ordinary `TPARTVIEW` partition checks.
+as a source by every TEPL family — binary (`TADD`/`TMAX`/…), ternary `TFMA`
+addend, tile-scalar (`TMULS`/…), unary (`TRECIP`/…), `TCVT`, and row-expansion
+(`TROWEXPANDMUL`/…) — and emits one source-selecting `B.SUBVIEW`. It requires
+persistent CUBE storage, matching dtype/valid rows, and a one-CELL view; it
+does not relax ordinary `TPARTVIEW` partition checks.
+
+Online-softmax sum update without a compact copy:
+
+```cpp
+using Reduction = VecTileM32<float, 32, 128, 32, 1>;
+using Row = VecTileM32<float, 32, 1, 32, 1>;
+Reduction localSumWide;
+Row newSum;
+
+auto localSum = TREDUCEPREFIXVIEW<Row>(localSumWide);
+TFMA(newSum, oldSum, oldScale, localSum);  // fused; B.SUBVIEW 0 on src2
+```
+
+Per-group amax scaling (`fa_lowp` quantizer) directly on the reduction result:
+
+```cpp
+auto amax = TREDUCEPREFIXVIEW<Row>(amaxWide);
+TMULS(scale, amax, 0.25f);
+```
 
 
 RowMax 在 ReLU、quant 和 convert **之前**基于 FullAcc 计算，输入/输出 dtype 必须是 FP32
