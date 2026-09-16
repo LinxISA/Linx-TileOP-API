@@ -16588,7 +16588,8 @@ void pto_prefix_row_expand(tile_shape_out &dst, matrix &src0, View &src1) {
 
 #define PTO_PREFIX_ROW_EXPAND_WRAPPER(Name, Opcode)                           \
   template <is_tile_data_v tile_shape_out, is_tile_data_v matrix, typename View> \
-    requires(std::is_same_v<typename tile_shape_out::DType,                    \
+    requires(pto_prefix_view<std::remove_const_t<View>> &&                     \
+             std::is_same_v<typename tile_shape_out::DType,                    \
                             typename View::DType>)                             \
   void Name(tile_shape_out &dst, matrix &src0, View &src1) {                   \
     pto_prefix_row_expand<Opcode>(dst, src0, src1);                            \
