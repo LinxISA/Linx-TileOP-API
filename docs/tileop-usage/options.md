@@ -274,7 +274,10 @@ as a source by every TEPL family — binary (`TADD`/`TMAX`/…), ternary `TFMA`
 addend, tile-scalar (`TMULS`/…), unary (`TRECIP`/…), `TCVT`, and row-expansion
 (`TROWEXPANDMUL`/…) — and emits one source-selecting `B.SUBVIEW`. It requires
 persistent CUBE storage, matching dtype/valid rows, and a one-CELL view; it
-does not relax ordinary `TPARTVIEW` partition checks.
+does not relax ordinary `TPARTVIEW` partition checks. Because the sources
+keep their CUBE layout, the binary prefix consumers also emit the block-level
+`B.DATR CUBE_M16/CUBE_M32` layout attribute (PTO-ISA #291), exactly like the
+plain binary wrappers.
 
 Online-softmax sum update without a compact copy:
 
