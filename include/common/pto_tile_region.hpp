@@ -109,6 +109,53 @@ private:
   int partition_cols_;
 };
 
+template <typename Parent, typename SubTile>
+class ReductionPrefixView {
+  static_assert(Parent::IsCubeLayout,
+                "reduction prefix view requires persistent CUBE storage");
+  static_assert(Parent::ValidCol == 1,
+                "reduction prefix view requires a one-column valid result");
+  static_assert(SubTile::Rows == Parent::Rows && SubTile::Cols == 1,
+                "reduction prefix view must select the first physical CELL");
+  static_assert(SubTile::ValidRow == Parent::ValidRow &&
+                    SubTile::ValidCol == 1,
+                "reduction prefix view must preserve the reduction valid shape");
+  static_assert(std::is_same_v<typename Parent::DType, typename SubTile::DType>,
+                "reduction prefix view requires matching element types");
+  static_assert(SubTile::LogicalTileBytes == 128,
+                "reduction prefix view must select one 128-byte CELL");
+
+public:
+  using ParentTile = Parent;
+  using SubTileType = SubTile;
+  using DType = typename SubTile::DType;
+  using TileDType = typename Parent::TileDType;
+  static constexpr Location Loc = Parent::Loc;
+  static constexpr int Rows = SubTile::Rows;
+  static constexpr int Cols = SubTile::Cols;
+  static constexpr int RowStride = SubTile::RowStride;
+  static constexpr int ColStride = SubTile::ColStride;
+  static constexpr int ValidRow = SubTile::ValidRow;
+  static constexpr int ValidCol = SubTile::ValidCol;
+  static constexpr BLayout BFractal = SubTile::BFractal;
+  static constexpr SLayout SFractal = SubTile::SFractal;
+  static constexpr bool IsCubeLayout = SubTile::IsCubeLayout;
+  static constexpr int LogicalTileBytes = SubTile::LogicalTileBytes;
+  static constexpr int TilesizeCode = SubTile::TilesizeCode;
+  static constexpr bool IsValidActiveSize = SubTile::IsValidActiveSize;
+
+  explicit ReductionPrefixView(Parent &parent) : parent_(&parent) {}
+
+  Parent &parent() const { return *parent_; }
+  decltype(auto) data() { return parent_->data(); }
+  decltype(auto) data() const { return parent_->data(); }
+  int GetValidRow() const { return ValidRow; }
+  int GetValidCol() const { return ValidCol; }
+  std::uintptr_t GetRangeBase() const { return 0; }
+
+private:
+  Parent *parent_;
+};
 template <typename Parent, typename SubTile, int Rows, int Cols>
 class BorrowedTileArray {
   using Contract = partition_contract<Parent, SubTile, Rows, Cols>;
@@ -147,6 +194,7 @@ public:
 private:
   Parent *parent_;
 };
+
 
 template <typename SubTile>
 class TileArrayOutputRef;
@@ -313,6 +361,9 @@ template <typename T>
 struct is_subtile_view : std::false_type {};
 template <typename Parent, typename SubTile>
 struct is_subtile_view<region::SubTileView<Parent, SubTile>> : std::true_type {};
+template <typename Parent, typename SubTile>
+struct is_subtile_view<region::ReductionPrefixView<Parent, SubTile>>
+    : std::true_type {};
 template <typename T>
 inline constexpr bool is_subtile_view_v = is_subtile_view<T>::value;
 
@@ -325,12 +376,19 @@ template <typename T>
 inline constexpr bool is_tile_array_output_ref_v =
     is_tile_array_output_ref<T>::value;
 
+template <typename SubTile, typename Parent>
+auto TREDUCEPREFIXVIEW(Parent &parent)
+    -> region::ReductionPrefixView<Parent, SubTile> {
+  return region::ReductionPrefixView<Parent, SubTile>(parent);
+}
 template <typename SubTile, int Rows, int Cols, typename Parent>
   requires(range::is_legal_subview_parent_v<Parent>)
 auto TPARTVIEW(Parent &parent)
     -> region::BorrowedTileArray<Parent, SubTile, Rows, Cols> {
   return region::BorrowedTileArray<Parent, SubTile, Rows, Cols>(parent);
 }
+
+
 
 template <typename Parent, typename SubTile, int Rows, int Cols>
 auto TASSEMBLY(region::TileArray<SubTile, Rows, Cols> &&array) -> Parent {
