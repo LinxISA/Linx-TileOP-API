@@ -27,7 +27,7 @@ ACTIVE_FIXTURES=(
   DynamicShape DynamicTlsuStride CubeCellTransport VecCubeLoadStore CubeTCvt SharedTranspose
   SharedTransposeNonSquare MatrixIntegerDtypes MXScaleVariants HiF4X2MatmulMX SharedMatmul
   TMatmulAccFullOptions TMatmulAccCScale TMatmulAllOptions TGEMVAllOptions TGEMVOperandOrder
-  PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas
+  PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas MGatherAtomics MScatterAtomics
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs
   DirectCubeLayout
   TAdd_mask TAdd TAdds TAnd TeplAss TeplAssSpecial TLoad TStore TCvt TDiv TDivs TExp TMax TMaxs

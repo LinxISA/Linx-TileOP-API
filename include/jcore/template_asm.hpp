@@ -2,6 +2,7 @@
 #define TEMPLATE_ASM_HPP
 
 #include "common/pto_tile.hpp"
+#include "common/pto_tile_region.hpp"
 
 using namespace pto;
 
@@ -3019,7 +3020,7 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
   if constexpr (is_subview_v<tile_shape>) {
     using ParentTile = typename tile_shape::ParentTile;
     static_assert(range::is_legal_subview_parent_v<ParentTile>,
-                  "B.SUBVIEW source must use an assigned Local or Shared CUBE "
+                  "B.SUBVIEW source must be an assigned Local CUBE or Shared RowMajor "
                   "tile layout");
     if constexpr (is_shared_tile_v<ParentTile>) {
       static_assert(tile_type_traits<typename ParentTile::TileDType>::
@@ -3954,6 +3955,335 @@ asm volatile(
       [Col] "i"(DstTile::Cols),
       [DstSize] "i"(DstTile::TilesizeCode)
     : "memory");  }
+}
+
+// PTO ISA TLSU GM_ATOM_VALUE family (functions 9-18): atomic RMW at logical
+// element indices with observed-old-value publication. Every member shares one
+// bundle shape -- a single Local B.IOT binding (IndexTile + one operand tile,
+// last, ->DstTile) and a base-only B.IOR (the index is the full logical linear
+// address, so no row stride is carried). Only the BSTART mnemonic and the legal
+// transfer DataType differ per member; see pto-spec
+// asl/tile/model/memory/gm-atom-red.asl (GMAtomicOperationDataTypeLegal) for the
+// per-op DataType legality reproduced in each wrapper's static_assert. The
+// destination is early-clobbered so the allocator keeps it distinct from the
+// operand. MGATHER_CAS (function 8) is defined separately above because it
+// carries two B.IOT bindings and a GM row stride.
+//
+// The four constexpr branches select immediate vs. runtime B.DIM encodings for
+// static or DYNAMIC ValidCol/ValidRow, matching MGATHER_CAS.
+#define PTO_DEFINE_MGATHER_ATOM(FnName, Mnem, OperandName, TYPE_OK, TYPE_MSG)   \
+  template <is_tile_data_v DstTile, is_tile_data_v IndexTile,                   \
+            is_tile_data_v ValueTile>                                           \
+  void FnName(DstTile &observedOld, uint64_t base, IndexTile &elementIndices,   \
+              ValueTile &OperandName, uint32_t validCol,                        \
+              uint32_t validRow = 1) {                                          \
+    static_assert(std::is_same_v<typename ValueTile::DType,                     \
+                                 typename DstTile::DType>,                       \
+                  #FnName " operand/dst must share one transfer DataType");     \
+    constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode; \
+    constexpr int TransferType =                                               \
+        type_traits<typename DstTile::DType>::TypeCode;                        \
+    static_assert(                                                              \
+        IndexType == __type_int4x2 || IndexType == __type_uint4x2 ||           \
+            IndexType == __type_int8 || IndexType == __type_uint8 ||           \
+            IndexType == __type_int16 || IndexType == __type_uint16 ||         \
+            IndexType == __type_int32 || IndexType == __type_uint32 ||         \
+            IndexType == __type_int64 || IndexType == __type_uint64,           \
+        #FnName " index tile must use an integer logical element-index type"); \
+    static_assert(TYPE_OK, TYPE_MSG);                                          \
+    static_assert(IndexTile::Rows == ValueTile::Rows &&                        \
+                      IndexTile::Cols == ValueTile::Cols &&                    \
+                      DstTile::Rows == ValueTile::Rows &&                      \
+                      DstTile::Cols == ValueTile::Cols,                        \
+                  #FnName " tiles must match the resolved ValidRow x ValidCol");\
+    if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow > 0) {            \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "i"(DstTile::ValidCol),     \
+            [VROW] "i"(DstTile::ValidRow), [Col] "i"(DstTile::Cols),         \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    } else if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow < 0) {    \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "i"(DstTile::ValidCol),     \
+            [VROW] "r"(validRow), [Col] "i"(DstTile::Cols),                  \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    } else if constexpr (DstTile::ValidCol < 0 && DstTile::ValidRow > 0) {    \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "r"(validCol),              \
+            [VROW] "i"(DstTile::ValidRow), [Col] "i"(DstTile::Cols),         \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    } else {                                                                  \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "r"(validCol),              \
+            [VROW] "r"(validRow), [Col] "i"(DstTile::Cols),                  \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    }                                                                          \
+  }
+
+// Transfer-DataType legality shared by several members (see gm-atom-red.asl).
+#define PTO_ATOM_TYPES_ADD                                                     \
+  (TransferType == __type_fp16 || TransferType == __type_bf16 ||              \
+   TransferType == __type_fp32 || TransferType == __type_fp64 ||             \
+   TransferType == __type_int32 || TransferType == __type_uint32 ||          \
+   TransferType == __type_uint64)
+#define PTO_ATOM_TYPES_MINMAX                                                  \
+  (TransferType == __type_int32 || TransferType == __type_int64 ||           \
+   TransferType == __type_uint32 || TransferType == __type_uint64)
+#define PTO_ATOM_TYPES_BITWISE                                                 \
+  (TransferType == __type_uint32 || TransferType == __type_uint64)
+#define PTO_ATOM_TYPES_U32 (TransferType == __type_uint32)
+
+PTO_DEFINE_MGATHER_ATOM(MGATHER_EXCH, "MGATHER.EXCH", replacement,
+                        PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_EXCH transfer DataType must be U32 or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_MAX, "MGATHER.MAX", value, PTO_ATOM_TYPES_MINMAX,
+                        "MGATHER_MAX transfer DataType must be S32, S64, U32, "
+                        "or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_MIN, "MGATHER.MIN", value, PTO_ATOM_TYPES_MINMAX,
+                        "MGATHER_MIN transfer DataType must be S32, S64, U32, "
+                        "or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_ADD, "MGATHER.ADD", value, PTO_ATOM_TYPES_ADD,
+                        "MGATHER_ADD transfer DataType must be FP16, BF16, FP32, "
+                        "FP64, S32, U32, or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_INC, "MGATHER.INC", limit, PTO_ATOM_TYPES_U32,
+                        "MGATHER_INC transfer DataType must be U32")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_DEC, "MGATHER.DEC", limit, PTO_ATOM_TYPES_U32,
+                        "MGATHER_DEC transfer DataType must be U32")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_AND, "MGATHER.AND", value,
+                        PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_AND transfer DataType must be U32 or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_OR, "MGATHER.OR", value, PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_OR transfer DataType must be U32 or U64")
+PTO_DEFINE_MGATHER_ATOM(MGATHER_XOR, "MGATHER.XOR", value,
+                        PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_XOR transfer DataType must be U32 or U64")
+
+// PTO ISA TLSU GM_RED_VALUE family (functions 19-26): atomic reduction into GM
+// at logical element indices with no destination and no observed old value.
+// Same bundle as the GM_ATOM_VALUE members minus the destination: a single
+// Local B.IOT binding (IndexTile + one operand tile, last) and a base-only
+// B.IOR. The valid region is taken from the index tile, since there is no
+// destination to publish. Per-op transfer-DataType legality mirrors the
+// corresponding atom member (see GMReductionOperationDataTypeLegal).
+#define PTO_DEFINE_MSCATTER_ATOM(FnName, Mnem, OperandName, TYPE_OK, TYPE_MSG)  \
+  template <is_tile_data_v IndexTile, is_tile_data_v ValueTile>                 \
+  void FnName(uint64_t base, IndexTile &elementIndices, ValueTile &OperandName, \
+              uint32_t validCol, uint32_t validRow = 1) {                       \
+    constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode; \
+    constexpr int TransferType =                                               \
+        type_traits<typename ValueTile::DType>::TypeCode;                      \
+    static_assert(                                                              \
+        IndexType == __type_int4x2 || IndexType == __type_uint4x2 ||           \
+            IndexType == __type_int8 || IndexType == __type_uint8 ||           \
+            IndexType == __type_int16 || IndexType == __type_uint16 ||         \
+            IndexType == __type_int32 || IndexType == __type_uint32 ||         \
+            IndexType == __type_int64 || IndexType == __type_uint64,           \
+        #FnName " index tile must use an integer logical element-index type"); \
+    static_assert(TYPE_OK, TYPE_MSG);                                          \
+    static_assert(IndexTile::Rows == ValueTile::Rows &&                        \
+                      IndexTile::Cols == ValueTile::Cols,                      \
+                  #FnName " tiles must match the resolved ValidRow x ValidCol");\
+    if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow > 0) {        \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "i"(IndexTile::ValidCol),   \
+            [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)      \
+          : "memory");                                                        \
+    } else if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow < 0) { \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "i"(IndexTile::ValidCol),   \
+            [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)                 \
+          : "memory");                                                        \
+    } else if constexpr (IndexTile::ValidCol < 0 && IndexTile::ValidRow > 0) { \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "r"(validCol),              \
+            [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)      \
+          : "memory");                                                        \
+    } else {                                                                  \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base),                \
+            [DataType] "i"(TransferType), [VCOL] "r"(validCol),              \
+            [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)                 \
+          : "memory");                                                        \
+    }                                                                          \
+  }
+
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_MAX, "MSCATTER.MAX", value,
+                         PTO_ATOM_TYPES_MINMAX,
+                         "MSCATTER_MAX transfer DataType must be S32, S64, U32, "
+                         "or U64")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_MIN, "MSCATTER.MIN", value,
+                         PTO_ATOM_TYPES_MINMAX,
+                         "MSCATTER_MIN transfer DataType must be S32, S64, U32, "
+                         "or U64")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_ADD, "MSCATTER.ADD", value,
+                         PTO_ATOM_TYPES_ADD,
+                         "MSCATTER_ADD transfer DataType must be FP16, BF16, "
+                         "FP32, FP64, S32, U32, or U64")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_INC, "MSCATTER.INC", limit, PTO_ATOM_TYPES_U32,
+                         "MSCATTER_INC transfer DataType must be U32")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_DEC, "MSCATTER.DEC", limit, PTO_ATOM_TYPES_U32,
+                         "MSCATTER_DEC transfer DataType must be U32")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_AND, "MSCATTER.AND", value,
+                         PTO_ATOM_TYPES_BITWISE,
+                         "MSCATTER_AND transfer DataType must be U32 or U64")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_OR, "MSCATTER.OR", value,
+                         PTO_ATOM_TYPES_BITWISE,
+                         "MSCATTER_OR transfer DataType must be U32 or U64")
+PTO_DEFINE_MSCATTER_ATOM(MSCATTER_XOR, "MSCATTER.XOR", value,
+                         PTO_ATOM_TYPES_BITWISE,
+                         "MSCATTER_XOR transfer DataType must be U32 or U64")
+
+#undef PTO_DEFINE_MGATHER_ATOM
+#undef PTO_DEFINE_MSCATTER_ATOM
+#undef PTO_ATOM_TYPES_ADD
+#undef PTO_ATOM_TYPES_MINMAX
+#undef PTO_ATOM_TYPES_BITWISE
+#undef PTO_ATOM_TYPES_U32
+
+// MSCATTER_POPC: population-count reduction (PTO ISA TLSU function 27,
+// GM_RED_POPC). Only an index tile participates -- each valid effective GM
+// address receives one U32 increment -- so the bundle carries a single-operand
+// Local B.IOT with no value and no destination, and the reduction DataType is
+// fixed U32. See pto-spec MSCATTER_POPC.asl and gm-atom-red.asl
+// (GMReductionOperationDataTypeLegal for POPC).
+template <is_tile_data_v IndexTile>
+void MSCATTER_POPC(uint64_t base, IndexTile &elementIndices, uint32_t validCol,
+                   uint32_t validRow = 1) {
+  constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode;
+  static_assert(
+      IndexType == __type_int4x2 || IndexType == __type_uint4x2 ||
+          IndexType == __type_int8 || IndexType == __type_uint8 ||
+          IndexType == __type_int16 || IndexType == __type_uint16 ||
+          IndexType == __type_int32 || IndexType == __type_uint32 ||
+          IndexType == __type_int64 || IndexType == __type_uint64,
+      "MSCATTER_POPC index tile must use an integer logical element-index type");
+  if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow > 0) {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "B.DIM zero, %c[VCOL], ->lb0\n"
+        "B.DIM zero, %c[VROW], ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
+          [DataType] "i"(__type_uint32), [VCOL] "i"(IndexTile::ValidCol),
+          [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  } else if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow < 0) {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "B.DIM zero, %c[VCOL], ->lb0\n"
+        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
+          [DataType] "i"(__type_uint32), [VCOL] "i"(IndexTile::ValidCol),
+          [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  } else if constexpr (IndexTile::ValidCol < 0 && IndexTile::ValidRow > 0) {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "B.DIM %[VCOL], 0, ->lb0\n"
+        "B.DIM zero, %c[VROW], ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
+          [DataType] "i"(__type_uint32), [VCOL] "r"(validCol),
+          [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  } else {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "B.DIM %[VCOL], 0, ->lb0\n"
+        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
+          [DataType] "i"(__type_uint32), [VCOL] "r"(validCol),
+          [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  }
 }
 
 // Low-level v5 GMOV. All four PEs must reach the same dynamic instance;
@@ -9225,6 +9555,31 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, ScaleMtx &scale_mtx,
 //===--- TEPL Mode 0: tile-tile elementwise ops (BSTART.TEPL) ---===//
 // opcode = Mode(0) * 32 + Function. One-layer inline-asm, no __vec__ kernel.
 
+// Reduction-prefix source helpers (PTO #311): a ReductionPrefixView borrows
+// the first 128-byte CELL of a wide CUBE row-reduction destination. Each
+// consuming overload validates the logical view contract against its tile
+// operands, then emits the ordinary TEPL block with one extra
+// `B.SUBVIEW SrcSelect, zero, 0, 1` attached to the binder group of the
+// viewed source. SrcSelect follows source0/source1 order inside the owning
+// B.IOT's range group (ASL OpenBundleRangeTileGroup / RecordBundleRangeSubview).
+template <typename View>
+concept pto_prefix_view =
+    pto::is_subtile_view_v<View> &&
+    requires { typename View::reduction_prefix_parent; } &&
+    std::is_same_v<typename View::ParentTile,
+                   typename View::reduction_prefix_parent>;
+
+template <typename Tile, typename View>
+concept reduction_prefix_operand_for =
+    pto_prefix_view<std::remove_const_t<View>> &&
+    std::is_same_v<typename Tile::DType,
+                   typename std::remove_const_t<View>::DType> &&
+    Tile::Rows == std::remove_const_t<View>::Rows &&
+    Tile::Cols == std::remove_const_t<View>::Cols &&
+    Tile::ValidRow == std::remove_const_t<View>::ValidRow &&
+    Tile::ValidCol == std::remove_const_t<View>::ValidCol &&
+    Tile::BFractal == std::remove_const_t<View>::BFractal;
+
 // TADD: dst = src0 + src1
 template <is_tile_data_v tile_shape>
 void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
@@ -12613,6 +12968,151 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
   );  }
 }
 
+// Generic TEPL builders for a reduction-prefix source (PTO #311): each
+// consumes `BSTART.TEPL <Opcode>, <DType>; layout; B.DIM*; B.IOT src,
+// mask, last, ->dst; [B.IOR scalar]; B.SUBVIEW 0, <base>, 0, 1`. The scalar
+// B.IOR follows the subview only in the tile-scalar family, matching the
+// ordinary wrappers (B.SUBVIEW stays contiguous with its B.IOT group; the
+// scalar B.IOR is a separate non-modifier command that closes the group).
+template <int Opcode, is_tile_data_v tile_shape, typename View>
+  requires(reduction_prefix_operand_for<tile_shape, View>)
+void pto_prefix_unary(tile_shape &dst, View &src) {
+  const uintptr_t prefix_base_units = src.GetRangeBase();
+  asm volatile(
+    "BSTART.TEPL %c[Opcode], %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.SUBVIEW 0, %7, 0, 1\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
+      "i"(tile_shape::ValidCol),
+      "i"(tile_shape::ValidRow),
+      "i"(tile_shape::Cols),
+      "Tr"(src.data()),
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      "r"(prefix_base_units),
+      [Opcode] "i"(Opcode),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape>)
+  );
+}
+
+template <int Opcode, is_tile_data_v tile_shape, typename View>
+  requires(reduction_prefix_operand_for<tile_shape, View>)
+void pto_prefix_scalar(tile_shape &dst, View &src,
+                       typename tile_shape::DType s) {
+  // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
+  // register so B.IOR [zero],[] still matches an instruction.
+  typename tile_shape::DType sv = s;
+  asm("" : "+r"(sv));
+  const uintptr_t prefix_base_units = src.GetRangeBase();
+  asm volatile(
+    "BSTART.TEPL %c[Opcode], %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.SUBVIEW 0, %7, 0, 1\n"
+    "B.IOR [%8],[]\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
+      "i"(tile_shape::ValidCol),
+      "i"(tile_shape::ValidRow),
+      "i"(tile_shape::Cols),
+      "Tr"(src.data()),
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      "r"(prefix_base_units),
+      "r"(sv),
+      [Opcode] "i"(Opcode),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape>)
+  );
+}
+
+#define PTO_PREFIX_UNARY_WRAPPER(Name, Opcode)                                \
+  template <is_tile_data_v tile_shape, typename View>                          \
+    requires(reduction_prefix_operand_for<tile_shape, View>)                   \
+  void Name(tile_shape &dst, View &src) {                                      \
+    pto_prefix_unary<Opcode>(dst, src);                                        \
+  }
+#define PTO_PREFIX_SCALAR_WRAPPER(Name, Opcode)                               \
+  template <is_tile_data_v tile_shape, typename View>                          \
+    requires(reduction_prefix_operand_for<tile_shape, View>)                   \
+  void Name(tile_shape &dst, View &src, typename tile_shape::DType s) {        \
+    pto_prefix_scalar<Opcode>(dst, src, s);                                    \
+  }
+
+PTO_PREFIX_UNARY_WRAPPER(TABS, 15)
+PTO_PREFIX_UNARY_WRAPPER(TNOT, 16)
+PTO_PREFIX_UNARY_WRAPPER(TNEG, 17)
+PTO_PREFIX_UNARY_WRAPPER(TEXP, 18)
+PTO_PREFIX_UNARY_WRAPPER(TLOG, 19)
+PTO_PREFIX_UNARY_WRAPPER(TRECIP, 20)
+PTO_PREFIX_UNARY_WRAPPER(TSQRT, 21)
+PTO_PREFIX_UNARY_WRAPPER(TRSQRT, 22)
+PTO_PREFIX_UNARY_WRAPPER(TRELU, 23)
+
+PTO_PREFIX_SCALAR_WRAPPER(TADDS, 32)
+PTO_PREFIX_SCALAR_WRAPPER(TSUBS, 33)
+PTO_PREFIX_SCALAR_WRAPPER(TDIVS, 35)
+PTO_PREFIX_SCALAR_WRAPPER(TMAXS, 43)
+PTO_PREFIX_SCALAR_WRAPPER(TMINS, 44)
+// TMULS uses the dedicated scalar form (opcode 34).
+PTO_PREFIX_SCALAR_WRAPPER(TMULS, 34)
+
+#undef PTO_PREFIX_SCALAR_WRAPPER
+#undef PTO_PREFIX_UNARY_WRAPPER
+
+// TCVT from a reduction-prefix source (PTO #311). The view's logical valid
+// shape and CUBE layout are preserved; only the destination dtype (and
+// RMode) may differ, mirroring the ordinary CUBE_M16/M32 TCVT contract.
+template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,
+          typename View>
+  requires(std::is_same_v<typename View::DType,
+                          typename View::SubTileType::DType> &&
+           pto_prefix_view<std::remove_const_t<View>> &&
+           tile_shape_out::Rows == View::Rows &&
+           tile_shape_out::ValidRow == View::ValidRow &&
+           tile_shape_out::ValidCol == View::ValidCol &&
+           tile_shape_out::BFractal == View::BFractal)
+void TCVT(tile_shape_out &dst, View &src) {
+  static_assert(tile_shape_out::BFractal == View::BFractal,
+                "TCVT CUBE_M16/M32 conversion must preserve the CUBE layout");
+  static_assert(tile_shape_out::TilesizeCode >= __tilesize_128B &&
+                    tile_shape_out::TilesizeCode <= __tilesize_64KB,
+                "TCVT CUBE_M16/M32 destination TSize must be 128 B..64 KiB");
+  const uintptr_t prefix_base_units = src.GetRangeBase();
+  asm volatile(
+      "BSTART.TEPL 27, %D1\n"
+      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
+      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
+      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
+      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
+      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
+      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
+      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
+      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
+      ".endif\n"
+      "B.DIM zero, %c5, ->lb0\n"
+      "B.DIM zero, %c6, ->lb1\n"
+      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      "B.SUBVIEW 0, %7, 0, 1\n"
+      : "=Tr"(dst.data())
+      : "i"(type_traits<typename View::DType>::TypeCode),
+        "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        "Tr"(src.data()),
+        "i"(tile_shape_out::TilesizeCode),
+        "i"(View::ValidCol),
+        "i"(View::ValidRow),
+        "r"(prefix_base_units),
+        [RMode] "i"(RMode)
+  );
+}
+
 // TCMPS: compare src with scalar. The comparison mode is a compile-time
 // template parameter encoded into B.DATR CMode[31:29]; scalar travels via the
 // canonical B.IOR slot, never as a Tile source (PTO 0.58).
@@ -13396,6 +13896,108 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
   );  }
 }
 
+// TFMA with a reduction-prefix addend (src2). Online-softmax sum update:
+// dst = src0 * src1 + reductionPrefix(src2). The ternary TFMA emits
+// B.IOT src0, src1 (no last) then B.IOT src2, dst (last); the viewed src2
+// binder opens its own source0 range group, so `B.SUBVIEW 0` attaches there.
+template <is_tile_data_v tile_shape, is_tile_data_v mul0, is_tile_data_v mul1,
+          typename View>
+  requires(reduction_prefix_operand_for<tile_shape, View> &&
+           std::is_same_v<typename mul0::DType, typename View::DType> &&
+           std::is_same_v<typename mul1::DType, typename View::DType>)
+void TFMA(tile_shape &dst, mul0 &src0, mul1 &src1, View &src2) {
+  const uintptr_t prefix_base_units = src2.GetRangeBase();
+  if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
+  asm volatile(
+    "BSTART.TEPL 28, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5, %6, mask=1111\n"
+    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.SUBVIEW 0, %9, 0, 1\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
+      "i"(tile_shape::ValidCol),
+      "i"(tile_shape::ValidRow),
+      "i"(tile_shape::Cols),
+      "Tr"(src0.data()),
+      "Tr"(src1.data()),
+      "Tr"(src2.data()),
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      "r"(prefix_base_units),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape>)
+  );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
+  asm volatile(
+    "BSTART.TEPL 28, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM %[src0____dimrow], 0, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5, %6, mask=1111\n"
+    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.SUBVIEW 0, %9, 0, 1\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
+      "i"(tile_shape::ValidCol),
+      [src0____dimrow] "r"(src0.GetValidRow()),
+      "i"(tile_shape::Cols),
+      "Tr"(src0.data()),
+      "Tr"(src1.data()),
+      "Tr"(src2.data()),
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      "r"(prefix_base_units),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape>)
+  );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
+  asm volatile(
+    "BSTART.TEPL 28, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM %[src0____dimcol], 0, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5, %6, mask=1111\n"
+    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.SUBVIEW 0, %9, 0, 1\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [src0____dimcol] "r"(src0.GetValidCol()),
+      "i"(tile_shape::ValidRow),
+      "i"(tile_shape::Cols),
+      "Tr"(src0.data()),
+      "Tr"(src1.data()),
+      "Tr"(src2.data()),
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      "r"(prefix_base_units),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape>)
+  );  } else {
+  asm volatile(
+    "BSTART.TEPL 28, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM %[src0____dimcol], 0, ->lb0\n"
+    "B.DIM %[src0____dimrow], 0, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5, %6, mask=1111\n"
+    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.SUBVIEW 0, %9, 0, 1\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape::DType>::TypeCode),
+      [src0____dimcol] "r"(src0.GetValidCol()),
+      [src0____dimrow] "r"(src0.GetValidRow()),
+      "i"(tile_shape::Cols),
+      "Tr"(src0.data()),
+      "Tr"(src1.data()),
+      "Tr"(src2.data()),
+      "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+      "r"(prefix_base_units),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape>)
+  );  }
+}
+
 //===--- TEPL Mode 3: complex ops (opcode = 96 + Function) ---===//
 
 // TEXTRACT: extract sub-tile (indexRow, indexCol via B.IOR)
@@ -13936,6 +14538,47 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
+  // PTO-ISA pto-spec#265 (issue #145): on a range::Assemble carrier the
+  // plain producer opens the session with an allocating destination B.IOT
+  // (parent capacity) plus a contiguous B.ASSEMBLE INIT whose final field
+  // is this fragment's WriterSizeCode; it must be nonzero and may not reuse
+  // the parent code.
+  if constexpr (is_assemble_v<tile_shape_out>) {
+    static_assert(
+        tile_shape_out::INIT,
+        "plain TROWSUM requires an INIT assemble carrier (the session-"
+        "opening slot); use TROWSUM_ASS for the subsequent MIDDLE/LAST slots");
+    static_assert(tile_shape_out::ParentSizeCode != 0,
+                  "TROWSUM assemble INIT requires a nonzero parent capacity");
+    constexpr unsigned FragmentBytes =
+        static_cast<unsigned>(sizeof(typename tile_shape_out::TileDType));
+    constexpr unsigned WriterSizeCode =
+        range::subview_size_code_for_bytes(FragmentBytes);
+    static_assert(WriterSizeCode != 0,
+                  "TROWSUM fragment must be a power-of-two multiple of 128 B");
+    const uintptr_t range_base =
+        static_cast<uintptr_t>(dst.GetRangeBase());
+    asm volatile(
+    "BSTART.TEPL 64, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.ASSEMBLE 1, %c8, %[RegSrc], %c7, %c[WriterSize]\n"
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+      "i"(tile_shape_in::ValidCol),
+      "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_in::Cols),
+      "Tr"(src.data()),
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape_in>),
+      [Off] "i"(tile_shape_out::OffsetUnits),
+      [Last] "i"(static_cast<int>(tile_shape_out::LAST)),
+      [RegSrc] "r"(range_base),
+      [WriterSize] "i"(WriterSizeCode)
+    );  } else
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 64, %D1\n"
@@ -15900,6 +16543,67 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
   );  }
 }
 
+// Row-expansion from a reduction-prefix broadcast source (PTO #311). The
+// reduction result's one-column prefix IS the canonical broadcast operand:
+// TROWEXPAND* reads a fresh TROWSUM/TROWMAX destination's first CELL directly.
+// Both sources ride one B.IOT, so the viewed src1 takes SrcSelect=1.
+// The destination B.DIM provides the geometry (ASL expansion contract); the
+// source one-column valid shape is only the broadcast extent.
+template <int Opcode, is_tile_data_v tile_shape_out, is_tile_data_v matrix,
+          typename View>
+  requires(pto_prefix_view<std::remove_const_t<View>> &&
+           std::is_same_v<typename tile_shape_out::DType,
+                          typename View::DType>)
+void pto_prefix_row_expand(tile_shape_out &dst, matrix &src0, View &src1) {
+  static_assert(std::is_same_v<typename matrix::DType,
+                               typename View::DType>,
+                "row-expansion prefix source dtype must match the matrix");
+  static_assert(matrix::BFractal == View::BFractal,
+                "row-expansion prefix broadcast layout must match the matrix");
+  static_assert(matrix::ValidRow == View::ValidRow,
+                "row-expansion prefix broadcast rows must match the matrix");
+  const uintptr_t prefix_base_units = src1.GetRangeBase();
+  asm volatile(
+    "BSTART.TEPL %c[Opcode], %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM zero, %c[DstValidCol], ->lb0\n"
+    "B.DIM zero, %c[DstValidRow], ->lb1\n"
+    "B.DIM zero, %c[DstCols], ->lb2\n"
+    "B.IOT %2, %3, mask=1111, last, ->%0<%Z4>\n"
+    "B.SUBVIEW 1, %5, 0, 1\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename matrix::DType>::TypeCode),
+      "Tr"(src0.data()),
+      "Tr"(src1.data()),
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      "r"(prefix_base_units),
+      [Opcode] "i"(Opcode),
+      [DstValidCol] "i"(tile_shape_out::ValidCol),
+      [DstValidRow] "i"(tile_shape_out::ValidRow),
+      [DstCols] "i"(tile_shape_out::Cols),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
+  );
+}
+
+#define PTO_PREFIX_ROW_EXPAND_WRAPPER(Name, Opcode)                           \
+  template <is_tile_data_v tile_shape_out, is_tile_data_v matrix, typename View> \
+    requires(std::is_same_v<typename tile_shape_out::DType,                    \
+                            typename View::DType>)                             \
+  void Name(tile_shape_out &dst, matrix &src0, View &src1) {                   \
+    pto_prefix_row_expand<Opcode>(dst, src0, src1);                            \
+  }
+
+PTO_PREFIX_ROW_EXPAND_WRAPPER(TROWEXPANDADD, 69)
+PTO_PREFIX_ROW_EXPAND_WRAPPER(TROWEXPANDSUB, 70)
+PTO_PREFIX_ROW_EXPAND_WRAPPER(TROWEXPANDMUL, 71)
+PTO_PREFIX_ROW_EXPAND_WRAPPER(TROWEXPANDDIV, 72)
+PTO_PREFIX_ROW_EXPAND_WRAPPER(TROWEXPANDMAX, 73)
+PTO_PREFIX_ROW_EXPAND_WRAPPER(TROWEXPANDMIN, 74)
+PTO_PREFIX_ROW_EXPAND_WRAPPER(TROWEXPANDEXPDIF, 75)
+
+#undef PTO_PREFIX_ROW_EXPAND_WRAPPER
+
 // TCOLEXPANDADD: col broadcast add
 // src1 is a per-column scalar/byte-strip operand whose shape may differ from src0
 // (col-broadcast analog of pto/TROWEXPANDMUL.md Mode 1/2); only dtype must match.
@@ -17249,6 +17953,21 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
                 "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL reduction _ASS dtypes must match");
+  static_assert(!D::INIT,
+                "TEPL reduction _ASS consumes an already-associated slot; "
+                "the INIT slot must use the plain producer form");
+  // PTO-ISA pto-spec#265 (issue #145): the destination-only B.IOT keeps the
+  // final source-form ParentRef carrier, but the B.ASSEMBLE slot 5 is the
+  // current writer extent (WriterSizeCode), not the parent capacity. Encode
+  // this fragment's extent instead of the stale ParentSizeCode so MIDDLE/LAST
+  // writers stay legal.
+  constexpr unsigned FragmentBytes =
+      static_cast<unsigned>(sizeof(typename D::TileDType));
+  constexpr unsigned WriterSizeCode =
+      range::subview_size_code_for_bytes(FragmentBytes);
+  static_assert(WriterSizeCode != 0,
+                "TEPL reduction _ASS fragment must be a power-of-two multiple "
+                "of 128 B");
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -17256,7 +17975,7 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [Type] "i"(type_traits<typename S::DType>::TypeCode),
@@ -17264,7 +17983,7 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
         [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
