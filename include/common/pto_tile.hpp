@@ -2077,30 +2077,32 @@ constexpr std::size_t subview_bytes_for_size_code(unsigned code) {
              : 0;
 }
 
-constexpr bool is_matrix_location(Location loc) {
-  return loc == Location::Mat || loc == Location::Left ||
-         loc == Location::Right || loc == Location::Acc;
-}
-
-template <typename Parent, bool IsShared = is_shared_tile<Parent>::value>
-struct subview_parent_location {
-  static constexpr Location value = Parent::Loc;
-};
-template <typename Parent>
-struct subview_parent_location<Parent, true> {
-  static constexpr Location value = Parent::Role;
-};
-
 // PTO-ISA BundleRangeSubviewLegal: B.SUBVIEW is defined for an assigned
 // Local or Shared tile using persistent CUBE CELL storage. The Local form is
-// selected by layout; Location::Vec is a valid Local CUBE carrier.
+// selected by layout; Location::Vec is a valid Local CUBE carrier. SharedTile
+// wraps a Local Tile, so its subview parent is the wrapped LocalTile; ordinary
+// Tiles are the parent themselves.
+template <typename Parent, typename = void>
+struct subview_parent_tile {
+  using type = Parent;
+};
+
+template <typename LocalTile>
+struct subview_parent_tile<SharedTile<LocalTile>> {
+  using type = LocalTile;
+};
+
+template <typename Parent>
+using subview_parent_tile_t = typename subview_parent_tile<Parent>::type;
+
 template <typename Parent, typename = void>
 struct is_legal_subview_parent : std::false_type {};
 
 template <typename Parent>
 struct is_legal_subview_parent<
-    Parent, std::void_t<decltype(Parent::Loc), decltype(Parent::IsCubeLayout)>>
-    : std::bool_constant<Parent::IsCubeLayout> {};
+    Parent,
+    std::void_t<decltype(subview_parent_tile_t<Parent>::IsCubeLayout)>>
+    : std::bool_constant<subview_parent_tile_t<Parent>::IsCubeLayout> {};
 
 template <typename Parent>
 inline constexpr bool is_legal_subview_parent_v =

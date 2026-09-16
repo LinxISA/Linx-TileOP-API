@@ -54,13 +54,13 @@ __attribute__((noinline)) void subview_factory_runtime_tstore(
 
 __attribute__((noinline)) void subview_factory_zero_offset_tstore(
     Dst &dst, Src &s) {
-  auto sv = range::subview<128, 3>(s);
+  auto sv = range::subview<1, 3>(s);
   TSTORE(dst, sv); // -> B.IOT <src>; B.SUBVIEW 0, zero, 3, 1
 }
 
 __attribute__((noinline)) void subview_factory_runtime_offset_tstore(
     Dst &dst, Src &s, uintptr_t base_units) {
-  auto sv = range::subview<128, 3>(s, base_units);
+  auto sv = range::subview<1, 3>(s, base_units);
   TSTORE(dst, sv); // -> B.IOT <src>; B.SUBVIEW 0, <allocated-gpr>, 3, 1
 }
 
