@@ -70,7 +70,8 @@ using SharedCubeMatrix = SharedTile<M16>;
 static_assert(range::is_legal_subview_parent_v<M16>);
 static_assert(range::is_legal_subview_parent_v<M32>);
 static_assert(range::is_legal_subview_parent_v<N8>);
-static_assert(!range::is_legal_subview_parent_v<VecM16>);
+// PTO-ISA #141: Location::Vec CUBE carriers are valid Local subview parents.
+static_assert(range::is_legal_subview_parent_v<VecM16>);
 static_assert(!range::is_legal_subview_parent_v<RowMajorMatrix>);
 static_assert(range::is_legal_subview_parent_v<SharedCubeMatrix>);
 static_assert(M16::CubeCellBytes == 128);
