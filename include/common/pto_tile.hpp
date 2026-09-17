@@ -26,6 +26,7 @@ constexpr bool is_gmov_type_code(int type_code) {
   case __type_fp4_e1m2x2:
   case __type_fp8_e8m0:
   case __type_fp4_hif4x2:
+  case __type_fp8_e6m2:
   case __type_int32:
   case __type_int16:
   case __type_int8:
@@ -277,7 +278,9 @@ constexpr int type_traits_code_bits(int Code) {
   case __type_fp8_e5m2:
   case __type_int8:
   case __type_uint8:
-  case __type_fp8_e8m0: return 8;
+  case __type_fp8_e8m0:
+  case __type_fp8_e6m2:
+  case __type_rcpe6m2: return 8;
   default: return -1;
   }
 }
@@ -293,6 +296,20 @@ constexpr bool tile_carrier_width_compatible(int StoredCode, int OperationCode) 
       return false;
   }
   return type_traits_code_bits(StoredCode) == type_traits_code_bits(OperationCode);
+}
+
+// PTO-ISA v0.58 (pto-spec#322) TCVT datatype-pair legality for the derived
+// RCPE6M2 type. RCPE6M2 (code 21) reuses the E6M2 code space as a source-only
+// reciprocal type: it has no destination encoding, and the only legal TCVT
+// destinations for an RCPE6M2 source are FP16 and BF16. All other pairs are
+// left permissive here so existing conversions (including E6M2, which is not
+// narrowed) remain unaffected.
+constexpr bool is_legal_tcvt_datatype_pair(int SrcCode, int DstCode) {
+  if (DstCode == __type_rcpe6m2)
+    return false; // RCPE6M2 has no destination encoding.
+  if (SrcCode == __type_rcpe6m2)
+    return DstCode == __type_fp16 || DstCode == __type_bf16;
+  return true;
 }
 
 constexpr bool is_valid_fixp_pre_quant(FixpPreQuantMode Mode) {

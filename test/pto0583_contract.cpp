@@ -207,4 +207,31 @@ static_assert(matrix_mx_input_needs_scale(__type_fp8_e5m2));
 static_assert(matrix_mx_input_needs_scale(__type_fp4_e2m1x2));
 static_assert(matrix_mx_input_needs_scale(__type_fp4_e1m2x2));
 
+// E6M2 (code 15) and RCPE6M2 (code 21): pto-spec#322 promotes both from the
+// reserved range into named TileDataTypes.
+static_assert(__type_fp8_e6m2 == 15);
+static_assert(__type_rcpe6m2 == 21);
+static_assert(type_traits<__fp8_e6m2>::TypeCode == __type_fp8_e6m2);
+static_assert(type_traits<__fp8_e6m2>::bits == 8);
+static_assert(type_traits<__fp8_rcpe6m2>::TypeCode == __type_rcpe6m2);
+static_assert(type_traits<__fp8_rcpe6m2>::bits == 8);
+static_assert(type_traits_code_bits(__type_fp8_e6m2) == 8);
+static_assert(type_traits_code_bits(__type_rcpe6m2) == 8);
+// E6M2 is an ordinary 8-bit scalar and is GMOV-legal; RCPE6M2 is a source-only
+// derived type with no destination encoding and is not GMOV-storable.
+static_assert(is_gmov_type_code(__type_fp8_e6m2));
+static_assert(!is_gmov_type_code(__type_rcpe6m2));
+
+// pto-spec#322 TCVT datatype-pair legality: RCPE6M2 is a source-only derived
+// type with no destination encoding; it converts only to FP16/BF16. E6M2 is
+// unrestricted (not narrowed).
+static_assert(!is_legal_tcvt_datatype_pair(__type_fp16, __type_rcpe6m2));
+static_assert(!is_legal_tcvt_datatype_pair(__type_bf16, __type_rcpe6m2));
+static_assert(is_legal_tcvt_datatype_pair(__type_rcpe6m2, __type_fp16));
+static_assert(is_legal_tcvt_datatype_pair(__type_rcpe6m2, __type_bf16));
+static_assert(!is_legal_tcvt_datatype_pair(__type_rcpe6m2, __type_fp32));
+static_assert(!is_legal_tcvt_datatype_pair(__type_rcpe6m2, __type_fp8_e6m2));
+static_assert(is_legal_tcvt_datatype_pair(__type_fp16, __type_fp8_e6m2));
+static_assert(is_legal_tcvt_datatype_pair(__type_fp8_e6m2, __type_bf16));
+
 int main() { return 0; }

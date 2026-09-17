@@ -159,6 +159,11 @@ template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,
 void TCVT_T(tile_shape_out &dst, tile_shape_in &src) {
   static_assert(RMode >= LINX_RNONE && RMode <= LINX_RHB,
                 "TCVT RMode must be a LinxRMode value");
+  static_assert(is_legal_tcvt_datatype_pair(
+                    type_traits<typename tile_shape_in::DType>::TypeCode,
+                    type_traits<typename tile_shape_out::DType>::TypeCode),
+                "Illegal TCVT datatype pair: RCPE6M2 is source-only and "
+                "converts only to FP16/BF16 (pto-spec#322)");
   static_assert((tile_shape_out::ValidRow == DYNAMIC ||
                  tile_shape_out::Rows >= tile_shape_out::ValidRow) &&
                     (tile_shape_out::ValidCol == DYNAMIC ||

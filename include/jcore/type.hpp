@@ -26,12 +26,14 @@ enum __type_code {
   __type_fp8_e8m0 = 13,
 
   __type_fp4_hif4x2 = 14,
+  __type_fp8_e6m2 = 15,
 
   __type_int64 = 16,
   __type_int32 = 17,
   __type_int16 = 18,
   __type_int8 = 19,
   __type_int4x2 = 20,
+  __type_rcpe6m2 = 21,
 
   __type_uint64 = 24,
   __type_uint32 = 25,
@@ -63,6 +65,8 @@ template<> struct type_traits<__fp4_e2m1x2>   : public type_traits_base<__type_f
 template<> struct type_traits<__fp4_e1m2x2>   : public type_traits_base<__type_fp4_e1m2x2, 8> {};
 template<> struct type_traits<__fp8_e8m0>     : public type_traits_base<__type_fp8_e8m0, 8> {};
 template<> struct type_traits<__fp4_hif4x2>   : public type_traits_base<__type_fp4_hif4x2, 8> {};
+template<> struct type_traits<__fp8_e6m2>     : public type_traits_base<__type_fp8_e6m2, 8> {};
+template<> struct type_traits<__fp8_rcpe6m2>  : public type_traits_base<__type_rcpe6m2, 8> {};
 
 template<> struct type_traits<int64_t>        : public type_traits_base<__type_int64, 64> {};
 template<> struct type_traits<int32_t>        : public type_traits_base<__type_int32, 32> {};

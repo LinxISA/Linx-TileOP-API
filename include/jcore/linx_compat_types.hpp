@@ -26,6 +26,7 @@ PTO_LINX_STORAGE_TYPE(__hif8, uint8_t);
 PTO_LINX_STORAGE_TYPE(__fp8_e4m3, uint8_t);
 PTO_LINX_STORAGE_TYPE(__fp8_e5m2, uint8_t);
 PTO_LINX_STORAGE_TYPE(__fp8_e6m2, uint8_t);
+PTO_LINX_STORAGE_TYPE(__fp8_rcpe6m2, uint8_t);
 PTO_LINX_STORAGE_TYPE(__fp6_e3m2, uint8_t);
 PTO_LINX_STORAGE_TYPE(__fp6_e2m3, uint8_t);
 PTO_LINX_STORAGE_TYPE(__fp4_e2m1x2, uint8_t);
@@ -55,6 +56,7 @@ PTO_LINX_STORAGE_TYPE(__fp8_e5m2x2, uint16_t);
 #define __fp8_e4m3_STORAGE(value) ((value).data)
 #define __fp8_e5m2_STORAGE(value) ((value).data)
 #define __fp8_e6m2_STORAGE(value) ((value).data)
+#define __fp8_rcpe6m2_STORAGE(value) ((value).data)
 #define __fp6_e3m2_STORAGE(value) ((value).data)
 #define __fp6_e2m3_STORAGE(value) ((value).data)
 #define __fp4_e2m1x2_STORAGE(value) ((value).data)
