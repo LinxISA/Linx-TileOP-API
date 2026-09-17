@@ -384,8 +384,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIsNotNone(match)
         body = match.group(0)
         self.assertNotIn('layout%c', body)
-        self.assertIn('PTO_CUBE_LOAD_LAYOUT_ASM', body)
-        self.assertIn('"B.DATR ND2M32.normal, Zero\\n"', self.header)
+        self.assertIn('PTO_CUBE_LOAD_DATR_ASM', body)
+        self.assertIn('[PadValue] "i"(static_cast<int>(Pad))', body)
 
     def test_range_modifier_types_and_aliases_remain_supported(self) -> None:
         header = PTO_TILE.read_text(encoding="utf-8")
@@ -732,7 +732,9 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         )
         self.assertIn('"BSTART.TLSU TLOAD, %D[DataType]\\n"', self.header)
         self.assertIn('"BSTART.TLSU TSTORE, %D[DataType]\\n"', self.header)
-        self.assertIn('"B.DATR ND2M32.normal, Zero\\n"', self.header)
+        # TLOAD_CUBE 的 CUBE selector+pad 已收进 PTO_CUBE_LOAD_DATR_ASM
+        #（PTO-ISA TLOAD: Local CUBE 允许全部四种 PadValue；默认 Zero）。
+        self.assertIn('PTO_CUBE_LOAD_DATR_ASM', self.header)
         self.assertNotIn(
             '"B.DATR %c[DataTypeB], byte0, Zero\\n"', self.header
         )
