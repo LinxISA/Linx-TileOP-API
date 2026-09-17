@@ -2202,7 +2202,7 @@ private:
 /// the low-level carrier and *_reg helpers for ABI and encoding tests.
 template <typename Parent, unsigned ParentSizeCode_, bool INIT_ = true,
           bool LAST_ = false, unsigned OffsetUnits_ = 0,
-          unsigned RegSrc_ = 2>
+          unsigned RegSrc_ = 2, unsigned WriterSizeCode_ = 0>
 class Assemble {
   static_assert(is_valid_parent_size_code(ParentSizeCode_),
                 "B.ASSEMBLE ParentSizeCode must be 0..12; 13..15 reserved");
@@ -2230,6 +2230,10 @@ public:
   static constexpr unsigned OffsetUnits = OffsetUnits_;
   static constexpr unsigned Offset = OffsetUnits;
   static constexpr unsigned RegSrc = RegSrc_;
+  // PTO-ISA #265: the B.ASSEMBLE field-5 writer extent for this carrier.
+  // The factories derive it from the declared fragment length; 0 means the
+  // legacy fallback (derive from the parent carrier capacity).
+  static constexpr unsigned WriterSizeCode = WriterSizeCode_;
   static constexpr Location Loc = Parent::Loc;
   static constexpr int Rows = Parent::Rows;
   static constexpr int Cols = Parent::Cols;
@@ -2370,7 +2374,9 @@ constexpr std::size_t assemble_length_bytes() {
                   Init ? subview_size_code_for_bytes(                          \
                              assemble_length_bytes<LengthUnits_, Parent>())    \
                        : 0,                                                    \
-                  Init, Last, OffsetUnits_, 0> {                               \
+                  Init, Last, OffsetUnits_, 0,                                 \
+                  subview_size_code_for_bytes(                                 \
+                      assemble_length_bytes<LengthUnits_, Parent>())> {        \
     constexpr std::size_t CheckedLength =                                     \
         assemble_length_bytes<LengthUnits_, Parent>();                         \
     (void)CheckedLength;                                                        \
@@ -2384,7 +2390,9 @@ constexpr std::size_t assemble_length_bytes() {
                   Init ? subview_size_code_for_bytes(                          \
                              assemble_length_bytes<LengthUnits_, Parent>())    \
                        : 0,                                                    \
-                  Init, Last, OffsetUnits_, AutoRegSrc> {                      \
+                  Init, Last, OffsetUnits_, AutoRegSrc,                        \
+                  subview_size_code_for_bytes(                                 \
+                      assemble_length_bytes<LengthUnits_, Parent>())> {        \
     constexpr std::size_t CheckedLength =                                     \
         assemble_length_bytes<LengthUnits_, Parent>();                         \
     (void)CheckedLength;                                                        \
