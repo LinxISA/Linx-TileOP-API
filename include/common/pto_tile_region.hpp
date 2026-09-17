@@ -35,7 +35,8 @@ constexpr int tile_size_code_for_bytes(std::size_t bytes) {
 
 template <typename Parent, typename SubTile, int Rows, int Cols>
 struct partition_contract {
-  static_assert(is_tile<Parent>::value && range::is_legal_subview_parent_v<Parent>,
+  static_assert(is_tile<Parent>::value &&
+                    range::is_legal_subview_parent_v<Parent>,
                 "TPARTVIEW parent must be an assigned Local Matrix Tile with "
                 "a CUBE layout");
   static_assert(Rows > 0 && Cols > 0,
@@ -130,8 +131,7 @@ class ReductionPrefixView {
                 "reduction prefix view must preserve the reduction valid shape");
   static_assert(std::is_same_v<typename Parent::DType, typename SubTile::DType>,
                 "reduction prefix view requires matching element types");
-  static_assert(SubTile::LogicalTileBytes >= range::RangeAddressUnitBytes &&
-                    SubTile::LogicalTileBytes % range::RangeAddressUnitBytes == 0,
+  static_assert(SubTile::LogicalTileBytes == range::RangeAddressUnitBytes,
                 "reduction prefix view must select one 128-byte CELL");
 
 public:

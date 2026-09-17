@@ -252,8 +252,13 @@ auto last   = range::assemble_last(tile, base_units);      // INIT=0, LAST=1（s
 三个及以上：     assemble → assemble_middle* → assemble_last
 ```
 
-非 INIT 形式的 `ParentSizeCode` 按 ISA 合同固定为 0，不要手动填 parent
-size code；INIT 形式从长度参数自动推导。
+第 5 字段是 **WriterSizeCode**，不是父 Tile 容量。INIT、MIDDLE、LAST
+都记录当前 slot 写入的 fragment 容量；父容量只由 INIT destination 的
+`TilesizeCode` 与 assembly session 绑定。例如
+`TileArray<Fragment, 1, 4>` 且每个 `Fragment::LogicalTileBytes == 512 B`
+时，四个 slot 的第 5 字段都应为 3，父 Tile 是 2 KB，offset 分别为
+0、4、8、12 个 128 B CELL。LLVM 暂时接受 WriterSizeCode 0，以兼容旧
+producer；新 API 不生成 0。
 
 > PTO-ISA #265 之后，`B.ASSEMBLE` 的最后一个字段语义是当前 writer 的
 > `WriterSizeCode`（fragment 的 extent），不再是 parent 容量；parent 容量
@@ -332,14 +337,14 @@ input-only binder 消费，不分配新 Tile generation。
 using TileT = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
 
 void fused(TileT &a, TileT &b, TileT &c, TileT &result) {
-  auto dst = range::assemble(result);   // INIT carrier（若为 session 第一片）
+  auto dst = range::assemble_last(result); // 已由普通 producer 打开的 LAST slot
   TFMA_ASS(dst, a, b, c);
 }
 ```
 
 归约 `_ASS`（`TROWSUM_ASS` 等）在 destination binder 后同样发出
 destination-only `B.ASSEMBLE`（携带 carrier 的 INIT/LAST/RegSrc/Offset/
-ParentSize），并且不要求 assembled destination 的物理 shape 等于逻辑归约
+WriterSizeCode），并且不要求 assembled destination 的物理 shape 等于逻辑归约
 结果——例如 `TROWSUM_ASS` 的输入逻辑结果是 `R x 1`，destination 可以是
 一个更大 parent 的 fragment carrier。
 
@@ -384,7 +389,7 @@ B.DIM      <valid-row>, 0, ->lb1
 B.DIM      zero, <physical-cols>, ->lb2
 B.IOT      <source-operands>, mask=1111
 B.IOT      <assembled-destination>, mask=1111, last
-B.ASSEMBLE <INIT>, <LAST>, <RegSrc>, <OffsetUnits>, <WriterSize>
+B.ASSEMBLE <INIT>, <LAST>, <RegSrc>, <OffsetUnits>, <WriterSizeCode>
 ```
 
 最后一个字段是当前 writer（fragment）的 extent code（PTO-ISA #265）；
@@ -465,9 +470,9 @@ Shared 尺寸遵循 Shared `B.IOS` 合同（`128 B..256 KiB`，SizeCode `1..12`�
 // range::Subview<Src, 1, 2048>(tile, 0);  // OffsetUnits > 2047
 // range::Subview<Src, 1, 0, 25>(tile, 0); // RegSrc 超出 0..23
 //
-// range::Assemble<Dst, 0, true>(tile, 0);   // INIT 需要 size 1..12
-// range::Assemble<Dst, 12, false>(tile, 0); // 非 INIT 必须 size 0
-// range::Assemble<Dst, 13, true>(tile, 0);  // ParentSizeCode 保留
+// range::Assemble<Dst, 0, true>(tile, 0);   // 仅用于兼容旧 producer
+// range::Assemble<Dst, 12, false>(tile, 0); // 合法：continuation 也携带 writer size
+// range::Assemble<Dst, 13, true>(tile, 0);  // WriterSizeCode 13..15 保留
 //
 // TROWSUM_ASS(range::assemble(parent), src); // _ASS 收 INIT carrier
 // TLOAD(range::assemble_last(parent), gm);   // 普通接口收非 INIT carrier
