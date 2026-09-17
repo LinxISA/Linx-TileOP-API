@@ -72,10 +72,10 @@ static_assert(range::is_legal_subview_parent_v<M32>);
 static_assert(range::is_legal_subview_parent_v<N8>);
 // PTO-ISA #141: Location::Vec CUBE carriers are valid Local subview parents.
 static_assert(range::is_legal_subview_parent_v<VecM16>);
+// PTO-ISA #159 contract: Local and Shared B.SUBVIEW parents both require a
+// persistent CUBE layout; RowMajor parents are compile-negative cases.
+static_assert(range::is_legal_subview_parent_v<SharedCubeMatrix>);
 static_assert(!range::is_legal_subview_parent_v<RowMajorMatrix>);
-// PTO-ISA #148: Shared B.SUBVIEW parents must be RowMajor; a Shared CUBE
-// carrier (SharedTile<M16>) is a compile-negative case.
-static_assert(!range::is_legal_subview_parent_v<SharedCubeMatrix>);
 static_assert(M16::CubeCellBytes == 128);
 static_assert(M16::CubeRequiredBytes == 2048);
 static_assert(M16Partial::CubeRequiredBytes == 2048);
