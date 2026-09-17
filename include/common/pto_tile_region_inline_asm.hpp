@@ -90,6 +90,18 @@ PTO_REGION_ALWAYS_INLINE void TEXP(
   pto_region_unary<18>(dst, src);
 }
 
+template <is_tile_data_v Out, typename Parent, typename SubTile>
+PTO_REGION_ALWAYS_INLINE void TROWMIN(
+    Out &dst, region::SubTileView<Parent, SubTile> &src) {
+  pto_region_unary<66>(dst, src);
+}
+
+template <is_tile_data_v Out, typename Parent, typename SubTile>
+PTO_REGION_ALWAYS_INLINE void TROWPROD(
+    Out &dst, region::SubTileView<Parent, SubTile> &src) {
+  pto_region_unary<67>(dst, src);
+}
+
 template <int ParentSize, bool Init, bool Last, int Opcode,
           typename SubTile, typename In>
 PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
@@ -105,7 +117,20 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
                 "TileArray slot requires matching valid shape");
   static_assert(std::is_same_v<typename SubTile::DType, typename In::DType>,
                 "TileArray slot requires matching element types");
-  constexpr int encoded_parent_size = Init ? ParentSize : 0;
+  // PTO-ISA #265 (issue #702): B.ASSEMBLE field 5 is the WRITER extent in
+  // every phase. On INIT the destination B.IOT is the allocating binder and
+  // must carry the parent capacity; MIDDLE/LAST reuse the parent register
+  // through the destination-only binder (non-allocating, SizeCode=0 form on
+  // the parent register) and still encode the nonzero writer extent.
+  constexpr int binder_size = Init ? ParentSize : 0;
+  constexpr int writer_size =
+      tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
+  static_assert(writer_size != 0,
+                "TileArray slot writer extent must be a nonzero size code");
+  // The writer-fits-parent bound is guaranteed by TileArray construction:
+  // ParentBytes = slot_count * SubTile::LogicalTileBytes. ParentSize here is
+  // only the dispatch case label, and the switch instantiates every case,
+  // so a compile-time comparison against it would spuriously fail.
   const uintptr_t range_base_units = dst.range_base_units();
 #define PTO_REGION_UNARY_ASSEMBLY_BODY                                      \
   "BSTART.TEPL %c7, %D1\n"                                                \
@@ -120,8 +145,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
   "i"(std::remove_reference_t<decltype(src)>::ValidCol),                  \
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                  \
   "i"(SubTile::Cols),                                                       \
-  "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),         \
-  "i"(Opcode), "r"(range_base_units), "i"(encoded_parent_size),          \
+  "i"(ParentSize),                                                          \
+  "i"(Opcode), "r"(range_base_units), "i"(writer_size),                  \
   "i"(Init), "i"(Last)
   if constexpr (Init) {
     asm volatile(PTO_REGION_UNARY_ASSEMBLY_BODY
@@ -129,9 +154,19 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
                  : PTO_REGION_UNARY_ASSEMBLY_INPUTS
                  : "memory");
   } else {
-    asm volatile(PTO_REGION_UNARY_ASSEMBLY_BODY
-                 : [Dst] "+Tr"(dst.template parent_data<ParentSize>())
-                 : PTO_REGION_UNARY_ASSEMBLY_INPUTS
+    // PTO-ISA #265 Local continuation: the final source-form SizeCode=0
+    // binder is exactly one Local ParentRef. The math input stays a
+    // source-only B.IOT and the parent register binds source-form.
+    asm volatile("BSTART.TEPL %c7, %D1\n"
+                 "B.DIM zero, %c3, ->lb0\n"
+                 "B.DIM zero, %c4, ->lb1\n"
+                 "B.DIM zero, %c5, ->lb2\n"
+                 "B.IOT %2, mask=1111, last\n"
+                 "B.IOT %0, mask=1111\n"
+                 "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_UNARY_ASSEMBLY_INPUTS
                  : "memory");
   }
 #undef PTO_REGION_UNARY_ASSEMBLY_INPUTS
@@ -191,7 +226,16 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
   static_assert(std::is_same_v<typename SubTile::DType, typename In::DType>,
                 "TileArray slot requires matching element types");
   volatile typename In::DType value = scalar;
-  constexpr int encoded_parent_size = Init ? ParentSize : 0;
+  // PTO-ISA #265 (issue #702): field 5 is the writer extent; the INIT
+  // destination B.IOT is the allocating binder and carries the parent.
+  constexpr int writer_size =
+      tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
+  static_assert(writer_size != 0,
+                "TileArray slot writer extent must be a nonzero size code");
+  // The writer-fits-parent bound is guaranteed by TileArray construction:
+  // ParentBytes = slot_count * SubTile::LogicalTileBytes. ParentSize here is
+  // only the dispatch case label, and the switch instantiates every case,
+  // so a compile-time comparison against it would spuriously fail.
   const uintptr_t range_base_units = dst.range_base_units();
 #define PTO_REGION_SCALAR_ASSEMBLY_BODY                                    \
   "BSTART.TEPL %c7, %D1\n"                                                \
@@ -207,8 +251,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
   "i"(std::remove_reference_t<decltype(src)>::ValidCol),                  \
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                  \
   "i"(SubTile::Cols),                                                       \
-  "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),         \
-  "i"(Opcode), "r"(range_base_units), "i"(encoded_parent_size),            \
+  "i"(ParentSize),                                                          \
+  "i"(Opcode), "r"(range_base_units), "i"(writer_size),                  \
   "i"(Init), "i"(Last), "r"(value)
   if constexpr (Init) {
     asm volatile(PTO_REGION_SCALAR_ASSEMBLY_BODY
@@ -216,9 +260,19 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
                  : PTO_REGION_SCALAR_ASSEMBLY_INPUTS
                  : "memory");
   } else {
-    asm volatile(PTO_REGION_SCALAR_ASSEMBLY_BODY
-                 : [Dst] "+Tr"(dst.template parent_data<ParentSize>())
-                 : PTO_REGION_SCALAR_ASSEMBLY_INPUTS
+    // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder
+    // carries the ParentRef; the math input stays source-only.
+    asm volatile("BSTART.TEPL %c7, %D1\n"
+                 "B.DIM zero, %c3, ->lb0\n"
+                 "B.DIM zero, %c4, ->lb1\n"
+                 "B.DIM zero, %c5, ->lb2\n"
+                 "B.IOT %2, mask=1111, last\n"
+                 "B.IOR [%12],[]\n"
+                 "B.IOT %0, mask=1111\n"
+                 "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_SCALAR_ASSEMBLY_INPUTS
                  : "memory");
   }
 #undef PTO_REGION_SCALAR_ASSEMBLY_INPUTS
@@ -293,7 +347,15 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
                                typename SourceSubTile::DType>,
                 "TileArray slot requires matching element types");
   volatile typename SourceSubTile::DType value = scalar;
-  constexpr int encoded_parent_size = Init ? ParentSize : 0;
+  // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase.
+  constexpr int writer_size =
+      tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
+  static_assert(writer_size != 0,
+                "TileArray slot writer extent must be a nonzero size code");
+  // The writer-fits-parent bound is guaranteed by TileArray construction:
+  // ParentBytes = slot_count * SubTile::LogicalTileBytes. ParentSize here is
+  // only the dispatch case label, and the switch instantiates every case,
+  // so a compile-time comparison against it would spuriously fail.
   const uintptr_t source_base_units = src.GetRangeBase();
   const uintptr_t destination_base_units = dst.range_base_units();
 #define PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_BODY                             \
@@ -305,16 +367,26 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.IOR [%14],[]\n"                                                       \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
+#define PTO_REGION_SCALAR_SUBVIEW_CONT_BODY                                 \
+  "BSTART.TEPL %c7, %D1\n"                                                \
+  "B.DIM zero, %c3, ->lb0\n"                                                  \
+  "B.DIM zero, %c4, ->lb1\n"                                                  \
+  "B.DIM zero, %c5, ->lb2\n"                                              \
+  "B.IOT %2, mask=1111, last\n"                                           \
+  "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
+  "B.IOR [%14],[]\n"                                                       \
+  "B.IOT %0, mask=1111\n"                                                 \
+  "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_INPUTS                          \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
   "Tr"(src.data()),                                                       \
   "i"(std::remove_reference_t<decltype(src)>::ValidCol),                  \
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                  \
   "i"(SourceSubTile::Cols),                                                 \
-  "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),         \
+  "i"(ParentSize),                                                          \
   "i"(Opcode), "r"(source_base_units),                                    \
   "i"(tile_type_traits<typename SourceSubTile::TileDType>::TilesizeCode),   \
-  "r"(destination_base_units), "i"(encoded_parent_size),                  \
+  "r"(destination_base_units), "i"(writer_size),                          \
   "i"(Init), "i"(Last), "r"(value)
   if constexpr (Init) {
     asm volatile(PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_BODY
@@ -322,9 +394,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
                  : PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_INPUTS
                  : "memory");
   } else {
-    asm volatile(PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_BODY
-                 : [Dst] "+Tr"(dst.template parent_data<ParentSize>())
-                 : PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_INPUTS
+    // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder.
+    asm volatile(PTO_REGION_SCALAR_SUBVIEW_CONT_BODY
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_INPUTS
                  : "memory");
   }
 #undef PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_INPUTS
@@ -401,7 +475,15 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
   static_assert(std::is_same_v<typename SubTile::DType,
                                typename SourceSubTile::DType>,
                 "TileArray slot requires matching element types");
-  constexpr int encoded_parent_size = Init ? ParentSize : 0;
+  // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase.
+  constexpr int writer_size =
+      tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
+  static_assert(writer_size != 0,
+                "TileArray slot writer extent must be a nonzero size code");
+  // The writer-fits-parent bound is guaranteed by TileArray construction:
+  // ParentBytes = slot_count * SubTile::LogicalTileBytes. ParentSize here is
+  // only the dispatch case label, and the switch instantiates every case,
+  // so a compile-time comparison against it would spuriously fail.
   const uintptr_t source_base_units = src.GetRangeBase();
   const uintptr_t destination_base_units = dst.range_base_units();
 #define PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_BODY                              \
@@ -412,16 +494,25 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
   "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"                                 \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
+#define PTO_REGION_UNARY_SUBVIEW_CONT_BODY                                  \
+  "BSTART.TEPL %c7, %D1\n"                                                \
+  "B.DIM zero, %c3, ->lb0\n"                                                  \
+  "B.DIM zero, %c4, ->lb1\n"                                                  \
+  "B.DIM zero, %c5, ->lb2\n"                                              \
+  "B.IOT %2, mask=1111, last\n"                                           \
+  "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
+  "B.IOT %0, mask=1111\n"                                                 \
+  "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_INPUTS                           \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
   "Tr"(src.data()),                                                       \
   "i"(std::remove_reference_t<decltype(src)>::ValidCol),                  \
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                  \
   "i"(SourceSubTile::Cols),                                                 \
-  "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),         \
+  "i"(ParentSize),                                                          \
   "i"(Opcode), "r"(source_base_units),                                    \
   "i"(tile_type_traits<typename SourceSubTile::TileDType>::TilesizeCode),   \
-  "r"(destination_base_units), "i"(encoded_parent_size),                  \
+  "r"(destination_base_units), "i"(writer_size),                          \
   "i"(Init), "i"(Last)
   if constexpr (Init) {
     asm volatile(PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_BODY
@@ -429,9 +520,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
                  : PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_INPUTS
                  : "memory");
   } else {
-    asm volatile(PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_BODY
-                 : [Dst] "+Tr"(dst.template parent_data<ParentSize>())
-                 : PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_INPUTS
+    // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder.
+    asm volatile(PTO_REGION_UNARY_SUBVIEW_CONT_BODY
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_INPUTS
                  : "memory");
   }
 #undef PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_INPUTS
@@ -594,7 +687,16 @@ PTO_REGION_ALWAYS_INLINE void
 pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   static_assert(SubTile::Rows == In::Rows && SubTile::Cols == In::Cols,
                 "TCVT assembly slot requires matching physical shape");
-  constexpr int encoded_parent_size = Init ? ParentSize : 0;
+  // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase;
+  // the INIT destination B.IOT allocates and carries the parent capacity.
+  constexpr int writer_size =
+      tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
+  static_assert(writer_size != 0,
+                "TileArray slot writer extent must be a nonzero size code");
+  // The writer-fits-parent bound is guaranteed by TileArray construction:
+  // ParentBytes = slot_count * SubTile::LogicalTileBytes. ParentSize here is
+  // only the dispatch case label, and the switch instantiates every case,
+  // so a compile-time comparison against it would spuriously fail.
   const uintptr_t range_base_units = dst.range_base_units();
 #define PTO_REGION_TCVT_ASSEMBLY_BODY                                       \
   "BSTART.TEPL 27, %D1\n"                                                  \
@@ -611,17 +713,27 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   "i"(std::remove_reference_t<decltype(src)>::ValidCol),                    \
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                    \
   "i"(SubTile::Cols),                                                        \
-  "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),          \
-  "r"(range_base_units), "i"(encoded_parent_size), "i"(Init), "i"(Last)
+  "i"(ParentSize),                                                           \
+  "r"(range_base_units), "i"(writer_size), "i"(Init), "i"(Last)
   if constexpr (Init) {
     asm volatile(PTO_REGION_TCVT_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
                  : PTO_REGION_TCVT_ASSEMBLY_INPUTS
                  : "memory");
   } else {
-    asm volatile(PTO_REGION_TCVT_ASSEMBLY_BODY
-                 : [Dst] "+Tr"(dst.template parent_data<ParentSize>())
-                 : PTO_REGION_TCVT_ASSEMBLY_INPUTS
+    // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder
+    // carries the ParentRef; the math input stays source-only.
+    asm volatile("BSTART.TEPL 27, %D1\n"
+                 "B.DATR %D2, RNONE\n"
+                 "B.DIM zero, %c4, ->lb0\n"
+                 "B.DIM zero, %c5, ->lb1\n"
+                 "B.DIM zero, %c6, ->lb2\n"
+                 "B.IOT %3, mask=1111, last\n"
+                 "B.IOT %0, mask=1111\n"
+                 "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_TCVT_ASSEMBLY_INPUTS
                  : "memory");
   }
 #undef PTO_REGION_TCVT_ASSEMBLY_INPUTS
@@ -685,7 +797,15 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
   static_assert(SubTile::ValidRow == SourceSubTile::ValidRow &&
                     SubTile::ValidCol == SourceSubTile::ValidCol,
                 "TCVT TileArray slot requires matching valid shape");
-  constexpr int encoded_parent_size = Init ? ParentSize : 0;
+  // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase.
+  constexpr int writer_size =
+      tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
+  static_assert(writer_size != 0,
+                "TileArray slot writer extent must be a nonzero size code");
+  // The writer-fits-parent bound is guaranteed by TileArray construction:
+  // ParentBytes = slot_count * SubTile::LogicalTileBytes. ParentSize here is
+  // only the dispatch case label, and the switch instantiates every case,
+  // so a compile-time comparison against it would spuriously fail.
   const uintptr_t source_base_units = src.GetRangeBase();
   const uintptr_t destination_base_units = dst.range_base_units();
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_BODY                               \
@@ -697,16 +817,26 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
   "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"                                 \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
+#define PTO_REGION_TCVT_SUBVIEW_CONT_BODY                                   \
+  "BSTART.TEPL 27, %D1\n"                                                  \
+  "B.DATR %D2, RNONE\n"                                                    \
+  "B.DIM zero, %c4, ->lb0\n"                                                   \
+  "B.DIM zero, %c5, ->lb1\n"                                                   \
+  "B.DIM zero, %c6, ->lb2\n"                                               \
+  "B.IOT %3, mask=1111, last\n"                                           \
+  "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
+  "B.IOT %0, mask=1111\n"                                                 \
+  "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS                            \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
   "i"(type_traits<typename SubTile::DType>::TypeCode), "Tr"(src.data()),  \
   "i"(std::remove_reference_t<decltype(src)>::ValidCol),                    \
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                    \
   "i"(SourceSubTile::Cols),                                                 \
-  "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),         \
+  "i"(ParentSize),                                                           \
   "r"(source_base_units),                                                   \
   "i"(tile_type_traits<typename SourceSubTile::TileDType>::TilesizeCode),   \
-  "r"(destination_base_units), "i"(encoded_parent_size),                  \
+  "r"(destination_base_units), "i"(writer_size),                          \
   "i"(Init), "i"(Last)
   if constexpr (Init) {
     asm volatile(PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_BODY
@@ -714,9 +844,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
                  : PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS
                  : "memory");
   } else {
-    asm volatile(PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_BODY
-                 : [Dst] "+Tr"(dst.template parent_data<ParentSize>())
-                 : PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS
+    // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder.
+    asm volatile(PTO_REGION_TCVT_SUBVIEW_CONT_BODY
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS
                  : "memory");
   }
 #undef PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS
@@ -838,12 +970,90 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary(
       : "memory");
 }
 
+template <int Opcode, typename Out, typename Parent, typename SubTile,
+          typename Tile>
+PTO_REGION_ALWAYS_INLINE void pto_region_binary(
+    Out &dst, region::SubTileView<Parent, SubTile> &src0, Tile &src1) {
+  static_assert(SubTile::SFractal == SLayout::NoneBox,
+                "inline Tile region path requires unboxed fragments");
+  static_assert(std::is_same_v<typename SubTile::DType, typename Tile::DType>,
+                "binary region sources require matching element types");
+  static_assert(std::is_same_v<typename SubTile::DType, typename Out::DType>,
+                "binary source and destination dtypes must match");
+  static_assert(SubTile::Rows == Tile::Rows && SubTile::Cols == Tile::Cols,
+                "binary region sources require matching physical shapes");
+  static_assert(SubTile::ValidRow == Tile::ValidRow &&
+                    SubTile::ValidCol == Tile::ValidCol,
+                "binary region sources require matching valid shapes");
+  const uintptr_t range_base0_units = src0.GetRangeBase();
+  asm volatile(
+      "BSTART.TEPL %c9, %D1\n"
+      "B.DIM zero, %c3, ->lb0\n"
+      "B.DIM zero, %c4, ->lb1\n"
+      "B.DIM zero, %c5, ->lb2\n"
+      "B.IOT %2, %6, mask=1111, last, ->%0<%Z7>\n"
+      "B.SUBVIEW 0, %7, 0, %c8\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename SubTile::DType>::TypeCode),
+        "Tr"(src0.data()), "i"(Tile::ValidCol), "i"(Tile::ValidRow),
+        "i"(Tile::Cols), "Tr"(src1.data()), "r"(range_base0_units),
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "i"(Opcode)
+      : "memory");
+}
+
+template <int Opcode, typename Out, typename Tile, typename Parent,
+          typename SubTile>
+PTO_REGION_ALWAYS_INLINE void pto_region_binary(
+    Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {
+  static_assert(SubTile::SFractal == SLayout::NoneBox,
+                "inline Tile region path requires unboxed fragments");
+  static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
+                "binary region sources require matching element types");
+  static_assert(std::is_same_v<typename Tile::DType, typename Out::DType>,
+                "binary source and destination dtypes must match");
+  static_assert(Tile::Rows == SubTile::Rows && Tile::Cols == SubTile::Cols,
+                "binary region sources require matching physical shapes");
+  static_assert(Tile::ValidRow == SubTile::ValidRow &&
+                    Tile::ValidCol == SubTile::ValidCol,
+                "binary region sources require matching valid shapes");
+  const uintptr_t range_base1_units = src1.GetRangeBase();
+  asm volatile(
+      "BSTART.TEPL %c9, %D1\n"
+      "B.DIM zero, %c3, ->lb0\n"
+      "B.DIM zero, %c4, ->lb1\n"
+      "B.DIM zero, %c5, ->lb2\n"
+      "B.IOT %6, %2, mask=1111, last, ->%0<%Z7>\n"
+      "B.SUBVIEW 1, %7, 0, %c8\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),
+        "i"(Tile::ValidCol), "i"(Tile::ValidRow), "i"(Tile::Cols),
+        "Tr"(src0.data()), "r"(range_base1_units),
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "i"(Opcode)
+      : "memory");
+}
+
 #define PTO_REGION_BINARY_SOURCE_WRAPPER(Name, Opcode)                       \
   template <is_tile_data_v Out, typename Parent0, typename SubTile0,         \
             typename Parent1, typename SubTile1>                              \
   PTO_REGION_ALWAYS_INLINE void Name(                                       \
       Out &dst, region::SubTileView<Parent0, SubTile0> &src0,                \
       region::SubTileView<Parent1, SubTile1> &src1) {                         \
+    pto_region_binary<Opcode>(dst, src0, src1);                              \
+  } \
+  template <is_tile_data_v Out, typename Parent, typename SubTile,            \
+            typename Tile>                                                    \
+  PTO_REGION_ALWAYS_INLINE void Name(                                       \
+      Out &dst, region::SubTileView<Parent, SubTile> &src0, Tile &src1) {     \
+    pto_region_binary<Opcode>(dst, src0, src1);                              \
+  }                                                                          \
+  template <is_tile_data_v Out, typename Tile, typename Parent,               \
+            typename SubTile>                                                 \
+  PTO_REGION_ALWAYS_INLINE void Name(                                       \
+      Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {     \
     pto_region_binary<Opcode>(dst, src0, src1);                              \
   }
 
@@ -857,6 +1067,247 @@ PTO_REGION_BINARY_SOURCE_WRAPPER(TOR, 7)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TXOR, 8)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TMAX, 11)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TMIN, 12)
+
+template <int Opcode, typename Out, typename Parent0, typename SubTile0,
+          typename Parent1, typename SubTile1>
+PTO_REGION_ALWAYS_INLINE void pto_region_expand(
+    Out &dst, region::SubTileView<Parent0, SubTile0> &src0,
+    region::SubTileView<Parent1, SubTile1> &src1) {
+  static_assert(SubTile0::SFractal == SLayout::NoneBox &&
+                    SubTile1::SFractal == SLayout::NoneBox,
+                "inline Tile region path requires unboxed fragments");
+  static_assert(SubTile0::ValidCol == SubTile1::ValidCol &&
+                    SubTile1::ValidCol == 1,
+                "row expansion requires a one-column broadcast source");
+  static_assert(SubTile0::ValidRow == SubTile1::ValidRow,
+                "row expansion broadcast rows must match the matrix");
+  static_assert(std::is_same_v<typename SubTile0::DType,
+                               typename SubTile1::DType>,
+                "expansion sources require matching element types");
+  static_assert(std::is_same_v<typename SubTile0::DType, typename Out::DType>,
+                "expansion source and destination dtypes must match");
+  static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
+                "region expansion requires a static destination shape");
+  const uintptr_t range_base0_units = src0.GetRangeBase();
+  const uintptr_t range_base1_units = src1.GetRangeBase();
+  asm volatile(
+      "BSTART.TEPL %c10, %D1\n"
+      "B.DIM zero, %c4, ->lb0\n"
+      "B.DIM zero, %c5, ->lb1\n"
+      "B.DIM zero, %c6, ->lb2\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
+      "B.SUBVIEW 0, %8, 0, %c11\n"
+      "B.SUBVIEW 1, %9, 0, %c11\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename SubTile0::DType>::TypeCode),
+        "Tr"(src0.data()), "Tr"(src1.data()), "i"(Out::ValidCol),
+        "i"(Out::ValidRow), "i"(Out::Cols),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "r"(range_base0_units), "r"(range_base1_units), "i"(Opcode),
+        "i"(tile_type_traits<typename SubTile0::TileDType>::TilesizeCode)
+      : "memory");
+}
+
+template <int Opcode, typename Out, typename Parent, typename SubTile,
+          typename Tile>
+PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
+    Out &dst, region::SubTileView<Parent, SubTile> &src0, Tile &src1) {
+  static_assert(SubTile::SFractal == SLayout::NoneBox,
+                "inline Tile region path requires unboxed fragments");
+  static_assert(std::is_same_v<typename SubTile::DType, typename Tile::DType>,
+                "expansion sources require matching element types");
+  static_assert(std::is_same_v<typename SubTile::DType, typename Out::DType>,
+                "expansion source and destination dtypes must match");
+  static_assert(Tile::ValidCol == 1,
+                "row expansion requires a one-column broadcast source");
+  static_assert(SubTile::ValidRow == Tile::ValidRow,
+                "row expansion broadcast rows must match the matrix");
+  static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
+                "region expansion requires a static destination shape");
+  const uintptr_t range_base0_units = src0.GetRangeBase();
+  asm volatile(
+      "BSTART.TEPL %c9, %D1\n"
+      "B.DIM zero, %c3, ->lb0\n"
+      "B.DIM zero, %c4, ->lb1\n"
+      "B.DIM zero, %c5, ->lb2\n"
+      "B.IOT %2, %6, mask=1111, last, ->%0<%Z7>\n"
+      "B.SUBVIEW 0, %7, 0, %c8\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename SubTile::DType>::TypeCode),
+        "Tr"(src0.data()), "i"(Out::ValidCol), "i"(Out::ValidRow),
+        "i"(Out::Cols), "Tr"(src1.data()),
+        "r"(range_base0_units),
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "i"(Opcode)
+      : "memory");
+}
+
+template <int Opcode, typename Out, typename Tile, typename Parent,
+          typename SubTile>
+PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
+    Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {
+  static_assert(SubTile::SFractal == SLayout::NoneBox,
+                "inline Tile region path requires unboxed fragments");
+  static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
+                "expansion sources require matching element types");
+  static_assert(std::is_same_v<typename Tile::DType, typename Out::DType>,
+                "expansion source and destination dtypes must match");
+  static_assert(SubTile::ValidCol == 1,
+                "row expansion requires a one-column broadcast source");
+  static_assert(Tile::ValidRow == SubTile::ValidRow,
+                "row expansion broadcast rows must match the matrix");
+  static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
+                "region expansion requires a static destination shape");
+  const uintptr_t range_base1_units = src1.GetRangeBase();
+  asm volatile(
+      "BSTART.TEPL %c9, %D1\n"
+      "B.DIM zero, %c3, ->lb0\n"
+      "B.DIM zero, %c4, ->lb1\n"
+      "B.DIM zero, %c5, ->lb2\n"
+      "B.IOT %6, %2, mask=1111, last, ->%0<%Z7>\n"
+      "B.SUBVIEW 1, %7, 0, %c8\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),
+        "i"(Out::ValidCol), "i"(Out::ValidRow), "i"(Out::Cols),
+        "Tr"(src0.data()), "r"(range_base1_units),
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "i"(Opcode)
+      : "memory");
+}
+
+template <int Opcode, typename Out, typename Parent, typename SubTile,
+          typename Tile>
+PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
+    Out &dst, region::SubTileView<Parent, SubTile> &src0, Tile &src1) {
+  static_assert(SubTile::SFractal == SLayout::NoneBox,
+                "inline Tile region path requires unboxed fragments");
+  static_assert(std::is_same_v<typename SubTile::DType, typename Tile::DType>,
+                "expansion sources require matching element types");
+  static_assert(std::is_same_v<typename SubTile::DType, typename Out::DType>,
+                "expansion source and destination dtypes must match");
+  static_assert(Tile::ValidRow == 1,
+                "column expansion requires a one-row broadcast source");
+  static_assert(SubTile::ValidCol == Tile::ValidCol,
+                "column expansion broadcast cols must match the matrix");
+  static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
+                "region expansion requires a static destination shape");
+  const uintptr_t range_base0_units = src0.GetRangeBase();
+  asm volatile(
+      "BSTART.TEPL %c9, %D1\n"
+      "B.DIM zero, %c3, ->lb0\n"
+      "B.DIM zero, %c4, ->lb1\n"
+      "B.DIM zero, %c5, ->lb2\n"
+      "B.IOT %2, %6, mask=1111, last, ->%0<%Z7>\n"
+      "B.SUBVIEW 0, %7, 0, %c8\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename SubTile::DType>::TypeCode),
+        "Tr"(src0.data()), "i"(Out::ValidCol), "i"(Out::ValidRow),
+        "i"(Out::Cols), "Tr"(src1.data()),
+        "r"(range_base0_units),
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "i"(Opcode)
+      : "memory");
+}
+
+template <int Opcode, typename Out, typename Tile, typename Parent,
+          typename SubTile>
+PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
+    Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {
+  static_assert(SubTile::SFractal == SLayout::NoneBox,
+                "inline Tile region path requires unboxed fragments");
+  static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
+                "expansion sources require matching element types");
+  static_assert(std::is_same_v<typename Tile::DType, typename Out::DType>,
+                "expansion source and destination dtypes must match");
+  static_assert(SubTile::ValidRow == 1,
+                "column expansion requires a one-row broadcast source");
+  static_assert(Tile::ValidCol == SubTile::ValidCol,
+                "column expansion broadcast cols must match the matrix");
+  static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
+                "region expansion requires a static destination shape");
+  const uintptr_t range_base1_units = src1.GetRangeBase();
+  asm volatile(
+      "BSTART.TEPL %c9, %D1\n"
+      "B.DIM zero, %c3, ->lb0\n"
+      "B.DIM zero, %c4, ->lb1\n"
+      "B.DIM zero, %c5, ->lb2\n"
+      "B.IOT %6, %2, mask=1111, last, ->%0<%Z7>\n"
+      "B.SUBVIEW 1, %7, 0, %c8\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),
+        "i"(Out::ValidCol), "i"(Out::ValidRow), "i"(Out::Cols),
+        "Tr"(src0.data()), "r"(range_base1_units),
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "i"(Opcode)
+      : "memory");
+}
+
+#define PTO_REGION_EXPAND_SOURCE_WRAPPER(Name, Opcode)                       \
+  template <is_tile_data_v Out, typename Parent0, typename SubTile0,          \
+            typename Parent1, typename SubTile1>                              \
+  PTO_REGION_ALWAYS_INLINE void Name(                                       \
+      Out &dst, region::SubTileView<Parent0, SubTile0> &src0,                \
+      region::SubTileView<Parent1, SubTile1> &src1) {                         \
+    pto_region_expand<Opcode>(dst, src0, src1);                              \
+  }
+
+#define PTO_REGION_ROW_EXPAND_MIXED_WRAPPER(Name, Opcode)                    \
+  template <is_tile_data_v Out, typename Parent, typename SubTile,            \
+            typename Tile>                                                    \
+  PTO_REGION_ALWAYS_INLINE void Name(                                       \
+      Out &dst, region::SubTileView<Parent, SubTile> &src0, Tile &src1) {     \
+    pto_region_row_expand<Opcode>(dst, src0, src1);                          \
+  }                                                                          \
+  template <is_tile_data_v Out, typename Tile, typename Parent,               \
+            typename SubTile>                                                 \
+  PTO_REGION_ALWAYS_INLINE void Name(                                       \
+      Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {     \
+    pto_region_row_expand<Opcode>(dst, src0, src1);                          \
+  }
+
+#define PTO_REGION_COL_EXPAND_MIXED_WRAPPER(Name, Opcode)                    \
+  template <is_tile_data_v Out, typename Parent, typename SubTile,            \
+            typename Tile>                                                    \
+  PTO_REGION_ALWAYS_INLINE void Name(                                       \
+      Out &dst, region::SubTileView<Parent, SubTile> &src0, Tile &src1) {     \
+    pto_region_col_expand<Opcode>(dst, src0, src1);                          \
+  }                                                                          \
+  template <is_tile_data_v Out, typename Tile, typename Parent,               \
+            typename SubTile>                                                 \
+  PTO_REGION_ALWAYS_INLINE void Name(                                       \
+      Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {     \
+    pto_region_col_expand<Opcode>(dst, src0, src1);                          \
+  }
+
+PTO_REGION_EXPAND_SOURCE_WRAPPER(TROWEXPANDADD, 69)
+PTO_REGION_EXPAND_SOURCE_WRAPPER(TROWEXPANDSUB, 70)
+PTO_REGION_EXPAND_SOURCE_WRAPPER(TROWEXPANDMUL, 71)
+PTO_REGION_EXPAND_SOURCE_WRAPPER(TROWEXPANDDIV, 72)
+PTO_REGION_EXPAND_SOURCE_WRAPPER(TROWEXPANDMAX, 73)
+PTO_REGION_EXPAND_SOURCE_WRAPPER(TROWEXPANDMIN, 74)
+PTO_REGION_EXPAND_SOURCE_WRAPPER(TROWEXPANDEXPDIF, 75)
+PTO_REGION_ROW_EXPAND_MIXED_WRAPPER(TROWEXPANDADD, 69)
+PTO_REGION_ROW_EXPAND_MIXED_WRAPPER(TROWEXPANDSUB, 70)
+PTO_REGION_ROW_EXPAND_MIXED_WRAPPER(TROWEXPANDMUL, 71)
+PTO_REGION_ROW_EXPAND_MIXED_WRAPPER(TROWEXPANDDIV, 72)
+PTO_REGION_ROW_EXPAND_MIXED_WRAPPER(TROWEXPANDMAX, 73)
+PTO_REGION_ROW_EXPAND_MIXED_WRAPPER(TROWEXPANDMIN, 74)
+PTO_REGION_ROW_EXPAND_MIXED_WRAPPER(TROWEXPANDEXPDIF, 75)
+PTO_REGION_COL_EXPAND_MIXED_WRAPPER(TCOLEXPANDADD, 85)
+PTO_REGION_COL_EXPAND_MIXED_WRAPPER(TCOLEXPANDSUB, 86)
+PTO_REGION_COL_EXPAND_MIXED_WRAPPER(TCOLEXPANDMUL, 87)
+PTO_REGION_COL_EXPAND_MIXED_WRAPPER(TCOLEXPANDDIV, 88)
+PTO_REGION_COL_EXPAND_MIXED_WRAPPER(TCOLEXPANDMAX, 89)
+PTO_REGION_COL_EXPAND_MIXED_WRAPPER(TCOLEXPANDMIN, 90)
+PTO_REGION_COL_EXPAND_MIXED_WRAPPER(TCOLEXPANDEXPDIF, 91)
+
+#undef PTO_REGION_EXPAND_SOURCE_WRAPPER
+#undef PTO_REGION_ROW_EXPAND_MIXED_WRAPPER
+#undef PTO_REGION_COL_EXPAND_MIXED_WRAPPER
 
 template <int Opcode, typename Out, typename Tile, typename Parent,
           typename SubTile>
@@ -979,7 +1430,16 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
                     std::is_same_v<typename SubTile0::DType,
                                    typename SubTile1::DType>,
                 "binary TileArray slot requires matching element types");
-  constexpr int encoded_parent_size = Init ? ParentSize : 0;
+  // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase;
+  // the INIT destination B.IOT allocates and carries the parent capacity.
+  constexpr int writer_size =
+      tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
+  static_assert(writer_size != 0,
+                "TileArray slot writer extent must be a nonzero size code");
+  // The writer-fits-parent bound is guaranteed by TileArray construction:
+  // ParentBytes = slot_count * SubTile::LogicalTileBytes. ParentSize here is
+  // only the dispatch case label, and the switch instantiates every case,
+  // so a compile-time comparison against it would spuriously fail.
   const uintptr_t source0_base_units = src0.GetRangeBase();
   const uintptr_t source1_base_units = src1.GetRangeBase();
   const uintptr_t destination_base_units = dst.range_base_units();
@@ -992,26 +1452,38 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
   "B.SUBVIEW 0, %8, 0, %c12\n"                                             \
   "B.SUBVIEW 1, %9, 0, %c12\n"                                             \
   "B.ASSEMBLE %c14, %c15, %10, 0, %c13\n"
+#define PTO_REGION_BINARY_CONT_BODY                                         \
+  "BSTART.TEPL %c11, %D1\n"                                               \
+  "B.DIM zero, %c4, ->lb0\n"                                                   \
+  "B.DIM zero, %c5, ->lb1\n"                                                   \
+  "B.DIM zero, %c6, ->lb2\n"                                               \
+  "B.IOT %2, %3, mask=1111, last\n"                                       \
+  "B.SUBVIEW 0, %8, 0, %c12\n"                                             \
+  "B.SUBVIEW 1, %9, 0, %c12\n"                                             \
+  "B.IOT %0, mask=1111\n"                                                 \
+  "B.ASSEMBLE %c14, %c15, %10, 0, %c13\n"
 #define PTO_REGION_BINARY_ASSEMBLY_INPUTS                                  \
   "i"(type_traits<typename SubTile0::DType>::TypeCode),                    \
   "Tr"(src0.data()), "Tr"(src1.data()),                                   \
   "i"(std::remove_reference_t<decltype(src0)>::ValidCol),                  \
   "i"(std::remove_reference_t<decltype(src0)>::ValidRow),                  \
   "i"(SubTile0::Cols),                                                      \
-  "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),        \
+  "i"(ParentSize),                                                           \
   "r"(source0_base_units), "r"(source1_base_units),                       \
   "r"(destination_base_units), "i"(Opcode),                              \
   "i"(tile_type_traits<typename SubTile0::TileDType>::TilesizeCode),       \
-  "i"(encoded_parent_size), "i"(Init), "i"(Last)
+  "i"(writer_size), "i"(Init), "i"(Last)
   if constexpr (Init) {
     asm volatile(PTO_REGION_BINARY_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
                  : PTO_REGION_BINARY_ASSEMBLY_INPUTS
                  : "memory");
   } else {
-    asm volatile(PTO_REGION_BINARY_ASSEMBLY_BODY
-                 : [Dst] "+Tr"(dst.template parent_data<ParentSize>())
-                 : PTO_REGION_BINARY_ASSEMBLY_INPUTS
+    // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder.
+    asm volatile(PTO_REGION_BINARY_CONT_BODY
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_BINARY_ASSEMBLY_INPUTS
                  : "memory");
   }
 #undef PTO_REGION_BINARY_ASSEMBLY_INPUTS
