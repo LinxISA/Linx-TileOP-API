@@ -14615,35 +14615,67 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
         "opening slot); use TROWSUM_ASS for the subsequent MIDDLE/LAST slots");
     static_assert(tile_shape_out::ParentSizeCode != 0,
                   "TROWSUM assemble INIT requires a nonzero parent capacity");
-    constexpr unsigned FragmentBytes =
-        static_cast<unsigned>(sizeof(typename tile_shape_out::TileDType));
-    constexpr unsigned WriterSizeCode =
-        range::subview_size_code_for_bytes(FragmentBytes);
+    // The writer extent is the fragment length declared on the assemble
+    // carrier (range::assemble<N> declares N 128-byte units), NOT the parent
+    // carrier capacity. This keeps the derivation valid for dynamic valid
+    // shapes and for parent tiles whose physical size is not a 128B
+    // power-of-two (issue #163; also fixes the #96 follow-up where the
+    // parent capacity leaked into the writer field).
+    constexpr unsigned WriterSizeCode = tile_shape_out::WriterSizeCode;
     static_assert(WriterSizeCode != 0,
-                  "TROWSUM fragment must be a power-of-two multiple of 128 B");
+                  "TROWSUM assemble carrier must declare a nonzero fragment "
+                  "length (range::assemble<N> / assemble_init_last<N>)");
     const uintptr_t range_base =
         static_cast<uintptr_t>(dst.GetRangeBase());
-    asm volatile(
-    "BSTART.TEPL 64, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
-    "B.DIM zero, %c2, ->lb0\n"
-    "B.DIM zero, %c3, ->lb1\n"
-    "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    // ASL (row reduction): B.DIM describes the SOURCE geometry. Dynamic
+    // valid dims (-1) go through register-form B.DIM, static dims through
+    // C.B.DIMI immediates — same convention as the plain branches below.
+    constexpr bool DynCol = tile_shape_in::ValidCol < 0;
+    constexpr bool DynRow = tile_shape_in::ValidRow < 0;
+    const size_t valid_col = src.GetValidCol();
+    const size_t valid_row = src.GetValidRow();
+#define PTO_TROWSUM_ASM_INIT_BODY(DIM_COL, DIM_ROW)                          \
+    "BSTART.TEPL 64, %D1\n"                                                \
+    PTO_ELEMENTWISE_LAYOUT_ASM                                              \
+    DIM_COL                                                                 \
+    DIM_ROW                                                                 \
+    "B.DIM zero, %c4, ->lb2\n"                                                \
+    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"                                   \
     "B.ASSEMBLE 1, %c8, %[RegSrc], %c7, %c[WriterSize]\n"
-    : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
-      "i"(tile_shape_in::ValidCol),
-      "i"(tile_shape_in::ValidRow),
-      "i"(tile_shape_in::Cols),
-      "Tr"(src.data()),
-      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
-      [ElemLayout] "i"(local_layout_code_v<tile_shape_in>),
-      [Off] "i"(tile_shape_out::OffsetUnits),
-      [Last] "i"(static_cast<int>(tile_shape_out::LAST)),
-      [RegSrc] "r"(range_base),
-      [WriterSize] "i"(WriterSizeCode)
-    );  } else
+#define PTO_TROWSUM_ASM_INIT_INPUTS                                         \
+    : "=Tr"(dst.data())                                                     \
+    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),            \
+      "i"(tile_shape_in::ValidCol),                                          \
+      "i"(tile_shape_in::ValidRow),                                          \
+      "i"(tile_shape_in::Cols),                                              \
+      "Tr"(src.data()),                                                      \
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode), \
+      [ElemLayout] "i"(local_layout_code_v<tile_shape_in>),                  \
+      [Off] "i"(tile_shape_out::OffsetUnits),                                 \
+      [Last] "i"(static_cast<int>(tile_shape_out::LAST)),                    \
+      [RegSrc] "r"(range_base),                                              \
+      [WriterSize] "i"(WriterSizeCode),                                       \
+      [vcol] "r"(valid_col), [vrow] "r"(valid_row)
+    if constexpr (DynCol && DynRow) {
+      asm volatile(PTO_TROWSUM_ASM_INIT_BODY("B.DIM %[vcol], 0, ->lb0\n",
+                                             "B.DIM %[vrow], 0, ->lb1\n")
+                   PTO_TROWSUM_ASM_INIT_INPUTS : "memory");
+    } else if constexpr (DynCol) {
+      asm volatile(PTO_TROWSUM_ASM_INIT_BODY("B.DIM %[vcol], 0, ->lb0\n",
+                                             "B.DIM zero, %c3, ->lb1\n")
+                   PTO_TROWSUM_ASM_INIT_INPUTS : "memory");
+    } else if constexpr (DynRow) {
+      asm volatile(PTO_TROWSUM_ASM_INIT_BODY("B.DIM zero, %c2, ->lb0\n",
+                                             "B.DIM %[vrow], 0, ->lb1\n")
+                   PTO_TROWSUM_ASM_INIT_INPUTS : "memory");
+    } else {
+      asm volatile(PTO_TROWSUM_ASM_INIT_BODY("B.DIM zero, %c2, ->lb0\n",
+                                             "B.DIM zero, %c3, ->lb1\n")
+                   PTO_TROWSUM_ASM_INIT_INPUTS : "memory");
+    }
+#undef PTO_TROWSUM_ASM_INIT_BODY
+#undef PTO_TROWSUM_ASM_INIT_INPUTS
+  } else
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 64, %D1\n"
@@ -18068,13 +18100,15 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
   // current writer extent (WriterSizeCode), not the parent capacity. Encode
   // this fragment's extent instead of the stale ParentSizeCode so MIDDLE/LAST
   // writers stay legal.
-  constexpr unsigned FragmentBytes =
-      static_cast<unsigned>(sizeof(typename D::TileDType));
-  constexpr unsigned WriterSizeCode =
-      range::subview_size_code_for_bytes(FragmentBytes);
+  // The writer extent is the fragment length declared on the assemble
+  // carrier, not the parent carrier capacity (issue #163 / #96 follow-up).
+  // Non-INIT factories (assemble_middle/last<N>) record the fragment code,
+  // so dynamic valid shapes and odd parent capacities no longer trip the
+  // legacy sizeof-based derivation.
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
   static_assert(WriterSizeCode != 0,
-                "TEPL reduction _ASS fragment must be a power-of-two multiple "
-                "of 128 B");
+                "TEPL reduction _ASS assemble carrier must declare a nonzero "
+                "fragment length (assemble_middle<N>/assemble_last<N>)");
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
