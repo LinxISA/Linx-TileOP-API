@@ -2,7 +2,7 @@
 // range carrier on a Local destination binder.
 //
 //   B.IOT mask=1111, last, ->%[dst]<TSize>
-//   B.ASSEMBLE INIT, LAST, RegSrc, uimm11, ParentSizeCode
+//   B.ASSEMBLE INIT, LAST, RegSrc, uimm11, WriterSizeCode
 //
 // The destination tile is wrapped in pto::range::Assemble which forwards
 // the parent shape/dtype/storage and carries INIT/LAST + the range
@@ -11,7 +11,7 @@
 // (verified by objdump in the target toolchain).
 //
 // Compile-time contract:
-//   - ParentSizeCode must be 0..12 (13..15 reserved).
+//   - WriterSizeCode must be 0..12 (13..15 reserved).
 //   - destination roles only map to B.ASSEMBLE (never B.SUBVIEW).
 
 #include <common/pto_tileop.hpp>
@@ -50,12 +50,12 @@ __attribute__((noinline)) void assemble_regsrc23_tload(
   TLOAD(as, src); // -> B.ASSEMBLE 1, 0, 23, 1, 12
 }
 
-// ParentSizeCode 0 boundary (non-INIT).
+// WriterSizeCode 0 is retained as a legacy-producer compatibility boundary.
 __attribute__((noinline)) void assemble_size0_tload(
     GMDst &src, Dst &d) {
   range::Assemble<Dst, 0, /*INIT*/ false, /*LAST*/ true, /*Off*/ 2047,
                   /*RegSrc*/ 2> as(d, 2);
-  TLOAD_ASS(as, src); // non-INIT slot: no B.ASSEMBLE emission
+  TLOAD_ASS(as, src); // -> B.ASSEMBLE 0, 1, 2, 2047, 0
 }
 
 // The factory derives the INIT parent size from Dst for the common case.
@@ -85,15 +85,15 @@ __attribute__((noinline)) void assemble_factory_init_last_tload(
 
 __attribute__((noinline)) void assemble_factory_middle_tload(
     GMDst &src, Dst &d, uintptr_t base_units) {
-  // Non-INIT slots are consumed by TLOAD_ASS (no B.ASSEMBLE emission).
+  // Non-INIT slots carry the same writer extent as INIT slots.
   auto as = range::assemble_middle<1, 3>(d, base_units);
-  TLOAD_ASS(as, src);
+  TLOAD_ASS(as, src); // -> B.ASSEMBLE 0, 0, <allocated-gpr>, 3, 1
 }
 
 __attribute__((noinline)) void assemble_factory_last_tload(
     GMDst &src, Dst &d) {
   auto as = range::assemble_last_at<2047>(d);
-  TLOAD_ASS(as, src);
+  TLOAD_ASS(as, src); // -> B.ASSEMBLE 0, 1, zero, 2047, 1
 }
 
 // Explicit register selection remains a low-level ABI/testing interface.

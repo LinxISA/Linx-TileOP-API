@@ -70,19 +70,19 @@ OutputParent output = TASSEMBLY<OutputParent>(std::move(fragments));
 ## Range modifier 的统一接口
 
 需要直接对 parent Tile 的某个连续 128B 区间执行 TileOP 时，使用统一的
-`range::subview` 或 `range::assemble` factory。长度填写实际字节数，不填写
+`range::subview` 或 `range::assemble` factory。长度填写 128B 单位数，不填写
 ISA `SizeCode`；省略长度时默认使用 parent Tile 的容量。
 
 ```cpp
-auto source = range::subview<2 * 1024, 3>(parent, base_units);
+auto source = range::subview<16, 3>(parent, base_units); // 16 * 128B = 2 KiB
 TSTORE(gm, source);
 
-auto destination = range::assemble<2 * 1024, 3>(parent, base_units);
+auto destination = range::assemble<16, 3>(parent, base_units);
 TLOAD(destination, gm);
 ```
 
 这里 `base_units` 和 `3` 都是 128B 单位：`3` 表示 `384B`。不传
 `base_units` 时使用 `zero`；传入运行时基址后由编译器自动选择 GPR。普通
-kernel 不需要也不应该填写寄存器编号。`LengthBytes` 不能超过 parent Tile
+kernel 不需要也不应该填写寄存器编号。指定的长度不能超过 parent Tile
 容量，非法长度和偏移会在编译期拒绝。ASSEMBLE 的生命周期使用
 `assemble_init_last`、`assemble_middle` 和 `assemble_last` helper 表达。

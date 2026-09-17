@@ -11,7 +11,7 @@ template <int Opcode, typename Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void
 pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
   static_assert(range::is_legal_subview_parent_v<Parent>,
-                "B.SUBVIEW source must be an assigned Local CUBE or Shared RowMajor "
+                "B.SUBVIEW source must be an assigned Local or Shared CUBE "
                 "tile layout");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
@@ -21,8 +21,8 @@ pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
                   "B.SUBVIEW source fragment must use a CUBE layout");
     asm volatile(
         "BSTART.TEPL %c8, %D1\n"
-        ".if %c9 == 29\nB.DATR CUBE_M32, Null\n"
-        ".elseif %c9 == 31\nB.DATR CUBE_M16, Null\n"
+        ".if %c10 == 29\nB.DATR CUBE_M32, Null\n"
+        ".elseif %c10 == 31\nB.DATR CUBE_M16, Null\n"
         ".endif\n"
         "B.DIM zero, %c3, ->lb0\n"
         "B.DIM zero, %c4, ->lb1\n"
@@ -31,7 +31,8 @@ pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
         "B.SUBVIEW 0, %9, 0, %c7\n"
         : [Dst] "=Tr"(dst.data())
         : "i"(type_traits<typename SubTile::DType>::TypeCode),
-          "Tr"(src.data()), "i"(std::remove_reference_t<decltype(src)>::ValidCol),
+          "Tr"(src.data()),
+          "i"(std::remove_reference_t<decltype(src)>::ValidCol),
           "i"(std::remove_reference_t<decltype(src)>::ValidRow),
           "i"(SubTile::Cols),
           "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
@@ -69,7 +70,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar(
         "B.IOR [%8],[]\n"
         : [Dst] "=Tr"(dst.data())
         : "i"(type_traits<typename SubTile::DType>::TypeCode),
-          "Tr"(src.data()), "i"(std::remove_reference_t<decltype(src)>::ValidCol),
+          "Tr"(src.data()),
+          "i"(std::remove_reference_t<decltype(src)>::ValidCol),
           "i"(std::remove_reference_t<decltype(src)>::ValidRow),
           "i"(SubTile::Cols),
           "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
@@ -125,8 +127,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
                 "TileArray slot requires matching valid shape");
   static_assert(std::is_same_v<typename SubTile::DType, typename In::DType>,
                 "TileArray slot requires matching element types");
-  constexpr int encoded_parent_size = Init ? ParentSize : 0;
-  constexpr int writer_size_code = SubTile::LogicalTileBytes / 128;
+  constexpr int encoded_parent_size = ParentSize;
+  constexpr int writer_size_code =
+      range::subview_size_code_for_bytes(SubTile::LogicalTileBytes);
   const uintptr_t range_base_units = dst.range_base_units();
 #define PTO_REGION_UNARY_ASSEMBLY_BODY                                      \
   "BSTART.TEPL %c7, %D1\n"                                                \
@@ -134,7 +137,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
   "B.DIM zero, %c4, ->lb1\n"                                                    \
   "B.DIM zero, %c5, ->lb2\n"                                                \
   "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"                                   \
-  "B.ASSEMBLE %c10, %c11, %8, 0, %c12\n"
+  "B.ASSEMBLE %c[Init], %c[Last], %[RangeBase], 0, %c[WriterSize]\n"
 #define PTO_REGION_UNARY_ASSEMBLY_INPUTS                                   \
   "i"(type_traits<typename In::DType>::TypeCode),                          \
   "Tr"(src.data()),                                                       \
@@ -142,8 +145,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                  \
   "i"(SubTile::Cols),                                                       \
   "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),         \
-  "i"(Opcode), "r"(range_base_units), "i"(encoded_parent_size),          \
-  "i"(Init), "i"(Last), "i"(writer_size_code)
+  "i"(Opcode), [RangeBase] "r"(range_base_units),                         \
+  "i"(encoded_parent_size), [Init] "i"(Init), [Last] "i"(Last),          \
+  [WriterSize] "i"(writer_size_code)
   if constexpr (Init) {
     asm volatile(PTO_REGION_UNARY_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
@@ -212,8 +216,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
   static_assert(std::is_same_v<typename SubTile::DType, typename In::DType>,
                 "TileArray slot requires matching element types");
   volatile typename In::DType value = scalar;
-  constexpr int encoded_parent_size = Init ? ParentSize : 0;
-  constexpr int writer_size_code = SubTile::LogicalTileBytes / 128;
+  constexpr int encoded_parent_size = ParentSize;
+  constexpr int writer_size_code =
+      range::subview_size_code_for_bytes(SubTile::LogicalTileBytes);
   const uintptr_t range_base_units = dst.range_base_units();
 #define PTO_REGION_SCALAR_ASSEMBLY_BODY                                    \
   "BSTART.TEPL %c7, %D1\n"                                                \
@@ -221,8 +226,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
   "B.DIM zero, %c4, ->lb1\n"                                                  \
   "B.DIM zero, %c5, ->lb2\n"                                              \
   "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"                                 \
-  "B.IOR [%12],[]\n"                                                       \
-  "B.ASSEMBLE %c10, %c11, %8, 0, %c12\n"
+  "B.IOR [%[Scalar]],[]\n"                                                 \
+  "B.ASSEMBLE %c[Init], %c[Last], %[RangeBase], 0, %c[WriterSize]\n"
 #define PTO_REGION_SCALAR_ASSEMBLY_INPUTS                                  \
   "i"(type_traits<typename In::DType>::TypeCode),                         \
   "Tr"(src.data()),                                                       \
@@ -230,8 +235,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                  \
   "i"(SubTile::Cols),                                                       \
   "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),         \
-  "i"(Opcode), "r"(range_base_units), "i"(encoded_parent_size),            \
-  "i"(Init), "i"(Last), "r"(value), "i"(writer_size_code)
+  "i"(Opcode), [RangeBase] "r"(range_base_units),                           \
+  "i"(encoded_parent_size), [Init] "i"(Init), [Last] "i"(Last),            \
+  [Scalar] "r"(value), [WriterSize] "i"(writer_size_code)
   if constexpr (Init) {
     asm volatile(PTO_REGION_SCALAR_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
@@ -315,7 +321,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
                 "TileArray slot requires matching element types");
   volatile typename SourceSubTile::DType value = scalar;
   constexpr int encoded_parent_size = Init ? ParentSize : 0;
-  constexpr int writer_size_code = SubTile::LogicalTileBytes / 128;
+  constexpr int writer_size_code =
+      range::subview_size_code_for_bytes(SubTile::LogicalTileBytes);
   const uintptr_t source_base_units = src.GetRangeBase();
   const uintptr_t destination_base_units = dst.range_base_units();
 #define PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_BODY                             \
@@ -325,8 +332,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
   "B.DIM zero, %c5, ->lb2\n"                                              \
   "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"                                 \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
-  "B.IOR [%13],[]\n"                                                       \
-  "B.ASSEMBLE %c12, %c13, %10, 0, %c14\n"
+  "B.IOR [%[Scalar]],[]\n"                                                 \
+  "B.ASSEMBLE %c[Init], %c[Last], %[RangeBase], 0, %c[WriterSize]\n"
 #define PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_INPUTS                          \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
   "Tr"(src.data()),                                                       \
@@ -336,8 +343,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
   "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),         \
   "i"(Opcode), "r"(source_base_units),                                    \
   "i"(tile_type_traits<typename SourceSubTile::TileDType>::TilesizeCode),   \
-  "r"(destination_base_units), "i"(encoded_parent_size),                  \
-  "i"(Init), "i"(Last), "r"(value), "i"(writer_size_code)
+  [RangeBase] "r"(destination_base_units), "i"(encoded_parent_size),       \
+  [Init] "i"(Init), [Last] "i"(Last), [Scalar] "r"(value),                \
+  [WriterSize] "i"(writer_size_code)
   if constexpr (Init) {
     asm volatile(PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
@@ -407,7 +415,7 @@ template <int ParentSize, bool Init, bool Last, int Opcode,
 PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
     region::TileArrayOutputRef<SubTile> &dst,
     region::SubTileView<Parent, SourceSubTile> &src) {
-  static_assert(SubTile::IsCubeLayout &&
+  static_assert(!SubTile::IsCubeLayout &&
                     SourceSubTile::IsCubeLayout,
                 "B.ASSEMBLE destination must be RowMajor and B.SUBVIEW "
                 "source must use a CUBE layout");
@@ -424,7 +432,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
                                typename SourceSubTile::DType>,
                 "TileArray slot requires matching element types");
   constexpr int encoded_parent_size = Init ? ParentSize : 0;
-  constexpr int writer_size_code = SubTile::LogicalTileBytes / 128;
+  constexpr int writer_size_code =
+      range::subview_size_code_for_bytes(SubTile::LogicalTileBytes);
   const uintptr_t source_base_units = src.GetRangeBase();
   const uintptr_t destination_base_units = dst.range_base_units();
 #define PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_BODY                              \
@@ -434,7 +443,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
   "B.DIM zero, %c5, ->lb2\n"                                              \
   "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"                                 \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
-  "B.ASSEMBLE %c12, %c13, %10, 0, %c14\n"
+  "B.ASSEMBLE %c[Init], %c[Last], %[RangeBase], 0, %c[WriterSize]\n"
 #define PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_INPUTS                           \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
   "Tr"(src.data()),                                                       \
@@ -444,8 +453,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
   "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),         \
   "i"(Opcode), "r"(source_base_units),                                    \
   "i"(tile_type_traits<typename SourceSubTile::TileDType>::TilesizeCode),   \
-  "r"(destination_base_units), "i"(encoded_parent_size),                  \
-  "i"(Init), "i"(Last), "i"(writer_size_code)
+  [RangeBase] "r"(destination_base_units), "i"(encoded_parent_size),       \
+  [Init] "i"(Init), [Last] "i"(Last),                                     \
+  [WriterSize] "i"(writer_size_code)
   if constexpr (Init) {
     asm volatile(PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
@@ -629,20 +639,24 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   constexpr bool is_cube_layout =
       SubTile::BFractal == BLayout::CubeM16 ||
       SubTile::BFractal == BLayout::CubeM32;
-  constexpr int writer_size_code = SubTile::LogicalTileBytes / 128;
+  constexpr int writer_size_code =
+      range::subview_size_code_for_bytes(SubTile::LogicalTileBytes);
   constexpr int encoded_parent_size = Init ? ParentSize : 0;
   const uintptr_t range_base_units = dst.range_base_units();
 #define PTO_REGION_TCVT_ASSEMBLY_BODY                                       \
   "BSTART.TEPL 27, %D1\n"                                                  \
-  "B.DATR %D2, RNONE\n"                                                    \
+  ".if %c7 == 29\nB.DATR CUBE_M32, %D2, Null, RNONE\n"                     \
+  ".elseif %c7 == 31\nB.DATR CUBE_M16, %D2, Null, RNONE\n"                 \
+  ".else\nB.DATR %D2, RNONE\n"                                             \
+  ".endif\n"                                                               \
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
-  ".if %c6 != 0\n"                                                        \
+  ".if %c7 != 0\n"                                                        \
   ".else\n"                                                                \
   "B.DIM zero, %c6, ->lb2\n"                                              \
   ".endif\n"                                                               \
-  "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"                                 \
-  "B.ASSEMBLE %c10, %c11, %8, 0, %c12\n"
+  "B.IOT %3, mask=1111, last, ->%0<%Z8>\n"                                 \
+  "B.ASSEMBLE %c[Init], %c[Last], %[RangeBase], 0, %c[WriterSize]\n"
 #define PTO_REGION_TCVT_ASSEMBLY_INPUTS                                    \
   "i"(type_traits<typename In::DType>::TypeCode),                           \
   "i"(type_traits<typename SubTile::DType>::TypeCode),                      \
@@ -650,10 +664,11 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   "i"(std::remove_reference_t<decltype(src)>::ValidCol),                    \
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                    \
   "i"(SubTile::Cols),                                                        \
-  "i"(is_cube_layout),                                                       \
+  "i"(is_cube_layout ? local_layout_code_v<SubTile> : 0),                    \
   "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),          \
-  "r"(range_base_units), "i"(encoded_parent_size), "i"(Init), "i"(Last), \
-  "i"(writer_size_code)
+  [RangeBase] "r"(range_base_units), "i"(encoded_parent_size),              \
+  [Init] "i"(Init), [Last] "i"(Last),                                     \
+  [WriterSize] "i"(writer_size_code)
   if constexpr (Init) {
     asm volatile(PTO_REGION_TCVT_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
@@ -713,7 +728,7 @@ template <int ParentSize, bool Init, bool Last, typename SubTile,
 PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
     region::TileArrayOutputRef<SubTile> &dst,
     region::SubTileView<Parent, SourceSubTile> &src) {
-  static_assert(SubTile::IsCubeLayout &&
+  static_assert(!SubTile::IsCubeLayout &&
                     SourceSubTile::IsCubeLayout,
                 "B.ASSEMBLE destination must be RowMajor and B.SUBVIEW "
                 "source must use a CUBE layout");
@@ -727,7 +742,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
                     SubTile::ValidCol == SourceSubTile::ValidCol,
                 "TCVT TileArray slot requires matching valid shape");
   constexpr int encoded_parent_size = Init ? ParentSize : 0;
-  constexpr int writer_size_code = SubTile::LogicalTileBytes / 128;
+  constexpr int writer_size_code =
+      range::subview_size_code_for_bytes(SubTile::LogicalTileBytes);
   const uintptr_t source_base_units = src.GetRangeBase();
   const uintptr_t destination_base_units = dst.range_base_units();
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_BODY                               \
@@ -738,7 +754,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
   "B.DIM zero, %c6, ->lb2\n"                                               \
   "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"                                 \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
-  "B.ASSEMBLE %c12, %c13, %10, 0, %c14\n"
+  "B.ASSEMBLE %c[Init], %c[Last], %[RangeBase], 0, %c[WriterSize]\n"
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS                            \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
   "i"(type_traits<typename SubTile::DType>::TypeCode), "Tr"(src.data()),  \
@@ -748,8 +764,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
   "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),         \
   "r"(source_base_units),                                                   \
   "i"(tile_type_traits<typename SourceSubTile::TileDType>::TilesizeCode),   \
-  "r"(destination_base_units), "i"(encoded_parent_size),                  \
-  "i"(Init), "i"(Last), "i"(writer_size_code)
+  [RangeBase] "r"(destination_base_units), "i"(encoded_parent_size),       \
+  [Init] "i"(Init), [Last] "i"(Last),                                     \
+  [WriterSize] "i"(writer_size_code)
   if constexpr (Init) {
     asm volatile(PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
@@ -1359,7 +1376,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
                                    typename SubTile1::DType>,
                 "binary TileArray slot requires matching element types");
   constexpr int encoded_parent_size = Init ? ParentSize : 0;
-  constexpr int writer_size_code = SubTile::LogicalTileBytes / 128;
+  constexpr int writer_size_code =
+      range::subview_size_code_for_bytes(SubTile::LogicalTileBytes);
   const uintptr_t source0_base_units = src0.GetRangeBase();
   const uintptr_t source1_base_units = src1.GetRangeBase();
   const uintptr_t destination_base_units = dst.range_base_units();
@@ -1371,7 +1389,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
   "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"                             \
   "B.SUBVIEW 0, %8, 0, %c12\n"                                             \
   "B.SUBVIEW 1, %9, 0, %c12\n"                                             \
-  "B.ASSEMBLE %c14, %c15, %10, 0, %c16\n"
+  "B.ASSEMBLE %c[Init], %c[Last], %[RangeBase], 0, %c[WriterSize]\n"
 #define PTO_REGION_BINARY_ASSEMBLY_INPUTS                                  \
   "i"(type_traits<typename SubTile0::DType>::TypeCode),                    \
   "Tr"(src0.data()), "Tr"(src1.data()),                                   \
@@ -1380,10 +1398,10 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
   "i"(SubTile0::Cols),                                                      \
   "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),        \
   "r"(source0_base_units), "r"(source1_base_units),                       \
-  "r"(destination_base_units), "i"(Opcode),                              \
+  [RangeBase] "r"(destination_base_units), "i"(Opcode),                   \
   "i"(tile_type_traits<typename SubTile0::TileDType>::TilesizeCode),       \
-  "i"(encoded_parent_size), "i"(Init), "i"(Last), \
-  "i"(writer_size_code)
+  "i"(encoded_parent_size), [Init] "i"(Init), [Last] "i"(Last),           \
+  [WriterSize] "i"(writer_size_code)
   if constexpr (Init) {
     asm volatile(PTO_REGION_BINARY_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())

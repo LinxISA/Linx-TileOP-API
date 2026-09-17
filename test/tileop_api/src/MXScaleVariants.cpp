@@ -19,6 +19,10 @@ using GV_SB = Tile<Location::Scaling, __fp8_e8m0, 8, 16,
                    BLayout::RowMajor, 1, 16>;
 template <typename T> using GVA = CubeTileM16<T, 1, 32>;
 template <typename T> using GVB = CubeTileN8<T, 32, 16>;
+template <typename T> using M32A = CubeTileM32<T, 32, 32>;
+using M32D = CubeAccumulatorM32<float, 32, 16>;
+using LocalSA = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
+                     BLayout::CubeM32, 32, 1>;
 
 template <typename T, int Rows, int Cols>
 using GM = global_tensor<T, RowMajor<Rows, Cols>>;
@@ -109,6 +113,22 @@ __attribute__((noinline)) void carrier_scale_b(
   TMATMUL_MX(d, a, b, sb);
   TMATMUL_MX_ACC(d, c, a, b, sb);
   TMATMUL_MX_BIAS(d, a, b, sb, bias);
+  TSTORE_CUBE(gm_d, d);
+}
+
+__attribute__((noinline)) void carrier_local_m32_scale_a(
+    float *output, __fp8_e4m3 *a_input, __fp8_e8m0 *scale_input,
+    __half *b_input) {
+  GM<float, 32, 16> gm_d(output);
+  GM<__fp8_e4m3, 32, 32> gm_a(a_input);
+  GM<__fp8_e8m0, 32, 4> gm_sa(scale_input);
+  GM<__half, 32, 16> gm_b(b_input);
+  M32D d; M32A<__fp8_e4m3> a; LocalSA sa; MB<__half> b;
+  TLOAD_CUBE(d, gm_d);
+  TLOAD_CUBE(a, gm_a);
+  TLOAD_CUBE(sa, gm_sa);
+  TLOAD_CUBE(b, gm_b);
+  TMATMUL_MX(d, a, sa, b);
   TSTORE_CUBE(gm_d, d);
 }
 

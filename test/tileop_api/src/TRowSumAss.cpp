@@ -7,8 +7,8 @@ using Destination = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
 using GlobalSource = global_tensor<float, RowMajor<16, 16>>;
 
 __attribute__((noinline)) void test_trowsum_ass(Source &src, Destination &dst) {
-  auto assembled_dst = range::assemble(dst);
-  TROWSUM_ASS(src, assembled_dst);
+  auto assembled_dst = range::assemble_last(dst);
+  TROWSUM_ASS(assembled_dst, src);
 }
 
 __attribute__((noinline)) void test_tload_ass(GlobalSource &src,

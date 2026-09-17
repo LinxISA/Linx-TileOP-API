@@ -2107,8 +2107,7 @@ template <typename Parent>
 struct is_legal_subview_parent<
     Parent,
     std::void_t<decltype(subview_parent_tile_t<Parent>::IsCubeLayout)>>
-    : std::bool_constant<
-          subview_parent_tile_t<Parent>::IsCubeLayout> {};
+    : std::bool_constant<subview_parent_tile_t<Parent>::IsCubeLayout> {};
 
 template <typename Parent>
 inline constexpr bool is_legal_subview_parent_v =
@@ -2196,28 +2195,25 @@ private:
 
 /// Destination-side range carrier. Capable of the multi-PE Shared
 /// destination requirement (operation enforces it); carries INIT/LAST and
-/// ParentSizeCode. INIT/LAST/OffsetUnits/RegSrc are compile-time constants for
+/// WriterSizeCode. INIT/LAST/OffsetUnits/RegSrc are compile-time constants for
 /// the same inline-asm "i" constraint reason as Subview: the range
 /// descriptor is a static part of the destination binder contract. The
 /// runtime base and compile-time offset are both counts of 128-byte units.
 /// High-level factories hide RegSrc; explicit selectors remain available to
 /// the low-level carrier and *_reg helpers for ABI and encoding tests.
-template <typename Parent, unsigned ParentSizeCode_, bool INIT_ = true,
+template <typename Parent, unsigned WriterSizeCode_, bool INIT_ = true,
           bool LAST_ = false, unsigned OffsetUnits_ = 0,
           unsigned RegSrc_ = 2>
 class Assemble {
-  static_assert(is_valid_parent_size_code(ParentSizeCode_),
-                "B.ASSEMBLE ParentSizeCode must be 0..12; 13..15 reserved");
-  static_assert(!((INIT_ == false) && (ParentSizeCode_ != 0)),
-                "B.ASSEMBLE: non-INIT modifier requires ParentSizeCode=0");
-  static_assert(!((INIT_ != false) && (ParentSizeCode_ == 0)),
-                "B.ASSEMBLE: INIT modifier requires ParentSizeCode 1..12");
+  static_assert(is_valid_parent_size_code(WriterSizeCode_),
+                "B.ASSEMBLE WriterSizeCode must be 0..12; 13..15 reserved");
   static_assert(is_valid_uimm11(OffsetUnits_),
                 "B.ASSEMBLE uimm11 offset must be 0..2047");
   static_assert(
-      !INIT_ || subview_bytes_for_size_code(ParentSizeCode_) <=
-                    Parent::LogicalTileBytes,
-      "B.ASSEMBLE length cannot exceed the parent Tile capacity");
+      WriterSizeCode_ == 0 ||
+          subview_bytes_for_size_code(WriterSizeCode_) <=
+              Parent::LogicalTileBytes,
+      "B.ASSEMBLE writer extent cannot exceed the parent Tile capacity");
   static_assert(
       RegSrc_ <= 23 || RegSrc_ == AutoRegSrc,
       "B.ASSEMBLE RegSrc must be an absolute GPR selector 0..23 or AutoRegSrc");
@@ -2226,7 +2222,9 @@ public:
   using ParentTile = Parent;
   using TileDType = typename Parent::TileDType;
 
-  static constexpr unsigned ParentSizeCode = ParentSizeCode_;
+  static constexpr unsigned WriterSizeCode = WriterSizeCode_;
+  // Source compatibility for code that inspected the old, misnamed member.
+  static constexpr unsigned ParentSizeCode = WriterSizeCode_;
   static constexpr bool INIT = INIT_;
   static constexpr bool LAST = LAST_;
   static constexpr unsigned OffsetUnits = OffsetUnits_;
@@ -2369,9 +2367,8 @@ constexpr std::size_t assemble_length_bytes() {
             typename Parent>                                                  \
   auto Name(Parent &parent)                                                    \
       -> Assemble<Parent,                                                      \
-                  Init ? subview_size_code_for_bytes(                          \
-                             assemble_length_bytes<LengthUnits_, Parent>())    \
-                       : 0,                                                    \
+                  subview_size_code_for_bytes(                                 \
+                      assemble_length_bytes<LengthUnits_, Parent>()),          \
                   Init, Last, OffsetUnits_, 0> {                               \
     constexpr std::size_t CheckedLength =                                     \
         assemble_length_bytes<LengthUnits_, Parent>();                         \
@@ -2383,9 +2380,8 @@ constexpr std::size_t assemble_length_bytes() {
             typename Parent>                                                  \
   auto Name(Parent &parent, uintptr_t range_base_units)                        \
       -> Assemble<Parent,                                                      \
-                  Init ? subview_size_code_for_bytes(                          \
-                             assemble_length_bytes<LengthUnits_, Parent>())    \
-                       : 0,                                                    \
+                  subview_size_code_for_bytes(                                 \
+                      assemble_length_bytes<LengthUnits_, Parent>()),          \
                   Init, Last, OffsetUnits_, AutoRegSrc> {                      \
     constexpr std::size_t CheckedLength =                                     \
         assemble_length_bytes<LengthUnits_, Parent>();                         \
