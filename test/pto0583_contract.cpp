@@ -205,4 +205,13 @@ static_assert(matrix_mx_input_needs_scale(__type_fp8_e5m2));
 static_assert(matrix_mx_input_needs_scale(__type_fp4_e2m1x2));
 static_assert(matrix_mx_input_needs_scale(__type_fp4_e1m2x2));
 
+// E6M2 (code 15): pto-spec#322 promotes it from the reserved range into a
+// named TileDataType.
+static_assert(__type_fp8_e6m2 == 15);
+static_assert(type_traits<__fp8_e6m2>::TypeCode == __type_fp8_e6m2);
+static_assert(type_traits<__fp8_e6m2>::bits == 8);
+static_assert(type_traits_code_bits(__type_fp8_e6m2) == 8);
+// E6M2 is an ordinary 8-bit scalar and is GMOV-legal.
+static_assert(is_gmov_type_code(__type_fp8_e6m2));
+
 int main() { return 0; }

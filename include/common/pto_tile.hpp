@@ -26,6 +26,7 @@ constexpr bool is_gmov_type_code(int type_code) {
   case __type_fp4_e1m2x2:
   case __type_fp8_e8m0:
   case __type_fp4_hif4x2:
+  case __type_fp8_e6m2:
   case __type_int32:
   case __type_int16:
   case __type_int8:
@@ -277,7 +278,8 @@ constexpr int type_traits_code_bits(int Code) {
   case __type_fp8_e5m2:
   case __type_int8:
   case __type_uint8:
-  case __type_fp8_e8m0: return 8;
+  case __type_fp8_e8m0:
+  case __type_fp8_e6m2: return 8;
   default: return -1;
   }
 }

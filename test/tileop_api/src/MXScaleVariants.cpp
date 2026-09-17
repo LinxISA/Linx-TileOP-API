@@ -14,7 +14,7 @@ template <typename T> using MB = CubeTileN8<T, 32, 16>;
 
 using GV_D = CubeAccumulatorM16<float, 1, 16>;
 using GV_SA = Tile<Location::Scaling, __fp8_e8m0, 16, 8,
-                   BLayout::RowMajor, 1, 1>;
+                   BLayout::CubeM32, 1, 1>;
 using GV_SB = Tile<Location::Scaling, __fp8_e8m0, 8, 16,
                    BLayout::RowMajor, 1, 16>;
 template <typename T> using GVA = CubeTileM16<T, 1, 32>;
