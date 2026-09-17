@@ -130,6 +130,30 @@ void convert_cube(Dst &dst, Src &src) {
 
 `CUBE_N8` 转换不在 ADR-0110 的范围内，当前 API 会拒绝此类转换。
 
+## E6M2 与 RCPE6M2（pto-spec#322）
+
+pto-spec#322 将两个原保留类型码提升为具名 TileDataType：
+
+| 类型 | 类型码 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `__fp8_e6m2` | 15 | 8 | 普通 8-bit 浮点标量，可自由参与 TCVT/GMOV（**不收窄**） |
+| `__fp8_rcpe6m2` | 21 | 8 | **源专用**倒数派生类型，复用 E6M2 码空间，**无目标编码** |
+
+- **E6M2** 与其它标量类型一样，作为 TCVT 源或目标均合法，无额外限制。
+- **RCPE6M2** 仅可作 TCVT 的**源**，且目标只能是 `FP16` 或 `BF16`；它没有目标编码，任何以 RCPE6M2 为目标的转换在编译期被拒绝。RCPE6M2 也不是 GMOV 可存储类型。
+
+```cpp
+using SrcRcp = Tile<Location::Vec, __fp8_rcpe6m2, 16, 32, BLayout::RowMajor>;
+using DstF16 = Tile<Location::Vec, __half,        16, 32, BLayout::RowMajor>;
+
+TCVT(dst_f16, src_rcp);   // ✓ RCPE6M2 -> FP16 合法
+
+// TCVT(dst_rcp, src_f16); // ✗ 编译期报错：RCPE6M2 无目标编码
+// TCVT(dst_fp32, src_rcp);// ✗ 编译期报错：RCPE6M2 源仅可转 FP16/BF16
+```
+
+该约束由 `TCVT_T` 中的 `static_assert(is_legal_tcvt_datatype_pair(...))` 在编译期强制。
+
 ## ISA bundle 映射
 
 对于普通 Tile，TileOP 会生成全部三个逻辑维度绑定：
@@ -170,10 +194,11 @@ B.IOT SrcTile, mask=1111, last, ->DstTile<DstTSize>
 - 源或目标 Local TSize 超出 `128 B..64 KiB` 范围；
 - 目标使用 CUBE 布局，但源不是 `CUBE_M16` 或 `CUBE_M32`；
 - 任一操作数使用不支持的 `CUBE_N8` 转换；
-- 普通布局转换改变了物理 `Rows` 或 `Cols`。
+- 普通布局转换改变了物理 `Rows` 或 `Cols`；
+- 目标 dtype 为 `RCPE6M2`（无目标编码），或源为 `RCPE6M2` 但目标不是 `FP16`/`BF16`（pto-spec#322）。
 
 其他 dtype 合法性、alias、数值行为、饱和、舍入、padding 以及异常行为遵循 PTO-SPEC 的 TCVT 合约。
 
 ## 规范
 
-详见 PTO-SPEC `TCVT` 操作和 ADR-0110；该规则由 PTO-SPEC issue #167 / PR #176 引入。
+详见 PTO-SPEC `TCVT` 操作和 ADR-0110；该规则由 PTO-SPEC issue #167 / PR #176 引入。E6M2（码 15）与 RCPE6M2（码 21）由 pto-spec#322 引入。

@@ -27,6 +27,7 @@ struct __hif8 { unsigned char value; };
 struct __fp8_e4m3 { unsigned char value; };
 struct __fp8_e5m2 { unsigned char value; };
 struct __fp8_e6m2 { unsigned char value; };
+struct __fp8_rcpe6m2 { unsigned char value; };
 struct __fp6_e3m2 { unsigned char value; };
 struct __fp6_e2m3 { unsigned char value; };
 struct __fp4_e2m1x2 { unsigned char value; };
