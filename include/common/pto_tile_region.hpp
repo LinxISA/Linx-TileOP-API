@@ -10,6 +10,14 @@
 
 namespace pto {
 
+// B.DATR.Layout codes for Local elementwise operands.
+// 29 selects CUBE_M32, 31 selects CUBE_M16, and 0 keeps the NORM default.
+template <typename Tile>
+inline constexpr int local_layout_code_v =
+    Tile::BFractal == BLayout::CubeM32 ? 29
+    : Tile::BFractal == BLayout::CubeM16 ? 31
+                                         : 0;
+
 namespace region {
 
 template <typename...>
@@ -122,7 +130,8 @@ class ReductionPrefixView {
                 "reduction prefix view must preserve the reduction valid shape");
   static_assert(std::is_same_v<typename Parent::DType, typename SubTile::DType>,
                 "reduction prefix view requires matching element types");
-  static_assert(SubTile::LogicalTileBytes == 128,
+  static_assert(SubTile::LogicalTileBytes >= range::RangeAddressUnitBytes &&
+                    SubTile::LogicalTileBytes % range::RangeAddressUnitBytes == 0,
                 "reduction prefix view must select one 128-byte CELL");
 
 public:

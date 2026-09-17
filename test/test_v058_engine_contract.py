@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "contracts" / "linxisa-v0.58-engine-ops.json"
 HEADER = ROOT / "include" / "jcore" / "template_asm.hpp"
 PTO_TILE = ROOT / "include" / "common" / "pto_tile.hpp"
+PTO_REGION = ROOT / "include" / "common" / "pto_tile_region.hpp"
 ACTIVE_TEXT_ROOTS = (ROOT / "include", ROOT / "docs")
 ACTIVE_IMPLEMENTATION_ROOTS = (ROOT / "include", ROOT / "test" / "tileop_api" / "src")
 
@@ -35,6 +36,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
         cls.header = HEADER.read_text(encoding="utf-8")
+        cls.pto_region_header = PTO_REGION.read_text(encoding="utf-8")
 
     def _active_text(self) -> str:
         return "\n".join(
@@ -207,7 +209,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn(
             'template <typename Tile>\n'
             'inline constexpr int local_layout_code_v =',
-            self.header)
+            self.pto_region_header)
         self.assertIn('".if %c[ElemLayout] == 29\\nB.DATR CUBE_M32, Null\\n"',
                       self.header)
         self.assertIn('".elseif %c[ElemLayout] == 31\\nB.DATR CUBE_M16, Null\\n"',
