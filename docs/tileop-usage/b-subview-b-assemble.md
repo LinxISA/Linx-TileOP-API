@@ -255,6 +255,12 @@ auto last   = range::assemble_last(tile, base_units);      // INIT=0, LAST=1（s
 非 INIT 形式的 `ParentSizeCode` 按 ISA 合同固定为 0，不要手动填 parent
 size code；INIT 形式从长度参数自动推导。
 
+> PTO-ISA #265 之后，`B.ASSEMBLE` 的最后一个字段语义是当前 writer 的
+> `WriterSizeCode`（fragment 的 extent），不再是 parent 容量；parent 容量
+> 由 INIT 相位 allocating destination binder 的 SizeCode 表达，Local
+> continuation 由末尾 source-form（SizeCode=0）binder 承载 ParentRef。
+> TileOP 的 region/TileArray 路径已按此合同发射（issue #702）。
+
 ```cpp
 using Dst = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
 using GM  = global_tensor<float, RowMajor<4, 8>>;
@@ -378,8 +384,12 @@ B.DIM      <valid-row>, 0, ->lb1
 B.DIM      zero, <physical-cols>, ->lb2
 B.IOT      <source-operands>, mask=1111
 B.IOT      <assembled-destination>, mask=1111, last
-B.ASSEMBLE <INIT>, <LAST>, <RegSrc>, <OffsetUnits>, <ParentSize>
+B.ASSEMBLE <INIT>, <LAST>, <RegSrc>, <OffsetUnits>, <WriterSize>
 ```
+
+最后一个字段是当前 writer（fragment）的 extent code（PTO-ISA #265）；
+INIT 相位的 parent 容量在 destination binder 的 `<Size>` 上，MIDDLE/LAST
+的 Local ParentRef 由末尾 source-form binder 承载。
 
 ## 显式 carrier 类型（专家）
 
