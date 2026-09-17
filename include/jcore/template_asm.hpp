@@ -823,6 +823,30 @@ enum class TmaPadValue : int {
   Null = 3,
 };
 
+#define PTO_CUBE_LOAD_DATR_ASM                                                \
+  ".if %c[PadValue] == 3\n"                                                   \
+  ".if %c[Layout] == 21\nB.DATR ND2M32.normal, Null\n"                        \
+  ".elseif %c[Layout] == 22\nB.DATR ND2M16.normal, Null\n"                    \
+  ".else\nB.DATR ND2N8.normal, Null\n"                                        \
+  ".endif\n"                                                                   \
+  ".elseif %c[PadValue] == 2\n"                                               \
+  ".if %c[Layout] == 21\nB.DATR ND2M32.normal, Min\n"                         \
+  ".elseif %c[Layout] == 22\nB.DATR ND2M16.normal, Min\n"                     \
+  ".else\nB.DATR ND2N8.normal, Min\n"                                         \
+  ".endif\n"                                                                   \
+  ".elseif %c[PadValue] == 1\n"                                               \
+  ".if %c[Layout] == 21\nB.DATR ND2M32.normal, Max\n"                         \
+  ".elseif %c[Layout] == 22\nB.DATR ND2M16.normal, Max\n"                     \
+  ".else\nB.DATR ND2N8.normal, Max\n"                                         \
+  ".endif\n"                                                                   \
+  ".else\n"                                                                    \
+  ".if %c[Layout] == 21\nB.DATR ND2M32.normal, Zero\n"                        \
+  ".elseif %c[Layout] == 22\nB.DATR ND2M16.normal, Zero\n"                    \
+  ".else\nB.DATR ND2N8.normal, Zero\n"                                        \
+  ".endif\n"                                                                   \
+  ".endif\n"
+
+
 template <typename tile_shape_out, typename tile_shape_offset, typename gm_shape,
           TmaPadValue Pad = TmaPadValue::Null>
 inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
@@ -2983,7 +3007,8 @@ PTO_SHARED_INLINE void TLOAD_ASS(
 // CUBE associated form: preserve the existing Local CUBE register and retain
 // the same explicit GM-to-CELL layout conversion as TLOAD_CUBE.  The binder is
 // an input (Tr), so no destination arrow or SizeCode modifier is emitted.
-template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
+template <TmaPadValue Pad = TmaPadValue::Zero, is_local_tile_v cube_shape,
+          is_global_data_v gm_shape>
   requires(cube_shape::IsCubeLayout)
 void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src) {
   static_assert(std::is_same_v<typename cube_shape::DType,
@@ -3000,7 +3025,7 @@ void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src) {
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
     "BSTART.TLSU TLOAD, %D[DataType]\n"
-    PTO_CUBE_LOAD_LAYOUT_ASM
+    PTO_CUBE_LOAD_DATR_ASM
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.IOT %[Dst], mask=1111, last\n"
@@ -3009,6 +3034,7 @@ void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src) {
     : [Dst] "Tr"(dst.data()), [Base] "r"(src.data()),
       [RowStrideBytes] "r"(src.GetStrideBytes(3)),
       [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
+      [PadValue] "i"(static_cast<int>(Pad)),
       [Layout] "i"(cube_shape::CubeLoadLayout),
       [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
     : "memory");
@@ -3227,7 +3253,11 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
 // PTO ISA 0.58.3 GM -> persistent Local CUBE CELL transport.  The layout
 // conversion is explicit, LB0/LB1 carry logical valid columns/rows, LB2 is
 // absent, and SizeCode describes capacity rather than logical M/N/K.
-template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
+// PTO-ISA TLOAD legality: Local CUBE codes 21..23 additionally permit all
+// four PadValue encodings for physical CELL tails.  Pad defaults to Zero,
+// which keeps the historical encoding byte-for-byte.
+template <TmaPadValue Pad = TmaPadValue::Zero, is_local_tile_v cube_shape,
+          is_global_data_v gm_shape>
   requires(cube_shape::IsCubeLayout)
 void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
   static_assert(!is_subview_v<cube_shape>,
@@ -3249,7 +3279,7 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
   if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2M32.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3259,12 +3289,14 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "i"(cube_shape::ValidCol), [VROW] "i"(cube_shape::ValidRow)
+        [VCOL] "i"(cube_shape::ValidCol), [VROW] "i"(cube_shape::ValidRow),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   else if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow < 0) {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2M32.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3274,12 +3306,14 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "i"(cube_shape::ValidCol), [VROW] "r"(valid_row)
+        [VCOL] "i"(cube_shape::ValidCol), [VROW] "r"(valid_row),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   else if constexpr (cube_shape::ValidCol < 0 && cube_shape::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2M32.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3289,12 +3323,14 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "r"(valid_col), [VROW] "i"(cube_shape::ValidRow)
+        [VCOL] "r"(valid_col), [VROW] "i"(cube_shape::ValidRow),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   else {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2M32.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3304,13 +3340,15 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   } else if constexpr (cube_shape::BFractal == BLayout::CubeM16) {
   if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2M16.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3320,12 +3358,14 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "i"(cube_shape::ValidCol), [VROW] "i"(cube_shape::ValidRow)
+        [VCOL] "i"(cube_shape::ValidCol), [VROW] "i"(cube_shape::ValidRow),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   else if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow < 0) {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2M16.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3335,12 +3375,14 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "i"(cube_shape::ValidCol), [VROW] "r"(valid_row)
+        [VCOL] "i"(cube_shape::ValidCol), [VROW] "r"(valid_row),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   else if constexpr (cube_shape::ValidCol < 0 && cube_shape::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2M16.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3350,12 +3392,14 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "r"(valid_col), [VROW] "i"(cube_shape::ValidRow)
+        [VCOL] "r"(valid_col), [VROW] "i"(cube_shape::ValidRow),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   else {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2M16.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3365,13 +3409,15 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   } else { // CubeN8
   if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2N8.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3381,12 +3427,14 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "i"(cube_shape::ValidCol), [VROW] "i"(cube_shape::ValidRow)
+        [VCOL] "i"(cube_shape::ValidCol), [VROW] "i"(cube_shape::ValidRow),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   else if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow < 0) {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2N8.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3396,12 +3444,14 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "i"(cube_shape::ValidCol), [VROW] "r"(valid_row)
+        [VCOL] "i"(cube_shape::ValidCol), [VROW] "r"(valid_row),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   else if constexpr (cube_shape::ValidCol < 0 && cube_shape::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2N8.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3411,12 +3461,14 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "r"(valid_col), [VROW] "i"(cube_shape::ValidRow)
+        [VCOL] "r"(valid_col), [VROW] "i"(cube_shape::ValidRow),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   else {
 asm volatile(
       "BSTART.TLSU TLOAD, %D[DataType]\n"
-      "B.DATR ND2N8.normal, Zero\n"
+    PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[SizeCode]>\n"
@@ -3426,7 +3478,9 @@ asm volatile(
         [RowStrideBytes] "r"(src.GetStrideBytes(3)),
         [DataType] "i"(type_traits<typename cube_shape::DType>::TypeCode),
         [SizeCode] "i"(cube_shape::TilesizeCode),
-        [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   }
 }
