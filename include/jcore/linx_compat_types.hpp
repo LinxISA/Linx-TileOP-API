@@ -8,6 +8,19 @@
 // fallback must not redefine them.
 #if defined(__linx)
 #define PTO_LINX_COMPAT_TYPES_PROVIDED 1
+
+// RCPE6M2 (pto-spec #322, TileOP #165) is a source-only derived type with no
+// scalar FCVT encoding, so blkc.h historically did not spell it. It now does
+// (LinxISA/llvm-project "[clang] Declare __fp8_rcpe6m2 scalar type", PR #97):
+// -mlxbc force-includes linx_blkc.h before every TileOP header, and that
+// definition must win. Provide the fallback storage struct only when neither
+// blkc.h nor the host test shim (PTO_LINX_HOST_CXX, whose own substitute uses
+// a `value` member) is in this translation unit, so
+// type_traits<__fp8_rcpe6m2> resolves in every include order without a
+// redefinition error.
+#if !defined(__LINX_BLKC) && !defined(PTO_LINX_HOST_CXX)
+struct __fp8_rcpe6m2 { uint8_t data; };
+#endif
 #elif !defined(PTO_LINX_COMPAT_TYPES_PROVIDED)
 
 // The public TileOP surface names scalar storage formats that are not C++
