@@ -16,9 +16,28 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src);
 For a CUBE row-reduction result with a wide physical carrier and `ValidCol=1`,
 `TREDUCEPREFIXVIEW<Row>(reduction)` exposes its first 128-byte CELL without a
 copy. It can be passed as either source of the binary region operations; the
-wrapper emits `B.SUBVIEW SrcSelect=0` or `1` for the selected source. The view
-requires matching dtype/valid rows, persistent CUBE storage, and a one-CELL
-view type. Ordinary `TPARTVIEW` exact-partition rules are unchanged.
+wrapper emits `B.SUBVIEW SrcSelect=0` or `1` for the selected source. Because the
+view keeps its CUBE layout, the consuming region op also emits a CUBE `B.DATR`
+(`B.DATR CUBE_M32, Null` for CUBE_M32, `CUBE_M16` for CUBE_M16) before the
+dimensions, consistent with the Local layout model in
+[concepts/local-layout.md](../../concepts/local-layout.md) (PTO-ISA #291); the
+`B.SUBVIEW` then selects the single CELL. The view requires matching dtype/valid
+rows, persistent CUBE storage, and a one-CELL view type. Ordinary `TPARTVIEW`
+exact-partition rules are unchanged.
+
+One 128-byte CELL is dtype-dependent, so the view type tracks the reduction
+dtype instead of a fixed column count — `[32,1]` for FP32, `[32,2]` for BF16,
+`[32,4]` for E8M0 (issue #160 item 4):
+
+```cpp
+using BF16Reduction = VecTileM32<__bf16, 32, 256, 32, 1>;
+using BF16Cell      = VecTileM32<__bf16, 32, 2, 32, 1>;   // one 128B CELL
+auto bf16_prefix = TREDUCEPREFIXVIEW<BF16Cell>(bf16_reduction);
+
+using E8M0Reduction = VecTileM32<__fp8_e8m0, 32, 512, 32, 1>;
+using E8M0Cell      = VecTileM32<__fp8_e8m0, 32, 4, 32, 1>; // one 128B CELL
+auto e8m0_prefix = TREDUCEPREFIXVIEW<E8M0Cell>(e8m0_reduction);
+```
 
 
 ```cpp

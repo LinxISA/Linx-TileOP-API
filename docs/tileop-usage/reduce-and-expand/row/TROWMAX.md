@@ -23,15 +23,36 @@ Reduction reduction;
 Row state, result;
 
 auto prefix = TREDUCEPREFIXVIEW<Row>(reduction);
-TMAX(result, state, prefix);  // emits B.SUBVIEW for source 1
+TMAX(result, state, prefix);  // B.DATR CUBE_M32, Null + B.SUBVIEW for source 1
 ```
 
 `TREDUCEPREFIXVIEW` requires persistent CUBE storage, matching dtype and valid
 rows, `ValidCol=1`, and a one-CELL (`128B`) view. It is a source view only;
 it does not allocate or copy a Tile. The binary region wrappers also accept the
 view in the first source position, in which case `B.SUBVIEW SrcSelect=0` is
-emitted. Use this API for PTO #311 reduction carriers; ordinary `TPARTVIEW`
-continues to require an exact physical and valid-shape partition.
+emitted. Because the view keeps its CUBE layout, the consuming region op emits a
+CUBE `B.DATR` (`B.DATR CUBE_M32, Null` for CUBE_M32, `CUBE_M16` for CUBE_M16)
+before the dimensions, consistent with the Local layout model in
+[concepts/local-layout.md](../../concepts/local-layout.md) (PTO-ISA #291); the
+`B.SUBVIEW` then selects the single CELL. Use this API for PTO #311 reduction
+carriers; ordinary `TPARTVIEW` continues to require an exact physical and
+valid-shape partition.
+
+One 128-byte CELL is dtype-dependent, so the view type follows the reduction
+dtype rather than a fixed column count — `[32,1]` for FP32, `[32,2]` for BF16,
+`[32,4]` for E8M0 (issue #160 item 4):
+
+```cpp
+// BF16: one 128B CELL is [32,2]
+using BF16Reduction = VecTileM32<__bf16, 32, 256, 32, 1>;
+using BF16Cell      = VecTileM32<__bf16, 32, 2, 32, 1>;
+auto bf16_prefix = TREDUCEPREFIXVIEW<BF16Cell>(bf16_reduction);
+
+// E8M0: one 128B CELL is [32,4]
+using E8M0Reduction = VecTileM32<__fp8_e8m0, 32, 512, 32, 1>;
+using E8M0Cell      = VecTileM32<__fp8_e8m0, 32, 4, 32, 1>;
+auto e8m0_prefix = TREDUCEPREFIXVIEW<E8M0Cell>(e8m0_reduction);
+```
 ### Destination assembly：`TROWMAX_ASS`
 
 
