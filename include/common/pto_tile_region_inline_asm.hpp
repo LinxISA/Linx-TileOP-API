@@ -54,6 +54,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar(
                   "B.SUBVIEW source fragment must use a CUBE layout");
     asm volatile(
         "BSTART.TEPL %c10, %D1\n"
+        PTO_REGION_ELEMENTWISE_LAYOUT_ASM
         "B.DIM zero, %c3, ->lb0\n"
         "B.DIM zero, %c4, ->lb1\n"
         "B.DIM zero, %c5, ->lb2\n"
@@ -67,7 +68,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar(
           "i"(SubTile::Cols),
           "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
           "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-          "r"(value), "r"(region_base_units), "i"(Opcode)
+          "r"(value), "r"(region_base_units), "i"(Opcode),
+          [ElemLayout] "i"(local_layout_code_v<SubTile>)
         : "memory");
   }
 }
@@ -1323,9 +1325,12 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
                 "reduction prefix sources require matching valid shapes");
   static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
                 "reduction prefix sources require matching element types");
+  static_assert(Tile::BFractal == SubTile::BFractal,
+                "reduction prefix sources require matching CUBE layouts");
   const uintptr_t prefix_base_units = src1.GetRangeBase();
   asm volatile(
       "BSTART.TEPL %c9, %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
       "B.DIM zero, %c4, ->lb0\n"
       "B.DIM zero, %c5, ->lb1\n"
       "B.DIM zero, %c6, ->lb2\n"
@@ -1337,7 +1342,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
         "i"(Tile::ValidCol), "i"(Tile::ValidRow), "i"(Tile::Cols),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         "r"(prefix_base_units), "i"(Opcode),
-        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode)
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        [ElemLayout] "i"(local_layout_code_v<Tile>)
       : "memory");
 }
 
@@ -1355,9 +1361,12 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
                 "reduction prefix sources require matching valid shapes");
   static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
                 "reduction prefix sources require matching element types");
+  static_assert(Tile::BFractal == SubTile::BFractal,
+                "reduction prefix sources require matching CUBE layouts");
   const uintptr_t prefix_base_units = src0.GetRangeBase();
   asm volatile(
       "BSTART.TEPL %c9, %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
       "B.DIM zero, %c4, ->lb0\n"
       "B.DIM zero, %c5, ->lb1\n"
       "B.DIM zero, %c6, ->lb2\n"
@@ -1369,7 +1378,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
         "i"(SubTile::ValidCol), "i"(SubTile::ValidRow), "i"(SubTile::Cols),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         "r"(prefix_base_units), "i"(Opcode),
-        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode)
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        [ElemLayout] "i"(local_layout_code_v<SubTile>)
       : "memory");
 }
 
