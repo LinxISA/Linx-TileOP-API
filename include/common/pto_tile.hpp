@@ -2392,8 +2392,7 @@ constexpr std::size_t assemble_length_bytes() {
                              assemble_length_bytes<LengthUnits_, Parent>())    \
                        : 0,                                                    \
                   Init, Last, OffsetUnits_, 0,                                 \
-                  subview_size_code_for_bytes(                                 \
-                      assemble_length_bytes<LengthUnits_, Parent>())> {        \
+                  0> {                                                         \
     constexpr std::size_t CheckedLength =                                     \
         assemble_length_bytes<LengthUnits_, Parent>();                         \
     (void)CheckedLength;                                                        \
@@ -2408,8 +2407,7 @@ constexpr std::size_t assemble_length_bytes() {
                              assemble_length_bytes<LengthUnits_, Parent>())    \
                        : 0,                                                    \
                   Init, Last, OffsetUnits_, AutoRegSrc,                        \
-                  subview_size_code_for_bytes(                                 \
-                      assemble_length_bytes<LengthUnits_, Parent>())> {        \
+                  0> {                                                         \
     constexpr std::size_t CheckedLength =                                     \
         assemble_length_bytes<LengthUnits_, Parent>();                         \
     (void)CheckedLength;                                                        \

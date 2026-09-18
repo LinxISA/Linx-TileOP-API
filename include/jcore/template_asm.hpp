@@ -9631,8 +9631,7 @@ PTO_SHARED_INLINE void TGEMV_MX_BIAS(D &d, Mtx &mtx, ScaleMtx &scale_mtx,
 // B.IOT's range group (ASL OpenBundleRangeTileGroup / RecordBundleRangeSubview).
 template <typename View>
 concept pto_prefix_view =
-    pto::is_subtile_view_v<View> &&
-    requires { typename View::reduction_prefix_parent; } &&
+    pto::is_reduction_prefix_view_v<std::remove_const_t<View>> &&
     std::is_same_v<typename View::ParentTile,
                    typename View::reduction_prefix_parent>;
 
@@ -14612,16 +14611,15 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
         "opening slot); use TROWSUM_ASS for the subsequent MIDDLE/LAST slots");
     static_assert(tile_shape_out::ParentSizeCode != 0,
                   "TROWSUM assemble INIT requires a nonzero parent capacity");
-    // The writer extent is the fragment length declared on the assemble
-    // carrier (range::assemble<N> declares N 128-byte units), NOT the parent
-    // carrier capacity. This keeps the derivation valid for dynamic valid
-    // shapes and for parent tiles whose physical size is not a 128B
-    // power-of-two (issue #163; also fixes the #96 follow-up where the
-    // parent capacity leaked into the writer field).
-    constexpr unsigned WriterSizeCode = tile_shape_out::WriterSizeCode;
-    static_assert(WriterSizeCode != 0,
-                  "TROWSUM assemble carrier must declare a nonzero fragment "
-                  "length (range::assemble<N> / assemble_init_last<N>)");
+    // The writer extent for a row reduction is one 128 B CELL (the logical
+    // R x 1 result). It is independent of the parent capacity, which keeps
+    // the encoding valid for dynamic valid shapes and for parent tiles whose
+    // physical size is not a 128B power-of-two (issue #163; also fixes the
+    // #96 follow-up where the parent capacity leaked into the writer field).
+    constexpr unsigned WriterSizeCode = 1;
+    static_assert(WriterSizeCode <= tile_shape_out::ParentSizeCode,
+                  "TROWSUM fragment WriterSizeCode exceeds the parent "
+                  "capacity declared on the assemble carrier");
     const uintptr_t range_base =
         static_cast<uintptr_t>(dst.GetRangeBase());
     // ASL (row reduction): B.DIM describes the SOURCE geometry. Dynamic
@@ -18101,15 +18099,11 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
   // current writer extent (WriterSizeCode), not the parent capacity. Encode
   // this fragment's extent instead of the stale ParentSizeCode so MIDDLE/LAST
   // writers stay legal.
-  // The writer extent is the fragment length declared on the assemble
-  // carrier, not the parent carrier capacity (issue #163 / #96 follow-up).
-  // Non-INIT factories (assemble_middle/last<N>) record the fragment code,
-  // so dynamic valid shapes and odd parent capacities no longer trip the
-  // legacy sizeof-based derivation.
-  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
-  static_assert(WriterSizeCode != 0,
-                "TEPL reduction _ASS assemble carrier must declare a nonzero "
-                "fragment length (assemble_middle<N>/assemble_last<N>)");
+  // The writer extent for a row reduction is one 128 B CELL, independent of
+  // the parent carrier capacity (issue #163 / #96 follow-up).
+  static_assert(!D::INIT,
+                "TEPL reduction _ASS consumes an already-associated slot");
+  constexpr unsigned WriterSizeCode = 1;
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
