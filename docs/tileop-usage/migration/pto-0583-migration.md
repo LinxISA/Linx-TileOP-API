@@ -57,17 +57,17 @@ support does not imply Shared high-level array transport.
 restriction. It may be used with Local `B.IOT` or Shared `B.IOS` destinations,
 subject to the destination operation and size-code contract.
 
-新版 `SUBVIEW/ASSEMBLE` 接口统一使用实际字节长度和 128B 单位地址参数：
+新版 `SUBVIEW/ASSEMBLE` factory 的长度和地址偏移都使用 128B 单位：
 
 ```cpp
-auto view = range::subview<4 * 1024, 2>(tile, base_units);
-auto destination = range::assemble<4 * 1024, 2>(tile, base_units);
+auto view = range::subview<32, 2>(tile, base_units);       // 32 * 128B = 4 KiB
+auto destination = range::assemble<32, 2>(tile, base_units);
 ```
 
-`4 * 1024` 会自动转换为对应的 ISA `SizeCode`，`base_units` 与 `2` 都是
+`32` 会自动转换为对应的 ISA `SizeCode`，`base_units` 与 `2` 也都是
 128B 单位，`2` 即 `256B`。省略长度使用 Tile 默认容量，省略基址使用
 `zero`；运行时基址的寄存器由编译器分配。旧代码中直接填写
-`SubviewSizeCode`、`ParentSizeCode` 或 `RegSrc` 的 carrier/专家接口仍可用于
+`SubviewSizeCode`、`WriterSizeCode` 或 `RegSrc` 的 carrier/专家接口仍可用于
 兼容和编码测试，但普通 kernel 应迁移到上述 factory。ASSEMBLE 的
 `INIT/MIDDLE/LAST` 状态使用命名 lifecycle helper 表达。
 

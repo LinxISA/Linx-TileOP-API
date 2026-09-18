@@ -243,7 +243,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
   "B.DIM zero, %c4, ->lb1\n"                                                  \
   "B.DIM zero, %c5, ->lb2\n"                                              \
   "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"                                 \
-  "B.IOR [%12],[]\n"                                                       \
+  "B.IOR [%[Scalar]],[]\n"                                                 \
   "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
 #define PTO_REGION_SCALAR_ASSEMBLY_INPUTS                                  \
   "i"(type_traits<typename In::DType>::TypeCode),                         \
@@ -253,7 +253,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
   "i"(SubTile::Cols),                                                       \
   "i"(ParentSize),                                                          \
   "i"(Opcode), "r"(range_base_units), "i"(writer_size),                  \
-  "i"(Init), "i"(Last), "r"(value)
+  "i"(Init), "i"(Last), [Scalar] "r"(value)
   if constexpr (Init) {
     asm volatile(PTO_REGION_SCALAR_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
@@ -267,7 +267,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
                  "B.DIM zero, %c4, ->lb1\n"
                  "B.DIM zero, %c5, ->lb2\n"
                  "B.IOT %2, mask=1111, last\n"
-                 "B.IOR [%12],[]\n"
+                 "B.IOR [%[Scalar]],[]\n"
                  "B.IOT %0, mask=1111\n"
                  "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                  :

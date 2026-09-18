@@ -7,7 +7,7 @@ using namespace pto;
 using TileT = Tile<Location::Vec, float, 16, 16>;
 
 __attribute__((noinline)) void tepl_ass_binary(TileT &a, TileT &b, TileT &d) {
-  auto ad = range::assemble(d);
+  auto ad = range::assemble_last(d);
   TADD_ASS(ad, a, b);
   TSUB_ASS(ad, a, b);
   TMUL_ASS(ad, a, b);
@@ -23,7 +23,7 @@ __attribute__((noinline)) void tepl_ass_binary(TileT &a, TileT &b, TileT &d) {
 }
 
 __attribute__((noinline)) void tepl_ass_unary(TileT &src, TileT &d) {
-  auto ad = range::assemble(d);
+  auto ad = range::assemble_last(d);
   TABS_ASS(ad, src);
   TNOT_ASS(ad, src);
   TNEG_ASS(ad, src);
@@ -33,7 +33,7 @@ __attribute__((noinline)) void tepl_ass_unary(TileT &src, TileT &d) {
 }
 
 __attribute__((noinline)) void tepl_ass_scalar(TileT &src, TileT &d) {
-  auto ad = range::assemble(d);
+  auto ad = range::assemble_last(d);
   TADDS_ASS(ad, src, 1.0f);
   TSUBS_ASS(ad, src, 1.0f);
   TMULS_ASS(ad, src, 1.0f);

@@ -44,7 +44,7 @@ TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_
 RANGE_CASES="subview_dest assemble_source subview_length"
 SUBVIEW_LEGALITY_CASES="subview_rowmajor tpartview_rowmajor tpartview_shared"
 GMOV_CASES="fp64 s64 u64 dtype shape valid_shape layout capacity location shared cube_n8"
-TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape"
+TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape assemble_valid_shape"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -108,8 +108,12 @@ for c in $RANGE_CASES; do
 done
 for c in $SUBVIEW_LEGALITY_CASES; do
   define=SHOULD_FAIL_$(echo "$c" | tr '[:lower:]' '[:upper:]')
-  expect_rejected "subview_$c" "$define" SubviewLegalityNegatives.cpp \
-    'is_legal_subview_parent_v<.*evaluated to false'
+  if [[ "$c" == tpartview_shared ]]; then
+    pattern='TPARTVIEW parent must be an assigned Local Matrix Tile'
+  else
+    pattern='is_legal_subview_parent_v<.*evaluated to false'
+  fi
+  expect_rejected "subview_$c" "$define" SubviewLegalityNegatives.cpp "$pattern"
 done
 for c in $GMOV_CASES; do
   define=SHOULD_FAIL_GMOV_$(echo "$c" | tr '[:lower:]' '[:upper:]')
@@ -131,6 +135,7 @@ for c in $TCVT_CASES; do
     cube_valid_shape) define=SHOULD_FAIL_TCVT_CUBE_VALID_SHAPE ;;
     cube_n8) define=SHOULD_FAIL_TCVT_CUBE_N8 ;;
     valid_shape) define=SHOULD_FAIL_TCVT_VALID_SHAPE ;;
+    assemble_valid_shape) define=SHOULD_FAIL_TCVT_ASSEMBLE_VALID_SHAPE ;;
   esac
   if "$CXX" "${FLAGS[@]}" -D"$define" src/TCvtCubeNegatives.cpp \
        -o "$OUT/neg_tcvt_$c.o" >/dev/null 2>&1; then

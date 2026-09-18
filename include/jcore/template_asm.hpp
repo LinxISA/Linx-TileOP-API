@@ -56,6 +56,29 @@ using namespace pto;
   ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Null\n"                      \
   ".endif\n"
 
+// TCVT must encode the CUBE layout, destination dtype and rounding mode in a
+// single B.DATR; consecutive B.DATR instructions do not merge attributes.
+#define PTO_CUBE_TCVT_DATR_ASM                                                 \
+  ".if %c[ElemLayout] == 29\n"                                                 \
+  ".if %c[RMode] == 0\nB.DATR CUBE_M32, %D2, Null, RNONE\n"                   \
+  ".elseif %c[RMode] == 1\nB.DATR CUBE_M32, %D2, Null, RNE\n"                   \
+  ".elseif %c[RMode] == 2\nB.DATR CUBE_M32, %D2, Null, RTZ\n"                   \
+  ".elseif %c[RMode] == 3\nB.DATR CUBE_M32, %D2, Null, RTM\n"                   \
+  ".elseif %c[RMode] == 4\nB.DATR CUBE_M32, %D2, Null, RTP\n"                   \
+  ".elseif %c[RMode] == 5\nB.DATR CUBE_M32, %D2, Null, RNA\n"                   \
+  ".elseif %c[RMode] == 6\nB.DATR CUBE_M32, %D2, Null, RTO\n"                   \
+  ".elseif %c[RMode] == 7\nB.DATR CUBE_M32, %D2, Null, RHB\n.endif\n"            \
+  ".elseif %c[ElemLayout] == 31\n"                                            \
+  ".if %c[RMode] == 0\nB.DATR CUBE_M16, %D2, Null, RNONE\n"                   \
+  ".elseif %c[RMode] == 1\nB.DATR CUBE_M16, %D2, Null, RNE\n"                   \
+  ".elseif %c[RMode] == 2\nB.DATR CUBE_M16, %D2, Null, RTZ\n"                   \
+  ".elseif %c[RMode] == 3\nB.DATR CUBE_M16, %D2, Null, RTM\n"                   \
+  ".elseif %c[RMode] == 4\nB.DATR CUBE_M16, %D2, Null, RTP\n"                   \
+  ".elseif %c[RMode] == 5\nB.DATR CUBE_M16, %D2, Null, RNA\n"                   \
+  ".elseif %c[RMode] == 6\nB.DATR CUBE_M16, %D2, Null, RTO\n"                   \
+  ".elseif %c[RMode] == 7\nB.DATR CUBE_M16, %D2, Null, RHB\n.endif\n"            \
+  ".endif\n"
+
 // Generic TEPL wrappers bind operands directly from `data()` and therefore do
 // not attach B.SUBVIEW.  A TPARTVIEW fragment must go through the dedicated
 // region emission paths, which preserve the fragment offset.
@@ -64,14 +87,6 @@ using namespace pto;
                 "generic TEPL emission does not attach B.SUBVIEW, so the "     \
                 "TPARTVIEW fragment offset would be silently dropped; "        \
                 "consume the SubTileView through a region path instead")
-
-// B.DATR.Layout code for a TEPL operand's physical Local layout: 29 CUBE_M32,
-// 31 CUBE_M16, and NORM (0) for the RowMajor default.
-template <typename Tile>
-inline constexpr int local_layout_code_v =
-    Tile::BFractal == BLayout::CubeM32 ? LayoutCvtEnum::CUBE_M32
-    : Tile::BFractal == BLayout::CubeM16 ? LayoutCvtEnum::CUBE_M16
-                                         : LayoutCvtEnum::NORM;
 
 // Same selector for the operations whose datr_contract pad_union is must-zero:
 // GMOV and the CELL-rearrangement family (TPERMUTE/TSHUF/TPACK/TUNPACK). Their
@@ -190,15 +205,7 @@ void TCVT_T(tile_shape_out &dst, tile_shape_in &src) {
     if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
-      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
-      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
-      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
-      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
-      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
-      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
-      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
-      ".endif\n"
+      PTO_CUBE_TCVT_DATR_ASM
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
@@ -209,20 +216,13 @@ asm volatile(
         "i"(tile_shape_out::TilesizeCode),
         "i"(tile_shape_in::ValidCol),
         "i"(tile_shape_in::ValidRow),
+        [ElemLayout] "i"(local_layout_code_v<tile_shape_out>),
         [RMode] "i"(RMode)
     );    }
     else if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow < 0) {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
-      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
-      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
-      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
-      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
-      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
-      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
-      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
-      ".endif\n"
+      PTO_CUBE_TCVT_DATR_ASM
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM %[tcvt_row], 0, ->lb1\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
@@ -233,20 +233,13 @@ asm volatile(
         "i"(tile_shape_out::TilesizeCode),
         "i"(tile_shape_in::ValidCol),
         [tcvt_row] "r"(src.GetValidRow()),
+        [ElemLayout] "i"(local_layout_code_v<tile_shape_out>),
         [RMode] "i"(RMode)
     );    }
     else if constexpr (tile_shape_in::ValidCol < 0 && tile_shape_in::ValidRow > 0) {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
-      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
-      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
-      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
-      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
-      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
-      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
-      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
-      ".endif\n"
+      PTO_CUBE_TCVT_DATR_ASM
       "B.DIM %[tcvt_col], 0, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
@@ -257,20 +250,13 @@ asm volatile(
         "i"(tile_shape_out::TilesizeCode),
         [tcvt_col] "r"(src.GetValidCol()),
         "i"(tile_shape_in::ValidRow),
+        [ElemLayout] "i"(local_layout_code_v<tile_shape_out>),
         [RMode] "i"(RMode)
     );    }
     else {
 asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
-      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
-      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
-      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
-      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
-      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
-      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
-      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
-      ".endif\n"
+      PTO_CUBE_TCVT_DATR_ASM
       "B.DIM %[tcvt_col], 0, ->lb0\n"
       "B.DIM %[tcvt_row], 0, ->lb1\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
@@ -281,6 +267,7 @@ asm volatile(
         "i"(tile_shape_out::TilesizeCode),
         [tcvt_col] "r"(src.GetValidCol()),
         [tcvt_row] "r"(src.GetValidRow()),
+        [ElemLayout] "i"(local_layout_code_v<tile_shape_out>),
         [RMode] "i"(RMode)
     );    }
   } else {
@@ -2408,6 +2395,12 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
   }
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
+  constexpr unsigned WriterSizeCode = [] {
+    if constexpr (is_assemble_v<tile_shape>)
+      return tile_shape::WriterSizeCode;
+    else
+      return tile_type_traits<typename tile_shape::TileDType>::TilesizeCode;
+  }();
   if constexpr (is_assemble_v<tile_shape>) {
     using ParentTile = typename tile_shape::ParentTile;
     if constexpr (is_shared_tile_v<ParentTile>) {
@@ -2423,7 +2416,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
           "B.DIM zero, %c[VROW], ->lb1\n"
           "B.DIM zero, %c[COL], ->lb2\n"
           "B.IOS mask=1111, ->%S[d0]<%Z[TileSize]>\n"
-          "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+          "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
           "B.IOR [%[s0],%[GmStride]], []\n"
           : [d0]"=Sr"(dst.handle_ref())
           : [s0]"r"(src.data()),
@@ -2436,7 +2429,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
             [Last]"i"(static_cast<int>(tile_shape::LAST)),
             [RegSrc]"r"(range_base),
             [Off]"i"(tile_shape::OffsetUnits),
-            [ParentSize]"i"(tile_shape::ParentSizeCode)
+            [WriterSize]"i"(WriterSizeCode)
           : "memory");
       } else {
       #define PTO_SHARED_RANGE_ASSEMBLE_CASE(N) \
@@ -2449,7 +2442,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
             "B.DIM zero, %c[VROW], ->lb1\n" \
             "B.DIM zero, %c[COL], ->lb2\n" \
             "B.IOS mask=1111, ->%S[d0]<%Z[TileSize]>\n" \
-            "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[ParentSize]\n" \
+            "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[WriterSize]\n" \
             "B.IOR [%[s0],%[GmStride]], []\n" \
             : [d0]"=Sr"(dst.handle_ref()) \
             : [s0]"r"(src.data()), \
@@ -2462,7 +2455,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
               [Last]"i"(static_cast<int>(tile_shape::LAST)), \
               [RegSrc]"r"(range_base), \
               [Off]"i"(tile_shape::OffsetUnits), \
-              [ParentSize]"i"(tile_shape::ParentSizeCode) \
+              [WriterSize]"i"(WriterSizeCode) \
             : "memory"); \
         }
       PTO_SHARED_RANGE_ASSEMBLE_CASE(0) else PTO_SHARED_RANGE_ASSEMBLE_CASE(1) else
@@ -2492,7 +2485,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
         "B.DIM zero, %c[VROW], ->lb1\n"
         "B.DIM zero, %c[COL], ->lb2\n"
         "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n"
-        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
         "B.IOR [%[s0],%[GmStride]], []\n"
         : [d0]"=Tr"(dst.data())
         : [s0]"r"(src.data()),
@@ -2505,7 +2498,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
           [Last]"i"(static_cast<int>(tile_shape::LAST)),
           [RegSrc]"r"(range_base),
           [Off]"i"(tile_shape::OffsetUnits),
-          [ParentSize]"i"(tile_shape::ParentSizeCode)
+          [WriterSize]"i"(WriterSizeCode)
         : "memory");
     } else {
     #define PTO_RANGE_ASSEMBLE_CASE(N) \
@@ -2518,7 +2511,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
           "B.DIM zero, %c[VROW], ->lb1\n" \
           "B.DIM zero, %c[COL], ->lb2\n" \
           "B.IOT mask=1111, last, ->%[d0]<%Z[TileSize]>\n" \
-          "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[ParentSize]\n" \
+          "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[WriterSize]\n" \
           "B.IOR [%[s0],%[GmStride]], []\n" \
           : [d0]"=Tr"(dst.data()) \
           : [s0]"r"(src.data()), \
@@ -2531,7 +2524,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
             [Last]"i"(static_cast<int>(tile_shape::LAST)), \
             [RegSrc]"r"(range_base), \
             [Off]"i"(tile_shape::OffsetUnits), \
-            [ParentSize]"i"(tile_shape::ParentSizeCode) \
+            [WriterSize]"i"(WriterSizeCode) \
           : "memory"); \
       }
     PTO_RANGE_ASSEMBLE_CASE(0) else PTO_RANGE_ASSEMBLE_CASE(1) else
@@ -2649,11 +2642,11 @@ void TLOAD_ASS(tile_shape &dst, const gm_shape &src) {
     : "memory");
 }
 
-template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+template <typename Parent, unsigned WriterSizeCode, bool INIT, bool LAST,
           unsigned OffsetUnits, unsigned RegSrc, is_global_data_v gm_shape>
   requires(is_local_tile_v<Parent> && !Parent::IsCubeLayout)
 void TLOAD_ASS(
-    range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc>
+    range::Assemble<Parent, WriterSizeCode, INIT, LAST, OffsetUnits, RegSrc>
         &dst,
     const gm_shape &src) {
   static_assert(!INIT,
@@ -2673,7 +2666,7 @@ void TLOAD_ASS(
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[COL], ->lb2\n"
       "B.IOT %[d0], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       "B.IOR [%[s0],%[GmStride]], []\n"
       :
       : [d0] "Tr"(dst.data()), [s0] "r"(src.data()),
@@ -2682,7 +2675,7 @@ void TLOAD_ASS(
         [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3)),
         [RegSrc] "r"(range_base),
         [Init] "i"(static_cast<int>(INIT)), [Last] "i"(static_cast<int>(LAST)),
-        [Off] "i"(OffsetUnits), [ParentSize] "i"(ParentSizeCode)
+        [Off] "i"(OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
   } else {
 #define PTO_TLOAD_ASS_REG_CASE(N)                                             \
@@ -2695,7 +2688,7 @@ void TLOAD_ASS(
       "B.DIM zero, %c[VROW], ->lb1\n"                                         \
       "B.DIM zero, %c[COL], ->lb2\n"                                          \
       "B.IOT %[d0], mask=1111, last\n"                                        \
-      "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[ParentSize]\n"     \
+      "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[WriterSize]\n"     \
       "B.IOR [%[s0],%[GmStride]], []\n"                                       \
       :                                                                       \
       : [d0] "Tr"(dst.data()), [s0] "r"(src.data()),                          \
@@ -2703,7 +2696,7 @@ void TLOAD_ASS(
         [VCOL] "i"(valid_col), [VROW] "i"(valid_row),                         \
         [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3)),       \
         [Init] "i"(static_cast<int>(INIT)), [Last] "i"(static_cast<int>(LAST)), \
-        [Off] "i"(OffsetUnits), [ParentSize] "i"(ParentSizeCode)              \
+        [Off] "i"(OffsetUnits), [WriterSize] "i"(WriterSizeCode)              \
       : "memory");                                                            \
   }
     PTO_TLOAD_ASS_REG_CASE(2) else PTO_TLOAD_ASS_REG_CASE(3) else
@@ -2968,11 +2961,11 @@ PTO_SHARED_INLINE void TLOAD_ASS(SharedTile<shp> &dst, const gm_shape &src) {
 // it must not turn the source B.IOS into a destination or emit a TileSize
 // modifier.  A destination-only B.ASSEMBLE is emitted so the MIDDLE/LAST
 // session state reaches the model.
-template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+template <typename Parent, unsigned WriterSizeCode, bool INIT, bool LAST,
           unsigned OffsetUnits, unsigned RegSrc, is_global_data_v gm_shape>
   requires(is_shared_tile_v<Parent>)
 PTO_SHARED_INLINE void TLOAD_ASS(
-    range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc>
+    range::Assemble<Parent, WriterSizeCode, INIT, LAST, OffsetUnits, RegSrc>
         &dst,
     const gm_shape &src) {
   using shp_dtype = typename Parent::TileDType;
@@ -2996,7 +2989,7 @@ PTO_SHARED_INLINE void TLOAD_ASS(
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     "B.IOS %S[d0], mask=1111\n"
-    "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+    "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
     :
     : [d0] "Sr"(dst.handle_ref()), [s0] "r"(src.data()),
@@ -3005,7 +2998,7 @@ PTO_SHARED_INLINE void TLOAD_ASS(
       [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3)),
       [RegSrc] "r"(range_base),
       [Init] "i"(static_cast<int>(INIT)), [Last] "i"(static_cast<int>(LAST)),
-      [Off] "i"(OffsetUnits), [ParentSize] "i"(ParentSizeCode)
+      [Off] "i"(OffsetUnits), [WriterSize] "i"(WriterSizeCode)
     : "memory");
 }
 
@@ -4900,9 +4893,15 @@ constexpr void validate_matrix_scale_contract() {
     static_assert(type_traits<typename ScaleA::DType>::TypeCode == ScaleAType,
                   "MX ScaleA dtype must match its primary input type "
                   "(HiF4X2 uses U32; other scaled MX types use E8M0)");
-    static_assert(ScaleA::BFractal == BLayout::RowMajor &&
-                      ScaleA::SFractal == SLayout::NoneBox,
-                  "MX ScaleA must use ordinary RowMajor layout");
+    if constexpr (is_shared_tile_v<ScaleA>) {
+      static_assert(ScaleA::BFractal == BLayout::RowMajor &&
+                        ScaleA::SFractal == SLayout::NoneBox,
+                    "Shared MX ScaleA must use ordinary RowMajor layout");
+    } else {
+      static_assert(ScaleA::BFractal == BLayout::CubeM32 &&
+                        ScaleA::SFractal == SLayout::NoneBox,
+                    "Local MX ScaleA must use CUBE_M32 layout");
+    }
     static_assert(is_shared_tile_v<ScaleA> == is_shared_tile_v<A>,
                   "MX ScaleA storage must match A storage");
     // A Shared ScaleA follows the same A-major physical rule as its primary
@@ -13157,15 +13156,7 @@ void TCVT(tile_shape_out &dst, View &src) {
   const uintptr_t prefix_base_units = src.GetRangeBase();
   asm volatile(
       "BSTART.TEPL 27, %D1\n"
-      ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"
-      ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"
-      ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"
-      ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"
-      ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"
-      ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"
-      ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"
-      ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n"
-      ".endif\n"
+      PTO_CUBE_TCVT_DATR_ASM
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
       "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
@@ -13178,6 +13169,7 @@ void TCVT(tile_shape_out &dst, View &src) {
         "i"(View::ValidCol),
         "i"(View::ValidRow),
         "r"(prefix_base_units),
+        [ElemLayout] "i"(local_layout_code_v<tile_shape_out>),
         [RMode] "i"(RMode)
   );
 }
@@ -17764,14 +17756,14 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
                 "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(!D::INIT,
                 "TEPL _ASS consumes an already-associated slot: the INIT "
-                "(session-opening) slot must be allocated by the plain "
-                "producer form, not by the _ASS form");
+                "slot must use a plain allocating producer");
   static_assert(std::is_same_v<typename A::DType, typename B::DType>,
                 "TEPL binary _ASS sources must have matching dtypes");
   static_assert(std::is_same_v<typename D::DType, typename A::DType>,
                 "TEPL binary _ASS destination and sources must have matching dtypes");
   const size_t col = src0.GetValidCol();
   const size_t row = src0.GetValidRow();
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
   // The destination-only B.IOT must carry the session state (MIDDLE/LAST)
   // in a destination-only B.ASSEMBLE so the model can close the session.
   // The range base flows through a GPR for the zero/AutoRegSrc forms; the
@@ -17788,7 +17780,7 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src0], %[Src1], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Type] "i"(type_traits<typename A::DType>::TypeCode),
         [Col] "r"(col), [Row] "r"(row), [Cols] "i"(A::Cols),
@@ -17796,7 +17788,7 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
         [Opcode] "i"(Opcode), [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(range_base),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
@@ -17811,12 +17803,12 @@ PTO_SHARED_INLINE void unary(D &dst, S &src) {
                 "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(!D::INIT,
                 "TEPL _ASS consumes an already-associated slot: the INIT "
-                "(session-opening) slot must be allocated by the plain "
-                "producer form, not by the _ASS form");
+                "slot must use a plain allocating producer");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL unary _ASS destination and source must have matching dtypes");
   const size_t col = src.GetValidCol();
   const size_t row = src.GetValidRow();
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
   // Destination-only B.ASSEMBLE carries the MIDDLE/LAST session state.
   static_assert(D::RegSrc == 0 || D::RegSrc == range::AutoRegSrc,
                 "TEPL _ASS with an explicit B.ASSEMBLE RegSrc selector is "
@@ -17829,7 +17821,7 @@ PTO_SHARED_INLINE void unary(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Type] "i"(type_traits<typename S::DType>::TypeCode),
         [Col] "r"(col), [Row] "r"(row), [Cols] "i"(S::Cols),
@@ -17837,7 +17829,7 @@ PTO_SHARED_INLINE void unary(D &dst, S &src) {
         [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(range_base),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
@@ -17852,14 +17844,14 @@ PTO_SHARED_INLINE void scalar(D &dst, S &src, typename S::DType value) {
                 "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(!D::INIT,
                 "TEPL _ASS consumes an already-associated slot: the INIT "
-                "(session-opening) slot must be allocated by the plain "
-                "producer form, not by the _ASS form");
+                "slot must use a plain allocating producer");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL scalar _ASS destination and source must have matching dtypes");
   const size_t col = src.GetValidCol();
   const size_t row = src.GetValidRow();
   typename S::DType scalar_value = value;
   asm("" : "+r"(scalar_value));
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
   // Destination-only B.ASSEMBLE carries the MIDDLE/LAST session state.
   static_assert(D::RegSrc == 0 || D::RegSrc == range::AutoRegSrc,
                 "TEPL _ASS with an explicit B.ASSEMBLE RegSrc selector is "
@@ -17873,7 +17865,7 @@ PTO_SHARED_INLINE void scalar(D &dst, S &src, typename S::DType value) {
       "B.IOT %[Src], mask=1111\n"
       "B.IOR [%[Scalar]],[]\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Type] "i"(type_traits<typename S::DType>::TypeCode),
         [Col] "r"(col), [Row] "r"(row), [Cols] "i"(S::Cols),
@@ -17881,7 +17873,7 @@ PTO_SHARED_INLINE void scalar(D &dst, S &src, typename S::DType value) {
         [Opcode] "i"(Opcode), [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(range_base),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
@@ -17960,6 +17952,7 @@ PTO_SHARED_INLINE void unary_special(D &dst, S &src) {
                 "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL unary _ASS dtypes must match");
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -17967,7 +17960,7 @@ PTO_SHARED_INLINE void unary_special(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [Type] "i"(type_traits<typename S::DType>::TypeCode),
@@ -17975,7 +17968,7 @@ PTO_SHARED_INLINE void unary_special(D &dst, S &src) {
         [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
@@ -17995,6 +17988,7 @@ PTO_SHARED_INLINE void ternary(D &dst, A &a, B &b, A &c) {
   static_assert(std::is_same_v<typename A::DType, typename B::DType> &&
                     std::is_same_v<typename A::DType, typename D::DType>,
                 "TEPL ternary _ASS dtypes must match");
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -18003,7 +17997,7 @@ PTO_SHARED_INLINE void ternary(D &dst, A &a, B &b, A &c) {
       "B.IOT %[A], %[B], mask=1111\n"
       "B.IOT %[C], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode), [Type] "i"(type_traits<typename A::DType>::TypeCode),
         [Col] "r"(a.GetValidCol()), [Row] "r"(a.GetValidRow()),
@@ -18011,7 +18005,7 @@ PTO_SHARED_INLINE void ternary(D &dst, A &a, B &b, A &c) {
         [C] "Tr"(c.data()), [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
@@ -18025,6 +18019,7 @@ PTO_SHARED_INLINE void convert(D &dst, S &src) {
                 "TPARTVIEW SubTileView through the region wrappers instead");
   static_assert(D::Rows == S::Rows && D::Cols == S::Cols,
                 "TCVT_ASS source and destination physical shapes must match");
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[SType]\n"
       "B.DATR %D[__pto_DstType], RNONE\n"
@@ -18033,7 +18028,7 @@ PTO_SHARED_INLINE void convert(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [SType] "i"(type_traits<typename S::DType>::TypeCode),
@@ -18042,7 +18037,7 @@ PTO_SHARED_INLINE void convert(D &dst, S &src) {
         [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
@@ -18063,6 +18058,7 @@ PTO_SHARED_INLINE void binary_special(D &dst, A &a, B &b) {
                 "TEPL binary _ASS source dtypes must match");
   static_assert(std::is_same_v<typename D::DType, typename A::DType>,
                 "TEPL binary _ASS destination dtype must match sources");
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -18070,7 +18066,7 @@ PTO_SHARED_INLINE void binary_special(D &dst, A &a, B &b) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[A], %[B], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode), [Type] "i"(type_traits<typename A::DType>::TypeCode),
         [Col] "r"(a.GetValidCol()), [Row] "r"(a.GetValidRow()),
@@ -18078,7 +18074,7 @@ PTO_SHARED_INLINE void binary_special(D &dst, A &a, B &b) {
         [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
@@ -18142,6 +18138,7 @@ PTO_SHARED_INLINE void expand(D &dst, S &src) {
   static_assert(is_assemble_v<D>, "TEPL _ASS destination must be assembled");
   static_assert(std::is_same_v<typename D::DType, typename S::DType>,
                 "TEPL expand _ASS dtypes must match");
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -18149,7 +18146,7 @@ PTO_SHARED_INLINE void expand(D &dst, S &src) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[Src], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [Type] "i"(type_traits<typename D::DType>::TypeCode),
@@ -18157,7 +18154,7 @@ PTO_SHARED_INLINE void expand(D &dst, S &src) {
         [Cols] "i"(D::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
@@ -18167,6 +18164,7 @@ PTO_SHARED_INLINE void output_geometry_binary(D &dst, A &a, B &b) {
   static_assert(std::is_same_v<typename A::DType, typename B::DType> &&
                     std::is_same_v<typename A::DType, typename D::DType>,
                 "TEPL _ASS dtypes must match");
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       "B.DIM %[Col], 0, ->lb0\n"
@@ -18174,7 +18172,7 @@ PTO_SHARED_INLINE void output_geometry_binary(D &dst, A &a, B &b) {
       "B.DIM zero, %c[Cols], ->lb2\n"
       "B.IOT %[A], %[B], mask=1111\n"
       "B.IOT %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
         [Type] "i"(type_traits<typename D::DType>::TypeCode),
@@ -18183,7 +18181,7 @@ PTO_SHARED_INLINE void output_geometry_binary(D &dst, A &a, B &b) {
         [Dst] "Tr"(dst.data()),
         [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
         [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)
+        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
       : "memory");
 }
 
@@ -18193,6 +18191,7 @@ PTO_SHARED_INLINE void compare(D &dst, A &a, B &b) {
   static_assert(is_assemble_v<D>, "TCMP_ASS destination must be assembled");
   static_assert(std::is_same_v<typename A::DType, typename B::DType>,
                 "TCMP_ASS source dtypes must match");
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
 #define PTO_TCMP_ASS_CASE(CMODE)                                                \
   if constexpr (Mode == CmpMode::CMODE) {                                      \
     asm volatile(                                                              \
@@ -18203,7 +18202,7 @@ PTO_SHARED_INLINE void compare(D &dst, A &a, B &b) {
         "B.DIM zero, %c[Cols], ->lb2\n"                                      \
         "B.IOT %[A], %[B], mask=1111\n"                                     \
         "B.IOT %[Dst], mask=1111, last\n"                                   \
-        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n" \
+        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n" \
         :                                                                      \
         : [Type] "i"(type_traits<typename A::DType>::TypeCode),               \
           [Col] "r"(a.GetValidCol()), [Row] "r"(a.GetValidRow()),             \
@@ -18211,7 +18210,7 @@ PTO_SHARED_INLINE void compare(D &dst, A &a, B &b) {
           [Dst] "Tr"(dst.data()),                                             \
           [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),           \
           [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)), \
-          [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)      \
+          [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)        \
         : "memory");                                                          \
   }
   PTO_TCMP_ASS_CASE(EQ)
@@ -18230,6 +18229,7 @@ PTO_SHARED_INLINE void compare_scalar(D &dst, S &src,
   static_assert(is_assemble_v<D>, "TCMPS_ASS destination must be assembled");
   typename S::DType scalar_value = value;
   asm("" : "+r"(scalar_value));
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
 #define PTO_TCMPS_ASS_CASE(CMODE)                                               \
   if constexpr (Mode == CmpMode::CMODE) {                                      \
     asm volatile(                                                              \
@@ -18241,7 +18241,7 @@ PTO_SHARED_INLINE void compare_scalar(D &dst, S &src,
         "B.IOT %[Src], mask=1111\n"                                         \
         "B.IOR [%[Scalar]],[]\n"                                             \
         "B.IOT %[Dst], mask=1111, last\n"                                   \
-        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[ParentSize]\n" \
+        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n" \
         :                                                                      \
         : [Type] "i"(type_traits<typename S::DType>::TypeCode),               \
           [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),         \
@@ -18249,7 +18249,7 @@ PTO_SHARED_INLINE void compare_scalar(D &dst, S &src,
           [Scalar] "r"(scalar_value), [Dst] "Tr"(dst.data()),                 \
           [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),           \
           [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)), \
-          [Off] "i"(D::OffsetUnits), [ParentSize] "i"(D::ParentSizeCode)      \
+          [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)        \
         : "memory");                                                          \
   }
   PTO_TCMPS_ASS_CASE(EQ)

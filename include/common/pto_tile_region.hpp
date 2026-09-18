@@ -10,6 +10,14 @@
 
 namespace pto {
 
+// B.DATR.Layout codes for Local elementwise operands.
+// 29 selects CUBE_M32, 31 selects CUBE_M16, and 0 keeps the NORM default.
+template <typename Tile>
+inline constexpr int local_layout_code_v =
+    Tile::BFractal == BLayout::CubeM32 ? 29
+    : Tile::BFractal == BLayout::CubeM16 ? 31
+                                         : 0;
+
 namespace region {
 
 template <typename...>
@@ -27,7 +35,8 @@ constexpr int tile_size_code_for_bytes(std::size_t bytes) {
 
 template <typename Parent, typename SubTile, int Rows, int Cols>
 struct partition_contract {
-  static_assert(is_tile<Parent>::value && range::is_legal_subview_parent_v<Parent>,
+  static_assert(is_tile<Parent>::value &&
+                    range::is_legal_subview_parent_v<Parent>,
                 "TPARTVIEW parent must be an assigned Local Matrix Tile with "
                 "a CUBE layout");
   static_assert(Rows > 0 && Cols > 0,
@@ -122,7 +131,7 @@ class ReductionPrefixView {
                 "reduction prefix view must preserve the reduction valid shape");
   static_assert(std::is_same_v<typename Parent::DType, typename SubTile::DType>,
                 "reduction prefix view requires matching element types");
-  static_assert(SubTile::LogicalTileBytes == 128,
+  static_assert(SubTile::LogicalTileBytes == range::RangeAddressUnitBytes,
                 "reduction prefix view must select one 128-byte CELL");
 
 public:

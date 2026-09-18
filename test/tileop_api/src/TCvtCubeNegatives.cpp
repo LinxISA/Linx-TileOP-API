@@ -37,4 +37,17 @@ void mismatched_ordinary_valid_shape(OrdinaryFp32 &dst, OrdinaryFp16 &src) {
 }
 #endif
 
+#if defined(SHOULD_FAIL_TCVT_ASSEMBLE_VALID_SHAPE)
+using SlotValid = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor,
+                       32, 15>;
+using ParentValid = Tile<Location::Vec, float, 32, 64, BLayout::RowMajor,
+                         32, 64>;
+
+void mismatched_assemble_slot_valid_shape(
+    TileArrayOutputRef<SlotValid> &dst, Tile<Location::Vec, float, 32, 16,
+                                             BLayout::RowMajor, 32, 16> &src) {
+  pto_region_tcvt_assemble_dispatch(dst, src);
+}
+#endif
+
 int main() { return 0; }
