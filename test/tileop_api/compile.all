@@ -30,9 +30,9 @@ ACTIVE_FIXTURES=(
   PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas MGatherAtomics MScatterAtomics
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs
   DirectCubeLayout
-  TAdd_mask TAdd TAdds TAnd TeplAss TeplAssSpecial TLoad TStore TCvt TDiv TDivs TExp TMax TMaxs
+  TAdd_mask TAdd TAdds TAnd TeplAss TeplAssSpecial TOrAssSubview TLoad TStore TCvt TDiv TDivs TExp TMax TMaxs
   TMov GMov TMul TMuls TOr TRecip TRem TRowMax TRowSum TSqrt TSub TSubs TTrans
-  RangeSubview RangeAssemble SharedRange TileRegionSharedSubview TileArray TileArrayCube TileArrayAssemblyOffsets TileArrayRegionAsm TileArrayWriterSize TileRegionUnaryAssembly TileRegion TileRegionUnary TileRegionBinary TileRegionBinaryAssembly TileRegionUnarySubviewAssembly TileRegionScalarAssembly TileRegionTCVTSubviewAssembly TileRegionCubeSubview SubviewVecCube Issue138Subview Issue160ReductionPrefix SubviewVecCubeIssue144
+  RangeSubview RangeAssemble SharedRange TileRegionSharedSubview TileArray TileArrayCube TileArrayAssemblyOffsets TileArrayRegionAsm TileArrayTCVTE8M0 TileArrayWriterSize TileRegionUnaryAssembly TileRegion TileRegionUnary TileRegionBinary TileRegionBinaryAssembly TileRegionUnarySubviewAssembly TileRegionScalarAssembly TileRegionTCVTSubviewAssembly TileRegionCubeSubview SubviewVecCube Issue138Subview Issue160ReductionPrefix SubviewVecCubeIssue144
   ValidShapeImmediate ValidShapePerDim ValidShapePerDimSweep CoopGroupMOverloads CubeInternalAcc TSELCanonical
 )
 

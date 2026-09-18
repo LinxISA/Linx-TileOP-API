@@ -457,7 +457,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertNotIn("->%[Dst]", cube)
         self.assertIn("void TLOAD_ASS(cube_shape &dst, const gm_shape &src)", dispatch)
 
-    def test_tepl_ass_surface_is_destination_first_with_split_iot(self) -> None:
+    def test_tepl_ass_surface_is_destination_first_and_packs_iot(self) -> None:
         start = self.header.index("//===--- TEPL associated forms")
         block = self.header[start:]
         self.assertIn("#define PTO_TEPL_ASS_BINARY", block)
@@ -482,6 +482,37 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             "TANDS", "TORS", "TXORS", "TSHLS", "TSHRS", "TMAXS", "TMINS",
         ):
             self.assertRegex(block, rf"PTO_TEPL_ASS_[A-Z]+\({name},")
+        packed_scalar = (
+            '"B.IOT %[Src], %[Dst], mask=1111, last\\n"'
+        )
+        self.assertGreaterEqual(block.count(packed_scalar), 2)
+        scalar = re.search(
+            r'(?s)PTO_SHARED_INLINE void scalar\(D &dst, S &src,.*?\n}', block
+        )
+        self.assertIsNotNone(scalar)
+        scalar_body = scalar.group(0)
+        self.assertIn(packed_scalar, scalar_body)
+        self.assertLess(scalar_body.index(packed_scalar),
+                        scalar_body.index('"B.IOR [%[Scalar]],[]\\n"'))
+        self.assertLess(scalar_body.index('"B.IOR [%[Scalar]],[]\\n"'),
+                        scalar_body.index('"B.ASSEMBLE '))
+        compare_scalar = re.search(
+            r'(?s)PTO_SHARED_INLINE void compare_scalar\(D &dst, S &src,.*?\n}',
+            block,
+        )
+        self.assertIsNotNone(compare_scalar)
+        compare_scalar_body = compare_scalar.group(0)
+        self.assertIn(packed_scalar, compare_scalar_body)
+        self.assertLess(compare_scalar_body.index(packed_scalar),
+                        compare_scalar_body.index('"B.IOR [%[Scalar]],[]\\n"'))
+        self.assertLess(compare_scalar_body.index('"B.IOR [%[Scalar]],[]\\n"'),
+                        compare_scalar_body.index('"B.ASSEMBLE '))
+        old_scalar_split = re.compile(
+            r'"B\.IOT %\[Src\], mask=1111\\n"\s*\\?\s*'
+            r'"B\.IOR \[%\[Scalar\]\],\[\]\\n"\s*\\?\s*'
+            r'"B\.IOT %\[Dst\], mask=1111, last\\n"'
+        )
+        self.assertIsNone(old_scalar_split.search(block))
         self.assertIn('"B.IOT %[Src0], %[Src1], mask=1111\\n"', block)
         self.assertIn('"B.IOT %[Dst], mask=1111, last\\n"', block)
         # Keep the invalid legacy spelling out of actual instruction strings;
@@ -503,7 +534,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
                      "TFMA_ASS(f, a, b, c);",
                      "TSQRT_ASS(f, a);", "TCVT_ASS(d, a);", "TTRANS_ASS(f, a);"):
             self.assertIn(call, special)
-        self.assertIn('"B.IOT %[C], mask=1111\\n"', block)
+        self.assertIn('"B.IOT %[C], %[Dst], mask=1111, last\\n"', block)
         self.assertIn('"B.DATR %D[__pto_DstType], RNONE\\n"', block)
         self.assertNotIn("[DType]", block)
 
