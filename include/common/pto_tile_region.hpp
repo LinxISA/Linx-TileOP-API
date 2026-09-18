@@ -18,6 +18,18 @@ inline constexpr int local_layout_code_v =
     : Tile::BFractal == BLayout::CubeM16 ? 31
                                          : 0;
 
+// PTO-ISA #291 (issue #160 item 6): a TEPL tile operation selects its Local
+// operand layout through B.DATR.Layout, so a CUBE_M16/M32 operand keeps its
+// physical CUBE representation instead of collapsing to the NORM (RowMajor)
+// default.  This macro mirrors template_asm.hpp's PTO_ELEMENTWISE_LAYOUT_ASM
+// but lives in the common header so the region inline-asm paths can emit the
+// same B.DATR without depending on template_asm.hpp's include order.  RowMajor
+// keeps its historical no-B.DATR encoding.
+#define PTO_REGION_ELEMENTWISE_LAYOUT_ASM                                      \
+  ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32, Null\n"                          \
+  ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Null\n"                      \
+  ".endif\n"
+
 namespace region {
 
 template <typename...>
@@ -124,8 +136,15 @@ class ReductionPrefixView {
                 "reduction prefix view requires persistent CUBE storage");
   static_assert(Parent::ValidCol == 1,
                 "reduction prefix view requires a one-column valid result");
-  static_assert(SubTile::Rows == Parent::Rows && SubTile::Cols == 1,
-                "reduction prefix view must select the first physical CELL");
+  static_assert(SubTile::BFractal == Parent::BFractal,
+                "reduction prefix view must keep the parent CUBE layout");
+  static_assert(SubTile::Rows == Parent::Rows,
+                "reduction prefix view must span the full CUBE row count");
+  // The single-CELL selection is expressed as an exact 128-byte extent below
+  // (SubTile::LogicalTileBytes == range::RangeAddressUnitBytes), not a fixed
+  // physical column count: one 128-byte CUBE CELL is [32,1] for FP32, [32,2]
+  // for BF16 and [32,4] for E8M0.  Pinning SubTile::Cols == 1 would reject the
+  // wider dtypes' legal first CELL (issue #160 item 4).
   static_assert(SubTile::ValidRow == Parent::ValidRow &&
                     SubTile::ValidCol == 1,
                 "reduction prefix view must preserve the reduction valid shape");
