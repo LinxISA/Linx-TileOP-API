@@ -67,8 +67,8 @@ Bias 是普通 Local RowMajor Tile，而不是 CUBE CELL Tile。它的 dtype 必
 accumulator，因此 Bias 也使用 FP32。Bias 的有效区域固定为 `1 x N`，其中
 `N` 与矩阵结果列数一致；物理 shape 可以更大，但不能把 padding 当作 Bias。
 
-Bias 从 GM 加载时使用普通 `TLOAD(bias, bias_gm)`。`TLOAD_CUBE` 只接受
-CUBE layout，不能用于 Bias。
+Bias 从 GM 加载时使用普通 `TLOAD(bias, bias_gm)`（Bias 是普通 Tile，不是
+CUBE layout）。
 
 ### 重载选择
 
@@ -158,11 +158,11 @@ void matmul_bias(float *out, const float *a_data, const float *b_data,
                  const float *bias_data) {
   GMA a_gm(a_data); GMB b_gm(b_data); GMC out_gm(out); GMBias bias_gm(bias_data);
   A a; B b; C c; Bias bias;
-  TLOAD_CUBE(a, a_gm);
-  TLOAD_CUBE(b, b_gm);
+  TLOAD(a, a_gm);
+  TLOAD(b, b_gm);
   TLOAD(bias, bias_gm);
   TMATMUL_BIAS(c, a, b, bias);
-  TSTORE_CUBE(out_gm, c);
+  TSTORE(out_gm, c);
 }
 ```
 

@@ -1,9 +1,9 @@
 # TSTORE
 
-`TSTORE` 将一个有效的 Local 或 Shared 矩形存储到 GM，且不修改源 Tile。
-对 Local CUBE Tile，`TSTORE` 等价于显式的 `TSTORE_CUBE` layout conversion；
-GM 与 CUBE dtype 必须相同，CUBE capacity 必须在 `128 B..256 KiB` 范围内，
-并且只写入 source 的 valid rows/columns。store padding 固定为 `Null`。
+`TSTORE` 将一个有效的 Local、Shared 或 CUBE 矩形存储到 GM，且不修改源 Tile。
+对 Local CUBE Tile，`TSTORE` 自动选择 CELL→GM 布局转换；GM 与 CUBE dtype
+必须相同，CUBE capacity 必须在 `128 B..256 KiB` 范围内，并且只写入 source
+的 valid rows/columns。store padding 固定为 `Null`。
 
 ## C++ 接口
 
@@ -12,15 +12,11 @@ GM 与 CUBE dtype 必须相同，CUBE capacity 必须在 `128 B..256 KiB` 范围
 ```cpp
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
 requires(!tile_shape::IsCubeLayout) void TSTORE(gm_shape &dst, tile_shape &src);
+// CUBE Tile 自动选择 CELL→GM 布局转换路径。
 template <is_global_data_v gm_shape, is_tile_data_v cube_shape>
 requires(cube_shape::IsCubeLayout) void TSTORE(gm_shape &dst, const cube_shape &src);
 template <is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
 PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src);
-
-// Explicit CUBE layout-conversion spelling.
-template <is_global_data_v gm_shape, is_local_tile_v cube_shape>
-requires(cube_shape::IsCubeLayout)
-void TSTORE_CUBE(gm_shape &dst, const cube_shape &src);
 ```
 
 ### 支持的数据类型
@@ -70,7 +66,7 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src);
 | 带 pitch 的子矩阵 | 构造器仍按**元素 stride**接收行跨度 | wrapper 在 `B.IOR.RegSrc1` 中传递换算后的**字节 stride**。 |
 | range / subview | base address 与 byte offset 分别传递 | 最终地址为 base 加操作的 range offset。 |
 
-普通 Tile 使用常规 TLSU 传输；CUBE Tile 由统一 `TLOAD/TSTORE` 自动选择布局转换。需要在源码中显式表达该边界时，可使用 `TLOAD_CUBE/TSTORE_CUBE`。
+普通 Tile 使用常规 TLSU 传输；CUBE Tile 由统一 `TLOAD/TSTORE` 自动选择布局转换。
 
 ### Shared Tile 与部分 PE 存储
 
@@ -89,8 +85,19 @@ PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src);
 内保持有效。`TSTORE`/`TSTORE_PART` 只存储 runtime valid rectangle；物理
 capacity 不会扩大 GM 的逻辑输出区域。
 
-`TSTORE_CUBE` 的两个 C++ 参数顺序是 `(global_tensor, cube_tile)`，并要求两者
-dtype 相同；它只适用于 Local CUBE Tile，不是 Shared partial-store 接口。
+### 专家别名：`TSTORE_CUBE`
+
+`TSTORE_CUBE(gm, cube_tile)` 是统一入口的专家别名（参数顺序
+`(global_tensor, cube_tile)`），供需要在源码中显式表达"此处发生 CELL→GM
+布局转换"的场景、固定 ABI 与编码测试使用：
+
+```cpp
+template <is_global_data_v gm_shape, is_local_tile_v cube_shape>
+requires(cube_shape::IsCubeLayout)
+void TSTORE_CUBE(gm_shape &dst, const cube_shape &src);
+```它转发到与 `TSTORE` CUBE 重载
+完全相同的实现。普通 kernel 写 `TSTORE` 即可；Shared 部分存储仍使用
+`TSTORE_PART`，与该别名无关。
 
 ### Vector CUBE layout
 

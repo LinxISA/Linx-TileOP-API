@@ -140,11 +140,11 @@ void matmul(float *a_data, float *b_data, float *c_data) {
   B b;
   C c;
 
-  TLOAD_CUBE(a, a_global);
-  TLOAD_CUBE(b, b_global);
+  TLOAD(a, a_global);
+  TLOAD(b, b_global);
   TMATMUL(c, a, b);
-  TSTORE_CUBE(c_global, c);
+  TSTORE(c_global, c);
 }
 ```
 
-示例计算 `C[M][N] = A[M][K] * B[K][N]`。`TLOAD_CUBE` 和 `TSTORE_CUBE` 用于 CUBE Tile 与 Global Memory 之间的数据传输。
+示例计算 `C[M][N] = A[M][K] * B[K][N]`。`TLOAD` 和 `TSTORE` 会根据 Tile 的 CUBE layout 自动选择 GM 转换路径。

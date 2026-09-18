@@ -122,11 +122,11 @@ using GMResult = global_tensor<float, RowMajor<1, 32>>;
 void gemv(float *out, const float *matrix_data, const float *vector_data) {
   GMMatrix matrix_gm(matrix_data); GMVec vector_gm(vector_data); GMResult out_gm(out);
   Matrix matrix; Vec vec; Result result;
-  TLOAD_CUBE(matrix, matrix_gm);
-  TLOAD_CUBE(vec, vector_gm);
+  TLOAD(matrix, matrix_gm);
+  TLOAD(vec, vector_gm);
   // result[1x32] = vec[1x32] * matrix[32x32]。
   TGEMV(result, matrix, vec);
-  TSTORE_CUBE(out_gm, result);
+  TSTORE(out_gm, result);
 }
 ```
 

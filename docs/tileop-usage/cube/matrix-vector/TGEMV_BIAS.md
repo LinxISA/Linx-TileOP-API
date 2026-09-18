@@ -133,11 +133,11 @@ void gemv_bias(float *out, const float *matrix_data, const float *vector_data,
   GM matrix_gm(matrix_data); GMVec vector_gm(vector_data); GMOut out_gm(out);
   GMBias bias_gm(bias_data);
   Matrix matrix; Vec vec; D result; Bias bias;
-  TLOAD_CUBE(matrix, matrix_gm);
-  TLOAD_CUBE(vec, vector_gm);
+  TLOAD(matrix, matrix_gm);
+  TLOAD(vec, vector_gm);
   TLOAD(bias, bias_gm);
   TGEMV_BIAS(result, matrix, vec, bias);
-  TSTORE_CUBE(out_gm, result);
+  TSTORE(out_gm, result);
 }
 ```
 
