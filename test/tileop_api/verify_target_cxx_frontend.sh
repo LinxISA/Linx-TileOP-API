@@ -43,6 +43,7 @@ fi
 for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
               TileRegionUnarySubviewAssembly.cpp \
               TileRegionTCVTSubviewAssembly.cpp \
+              TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
               SharedTransposeNonSquare.cpp; do
   "$TC_DIR/clang++" "${FLAGS[@]}" -fsyntax-only \
@@ -93,6 +94,28 @@ for name in expected:
         raise SystemExit(f"{name}: missing source B.IOT binder")
     if not any("B.SUBVIEW" in line for line in asm):
         raise SystemExit(f"{name}: missing B.SUBVIEW modifier")
+PY
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TOrAssSubview.cpp" -o "$OUT/TOrAssSubview.ll"
+python3 - "$OUT/TOrAssSubview.ll" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+functions = re.split(r"(?=^define )", text, flags=re.MULTILINE)
+for name in ("tor_ass_subview", "tor_ass_explicit_range"):
+    body = next((part for part in functions if name in part), None)
+    if body is None:
+        raise SystemExit(f"missing TOR_ASS subview fixture {name}")
+    if body.count("B.SUBVIEW") != 2:
+        raise SystemExit(f"{name}: expected two source B.SUBVIEW modifiers")
+    if body.count("B.ASSEMBLE") != 1:
+        raise SystemExit(f"{name}: expected one destination B.ASSEMBLE modifier")
+    if not re.search(r"B\.IOT.*B\.SUBVIEW.*B\.SUBVIEW.*B\.IOT.*B\.ASSEMBLE",
+                     body):
+        raise SystemExit(f"{name}: invalid source/destination modifier order")
 PY
 
 echo "Linx target C++ frontend range/GMOV contract: PASS"

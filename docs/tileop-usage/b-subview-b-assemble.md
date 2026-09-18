@@ -361,6 +361,11 @@ TEPL 逐元素、归约、广播、比较接口提供 `_ASS` 后缀版本：dest
 "assembled destination 在前、输入在后"。`_ASS` 把已关联的 destination 作为
 input-only binder 消费，不分配新 Tile generation。
 
+`TOR_ASS` 额外支持两个 source 都是 `TPARTVIEW` 返回的 `SubTileView`，或都
+是 `range::subview` carrier。此时同一个 bundle 会在 source binder 后发出
+两条 `B.SUBVIEW`，并在 assembled destination binder 后发出
+`B.ASSEMBLE`。其他 `_ASS` 操作目前仍只接受普通 source Tile。
+
 ```cpp
 using TileT = Tile<Location::Vec, float, 16, 16, BLayout::RowMajor>;
 
