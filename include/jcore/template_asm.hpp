@@ -17746,7 +17746,7 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
     // offset. Keep the source B.IOT binders first, then attach one B.SUBVIEW
     // to each source before publishing the assembled destination.
     static_assert(Opcode == 7,
-                  "only TOR_ASS currently supports TPARTVIEW sources");
+                  "only TOR_ASS currently supports B.SUBVIEW sources");
     static_assert((is_subtile_view_v<A> || is_subview_v<A>) &&
                       (is_subtile_view_v<B> || is_subview_v<B>),
                   "TOR_ASS subview form requires both sources to carry "
