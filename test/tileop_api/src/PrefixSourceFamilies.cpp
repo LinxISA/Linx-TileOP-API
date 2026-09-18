@@ -41,6 +41,31 @@ __attribute__((noinline)) void trowexpandmul_prefix(Matrix &dst, Matrix &base,
   TROWEXPANDMUL(dst, base, prefix);  // B.SUBVIEW 1 on the shared B.IOT
 }
 
+// Issue #155: the binary prefix wrappers must carry the shared CUBE layout
+// attribute. A VecTileM32 operand plus a reduction-prefix view selects
+// B.DATR CUBE_M32 on the block, exactly like the plain jcore binary form;
+// omitting it leaves the block on the NORM default and the #291 model
+// rejects the CUBE source pair.
+__attribute__((noinline)) void tmax_prefix_rhs(Row &newMax, Row &runningMax,
+                                               Reduction &localMaxWide) {
+  auto prefix = TREDUCEPREFIXVIEW<Row>(localMaxWide);
+  TMAX(newMax, runningMax, prefix);  // B.SUBVIEW 1 + B.DATR CUBE_M32
+}
+
+__attribute__((noinline)) void tmax_prefix_lhs(Row &newMax,
+                                               Reduction &localMaxWide,
+                                               Row &runningMax) {
+  auto prefix = TREDUCEPREFIXVIEW<Row>(localMaxWide);
+  TMAX(newMax, prefix, runningMax);  // B.SUBVIEW 0 + B.DATR CUBE_M32
+}
+
+__attribute__((noinline)) void tadd_prefix_lhs(Row &acc,
+                                               Reduction &localSumWide,
+                                               Row &rhs) {
+  auto prefix = TREDUCEPREFIXVIEW<Row>(localSumWide);
+  TADD(acc, prefix, rhs);  // B.SUBVIEW 0 + B.DATR CUBE_M32
+}
+
 int main() {
   Reduction reduction;
   Row row, row2;
@@ -51,6 +76,9 @@ int main() {
   VecTileM32<__half, 32, 1, 32, 1> halfRow;
   tcvt_prefix(halfRow, reduction);
   trowexpandmul_prefix(matrix, matrix, reduction);
+  tmax_prefix_rhs(row, row2, reduction);
+  tmax_prefix_lhs(row, reduction, row2);
+  tadd_prefix_lhs(row, reduction, row2);
   asm volatile("" : : "Tr"(row.data()), "Tr"(matrix.data()));
   return 0;
 }

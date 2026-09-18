@@ -32,6 +32,12 @@ it does not allocate or copy a Tile. The binary region wrappers also accept the
 view in the first source position, in which case `B.SUBVIEW SrcSelect=0` is
 emitted. Use this API for PTO #311 reduction carriers; ordinary `TPARTVIEW`
 continues to require an exact physical and valid-shape partition.
+
+When the other binary operand is a CUBE_M16/CUBE_M32 Tile (the typical
+`VecTileM32` running-state case), the consumed block carries
+`B.DATR CUBE_M32/CUBE_M16` so the source pair satisfies the PTO #291
+elementwise same-layout closure; a NORM-default block with CUBE sources is
+illegal (issue #155).
 ### Destination assembly：`TROWMAX_ASS`
 
 
