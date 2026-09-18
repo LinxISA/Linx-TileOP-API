@@ -149,12 +149,12 @@ void matmul_acc(float *out, const float *accumulator,
   A a;
   B b;
   Acc c, d;
-  TLOAD_CUBE(a, a_gm);
-  TLOAD_CUBE(b, b_gm);
-  TLOAD_CUBE(c, c_gm);
+  TLOAD(a, a_gm);
+  TLOAD(b, b_gm);
+  TLOAD(c, c_gm);
   // d = c + a * b；d 与 c 是两个独立的 accumulator Tile。
   TMATMUL_ACC(d, c, a, b);
-  TSTORE_CUBE(d_gm, d);
+  TSTORE(d_gm, d);
 }
 ```
 

@@ -7,6 +7,7 @@
 当前 API 中可用的调用形式：
 
 ```cpp
+// 普通矩形加载；CUBE Tile 会自动选择 ND→CELL 布局转换路径（见下）。
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
 requires(!tile_shape::IsCubeLayout) void TLOAD(tile_shape &dst, gm_shape &src);
 
@@ -16,10 +17,6 @@ template <is_tile_data_v shp, int PEMask = 15, is_global_data_v gm_shape>
 PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src);
 template <is_tile_data_v cube_shape, is_global_data_v gm_shape>
 requires(cube_shape::IsCubeLayout) void TLOAD(cube_shape &dst, gm_shape &src);
-
-// Explicit CUBE layout-conversion spelling.
-template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
-requires(cube_shape::IsCubeLayout) void TLOAD_CUBE(cube_shape &dst, gm_shape &src);
 
 // Convolution weight conversion: GM OHWI/OIHW -> Shared row-major [N][K].
 template <WeightLayoutEnum WeightLayout, int PEMask = 1,
@@ -109,7 +106,7 @@ void load_weights(WeightShared &dst, const WeightGM &src) {
 `BSTART.TLOAD` 的源数据类型；其它 DATR 字段固定为 `EQ`、默认舍入、禁用饱和和
 禁用 canonicalization。
 
-### Associated destination：`TLOAD_ASS` / `TLOAD_CUBE_ASS`
+### Associated destination：`TLOAD_ASS`
 
 ```cpp
 template <is_local_tile_v tile_shape, is_global_data_v gm_shape>
@@ -126,10 +123,7 @@ void TLOAD_ASS(
     range::Assemble<Parent, WriterSizeCode, INIT, LAST, OffsetUnits, RegSrc> &dst,
     const gm_shape &src);
 
-template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
-requires(cube_shape::IsCubeLayout)
-void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src);
-
+// CUBE destination 由统一入口自动选择布局转换路径。
 template <is_tile_data_v cube_shape, is_global_data_v gm_shape>
 requires(cube_shape::IsCubeLayout)
 void TLOAD_ASS(cube_shape &dst, const gm_shape &src);
@@ -146,7 +140,7 @@ CUBE dtype 相同、CELL storage 不超过 Local capacity，并遵循下方 CUBE
 转换约束。
 
 **Associated destination 的前提是 handle/register 已经由 producer 建立**。
-第一次落到一个 assembly range 的 load 必须使用普通 `TLOAD`/`TLOAD_CUBE`
+第一次落到一个 assembly range 的 load 必须使用普通 `TLOAD`
 （或 `TMOV_L2S_*`）分配 destination generation；后续 slot 才能用 `_ASS`
 形式追加。不要把默认构造的 `SharedTile` 直接传给 `TLOAD_ASS`：其 handle
 尚未初始化，也没有可消费的关联关系（`_ASS` 的 `"Sr"` 输入只接受已建立
@@ -211,24 +205,34 @@ Local parent 的等价形态是先对 `range::assemble<...>(parent)` 的第一�
 | 带 pitch 的子矩阵 | 构造器仍按**元素 stride**接收行跨度 | wrapper 在 `B.IOR.RegSrc1` 中传递换算后的**字节 stride**。 |
 | range / subview | base address 与 byte offset 分别传递 | 最终地址为 base 加操作的 range offset。 |
 
-普通 Tile 使用常规 TLSU 传输；CUBE Tile 由统一 `TLOAD/TSTORE` 自动选择布局转换。需要在源码中显式表达该边界时，可使用 `TLOAD_CUBE/TSTORE_CUBE`。
+普通 Tile 使用常规 TLSU 传输；CUBE Tile 由统一 `TLOAD/TSTORE` 自动选择布局转换。
 
 ### CUBE load contract
 
-使用 `TLOAD_CUBE(dst, src)` 时，`dst` 必须是 Local CUBE Tile，`src` 必须是
-相同 dtype 的 `global_tensor`。Local CUBE capacity 必须在 `128 B..256 KiB`
-范围内，且足以容纳该 CUBE layout 的逻辑 tile。`LB0/LB1` 传递 runtime valid
-columns/rows，`LB2` 不参与 CUBE load；valid shape 不能超过 physical shape，
-加载 padding 固定为 `Zero`。
+对 CUBE Tile 使用 `TLOAD(dst, src)` 时，编译器自动选择 ND→CELL 布局转换，
+`dst` 必须是 Local CUBE Tile，`src` 必须是相同 dtype 的 `global_tensor`。
+Local CUBE capacity 必须在 `128 B..256 KiB` 范围内，且足以容纳该 CUBE
+layout 的逻辑 tile。`LB0/LB1` 传递 runtime valid columns/rows，`LB2` 不参与
+CUBE load；valid shape 不能超过 physical shape。物理 CELL 尾部（valid 区域
+之外）的 padding 通过 `TLOAD_CUBE<TmaPadValue>` 模板参数选择（默认 Zero），
+统一入口使用默认值。
 
 `CubeM16`、`CubeM32` 和 `CubeN8` 分别使用 `ND2M16`、`ND2M32` 和 `ND2N8`；
 对应 store selector 是 `M162ND`、`M322ND` 和 `N82ND`。不能在这些 layout
 之间复用错误的转换选择器。
 
-`TLOAD_CUBE` 的两个 C++ 参数顺序是 `(cube_tile, global_tensor)`；它不是
-Shared load 的返回值形式，也不接受 iterator view 作为 GM 本体。普通 `TLOAD`
-在目标是 CUBE Tile 时会选择相同的转换路径，但需要显式表达转换边界时应使用
-上面的 `TLOAD_CUBE` 签名。
+### 专家别名：`TLOAD_CUBE`
+
+`TLOAD_CUBE(dst, src)` 是统一入口的专家别名（参数顺序
+`(cube_tile, global_tensor)`），供需要在源码中显式表达"此处发生 ND→CELL
+布局转换"的场景、固定 ABI 与编码测试使用：
+
+```cpp
+template <is_local_tile_v cube_shape, is_global_data_v gm_shape>
+requires(cube_shape::IsCubeLayout) void TLOAD_CUBE(cube_shape &dst, gm_shape &src);
+```它转发到与 `TLOAD` CUBE 重载
+完全相同的实现，支持相同的 `TmaPadValue` Pad 模板参数。普通 kernel 写
+`TLOAD` 即可。
 
 ### Vector CUBE layout
 
