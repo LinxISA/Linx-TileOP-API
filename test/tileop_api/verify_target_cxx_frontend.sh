@@ -43,6 +43,7 @@ fi
 for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
               TileRegionUnarySubviewAssembly.cpp \
               TileRegionTCVTSubviewAssembly.cpp \
+              TileArrayTCVTE8M0.cpp \
               SharedTransposeNonSquare.cpp; do
   "$TC_DIR/clang++" "${FLAGS[@]}" -fsyntax-only \
     "$ROOT/test/tileop_api/src/$source"

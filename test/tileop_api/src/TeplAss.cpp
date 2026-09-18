@@ -1,5 +1,7 @@
 // Associated TEPL destinations are passed first at the C++ API boundary. The
-// implementation still emits source B.IOTs before the destination-only B.IOT.
+// instruction stream packs at most two tile inputs into each B.IOT; unary and
+// scalar forms bind source and associated destination together, while binary
+// forms retain a final destination-only B.IOT.
 #include <common/pto_tileop.hpp>
 
 using namespace pto;

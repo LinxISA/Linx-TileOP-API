@@ -45,32 +45,60 @@ source、兼容代码和编码回归测试；`*_at_reg` 接口只出现在固定
 
 using namespace pto;
 
-using Parent   = TileLeft<__bf16, 32, 64>;   // 组装结果 [32, 64]
-using Fragment = TileLeft<__bf16, 32, 16>;   // 每个分片 [32, 16]
-using Input    = TileLeft<__bf16, 32, 16>;
-using Result   = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+// 真实场景：把 BF16 scale 量化成 MX E8M0，四个 [32,1] scale 分片拼成一个
+// [32,4] parent。每个 128B CELL 是 RowMajor E8M0 [32,4]（有效 [32,1]）；
+// 组装 destination 按设计是 RowMajor，源也声明相同物理 [32,4]。
+using ScaleBf16      = Tile<Location::Vec, __bf16,     32, 4, BLayout::RowMajor, 32, 1>;
+using ScaleFragment  = Tile<Location::Vec, __fp8_e8m0, 32, 4, BLayout::RowMajor, 32, 1>;
+using ScaleParent    = Tile<Location::Vec, __fp8_e8m0, 32, 16, BLayout::RowMajor, 32, 4>;
 
-void assemble_four(Input (&inputs)[4], Parent &out_storage) {
-  TileArray<Fragment, 1, 4> destinations;    // 1 行 x 4 列 slot
+ScaleParent assemble_scales(ScaleBf16 (&scales)[4]) {
+  TileArray<ScaleFragment, 1, 4> destinations;   // 1 行 x 4 列 slot
 
   for (int col = 0; col < 4; ++col) {
-    auto slot = destinations[0][col];        // TileArrayOutputRef
-    TCVT(slot, inputs[col]);                 // 每个 slot 的写入自动带 B.ASSEMBLE
+    auto slot = destinations[0][col];            // TileArrayOutputRef，只能作 destination
+    // 算法本来就要做的 BF16 -> E8M0 量化：destination 直接指向 slot，
+    // 这一个 TCVT bundle 既产生结果，又在 destination binder 后带 B.ASSEMBLE。
+    // LINX_RDN 发码为 B.DATR ..., RTM（MX scale 量化所需的 floor 舍入）。
+    TCVT<LINX_RDN>(slot, scales[col]);
   }
 
-  Parent result = TASSEMBLY<Parent>(std::move(destinations));
-  (void)result;
-}
-
-void source_fragment_example(Parent &parent, Result &out) {
-  // source 侧对应物：TPARTVIEW 切片，取一片作为 source_tile 消费
-  auto source_tile = TPARTVIEW<Fragment, 1, 4>(parent)[0][2];
-  TABS(out, source_tile);
+  // TASSEMBLY 不发指令，只把已组装好的 carrier 返回为 parent。
+  return TASSEMBLY<ScaleParent>(std::move(destinations));
 }
 ```
 
+source 侧对应物是 `TPARTVIEW`：`B.ASSEMBLE` 把 producer 的 destination 写进
+parent 的某个 slot，`B.SUBVIEW` 则把 parent 的某段借出为 source fragment，
+两者互为读写对偶。
+
+```cpp
+using CubeParent = CubeTileM32<float, 32, 64>;
+using CubeFrag   = CubeTileM32<float, 32, 16>;
+using Result     = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+
+void source_fragment_example(CubeParent &parent, Result &out) {
+  auto source_tile = TPARTVIEW<CubeFrag, 1, 4>(parent)[0][2]; // 借出第 2 片
+  TABS(out, source_tile);                                     // source B.IOT + B.SUBVIEW
+}
+```
+
+
 要点：
 
+- **`B.ASSEMBLE` 是 producer bundle 的 destination modifier，不是独立的拷贝
+  指令**。让算法真正的 producer（这里是 BF16 → E8M0 的量化 `TCVT`）把结果
+  直接写进 slot，`B.ASSEMBLE` 就跟在它的 destination binder 后面。
+- **不要用同类型 `TCVT` 当拷贝来填槽**。如果某个 slot 的内容已由别处的计算
+  产生，应让那个已有 producer 直接接收 slot（用对应的 `_ASS` 接口或直接以
+  slot 为 destination），而不是先算到临时 fragment、再用 `TCVT(slot, tmp)`
+  搬一遍——同 dtype `TCVT` 会平白多发一组 TileOP，且掩盖了“slot 由 producer
+  直接写入”的语义。
+- **`TASSEMBLY` 本身不发指令**：所有 `B.ASSEMBLE` 都已在写 slot 时发出，
+  `TASSEMBLY` 只把组装好的 carrier 作为 parent 返回。
+- 需要特定舍入时给 region `TCVT` 传 `LinxRMode` 模板参数，例如 MX E8M0 scale
+  量化用 `TCVT<LINX_RDN>`（`LINX_RDN` 在 `B.DATR` 上发码为 `RTM`，即 floor）；
+  默认 `LINX_RNONE` 保持操作默认编码。
 - **slot 必须按 ordinal 顺序写入**（`row * Cols + col`，从 0 开始）。第 0 个
   写入的 slot 发出 `INIT` 形式，最后一个发出 `LAST`，中间是 `MIDDLE`；
   乱序写入会被生命周期约束拒绝。
@@ -342,8 +370,8 @@ void fused(TileT &a, TileT &b, TileT &c, TileT &result) {
 }
 ```
 
-归约 `_ASS`（`TROWSUM_ASS` 等）在 destination binder 后同样发出
-destination-only `B.ASSEMBLE`（携带 carrier 的 INIT/LAST/RegSrc/Offset/
+归约 `_ASS`（`TROWSUM_ASS` 等）同样在包含 assembled destination 的
+binder 后发出 `B.ASSEMBLE`（携带 carrier 的 INIT/LAST/RegSrc/Offset/
 WriterSizeCode），并且不要求 assembled destination 的物理 shape 等于逻辑归约
 结果——例如 `TROWSUM_ASS` 的输入逻辑结果是 `R x 1`，destination 可以是
 一个更大 parent 的 fragment carrier。
@@ -380,14 +408,27 @@ void tree_reduce(Src &src, Slot &parent) {
 dtype 规则：`TCMP_ASS` 两个输入 dtype 必须相同；`TCVT_ASS` 允许转换 dtype
 但物理 shape 必须相同；其余接口 source 与 destination dtype 匹配。
 
-`_ASS` 生成的共同 bundle 结构（opcode 与额外 modifier 由操作决定）：
+`_ASS` 的 binder 每条最多携带两个 Tile 输入。仅有一个 Tile source 的接口
+（一元、tile/scalar、转换、归约、广播）把 source 与 assembled destination 合并到
+同一条 `B.IOT`；scalar 由随后的 `B.IOR` 承载，不占 Tile 输入位置。多 Tile
+source 接口按每条最多两个输入继续分组。opcode 与额外 modifier 由操作决定：
 
 ```asm
+# 单 Tile source：source 与 assembled destination 共用一个 binder
 BSTART.TEPL <opcode>, <source-dtype>
 B.DIM      <valid-col>, 0, ->lb0
 B.DIM      <valid-row>, 0, ->lb1
 B.DIM      zero, <physical-cols>, ->lb2
-B.IOT      <source-operands>, mask=1111
+B.IOT      <source>, <assembled-destination>, mask=1111, last
+B.ASSEMBLE <INIT>, <LAST>, <RegSrc>, <OffsetUnits>, <WriterSizeCode>
+
+# tile/scalar：同样合并两个 Tile operand，scalar modifier 随后发出
+B.IOT      <source>, <assembled-destination>, mask=1111, last
+B.IOR      [<scalar>],[]
+B.ASSEMBLE <INIT>, <LAST>, <RegSrc>, <OffsetUnits>, <WriterSizeCode>
+
+# 两个 Tile source：前一条已占满，destination 保留在末尾 binder
+B.IOT      <source0>, <source1>, mask=1111
 B.IOT      <assembled-destination>, mask=1111, last
 B.ASSEMBLE <INIT>, <LAST>, <RegSrc>, <OffsetUnits>, <WriterSizeCode>
 ```

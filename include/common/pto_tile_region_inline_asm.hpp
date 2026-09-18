@@ -684,11 +684,29 @@ PTO_REGION_SCALAR_SUBVIEW_DEST_WRAPPER(TMINS, 44)
 #undef PTO_REGION_SCALAR_DEST_WRAPPER
 #undef PTO_REGION_SCALAR_SUBVIEW_DEST_WRAPPER
 
-template <int ParentSize, bool Init, bool Last, typename SubTile, typename In>
+// B.DATR rounding-mode selector for the TileArray TCVT assembly path. The
+// ISA B.DATR RMode field (bits[17:15]) matches the LinxRMode enumeration
+// one-to-one; this mirrors the ordinary TCVT_T emitter (jcore/template_asm.hpp)
+// so the assembly producer that writes a slot can request MX-scale rounding
+// (e.g. LINX_RDN -> RTM floor for BF16 -> E8M0). %D2 is the destination dtype.
+#define PTO_REGION_TCVT_DATR_ASM                                             \
+  ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"                                 \
+  ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"                               \
+  ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"                               \
+  ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"                               \
+  ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"                               \
+  ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"                               \
+  ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"                               \
+  ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n.endif\n"
+
+template <int ParentSize, bool Init, bool Last, int RMode, typename SubTile,
+          typename In>
 PTO_REGION_ALWAYS_INLINE void
 pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   static_assert(SubTile::Rows == In::Rows && SubTile::Cols == In::Cols,
                 "TCVT assembly slot requires matching physical shape");
+  static_assert(RMode >= LINX_RNONE && RMode <= LINX_RHB,
+                "TCVT RMode must be a LinxRMode value");
   // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase;
   // the INIT destination B.IOT allocates and carries the parent capacity.
   constexpr int writer_size =
@@ -702,7 +720,7 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   const uintptr_t range_base_units = dst.range_base_units();
 #define PTO_REGION_TCVT_ASSEMBLY_BODY                                       \
   "BSTART.TEPL 27, %D1\n"                                                  \
-  "B.DATR %D2, RNONE\n"                                                    \
+  PTO_REGION_TCVT_DATR_ASM                                                 \
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
   "B.DIM zero, %c6, ->lb2\n"                                              \
@@ -716,7 +734,8 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                    \
   "i"(SubTile::Cols),                                                        \
   "i"(ParentSize),                                                           \
-  "r"(range_base_units), "i"(writer_size), "i"(Init), "i"(Last)
+  "r"(range_base_units), "i"(writer_size), "i"(Init), "i"(Last),            \
+  [RMode] "i"(RMode)
   if constexpr (Init) {
     asm volatile(PTO_REGION_TCVT_ASSEMBLY_BODY
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
@@ -726,7 +745,7 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
     // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder
     // carries the ParentRef; the math input stays source-only.
     asm volatile("BSTART.TEPL 27, %D1\n"
-                 "B.DATR %D2, RNONE\n"
+                 PTO_REGION_TCVT_DATR_ASM
                  "B.DIM zero, %c4, ->lb0\n"
                  "B.DIM zero, %c5, ->lb1\n"
                  "B.DIM zero, %c6, ->lb2\n"
@@ -742,26 +761,30 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
 #undef PTO_REGION_TCVT_ASSEMBLY_BODY
 }
 
-template <int ParentSize, typename SubTile, typename In>
+template <int ParentSize, int RMode, typename SubTile, typename In>
 PTO_REGION_ALWAYS_INLINE void
 pto_region_tcvt_phase(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   if (dst.slot_count() == 1)
-    pto_region_tcvt_assemble<ParentSize, true, true>(dst, src);
+    pto_region_tcvt_assemble<ParentSize, true, true, RMode>(dst, src);
   else if (dst.ordinal() == 0)
-    pto_region_tcvt_assemble<ParentSize, true, false>(dst, src);
+    pto_region_tcvt_assemble<ParentSize, true, false, RMode>(dst, src);
   else if (dst.ordinal() == dst.slot_count() - 1)
-    pto_region_tcvt_assemble<ParentSize, false, true>(dst, src);
+    pto_region_tcvt_assemble<ParentSize, false, true, RMode>(dst, src);
   else
-    pto_region_tcvt_assemble<ParentSize, false, false>(dst, src);
+    pto_region_tcvt_assemble<ParentSize, false, false, RMode>(dst, src);
 }
 
-template <typename SubTile, is_tile_data_v In>
+// RMode selects the B.DATR rounding mode (LinxRMode; default LINX_RNONE keeps
+// the operation-default encoding). LINX_RDN (RTM floor) is the mode MX E8M0
+// scale quantization needs, so the algorithmic producer that writes a slot can
+// request it directly, e.g. TCVT<LINX_RDN>(destinations[0][col], scale).
+template <int RMode = LINX_RNONE, typename SubTile, is_tile_data_v In>
 PTO_REGION_ALWAYS_INLINE void TCVT(region::TileArrayOutputRef<SubTile> dst,
                                    In &src) {
   switch (dst.parent_size_code()) {
 #define PTO_REGION_PARENT_CASE(N)                                             \
   case N:                                                                     \
-    pto_region_tcvt_phase<N>(dst, src);                                       \
+    pto_region_tcvt_phase<N, RMode>(dst, src);                                \
     break
     PTO_REGION_PARENT_CASE(1);
     PTO_REGION_PARENT_CASE(2);
@@ -780,6 +803,7 @@ PTO_REGION_ALWAYS_INLINE void TCVT(region::TileArrayOutputRef<SubTile> dst,
     __builtin_trap();
   }
 }
+#undef PTO_REGION_TCVT_DATR_ASM
 
 template <int ParentSize, bool Init, bool Last, typename SubTile,
           typename Parent, typename SourceSubTile>
