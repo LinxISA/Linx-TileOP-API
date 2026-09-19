@@ -74,13 +74,27 @@ struct partition_contract {
                 "Tile partition must cover the complete parent Tile");
 };
 
-template <typename Parent, typename SubTile>
+template <typename Parent, typename SubTile, bool Prefix_ = false>
 class SubTileView {
   static_assert(range::is_legal_subview_parent_v<Parent>,
                 "B.SUBVIEW parent must be an assigned Local CUBE or Shared RowMajor "
                 "tile layout");
+  // Prefix-view contract (former ReductionPrefixView): borrows the first
+  // 128-byte CELL of a persistent CUBE row-reduction carrier (PTO #311).
+  static_assert(!Prefix_ || (Parent::IsCubeLayout && Parent::ValidCol == 1 &&
+                             SubTile::Rows == Parent::Rows &&
+                             SubTile::ValidRow == Parent::ValidRow &&
+                             SubTile::ValidCol == 1 &&
+                             SubTile::LogicalTileBytes == 128 &&
+                             std::is_same_v<typename Parent::DType,
+                                            typename SubTile::DType>),
+                "reduction prefix view requires persistent CUBE storage, a "
+                "one-column valid result, and a one-CELL (128 B) fragment");
 public:
   using ParentTile = Parent;
+  // PTO #311 marker: identifies this carrier as a reduction prefix view for
+  // the pto_prefix_view concept in template_asm.hpp.
+  using reduction_prefix_parent = std::conditional_t<Prefix_, Parent, void>;
   using SubTileType = SubTile;
   using DType = typename SubTile::DType;
   using TileDType = typename Parent::TileDType;
@@ -130,62 +144,6 @@ private:
   int partition_cols_;
 };
 
-template <typename Parent, typename SubTile>
-class ReductionPrefixView {
-  static_assert(Parent::IsCubeLayout,
-                "reduction prefix view requires persistent CUBE storage");
-  static_assert(Parent::ValidCol == 1,
-                "reduction prefix view requires a one-column valid result");
-  static_assert(SubTile::BFractal == Parent::BFractal,
-                "reduction prefix view must keep the parent CUBE layout");
-  static_assert(SubTile::Rows == Parent::Rows,
-                "reduction prefix view must span the full CUBE row count");
-  // The single-CELL selection is expressed as an exact 128-byte extent below
-  // (SubTile::LogicalTileBytes == range::RangeAddressUnitBytes), not a fixed
-  // physical column count: one 128-byte CUBE CELL is [32,1] for FP32, [32,2]
-  // for BF16 and [32,4] for E8M0.  Pinning SubTile::Cols == 1 would reject the
-  // wider dtypes' legal first CELL (issue #160 item 4).
-  static_assert(SubTile::ValidRow == Parent::ValidRow &&
-                    SubTile::ValidCol == 1,
-                "reduction prefix view must preserve the reduction valid shape");
-  static_assert(std::is_same_v<typename Parent::DType, typename SubTile::DType>,
-                "reduction prefix view requires matching element types");
-  static_assert(SubTile::LogicalTileBytes == range::RangeAddressUnitBytes,
-                "reduction prefix view must select one 128-byte CELL");
-
-public:
-  using ParentTile = Parent;
-  using SubTileType = SubTile;
-  using DType = typename SubTile::DType;
-  using TileDType = typename Parent::TileDType;
-  static constexpr Location Loc = Parent::Loc;
-  static constexpr int Rows = SubTile::Rows;
-  static constexpr int Cols = SubTile::Cols;
-  static constexpr int RowStride = SubTile::RowStride;
-  static constexpr int ColStride = SubTile::ColStride;
-  static constexpr int ValidRow = SubTile::ValidRow;
-  static constexpr int ValidCol = SubTile::ValidCol;
-  static constexpr BLayout BFractal = SubTile::BFractal;
-  static constexpr SLayout SFractal = SubTile::SFractal;
-  static constexpr bool IsCubeLayout = SubTile::IsCubeLayout;
-  static constexpr int LogicalTileBytes = SubTile::LogicalTileBytes;
-  static constexpr int TilesizeCode = SubTile::TilesizeCode;
-  static constexpr bool IsValidActiveSize = SubTile::IsValidActiveSize;
-
-  explicit ReductionPrefixView(Parent &parent) : parent_(&parent) {}
-
-  using reduction_prefix_parent = Parent;
-
-  Parent &parent() const { return *parent_; }
-  decltype(auto) data() { return parent_->data(); }
-  decltype(auto) data() const { return parent_->data(); }
-  int GetValidRow() const { return ValidRow; }
-  int GetValidCol() const { return ValidCol; }
-  std::uintptr_t GetRangeBase() const { return 0; }
-
-private:
-  Parent *parent_;
-};
 template <typename Parent, typename SubTile, int Rows, int Cols>
 class BorrowedTileArray {
   using Contract = partition_contract<Parent, SubTile, Rows, Cols>;
@@ -309,6 +267,9 @@ public:
   int col() const { return col_; }
   int ordinal() const { return row_ * array_cols_ + col_; }
   int slot_count() const { return slot_count_; }
+  // Unified offset query (128-byte units), same name as the source-side
+  // carriers (SubTileView / range::Subview / range::Assemble).
+  std::uintptr_t GetRangeBase() const { return range_base_units(); }
   std::uintptr_t range_base_units() const {
     static_assert(SubTile::LogicalTileBytes % range::RangeAddressUnitBytes == 0,
                   "Tile assembly offsets must be representable in 128B units");
@@ -377,6 +338,9 @@ private:
 template <typename Parent, typename SubTile>
 using SubTileView = region::SubTileView<Parent, SubTile>;
 
+template <typename Parent, typename SubTile>
+using ReductionPrefixView = region::SubTileView<Parent, SubTile, true>;
+
 template <typename Parent, typename SubTile, int Rows, int Cols>
 using BorrowedTileArray =
     region::BorrowedTileArray<Parent, SubTile, Rows, Cols>;
@@ -391,9 +355,7 @@ template <typename T>
 struct is_subtile_view : std::false_type {};
 template <typename Parent, typename SubTile>
 struct is_subtile_view<region::SubTileView<Parent, SubTile>> : std::true_type {};
-template <typename Parent, typename SubTile>
-struct is_subtile_view<region::ReductionPrefixView<Parent, SubTile>>
-    : std::true_type {};
+
 template <typename T>
 inline constexpr bool is_subtile_view_v = is_subtile_view<T>::value;
 
@@ -408,12 +370,19 @@ struct is_tile<region::SubTileView<Parent, SubTile>> : std::true_type {
 // Range-modifier trait for the reduction-prefix source carrier: borrows the
 // first CELL of a wide CUBE reduction destination as a zero-copy source
 // (PTO #311).
+// A reduction prefix view is a SubTileView instantiated with Prefix_=true.
 template <typename T> struct is_reduction_prefix_view : std::false_type {};
 template <typename Parent, typename SubTile>
-struct is_reduction_prefix_view<region::ReductionPrefixView<Parent, SubTile>>
+struct is_reduction_prefix_view<region::SubTileView<Parent, SubTile, true>>
     : std::true_type {};
 template <typename T>
 concept is_reduction_prefix_view_v = is_reduction_prefix_view<T>::value;
+
+// Deprecated alias: the standalone ReductionPrefixView class was merged into
+// SubTileView (Prefix_=true). Keep for one release so old kernels compile;
+// it only names the new carrier and does not restore the old type.
+template <typename Parent, typename SubTile>
+using ReductionPrefixView = region::SubTileView<Parent, SubTile, true>;
 
 template <typename T>
 struct is_tile_array_output_ref : std::false_type {};
@@ -426,8 +395,10 @@ inline constexpr bool is_tile_array_output_ref_v =
 
 template <typename SubTile, typename Parent>
 auto TREDUCEPREFIXVIEW(Parent &parent)
-    -> region::ReductionPrefixView<Parent, SubTile> {
-  return region::ReductionPrefixView<Parent, SubTile>(parent);
+    -> region::SubTileView<Parent, SubTile, /*Prefix=*/true> {
+  // First CELL: row=0, col=0 of a 1-column partition — range base is 0,
+  // identical to the former ReductionPrefixView semantics.
+  return region::SubTileView<Parent, SubTile, true>(parent, 0, 0, 1);
 }
 template <typename SubTile, int Rows, int Cols, typename Parent>
   requires(range::is_legal_subview_parent_v<Parent>)

@@ -7,6 +7,23 @@ namespace pto {
 
 #define PTO_REGION_ALWAYS_INLINE __attribute__((always_inline)) inline
 
+// PTO-ISA #291: CUBE_M16/M32 elementwise pairs must select their shared
+// direct-Local layout on the block. Mirrors jcore PTO_ELEMENTWISE_LAYOUT_ASM.
+#ifndef PTO_REGION_ELEMENTWISE_LAYOUT_ASM
+#define PTO_REGION_ELEMENTWISE_LAYOUT_ASM                                      \
+  ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32, Null\n"                          \
+  ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Null\n"                      \
+  ".endif\n"
+#endif
+
+// B.DATR.Layout code for a TEPL operand's physical Local layout
+// (PTO-ISA #291): 29 CUBE_M32, 31 CUBE_M16, 0 NORM.
+template <typename Tile>
+inline constexpr int region_prefix_layout_code_v =
+    Tile::BFractal == BLayout::CubeM32
+        ? 29
+        : Tile::BFractal == BLayout::CubeM16 ? 31 : 0;
+
 template <int Opcode, typename Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void
 pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
@@ -1062,6 +1079,78 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary(
       : "memory");
 }
 
+// Prefix-view binary sources (PTO #311): the math inputs keep their CUBE
+// layout, so the block carries B.DATR <layout> exactly like the plain jcore
+// binary wrappers (PTO-ISA #291). The prefix contract itself (CUBE parent,
+// one-CELL fragment) was validated by the TREDUCEPREFIXVIEW factory.
+template <int Opcode, typename Out, typename Tile, typename Parent,
+          typename SubTile>
+PTO_REGION_ALWAYS_INLINE void pto_region_binary_prefix(
+    Out &dst, Tile &src0,
+    region::SubTileView<Parent, SubTile, true> &src1) {
+  static_assert(Tile::IsCubeLayout,
+                "reduction prefix pair requires a CUBE-layout sibling source");
+  static_assert(Tile::Rows == SubTile::Rows && Tile::Cols == SubTile::Cols,
+                "reduction prefix pair requires matching physical shapes");
+  static_assert(Tile::ValidRow == SubTile::ValidRow &&
+                    Tile::ValidCol == SubTile::ValidCol,
+                "reduction prefix pair requires matching valid shapes");
+  static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
+                "reduction prefix pair requires matching element types");
+  const uintptr_t prefix_base_units = src1.GetRangeBase();
+  asm volatile(
+      "BSTART.TEPL %c9, %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
+      "B.DIM zero, %c4, ->lb0\n"
+      "B.DIM zero, %c5, ->lb1\n"
+      "B.DIM zero, %c6, ->lb2\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
+      "B.SUBVIEW 1, %8, 0, %c10\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename Tile::DType>::TypeCode),
+        "Tr"(src0.data()), "Tr"(src1.data()),
+        "i"(Tile::ValidCol), "i"(Tile::ValidRow), "i"(Tile::Cols),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "r"(prefix_base_units), "i"(Opcode),
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        [ElemLayout] "i"(region_prefix_layout_code_v<Tile>)
+      : "memory");
+}
+
+template <int Opcode, typename Out, typename Parent, typename SubTile,
+          typename Tile>
+PTO_REGION_ALWAYS_INLINE void pto_region_binary_prefix(
+    Out &dst, region::SubTileView<Parent, SubTile, true> &src0,
+    Tile &src1) {
+  static_assert(Tile::IsCubeLayout,
+                "reduction prefix pair requires a CUBE-layout sibling source");
+  static_assert(Tile::Rows == SubTile::Rows && Tile::Cols == SubTile::Cols,
+                "reduction prefix pair requires matching physical shapes");
+  static_assert(Tile::ValidRow == SubTile::ValidRow &&
+                    Tile::ValidCol == SubTile::ValidCol,
+                "reduction prefix pair requires matching valid shapes");
+  static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
+                "reduction prefix pair requires matching element types");
+  const uintptr_t prefix_base_units = src0.GetRangeBase();
+  asm volatile(
+      "BSTART.TEPL %c9, %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
+      "B.DIM zero, %c4, ->lb0\n"
+      "B.DIM zero, %c5, ->lb1\n"
+      "B.DIM zero, %c6, ->lb2\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
+      "B.SUBVIEW 0, %8, 0, %c10\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename SubTile::DType>::TypeCode),
+        "Tr"(src0.data()), "Tr"(src1.data()),
+        "i"(SubTile::ValidCol), "i"(SubTile::ValidRow), "i"(SubTile::Cols),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "r"(prefix_base_units), "i"(Opcode),
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        [ElemLayout] "i"(region_prefix_layout_code_v<SubTile>)
+      : "memory");
+}
+
 #define PTO_REGION_BINARY_SOURCE_WRAPPER(Name, Opcode)                       \
   template <is_tile_data_v Out, typename Parent0, typename SubTile0,         \
             typename Parent1, typename SubTile1>                              \
@@ -1081,6 +1170,20 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary(
   PTO_REGION_ALWAYS_INLINE void Name(                                       \
       Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {     \
     pto_region_binary<Opcode>(dst, src0, src1);                              \
+  }                                                                          \
+  template <is_tile_data_v Out, typename Tile, typename Parent,               \
+            typename SubTile>                                                 \
+  PTO_REGION_ALWAYS_INLINE void Name(                                       \
+      Out &dst, Tile &src0,                                                   \
+      region::SubTileView<Parent, SubTile, true> &src1) {                     \
+    pto_region_binary_prefix<Opcode>(dst, src0, src1);                       \
+  }                                                                          \
+  template <is_tile_data_v Out, typename Parent, typename SubTile,            \
+            typename Tile>                                                    \
+  PTO_REGION_ALWAYS_INLINE void Name(                                       \
+      Out &dst, region::SubTileView<Parent, SubTile, true> &src0,             \
+      Tile &src1) {                                                           \
+    pto_region_binary_prefix<Opcode>(dst, src0, src1);                       \
   }
 
 PTO_REGION_BINARY_SOURCE_WRAPPER(TADD, 0)
@@ -1335,104 +1438,7 @@ PTO_REGION_COL_EXPAND_MIXED_WRAPPER(TCOLEXPANDEXPDIF, 91)
 #undef PTO_REGION_ROW_EXPAND_MIXED_WRAPPER
 #undef PTO_REGION_COL_EXPAND_MIXED_WRAPPER
 
-template <int Opcode, typename Out, typename Tile, typename Parent,
-          typename SubTile>
-PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
-    Out &dst, Tile &src0,
-    region::ReductionPrefixView<Parent, SubTile> &src1) {
-  static_assert(Tile::IsCubeLayout && SubTile::IsCubeLayout,
-                "reduction prefix sources require CUBE layouts");
-  static_assert(Tile::Rows == SubTile::Rows && Tile::Cols == SubTile::Cols,
-                "reduction prefix sources require matching physical shapes");
-  static_assert(Tile::ValidRow == SubTile::ValidRow &&
-                    Tile::ValidCol == SubTile::ValidCol,
-                "reduction prefix sources require matching valid shapes");
-  static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
-                "reduction prefix sources require matching element types");
-  static_assert(Tile::BFractal == SubTile::BFractal,
-                "reduction prefix sources require matching CUBE layouts");
-  const uintptr_t prefix_base_units = src1.GetRangeBase();
-  asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
-      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
-      "B.DIM zero, %c4, ->lb0\n"
-      "B.DIM zero, %c5, ->lb1\n"
-      "B.DIM zero, %c6, ->lb2\n"
-      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
-      "B.SUBVIEW 1, %8, 0, %c10\n"
-      : [Dst] "=Tr"(dst.data())
-      : "i"(type_traits<typename Tile::DType>::TypeCode),
-        "Tr"(src0.data()), "Tr"(src1.data()),
-        "i"(Tile::ValidCol), "i"(Tile::ValidRow), "i"(Tile::Cols),
-        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "r"(prefix_base_units), "i"(Opcode),
-        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-        [ElemLayout] "i"(local_layout_code_v<Tile>)
-      : "memory");
-}
 
-template <int Opcode, typename Out, typename Parent, typename SubTile,
-          typename Tile>
-PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
-    Out &dst, region::ReductionPrefixView<Parent, SubTile> &src0,
-    Tile &src1) {
-  static_assert(Tile::IsCubeLayout && SubTile::IsCubeLayout,
-                "reduction prefix sources require CUBE layouts");
-  static_assert(Tile::Rows == SubTile::Rows && Tile::Cols == SubTile::Cols,
-                "reduction prefix sources require matching physical shapes");
-  static_assert(Tile::ValidRow == SubTile::ValidRow &&
-                    Tile::ValidCol == SubTile::ValidCol,
-                "reduction prefix sources require matching valid shapes");
-  static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
-                "reduction prefix sources require matching element types");
-  static_assert(Tile::BFractal == SubTile::BFractal,
-                "reduction prefix sources require matching CUBE layouts");
-  const uintptr_t prefix_base_units = src0.GetRangeBase();
-  asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
-      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
-      "B.DIM zero, %c4, ->lb0\n"
-      "B.DIM zero, %c5, ->lb1\n"
-      "B.DIM zero, %c6, ->lb2\n"
-      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
-      "B.SUBVIEW 0, %8, 0, %c10\n"
-      : [Dst] "=Tr"(dst.data())
-      : "i"(type_traits<typename SubTile::DType>::TypeCode),
-        "Tr"(src0.data()), "Tr"(src1.data()),
-        "i"(SubTile::ValidCol), "i"(SubTile::ValidRow), "i"(SubTile::Cols),
-        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "r"(prefix_base_units), "i"(Opcode),
-        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-        [ElemLayout] "i"(local_layout_code_v<SubTile>)
-      : "memory");
-}
-
-#define PTO_REGION_BINARY_PREFIX_WRAPPER(Name, Opcode)                         \
-  template <is_tile_data_v Out, typename Tile, typename Parent, typename SubTile> \
-  PTO_REGION_ALWAYS_INLINE void Name(                                        \
-      Out &dst, Tile &src0,                                                   \
-      region::ReductionPrefixView<Parent, SubTile> &src1) {                    \
-    pto_region_binary_reduction_prefix<Opcode>(dst, src0, src1);              \
-  }                                                                            \
-  template <is_tile_data_v Out, typename Parent, typename SubTile, typename Tile> \
-  PTO_REGION_ALWAYS_INLINE void Name(                                        \
-      Out &dst, region::ReductionPrefixView<Parent, SubTile> &src0,           \
-      Tile &src1) {                                                           \
-    pto_region_binary_reduction_prefix<Opcode>(dst, src0, src1);              \
-  }
-
-PTO_REGION_BINARY_PREFIX_WRAPPER(TADD, 0)
-PTO_REGION_BINARY_PREFIX_WRAPPER(TSUB, 1)
-PTO_REGION_BINARY_PREFIX_WRAPPER(TMUL, 2)
-PTO_REGION_BINARY_PREFIX_WRAPPER(TDIV, 3)
-PTO_REGION_BINARY_PREFIX_WRAPPER(TREM, 4)
-PTO_REGION_BINARY_PREFIX_WRAPPER(TAND, 6)
-PTO_REGION_BINARY_PREFIX_WRAPPER(TOR, 7)
-PTO_REGION_BINARY_PREFIX_WRAPPER(TXOR, 8)
-PTO_REGION_BINARY_PREFIX_WRAPPER(TMAX, 11)
-PTO_REGION_BINARY_PREFIX_WRAPPER(TMIN, 12)
-
-#undef PTO_REGION_BINARY_PREFIX_WRAPPER
 
 template <int ParentSize, bool Init, bool Last, int Opcode,
           typename SubTile, typename Parent0, typename SubTile0,
