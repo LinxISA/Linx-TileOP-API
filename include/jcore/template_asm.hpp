@@ -58,26 +58,22 @@ using namespace pto;
 
 // TCVT must encode the CUBE layout, destination dtype and rounding mode in a
 // single B.DATR; consecutive B.DATR instructions do not merge attributes.
+// TCVT for a CUBE_M16/M32 source keeps the Tile descriptors' CUBE layout
+// while B.DATR.Layout stays NORM (omitted): TileOperandsLegal_TCVT requires
+// CurrentBundleDataLayout() == TileDataLayout_NORM for a CUBE M-format
+// source (pto-spec a7331d2b, issue #178). The destination CELL shape is
+// derived from the destination DataType, so only the destination dtype and
+// the rounding mode are encoded here; consecutive B.DATR instructions do
+// not merge attributes.
 #define PTO_CUBE_TCVT_DATR_ASM                                                 \
-  ".if %c[ElemLayout] == 29\n"                                                 \
-  ".if %c[RMode] == 0\nB.DATR CUBE_M32, %D2, Null, RNONE\n"                   \
-  ".elseif %c[RMode] == 1\nB.DATR CUBE_M32, %D2, Null, RNE\n"                   \
-  ".elseif %c[RMode] == 2\nB.DATR CUBE_M32, %D2, Null, RTZ\n"                   \
-  ".elseif %c[RMode] == 3\nB.DATR CUBE_M32, %D2, Null, RTM\n"                   \
-  ".elseif %c[RMode] == 4\nB.DATR CUBE_M32, %D2, Null, RTP\n"                   \
-  ".elseif %c[RMode] == 5\nB.DATR CUBE_M32, %D2, Null, RNA\n"                   \
-  ".elseif %c[RMode] == 6\nB.DATR CUBE_M32, %D2, Null, RTO\n"                   \
-  ".elseif %c[RMode] == 7\nB.DATR CUBE_M32, %D2, Null, RHB\n.endif\n"            \
-  ".elseif %c[ElemLayout] == 31\n"                                            \
-  ".if %c[RMode] == 0\nB.DATR CUBE_M16, %D2, Null, RNONE\n"                   \
-  ".elseif %c[RMode] == 1\nB.DATR CUBE_M16, %D2, Null, RNE\n"                   \
-  ".elseif %c[RMode] == 2\nB.DATR CUBE_M16, %D2, Null, RTZ\n"                   \
-  ".elseif %c[RMode] == 3\nB.DATR CUBE_M16, %D2, Null, RTM\n"                   \
-  ".elseif %c[RMode] == 4\nB.DATR CUBE_M16, %D2, Null, RTP\n"                   \
-  ".elseif %c[RMode] == 5\nB.DATR CUBE_M16, %D2, Null, RNA\n"                   \
-  ".elseif %c[RMode] == 6\nB.DATR CUBE_M16, %D2, Null, RTO\n"                   \
-  ".elseif %c[RMode] == 7\nB.DATR CUBE_M16, %D2, Null, RHB\n.endif\n"            \
-  ".endif\n"
+  ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"                                    \
+  ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"                                  \
+  ".elseif %c[RMode] == 2\nB.DATR %D2, RTZ\n"                                  \
+  ".elseif %c[RMode] == 3\nB.DATR %D2, RTM\n"                                  \
+  ".elseif %c[RMode] == 4\nB.DATR %D2, RTP\n"                                  \
+  ".elseif %c[RMode] == 5\nB.DATR %D2, RNA\n"                                  \
+  ".elseif %c[RMode] == 6\nB.DATR %D2, RTO\n"                                  \
+  ".elseif %c[RMode] == 7\nB.DATR %D2, RHB\n.endif\n"
 
 // Generic TEPL wrappers bind operands directly from `data()` and therefore do
 // not attach B.SUBVIEW.  A TPARTVIEW fragment must go through the dedicated
