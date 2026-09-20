@@ -2913,9 +2913,14 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src,
 
   const size_t valid_k = dst.GetValidCol();
   const size_t valid_n = dst.GetValidRow();
+  // The assembler only spells the weight layouts through their ISA names
+  // (OHWI2NK/OIHW2NK); the numeric "layout<N>" form is not accepted syntax.
+  constexpr bool IsOIHW = WeightLayout == OIHW2NK;
   asm volatile(
       "BSTART.TLSU TLOAD, %D[SrcType]\n"
-      "B.DATR layout%c[WeightLayout], DTYPE_NONE, Zero\n"
+      ".if %c[WeightLayout] == 10\nB.DATR OHWI2NK, DTYPE_NONE, Zero\n"
+      ".elseif %c[WeightLayout] == 11\nB.DATR OIHW2NK, DTYPE_NONE, Zero\n"
+      ".endif\n"
       "B.DIM %[ValidK], 0, ->lb0\n"
       "B.DIM %[ValidN], 0, ->lb1\n"
       "B.DIM zero, %c[TotalK], ->lb2\n"
