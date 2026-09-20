@@ -8,8 +8,12 @@
 
 ```cpp
 template <is_tile_data_v tile_shape>
-void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1);
+void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned ValidCol = 0, unsigned ValidRow = 0);
 ```
+
+用户可通过可选的 `ValidCol`/`ValidRow` 参数覆写发射的 `B.DIM` 几何（运行期寄存器形式）。缺省 `0` 表示使用 tile 类型派生的维度，发射保持既有立即数形式。覆写值必须非零且不超过 tile 容量。
+
 
 ### Associated destination：`TMIN_ASS`
 

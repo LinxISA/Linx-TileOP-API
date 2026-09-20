@@ -9799,7 +9799,13 @@ PTO_DEFINE_ELEMENTWISE_USER_DIMS(TMIN, 12)
 
 // TSUB: dst = src0 - src1
 template <is_tile_data_v tile_shape>
-void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 1>(
+        dst, src0, src1, UserValidCol, UserValidRow);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 1, %D1\n"
@@ -9877,7 +9883,13 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 
 // TMUL: dst = src0 * src1
 template <is_tile_data_v tile_shape>
-void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 2>(
+        dst, src0, src1, UserValidCol, UserValidRow);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 2, %D1\n"
@@ -9959,7 +9971,13 @@ void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 
 // TDIV: dst = src0 / src1
 template <is_tile_data_v tile_shape>
-void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 3>(
+        dst, src0, src1, UserValidCol, UserValidRow);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 3, %D1\n"
@@ -10123,7 +10141,13 @@ void TFMOD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 
 // TAND: dst = src0 & src1
 template <is_tile_data_v tile_shape>
-void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 6>(
+        dst, src0, src1, UserValidCol, UserValidRow);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 6, %D1\n"
@@ -10201,7 +10225,13 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 
 // TOR: dst = src0 | src1
 template <is_tile_data_v tile_shape>
-void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 7>(
+        dst, src0, src1, UserValidCol, UserValidRow);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 7, %D1\n"
@@ -10279,7 +10309,13 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 
 // TXOR: dst = src0 ^ src1
 template <is_tile_data_v tile_shape>
-void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 8>(
+        dst, src0, src1, UserValidCol, UserValidRow);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 8, %D1\n"
@@ -10357,7 +10393,13 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 
 // TSHL: dst = src0 << src1
 template <is_tile_data_v tile_shape>
-void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 9>(
+        dst, src0, src1, UserValidCol, UserValidRow);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 9, %D1\n"
@@ -10435,7 +10477,13 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 
 // TSHR: dst = src0 >> src1
 template <is_tile_data_v tile_shape>
-void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 10>(
+        dst, src0, src1, UserValidCol, UserValidRow);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 10, %D1\n"
@@ -10513,7 +10561,13 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 
 // TMAX: dst = max(src0, src1)
 template <is_tile_data_v tile_shape>
-void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 11>(
+        dst, src0, src1, UserValidCol, UserValidRow);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 11, %D1\n"
@@ -10591,7 +10645,13 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 
 // TMIN: dst = min(src0, src1)
 template <is_tile_data_v tile_shape>
-void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 12>(
+        dst, src0, src1, UserValidCol, UserValidRow);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 12, %D1\n"
