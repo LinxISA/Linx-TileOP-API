@@ -465,7 +465,7 @@ using namespace pto;
 using D = CubeAccumulatorM32<float, 32, 32>;
 using Ds8 = CubeAccumulatorM32<int8_t, 32, 32>;
 using A = CubeTileM32<float, 32, 64>;
-using B = CubeTileN8<float, 32, 64>;
+using B = CubeTileN8<float, 64, 32>; // local B is logical [K, N]
 using Param = Tile<Location::Vec, unsigned long, 2, 32,
                    BLayout::RowMajor, 1, 32>;
 using Row = Tile<Location::Vec, float, 32, 32,

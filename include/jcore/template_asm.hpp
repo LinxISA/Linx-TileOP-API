@@ -4678,6 +4678,23 @@ constexpr int cooperative_group_m_rows_per_pe(int group_m) {
   return group_m <= 64 ? 16 : 32;
 }
 
+// Effective logical K/N of a matrix Right primary. A Shared B declares its
+// PHYSICAL stored RowMajor shape (pto-spec #257,
+// BundleMatrixSharedBPrimarySchemaLegal): TransB=0 stores [N, K] (K
+// contiguous); TransB=1 stores [K, N] (N contiguous). A Local B (CUBE_N8)
+// is instead a logical descriptor whose valid shape is always [K, N]
+// (TileMatrixCubeInfosMatchDimensions: right.valid_rows == k,
+// right.valid_columns == n), so TransB — which is only legal on a Shared B
+// anyway — never relabels its dimensions.
+template <typename B, bool TransB>
+inline constexpr int matrix_b_effective_k =
+    is_shared_tile_v<B> ? (TransB ? B::ValidRow : B::ValidCol)
+                        : B::ValidRow;
+template <typename B, bool TransB>
+inline constexpr int matrix_b_effective_n =
+    is_shared_tile_v<B> ? (TransB ? B::ValidCol : B::ValidRow)
+                        : B::ValidCol;
+
 template <FixpAttr Attr, typename Dst, typename A, typename B, bool MX = false>
 constexpr void validate_matrix_contract() {
   static_assert(matrix_input_pair_legal<A, B, MX>(),
@@ -4723,18 +4740,17 @@ constexpr void validate_matrix_contract() {
       ? A::ValidCol : A::ValidRow;
   constexpr int AValidCols = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidRow : A::ValidCol;
-  // ASL (pto-spec #257, BundleMatrixSharedBPrimarySchemaLegal): a Shared B
-  // declares its PHYSICAL stored RowMajor shape. TransB=0 stores [N, K]
-  // (K contiguous); TransB=1 stores [K, N] (N contiguous). The logical K/N
-  // derivation is therefore symmetric with the Shared A rule above.
-  constexpr int BValidRows = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidRow : B::ValidCol;
-  constexpr int BValidCols = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidCol : B::ValidRow;
+  // A Shared B declares its PHYSICAL stored RowMajor shape (pto-spec #257,
+  // BundleMatrixSharedBPrimarySchemaLegal); a Local B (CUBE_N8) is a logical
+  // descriptor whose valid shape is always [K, N] — see
+  // matrix_b_effective_k/n above.
+  constexpr int BValidRows = matrix_b_effective_k<B, Attr.TransB>;
+  constexpr int BValidCols = matrix_b_effective_n<B, Attr.TransB>;
   static_assert(AValidCols == BValidRows,
                 "Matrix effective valid K dimensions must match "
-                "(non-transposed Shared B is declared as its physical [N, K] "
-                "shape: K is the second dimension)");
+                "(a non-transposed Shared B is declared as its physical "
+                "[N, K] shape: K is the second dimension; a Local B is "
+                "always logical [K, N])");
   if constexpr (is_shared_tile_v<A> && is_shared_tile_v<B>) {
     // ASL TMATMUL legality: any cooperative TMATMUL interprets LB0 as
     // core-total group_M, and PE i computes valid_M =
@@ -4862,9 +4878,8 @@ constexpr void validate_matrix_bias_contract() {
                     B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC,
                 "Matrix Bias dynamic valid shapes are not supported");
   // Shared B declares its physical stored shape (pto-spec #257): [N, K]
-  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
-  constexpr int N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidCol : B::ValidRow;
+  // without TransB, [K, N] with it. A Local B is always logical [K, N].
+  constexpr int N = matrix_b_effective_n<B, Attr.TransB>;
   static_assert(Bias::ValidRow == 1 && Bias::ValidCol == N,
                 "Matrix Bias valid shape must be 1 x N");
 }
@@ -4886,9 +4901,8 @@ constexpr void validate_matrix_scale_contract() {
   constexpr int K = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidRow : A::ValidCol;
   // Shared B declares its physical stored shape: [N, K] without TransB,
-  // [K, N] with it (pto-spec #257). Symmetric with the Shared A rule.
-  constexpr int N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidCol : B::ValidRow;
+  // [K, N] with it (pto-spec #257). A Local B is always logical [K, N].
+  constexpr int N = matrix_b_effective_n<B, Attr.TransB>;
   constexpr int ScaleAType = matrix_mx_scale_carrier_type(ACode);
   constexpr int ScaleBType = matrix_mx_scale_carrier_type(BCode);
   constexpr int ScaleAGroup = matrix_mx_scale_group_size(ACode);
@@ -4970,9 +4984,8 @@ constexpr void validate_matrix_postprocess_contract() {
   constexpr int M = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidCol : A::ValidRow;
   // Shared B declares its physical stored shape (pto-spec #257): [N, K]
-  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
-  constexpr int N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidCol : B::ValidRow;
+  // without TransB, [K, N] with it. A Local B is always logical [K, N].
+  constexpr int N = matrix_b_effective_n<B, Attr.TransB>;
   // Reduction outputs reduce the per-PE D rows: ASL MatrixRowMaxResult
   // iterates input.valid_rows, the per-PE clamp of group_M for a
   // cooperative TMATMUL, not the core-total group_M.
@@ -5061,9 +5074,8 @@ constexpr MatmulShape resolve_matmul_shape() {
   constexpr size_t K = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidRow : A::ValidCol;
   // Shared B declares its physical stored shape: [N, K] without TransB,
-  // [K, N] with it (pto-spec #257). Symmetric with the Shared A rule.
-  constexpr size_t N = is_shared_tile_v<B> && Attr.TransB
-      ? B::ValidCol : B::ValidRow;
+  // [K, N] with it (pto-spec #257). A Local B is always logical [K, N].
+  constexpr size_t N = matrix_b_effective_n<B, Attr.TransB>;
   return MatmulShape{M, N, K, IsGroup};
 }
 
@@ -7525,9 +7537,8 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   // Shared B declares its physical stored shape (pto-spec #257): [N, K]
-  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
-  constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
+  // without TransB, [K, N] with it. A Local B is always logical [K, N].
+  constexpr int EffectiveN = pto_matmul_detail::matrix_b_effective_n<tile_shape_b, Attr.TransB>;
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
@@ -7632,9 +7643,8 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   // Shared B declares its physical stored shape (pto-spec #257): [N, K]
-  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
-  constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
+  // without TransB, [K, N] with it. A Local B is always logical [K, N].
+  constexpr int EffectiveN = pto_matmul_detail::matrix_b_effective_n<tile_shape_b, Attr.TransB>;
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
@@ -7747,9 +7757,8 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_d &d, tile_shape_a &a,
   constexpr int IorMode = (HasScalarQuant ? 1 : 0) |
                           (Attr.Relu == FixpReluMode::LRelu ? 2 : 0);
   // Shared B declares its physical stored shape (pto-spec #257): [N, K]
-  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
-  constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
+  // without TransB, [K, N] with it. A Local B is always logical [K, N].
+  constexpr int EffectiveN = pto_matmul_detail::matrix_b_effective_n<tile_shape_b, Attr.TransB>;
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   // Reduction outputs still use the per-PE clamp of group_M for cooperative
@@ -7877,9 +7886,8 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   constexpr int EffectiveM = is_shared_tile_v<tile_shape_a> && Attr.TransA
       ? tile_shape_a::ValidCol : tile_shape_a::ValidRow;
   // Shared B declares its physical stored shape (pto-spec #257): [N, K]
-  // without TransB, [K, N] with it. Symmetric with the Shared A rule.
-  constexpr int EffectiveN = is_shared_tile_v<tile_shape_b> && Attr.TransB
-      ? tile_shape_b::ValidCol : tile_shape_b::ValidRow;
+  // without TransB, [K, N] with it. A Local B is always logical [K, N].
+  constexpr int EffectiveN = pto_matmul_detail::matrix_b_effective_n<tile_shape_b, Attr.TransB>;
   // Reduction outputs (RowMax/GroupMax) reduce the per-PE D rows: ASL
   // MatrixRowMaxResult iterates input.valid_rows, which for a cooperative
   // TMATMUL is the per-PE clamp of group_M, not the core-total group_M.
