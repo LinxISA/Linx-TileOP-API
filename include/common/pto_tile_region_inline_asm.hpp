@@ -703,8 +703,23 @@ template <int ParentSize, bool Init, bool Last, int RMode, typename SubTile,
           typename In>
 PTO_REGION_ALWAYS_INLINE void
 pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
-  static_assert(SubTile::Rows == In::Rows && SubTile::Cols == In::Cols,
-                "TCVT assembly slot requires matching physical shape");
+  // TCVT ASL (format-conversion/TCVT.asl): "For a CUBE_M16 or CUBE_M32
+  // source, the destination preserves the same CUBE layout and
+  // ValidRow/ValidCol, while Row, Col, CELL count, capacity, and packing
+  // independently match the destination DataType."  Physical Rows/Cols
+  // therefore differ across dtypes by element width; only the logical
+  // valid shape and the slot capacity contract are checked here. A
+  // cross-dtype physical-Cols equality assert would wrongly reject legal
+  // conversions such as BF16 32x2 -> E8M0 32x4 (issue #177).
+  static_assert(SubTile::ValidRow == In::ValidRow &&
+                    SubTile::ValidCol == In::ValidCol,
+                "TCVT assembly slot requires matching valid shape");
+  static_assert(SubTile::Rows * SubTile::Cols *
+                        type_traits<typename SubTile::DType>::bits ==
+                    In::Rows * In::Cols *
+                        type_traits<typename In::DType>::bits,
+                "TCVT assembly slot capacity mismatch: Rows x Cols x bits "
+                "must pack the same byte count for both dtypes");
   static_assert(RMode >= LINX_RNONE && RMode <= LINX_RHB,
                 "TCVT RMode must be a LinxRMode value");
   // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase;
