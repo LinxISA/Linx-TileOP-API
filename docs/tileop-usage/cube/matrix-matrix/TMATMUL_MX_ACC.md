@@ -191,10 +191,10 @@ BSTOP       or the next BSTART completion boundary
 
 using namespace pto;
 using A = CubeTileM16<__half, 16, 32>;
-using B = CubeTileN8<__fp8_e4m3, 16, 32>;
+using B = CubeTileN8<__fp8_e4m3, 32, 16>; // local B is logical [K, N]
 using Acc = CubeAccumulatorM16<float, 16, 16>;
-using ScaleB = Tile<Location::Scaling, __fp8_e8m0, 8, 16,
-                     BLayout::RowMajor, 1, 16>;
+using ScaleB = Tile<Location::Scaling, __fp8_e8m0, 1, 16,
+                     BLayout::RowMajor, 1, 16>; // local scale: [ceil(K/32), N]
 
 void matmul_mx_acc(Acc &d, Acc &c, A &a, B &b, ScaleB &scale_b) {
   // d = c + a * dequant(b, scale_b)。

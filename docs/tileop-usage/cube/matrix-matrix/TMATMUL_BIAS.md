@@ -146,11 +146,11 @@ BSTOP       or the next BSTART completion boundary
 
 using namespace pto;
 using A = CubeTileM16<float, 16, 32>;
-using B = CubeTileN8<float, 16, 32>;
+using B = CubeTileN8<float, 32, 16>; // local B is logical [K, N]
 using C = CubeAccumulatorM16<float, 16, 16>;
-using Bias = CubeBias<float, 16>;
+using Bias = CubeBias<float, 16>; // 1 x N
 using GMA = global_tensor<float, RowMajor<16, 32>>;
-using GMB = global_tensor<float, RowMajor<16, 32>>;
+using GMB = global_tensor<float, RowMajor<32, 16>>;
 using GMC = global_tensor<float, RowMajor<16, 16>>;
 using GMBias = global_tensor<float, RowMajor<8, 16>>;
 
