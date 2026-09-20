@@ -9684,8 +9684,18 @@ PTO_SHARED_INLINE void emit_binary_user(
 
 } // namespace pto_elementwise_user_dims
 template <is_tile_data_v tile_shape>
-void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
+void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape);
+  if constexpr (tile_shape::ValidCol > 0 || tile_shape::ValidRow > 0) {
+    if (UserValidCol != 0 || UserValidRow != 0) {
+      // User override: both dims take the runtime register form, matching
+      // the ISA B.DIM RegSrc contract for non-schema dims.
+      pto_elementwise_user_dims::emit_binary_user<tile_shape, 0>(
+          dst, src0, src1, UserValidCol, UserValidRow);
+      return;
+    }
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
     "BSTART.TEPL 0, %D1\n"
