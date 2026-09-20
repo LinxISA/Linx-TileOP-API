@@ -1367,6 +1367,30 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
   static_assert(Tile::BFractal == SubTile::BFractal,
                 "reduction prefix sources require matching CUBE layouts");
   const uintptr_t prefix_base_units = src1.GetRangeBase();
+  // A dynamic (ValidRow == -1) tile carries its valid row count at runtime;
+  // B.DIM's uimm17 is unsigned, so the count must travel in a GPR via the
+  // "B.DIM RegSrc, uimm17, ->LBn" form (issue #187), exactly like the TCVT
+  // dynamic branch in template_asm.hpp.
+  if constexpr (Tile::ValidRow < 0) {
+  asm volatile(
+      "BSTART.TEPL %c8, %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
+      "B.DIM zero, %c4, ->lb0\n"
+      "B.DIM %[DynValidRow], 0, ->lb1\n"
+      "B.DIM zero, %c5, ->lb2\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z6>\n"
+      "B.SUBVIEW 1, %7, 0, %c9\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename Tile::DType>::TypeCode),
+        "Tr"(src0.data()), "Tr"(src1.data()),
+        "i"(Tile::ValidCol), "i"(Tile::Cols),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "r"(prefix_base_units), "i"(Opcode),
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        [ElemLayout] "i"(local_layout_code_v<Tile>),
+        [DynValidRow] "r"(src0.GetValidRow())
+      : "memory");
+  } else {
   asm volatile(
       "BSTART.TEPL %c9, %D1\n"
       PTO_REGION_ELEMENTWISE_LAYOUT_ASM
@@ -1384,6 +1408,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
         "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
         [ElemLayout] "i"(local_layout_code_v<Tile>)
       : "memory");
+  }
 }
 
 template <int Opcode, typename Out, typename Parent, typename SubTile,
@@ -1403,6 +1428,28 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
   static_assert(Tile::BFractal == SubTile::BFractal,
                 "reduction prefix sources require matching CUBE layouts");
   const uintptr_t prefix_base_units = src0.GetRangeBase();
+  // Dynamic ValidRow travels in a GPR (issue #187, see the mirrored
+  // Tile-src overload above).
+  if constexpr (SubTile::ValidRow < 0) {
+  asm volatile(
+      "BSTART.TEPL %c8, %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
+      "B.DIM zero, %c4, ->lb0\n"
+      "B.DIM %[DynValidRow], 0, ->lb1\n"
+      "B.DIM zero, %c5, ->lb2\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z6>\n"
+      "B.SUBVIEW 0, %7, 0, %c9\n"
+      : [Dst] "=Tr"(dst.data())
+      : "i"(type_traits<typename SubTile::DType>::TypeCode),
+        "Tr"(src0.data()), "Tr"(src1.data()),
+        "i"(SubTile::ValidCol), "i"(SubTile::Cols),
+        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        "r"(prefix_base_units), "i"(Opcode),
+        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
+        [ElemLayout] "i"(local_layout_code_v<SubTile>),
+        [DynValidRow] "r"(src1.GetValidRow())
+      : "memory");
+  } else {
   asm volatile(
       "BSTART.TEPL %c9, %D1\n"
       PTO_REGION_ELEMENTWISE_LAYOUT_ASM
@@ -1420,6 +1467,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
         "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
         [ElemLayout] "i"(local_layout_code_v<SubTile>)
       : "memory");
+  }
 }
 
 #define PTO_REGION_BINARY_PREFIX_WRAPPER(Name, Opcode)                         \
