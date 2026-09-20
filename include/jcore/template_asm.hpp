@@ -9629,6 +9629,60 @@ concept reduction_prefix_operand_for =
     Tile::BFractal == std::remove_const_t<View>::BFractal;
 
 // TADD: dst = src0 + src1
+// --- PTO 0.58.6 user-overridable valid dims (elementwise family) --------
+// The optional ValidCol/ValidRow arguments let a caller narrow or widen the
+// B.DIM geometry of the emitted bundle without changing the tile types:
+//   0 (default)  -> the type-derived dimension is emitted (immediate form
+//                   for static tiles, runtime form for dynamic tiles);
+//   N > 0        -> B.DIM uses the runtime register form with the user
+//                   value, overriding the type-derived dimension.
+// Constraints: ValidCol/ValidRow must be nonzero and <= the tile capacity
+// (Rows/Cols); a nonzero ValidRow requires a nonzero ValidCol because LB0
+// is mandatory in every elementwise bundle.
+
+namespace pto_elementwise_user_dims {
+
+// The optional ValidCol/ValidRow arguments let a caller narrow the B.DIM
+// geometry of the emitted bundle without changing the tile types: 0 (the
+// default) emits the type-derived dimension; N > 0 overrides it via the
+// runtime register form. Constraints: both values nonzero and within the
+// tile capacity when overridden; a nonzero ValidRow requires a nonzero
+// ValidCol because LB0 is mandatory in every elementwise bundle.
+
+template <is_tile_data_v T>
+constexpr bool user_dims_legal(unsigned Col, unsigned Row) {
+  if (Col == 0 || Row == 0)
+    return false;
+  return Col <= (unsigned)T::Cols && Row <= (unsigned)T::Rows;
+}
+
+// One elementwise bundle: header + layout + 3x B.DIM + record + operands.
+// DimSrc selects per-slot immediate (type-derived) vs register (user)
+// emission for lb0/lb1; lb2 (physical Cols) always uses the type value.
+template <is_tile_data_v Tile, int Opcode>
+PTO_SHARED_INLINE void emit_binary_user(
+    Tile &dst, Tile &src0, Tile &src1, unsigned UserCol, unsigned UserRow) {
+  unsigned Col = UserCol ? UserCol : (unsigned)Tile::ValidCol;
+  unsigned Row = UserRow ? UserRow : (unsigned)Tile::ValidRow;
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      PTO_ELEMENTWISE_LAYOUT_ASM
+      "B.DIM %[ucol], 0, ->lb0\n"
+      "B.DIM %[urow], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      : [Dst] "=Tr"(dst.data())
+      : [ucol] "r"(Col), [urow] "r"(Row),
+        [Type] "i"(type_traits<typename Tile::DType>::TypeCode),
+        [Cols] "i"(Tile::Cols),
+        [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+        [Opcode] "i"(Opcode),
+        [TileSize] "i"(tile_type_traits<typename Tile::TileDType>::TilesizeCode),
+        [ElemLayout] "i"(local_layout_code_v<Tile>)
+      : "memory");
+}
+
+} // namespace pto_elementwise_user_dims
 template <is_tile_data_v tile_shape>
 void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape);
@@ -9706,6 +9760,32 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
       [ElemLayout] "i"(local_layout_code_v<tile_shape>)
   );  }
 }
+
+// User-overridable valid dims: ValidCol/ValidRow are compile-time template
+// parameters; 0/omitted selects the type-derived dimensions. The opcodes
+// match the physical TEPL function codes (TADD=0, TSUB=1, ...).
+#define PTO_DEFINE_ELEMENTWISE_USER_DIMS(NAME, OPCODE)                         \
+  template <is_tile_data_v tile_shape, unsigned ValidCol, unsigned ValidRow>   \
+  PTO_SHARED_INLINE void NAME##_U(tile_shape &dst, tile_shape &src0,           \
+                                  tile_shape &src1) {                          \
+    static_assert(                                                             \
+        pto_elementwise_user_dims::user_dims_legal<tile_shape>(ValidCol,       \
+                                                              ValidRow),       \
+        #NAME "_U user dims must be nonzero and within tile capacity");        \
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, OPCODE>(                   dst, src0, src1, ValidCol, ValidRow);                                  \
+  }
+
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TADD, 0)
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TSUB, 1)
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TMUL, 2)
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TDIV, 3)
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TAND, 6)
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TOR, 7)
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TXOR, 8)
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TSHL, 9)
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TSHR, 10)
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TMAX, 11)
+PTO_DEFINE_ELEMENTWISE_USER_DIMS(TMIN, 12)
 
 // TSUB: dst = src0 - src1
 template <is_tile_data_v tile_shape>
