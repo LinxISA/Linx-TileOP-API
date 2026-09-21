@@ -714,12 +714,30 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   static_assert(SubTile::ValidRow == In::ValidRow &&
                     SubTile::ValidCol == In::ValidCol,
                 "TCVT assembly slot requires matching valid shape");
-  static_assert(SubTile::Rows * SubTile::Cols *
-                        type_traits<typename SubTile::DType>::bits ==
-                    In::Rows * In::Cols *
-                        type_traits<typename In::DType>::bits,
-                "TCVT assembly slot capacity mismatch: Rows x Cols x bits "
-                "must pack the same byte count for both dtypes");
+  // TCVT ASL (format-conversion/TCVT.asl) splits the geometry contract by
+  // source layout.  CUBE_M16/M32 source: ValidRow/ValidCol preserved and
+  // "Row, Col, CELL count, capacity, and packing independently match the
+  // destination DataType" — one M-format CELL is the same 128 B either way,
+  // so the packed byte capacity must match (#177: BF16 32x2 -> E8M0 32x4).
+  // Ordinary (RowMajor) source: "source and destination have equal Row,
+  // Col, ValidRow, and ValidCol" — the physical shape is identical and the
+  // capacity simply follows each side's own DataType (#170/#197: BF16
+  // 32x4 -> E8M0 32x4 in a TileArray slot has 2048 vs 1024 bits and is
+  // legal).  Requiring the capacity equality unconditionally therefore
+  // wrongly rejected the ordinary-layout form.
+  constexpr bool SlotCapacityMustMatch =
+      SubTile::IsCubeLayout || In::IsCubeLayout;
+  static_assert(!SlotCapacityMustMatch ||
+                    (SubTile::Rows * SubTile::Cols *
+                         type_traits<typename SubTile::DType>::bits ==
+                     In::Rows * In::Cols *
+                         type_traits<typename In::DType>::bits),
+                "TCVT assembly slot capacity mismatch: a CUBE M-format "
+                "conversion packs the same byte count for both dtypes");
+  static_assert(SlotCapacityMustMatch ||
+                    (SubTile::Rows == In::Rows && SubTile::Cols == In::Cols),
+                "TCVT assembly slot requires equal physical Rows/Cols for "
+                "ordinary (RowMajor) sources");
   static_assert(RMode >= LINX_RNONE && RMode <= LINX_RHB,
                 "TCVT RMode must be a LinxRMode value");
   // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase;
