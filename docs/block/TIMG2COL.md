@@ -7,9 +7,29 @@
 当前 API 中可用的调用形式：
 
 ```cpp
+// 直接物化为 Local CUBE（ND/NHWC 源寻址；ND2M16/ND2M32 布局）
 template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
 void TIMG2COL(tile_shape_out &dst, gm_shape &src,
               uint64_t param0, uint64_t param1, uint64_t param2);
+
+// 协作形式：LB1 携带核心级总行数（1..128），destination 为每-PE 分片
+template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
+void TIMG2COL(tile_shape_out &dst, gm_shape &src,
+              uint64_t param0, uint64_t param1, uint64_t param2,
+              size_t groupRows);
+
+// SharedND 输出（issue #194）：SourceOrder=NORM（ND/NHWC 源寻址）或
+// DN2ND（DN/NCHW 源寻址）；发布到 RowMajor Shared parent
+template <LayoutCvtEnum SourceOrder = NORM, is_tile_data_v shp,
+          is_global_data_v gm_shape>
+void TIMG2COL(SharedTile<shp> &dst, gm_shape &src, TIMG2COLParams params);
+
+// 单-issuer Shared 变体：一个 PE 位掩码的 B.IOS 直接发布完整 parent，
+// 不需要 B.ASSEMBLE 世代协议
+template <LayoutCvtEnum SourceOrder = NORM, is_tile_data_v shp,
+          is_global_data_v gm_shape>
+void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
+                    TIMG2COLParams params, unsigned PEMask);
 ```
 
 ### 支持的数据类型
@@ -88,6 +108,23 @@ B.IOT       mask=1111, last, ->DstTile<TSize>
 BSTOP
 ```
 
+## SharedND 输出与 NCHW（issue #194）
+
+直接 Local 输出由 schema 固定为 `ND2M16`/`ND2M32` 布局，即 **ND（NHWC）源寻址**
+（`spatial*Cin + channel`）。NCHW 源需要 **DN 寻址**（`channel*H*W + spatial`），
+规范将该寻址唯一地路由到 SharedND 输出：
+
+| SourceOrder | B.DATR 布局 | GM 寻址 | 适用源布局 |
+| --- | --- | --- | --- |
+| `NORM` | `NORM` | `spatial*Cin + channel` | NHWC |
+| `DN2ND` | `DN2ND` | `channel*H*W + spatial` | NCHW |
+
+- 四-PE 协作形式（`mask=1111` 的 `B.IOS`）要求调用方按 ASL 世代协议补发
+  各 PE 的 `B.ASSEMBLE`（INIT/MIDDLE/LAST 阶段），当前封装不代发——需要
+  分段写入时请改用单-issuer 变体或自行编码。
+- 单-issuer 变体 `TIMG2COL_SPART` 接受恰含一个 PE 位的掩码，一条
+  `B.IOS` 直接发布完整 parent，无 `B.ASSEMBLE`。
+
 ## 使用示例
 
 ```cpp
@@ -100,6 +137,20 @@ float src_data[8 * 256] = {};
 GM src_global(src_data);
 TileT dst;
 TIMG2COL(dst, src_global, 0x0008000800040008ULL, 0, 0);
+```
+
+NCHW 源经 SharedND 物化（DN2ND 寻址）：
+
+```cpp
+using namespace pto;
+using SharedND = SharedTile<Tile<Location::Vec, __half, 64, 64,
+                                     BLayout::RowMajor, 64, 64>>;
+using FeatureGM = global_tensor<__half, RowMajor<64, 64>>;
+__half buf[64 * 64] = {};
+FeatureGM feature(buf);
+SharedND shared;
+TIMG2COL_SPART<DN2ND>(shared, feature,
+                      TIMG2COLParams{0x0008000800040008ULL, 0, 0}, 1);
 ```
 
 涉及不同输入尺寸、padding、stride、dilation 或起始位置时，请按
