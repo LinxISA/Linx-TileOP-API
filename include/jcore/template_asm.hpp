@@ -2909,9 +2909,16 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src,
 
   const size_t valid_k = dst.GetValidCol();
   const size_t valid_n = dst.GetValidRow();
-  // The assembler only spells the weight layouts through their ISA names
-  // (OHWI2NK/OIHW2NK); the numeric "layout<N>" form is not accepted syntax.
-  constexpr bool IsOIHW = WeightLayout == OIHW2NK;
+  // Keep the packed parameter words in real GPRs: the weight-mode contract
+  // requires "exactly one three-source B.IOR binds GMBase, ShapeGPR,
+  // StartGPR" (PTO-BSTART-TLOAD-WEIGHT-NK-CONTRACT-001), and a compile-time
+  // constant (typically StartWord == 0 for the first weight group) would be
+  // folded into the architectural zero register, silently dropping the third
+  // B.IOR source and breaking the schema at execution time (issue #195).
+  uint64_t shape_word = params.shape_word;
+  asm("" : "+r"(shape_word));
+  uint64_t start_word = params.start_word;
+  asm("" : "+r"(start_word));
   asm volatile(
       "BSTART.TLSU TLOAD, %D[SrcType]\n"
       ".if %c[WeightLayout] == 10\nB.DATR OHWI2NK, DTYPE_NONE, Zero\n"
@@ -2923,8 +2930,8 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src,
       PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
       "B.IOR [%[Base],%[Shape],%[Start]], []\n"
       : [Shared] "=Sr"(dst.handle_ref())
-      : [Base] "r"(src.data()), [Shape] "r"(params.shape_word),
-        [Start] "r"(params.start_word), [PEMask] "i"(PEMask),
+      : [Base] "r"(src.data()), [Shape] "r"(shape_word),
+        [Start] "r"(start_word), [PEMask] "i"(PEMask),
         [WeightLayout] "i"(static_cast<int>(WeightLayout)),
         [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
         [TileSize] "i"(tile_type_traits<shp_dtype>::TilesizeCode),
@@ -14335,6 +14342,62 @@ template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
 void TIMG2COL(tile_shape_out &dst, gm_shape &src,
               uint64_t param0, uint64_t param1, uint64_t param2) {
   TIMG2COL(dst, src, TIMG2COLParams{param0, param1, param2});
+}
+
+// Cooperative form (issue #195): LB1 carries the core-total group rows
+// (1..128) as a runtime GPR while the destination type stays the per-PE
+// shard (16/32 rows for LocalM16/M32). This mirrors the TMATMUL groupM
+// overload and is the only way TIMG2COL composes with the cooperative
+// Local-A/Shared-B TMATMUL: the ASL slices LB1 rows per PE
+// (BundleTIMG2COLValidRowForOutput: M_per_PE = 16/32, zero-row PEs stay
+// collective participants but allocate nothing), so every PE materializes
+// its own shard of one shared group total instead of each PE re-declaring
+// the full group as its Local destination.
+template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
+  requires(tile_shape_out::Loc == Location::Left &&
+           (tile_shape_out::BFractal == BLayout::CubeM16 ||
+            tile_shape_out::BFractal == BLayout::CubeM32))
+void TIMG2COL(tile_shape_out &dst, gm_shape &src,
+              uint64_t param0, uint64_t param1, uint64_t param2,
+              size_t groupRows) {
+  static_assert(tile_shape_out::ValidCol != 0,
+                "TIMG2COL valid dimensions must be nonzero");
+  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+                "TIMG2COL DataType is not supported by the ASL contract");
+  uint64_t p0 = param0;
+  asm("" : "+r"(p0));
+  uint64_t p1 = param1;
+  asm("" : "+r"(p1));
+  uint64_t p2 = param2;
+  asm("" : "+r"(p2));
+  asm volatile(
+      "BSTART.TIMG2COL %D[DataType]\n"
+      "B.DATR %c[Layout], DTYPE_NONE, Zero\n"
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM %[GroupRows], 0, ->lb1\n"
+      "B.DIM zero, %c[TotalCol], ->lb2\n"
+      "B.IOR [%[GMBase], zero, zero], []\n"
+      "B.IOR [%[Param0], %[Param1], %[Param2]], []\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      : [Dst] "=Tr"(dst.data())
+      : [GMBase] "r"(src.data()),
+        [DataType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+        [Layout] "i"(tile_shape_out::BFractal == BLayout::CubeM16 ?
+                       LayoutCvtEnum::ND2M16 : LayoutCvtEnum::ND2M32),
+        [ValidCol] "i"(tile_shape_out::ValidCol),
+        [TotalCol] "i"(tile_shape_out::Cols),
+        [Param0] "r"(p0), [Param1] "r"(p1), [Param2] "r"(p2),
+        [GroupRows] "r"(groupRows),
+        [TileSize] "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode)
+      : "memory");
 }
 
 // TFILLPAD: copy valid region and fill padding
