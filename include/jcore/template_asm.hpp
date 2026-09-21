@@ -14400,6 +14400,141 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src,
       : "memory");
 }
 
+
+// The TileOP LayoutCvtEnum numbering predates the 0.58.x B.DATR layout code
+// table and diverges for the DN/ZN family (enum DN2ND=4 is ISA ND2NZ=4;
+// ISA DN2ND=6). Map the two Shared-source orders to their ISA B.DATR layout
+// codes directly (control-state.asl TileDataLayoutCodeOf: NORM=0, DN2ND=6).
+constexpr uint64_t timg2col_shared_layout_code(LayoutCvtEnum Order) {
+  return Order == DN2ND ? 6 : 0;
+}
+
+// TIMG2COL SharedND output (issue #194): the direct-Local forms above are
+// pinned to the ND (NHWC) GM addressing by the schema's ND2M16/ND2M32
+// layouts. NCHW sources need the DN addressing (BundleTIMG2COLGMIndexDN:
+// channel * H * W + spatial), which the ASL only routes through the Shared
+// ND output: layout DN2ND selects the channel-major index, NORM keeps the
+// ND index while still publishing through Shared. The destination is an
+// ordinary RowMajor Shared parent; a mask=1111 B.IOS additionally requires
+// the B.ASSEMBLE generation protocol (one PE per INIT/MIDDLE/LAST phase),
+// exposed through the same range::assemble carriers the Shared TLOAD uses.
+template <LayoutCvtEnum SourceOrder = NORM, is_tile_data_v shp,
+          is_global_data_v gm_shape>
+  requires(shp::isRowMajor && !shp::isBoxedLayout)
+void TIMG2COL(SharedTile<shp> &dst, gm_shape &src, TIMG2COLParams params) {
+  static_assert(SourceOrder == NORM || SourceOrder == DN2ND,
+                "TIMG2COL Shared output source order must be NORM (NHWC "
+                "indexing) or DN2ND (NCHW indexing)");
+  static_assert(shp::ValidRow != 0 &&
+                    shp::ValidCol != 0,
+                "TIMG2COL valid dimensions must be nonzero");
+  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+                "TIMG2COL DataType is not supported by the ASL contract");
+  static_assert(
+      tile_type_traits<typename shp::TileDType>::
+          IsValidSharedActiveSize,
+      "TIMG2COL Shared destination size must be 128 B..256 KB");
+  uint64_t param0 = params.param0;
+  asm("" : "+r"(param0));
+  uint64_t param1 = params.param1;
+  asm("" : "+r"(param1));
+  uint64_t param2 = params.param2;
+  asm("" : "+r"(param2));
+  asm volatile(
+      "BSTART.TIMG2COL %D[DataType]\n"
+      "B.DATR %c[Layout], DTYPE_NONE, Zero\n"
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM zero, %c[ValidRow], ->lb1\n"
+      "B.DIM zero, %c[TotalCol], ->lb2\n"
+      "B.IOR [%[GMBase], zero, zero], []\n"
+      "B.IOR [%[Param0], %[Param1], %[Param2]], []\n"
+      "B.IOS mask=1111, ->%[Shared]<%Z[TileSize]>\n"
+      : [Shared] "=Sr"(dst.handle_ref())
+      : [GMBase] "r"(src.data()),
+        [DataType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+        [Layout] "i"(timg2col_shared_layout_code(SourceOrder)),
+        [ValidCol] "i"(shp::ValidCol),
+        [ValidRow] "i"(shp::ValidRow),
+        [TotalCol] "i"(shp::Cols),
+        [Param0] "r"(param0), [Param1] "r"(param1), [Param2] "r"(param2),
+        [TileSize] "i"(tile_type_traits<typename shp::TileDType>::TilesizeCode)
+      : "memory");
+}
+
+// Single-issuer Shared variant: a one-PE mask (or any mask with a single
+// bit) publishes the complete parent through one B.IOS without the
+// B.ASSEMBLE generation protocol (BundleSharedGenerationCapacity singleton
+// contract). The writer PE materializes the whole valid rectangle.
+template <LayoutCvtEnum SourceOrder = NORM, is_tile_data_v shp,
+          is_global_data_v gm_shape>
+  requires(shp::isRowMajor && !shp::isBoxedLayout)
+void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
+                    TIMG2COLParams params, unsigned PEMask) {
+  static_assert(SourceOrder == NORM || SourceOrder == DN2ND,
+                "TIMG2COL Shared output source order must be NORM (NHWC "
+                "indexing) or DN2ND (NCHW indexing)");
+  static_assert(shp::ValidRow != 0 &&
+                    shp::ValidCol != 0,
+                "TIMG2COL valid dimensions must be nonzero");
+  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
+                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+                "TIMG2COL DataType is not supported by the ASL contract");
+  static_assert(
+      tile_type_traits<typename shp::TileDType>::
+          IsValidSharedActiveSize,
+      "TIMG2COL Shared destination size must be 128 B..256 KB");
+  if (PEMask == 0 || (PEMask & (PEMask - 1)) != 0) {
+    __builtin_printf("TIMG2COL_SPART: mask must have exactly one PE bit\n");
+    __builtin_trap();
+  }
+  uint64_t param0 = params.param0;
+  asm("" : "+r"(param0));
+  uint64_t param1 = params.param1;
+  asm("" : "+r"(param1));
+  uint64_t param2 = params.param2;
+  asm("" : "+r"(param2));
+  asm volatile(
+      "BSTART.TIMG2COL %D[DataType]\n"
+      "B.DATR %c[Layout], DTYPE_NONE, Zero\n"
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM zero, %c[ValidRow], ->lb1\n"
+      "B.DIM zero, %c[TotalCol], ->lb2\n"
+      "B.IOR [%[GMBase], zero, zero], []\n"
+      "B.IOR [%[Param0], %[Param1], %[Param2]], []\n"
+      ".if %c[IsMask1]\nB.IOS mask=0001, ->%[Shared]<%Z[TileSize]>\n"
+      ".elseif %c[IsMask2]\nB.IOS mask=0010, ->%[Shared]<%Z[TileSize]>\n"
+      ".elseif %c[IsMask4]\nB.IOS mask=0100, ->%[Shared]<%Z[TileSize]>\n"
+      ".else\nB.IOS mask=1000, ->%[Shared]<%Z[TileSize]>\n"
+      ".endif\n"
+      : [Shared] "=Sr"(dst.handle_ref())
+      : [GMBase] "r"(src.data()),
+        [DataType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+        [Layout] "i"(timg2col_shared_layout_code(SourceOrder)),
+        [ValidCol] "i"(shp::ValidCol),
+        [ValidRow] "i"(shp::ValidRow),
+        [TotalCol] "i"(shp::Cols),
+        [Param0] "r"(param0), [Param1] "r"(param1), [Param2] "r"(param2),
+        [TileSize] "i"(tile_type_traits<typename shp::TileDType>::TilesizeCode),
+        [IsMask1] "i"(PEMask == 1), [IsMask2] "i"(PEMask == 2),
+        [IsMask4] "i"(PEMask == 4)
+      : "memory");
+}
+
 // TFILLPAD: copy valid region and fill padding
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TFILLPAD(tile_shape_out &dst, tile_shape_in &src) {
