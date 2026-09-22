@@ -516,3 +516,10 @@ void options_example(D &d, Ds8 &d8, D &c, A &a, B &b,
   [TGEMV_BIAS](cube/matrix-vector/TGEMV_BIAS.md)
 - [TGEMV_MX](cube/matrix-vector/TGEMV_MX.md)、[TGEMV_MX_ACC](cube/matrix-vector/TGEMV_MX_ACC.md)、
   [TGEMV_MX_BIAS](cube/matrix-vector/TGEMV_MX_BIAS.md)
+## 13. Header provenance and feature gates
+
+`<common/pto_tileop.hpp>` includes
+`<common/pto_tileop_api_revision.hpp>`. Installed toolchains can report the
+exact TileOP-API checkout through `PTO_TILEOP_API_REVISION`; consumers should
+use capability macros such as `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX` for
+compile-time requirements instead of ordering raw Git hashes.

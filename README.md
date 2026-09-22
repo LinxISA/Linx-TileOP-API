@@ -3,6 +3,13 @@
 Header-only C++ TileOP bindings for the LinxISA / PTO ISA v0.58 architectural contract,
 including the PTO ISA v0.58.5 layout-and-rearrangement additions.
 
+Installed headers expose their provenance through
+`<common/pto_tileop_api_revision.hpp>`. `PTO_TILEOP_API_VERSION` and
+`PTO_TILEOP_API_SPEC_VERSION` identify the API/spec contract, while
+`PTO_TILEOP_API_REVISION` records the exact TileOP-API Git commit used by
+`make install`. Feature macros such as `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX`
+allow consumers to reject toolchains that predate a required fix.
+
 The normative instruction names, encodings, and execution-engine classification come from the
 pinned LinxISA projection in
 [`contracts/linxisa-v0.58-engine-ops.json`](contracts/linxisa-v0.58-engine-ops.json). The public

@@ -22,6 +22,23 @@
 不要混用不同版本的 headers、compiler 和规范内容。出现汇编编码、SizeCode 或
 bundle 字段不匹配时，先确认这三者的版本是否一致。
 
+安装后的 `<common/pto_tileop_api_revision.hpp>` 提供以下自检宏：
+
+- `PTO_TILEOP_API_VERSION`：TileOP C++ API 版本；
+- `PTO_TILEOP_API_SPEC_VERSION`：当前头文件对齐的 PTO ISA 版本；
+- `PTO_TILEOP_API_REVISION`：`make install` 时实际 checkout 的 Git commit；
+- `PTO_TILEOP_API_REVISION_IS_EXACT`：revision 是否来自干净 checkout；
+- `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX`：local Right B 使用逻辑 `[K,N]` 契约。
+
+消费方应优先使用 feature 宏检查所需修复，而不是比较 revision 字符串。例如：
+
+```cpp
+#include <common/pto_tileop.hpp>
+
+static_assert(PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX,
+              "requires the local Right B [K,N] contract fix");
+```
+
 ## 快速开始
 
 下面的例子展示普通 Local VEC Tile 的最小数据流：从 Global Memory 载入，执行
