@@ -103,7 +103,7 @@ BSTOP
 
 using namespace pto;
 using Transfer = Tile<Location::Vec, uint32_t, 8, 256, BLayout::RowMajor>;
-using ElementIndices = Tile<Location::Vec, int16_t, 8, 256, BLayout::RowMajor>;
+using ElementIndices = Tile<Location::Vec, int32_t, 8, 256, BLayout::RowMajor>;
 
 void atomic_reduce(ElementIndices &element_indices, Transfer &value) {
   // 每个 index 是相对于 base 的逻辑线性元素下标；归约就地写回 GM，无返回值。

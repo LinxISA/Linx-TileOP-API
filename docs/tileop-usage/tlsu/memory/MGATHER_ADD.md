@@ -111,7 +111,7 @@ BSTOP
 
 using namespace pto;
 using Transfer = Tile<Location::Vec, uint32_t, 8, 256, BLayout::RowMajor>;
-using ElementIndices = Tile<Location::Vec, int16_t, 8, 256, BLayout::RowMajor>;
+using ElementIndices = Tile<Location::Vec, int32_t, 8, 256, BLayout::RowMajor>;
 
 void atomic_fetch_add(Transfer &observed_old, ElementIndices &element_indices,
                       Transfer &value) {
