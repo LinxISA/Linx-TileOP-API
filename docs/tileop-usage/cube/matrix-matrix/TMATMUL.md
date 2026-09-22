@@ -59,6 +59,11 @@ __attribute__((always_inline)) inline void TMATMUL(
 - 输入 Tile 必须已初始化，输出 Tile 必须具有足够容量；
 - 参数顺序必须与接口声明一致，不要添加接口未声明的操作数。
 
+已发布的 Shared 矩阵可以通过
+`reinterpret_shared_tile<Location::Left|Location::Right>` 以相反角色传给
+`TMATMUL`。该 view 只复用原 Shared handle，因此不产生额外 TLOAD、TMOV
+或 Shared 分配；源 handle 必须在 view 使用期间保持存活。
+
 ## 约束
 
 矩阵维度必须满足乘法关系（`M×K` 与 `K×N`，或对应 GEMV 形式）；A/B/D 的 CUBE layout、累加器类型和任何 scale/bias/options 必须构成该重载允许的组合。

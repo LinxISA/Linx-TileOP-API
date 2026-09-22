@@ -8,6 +8,10 @@ Local Tile 的静态 `DType` 重解释为另一个**等位宽**的数据类型�
 它是一个**视图（view）**，不是转换：不分配新 Tile、不复制 payload、
 不发射 `TCVT`。
 
+这与 Shared operand-role view 不同：
+`reinterpret_shared_tile<Location::Left|Location::Right>(shared)` 只改变
+TMATMUL 的 Left/Right 角色，不改变 dtype，并复用原 Shared handle。
+
 ## C++ 接口
 
 ```cpp

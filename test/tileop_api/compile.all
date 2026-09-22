@@ -24,7 +24,7 @@ if [[ "$PLAT" == "linx" ]]; then
 fi
 
 ACTIVE_FIXTURES=(
-  DynamicShape DynamicTlsuStride CubeCellTransport VecCubeLoadStore CubeTCvt SharedTranspose
+  DynamicShape DynamicTlsuStride CubeCellTransport VecCubeLoadStore CubeTCvt SharedTranspose SharedRoleView
   SharedTransposeNonSquare MatrixIntegerDtypes MXScaleVariants HiF4X2MatmulMX SharedMatmul
   TMatmulAccFullOptions TMatmulAccCScale TMatmulAllOptions TGEMVAllOptions TGEMVOperandOrder
   PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas MGatherAtomics MScatterAtomics
