@@ -182,6 +182,12 @@ B.DIM rValidRow, 0, ->lb1
 B.IOT SrcTile, mask=1111, last, ->DstTile<DstTSize>
 ```
 
+在 `TileArray` 的 CUBE-M TCVT 中，writer 同样只编码 `LB0=ValidCol` 和
+`LB1=ValidRow`，不编码 `LB2=Col`。目标物理列数、CELL 数量、容量和目标
+`TSize` 由目标 dtype 的 CUBE 描述独立推导；因此跨 dtype 的 TileArray slot
+不要求与源保持相同的物理列数或字节容量。普通布局的 TileArray TCVT 仍编码
+`LB2` 并保留普通布局的物理 shape 约束。
+
 当前实现使用扩展内联汇编。由于带类型的 C++ 操作数已经提供了该 bundle 所需的全部字段，因此不需要额外的 intrinsic：包括源和目标 Tile 寄存器、dtype 选择器、有效维度、布局检查以及目标 TSize。
 
 ## 编译期诊断

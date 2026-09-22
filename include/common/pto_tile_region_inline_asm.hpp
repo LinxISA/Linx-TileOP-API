@@ -714,28 +714,17 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   static_assert(SubTile::ValidRow == In::ValidRow &&
                     SubTile::ValidCol == In::ValidCol,
                 "TCVT assembly slot requires matching valid shape");
-  // TCVT ASL (format-conversion/TCVT.asl) splits the geometry contract by
-  // source layout.  CUBE_M16/M32 source: ValidRow/ValidCol preserved and
-  // "Row, Col, CELL count, capacity, and packing independently match the
-  // destination DataType" — one M-format CELL is the same 128 B either way,
-  // so the packed byte capacity must match (#177: BF16 32x2 -> E8M0 32x4).
-  // Ordinary (RowMajor) source: "source and destination have equal Row,
-  // Col, ValidRow, and ValidCol" — the physical shape is identical and the
-  // capacity simply follows each side's own DataType (#170/#197: BF16
-  // 32x4 -> E8M0 32x4 in a TileArray slot has 2048 vs 1024 bits and is
-  // legal).  Requiring the capacity equality unconditionally therefore
-  // wrongly rejected the ordinary-layout form.
-  constexpr bool SlotCapacityMustMatch =
-      SubTile::IsCubeLayout || In::IsCubeLayout;
-  static_assert(!SlotCapacityMustMatch ||
-                    (SubTile::Rows * SubTile::Cols *
-                         type_traits<typename SubTile::DType>::bits ==
-                     In::Rows * In::Cols *
-                         type_traits<typename In::DType>::bits),
-                "TCVT assembly slot capacity mismatch: a CUBE M-format "
-                "conversion packs the same byte count for both dtypes");
-  static_assert(SlotCapacityMustMatch ||
-                    (SubTile::Rows == In::Rows && SubTile::Cols == In::Cols),
+  constexpr bool SourceCubeM =
+      In::BFractal == BLayout::CubeM16 || In::BFractal == BLayout::CubeM32;
+  // TCVT ASL (format-conversion/TCVT.asl) permits CUBE_M16/M32 source and
+  // destination geometry, CELL count, capacity, and packing to differ with
+  // the destination DataType. Ordinary layouts still preserve physical Row
+  // and Col, while each side's capacity follows its own DataType.
+  static_assert(SourceCubeM
+                    ? (SubTile::BFractal == In::BFractal &&
+                       SubTile::IsCubeLayout)
+                    : (SubTile::Rows == In::Rows &&
+                       SubTile::Cols == In::Cols),
                 "TCVT assembly slot requires equal physical Rows/Cols for "
                 "ordinary (RowMajor) sources");
   static_assert(RMode >= LINX_RNONE && RMode <= LINX_RHB,
@@ -751,12 +740,12 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   // only the dispatch case label, and the switch instantiates every case,
   // so a compile-time comparison against it would spuriously fail.
   const uintptr_t range_base_units = dst.range_base_units();
-#define PTO_REGION_TCVT_ASSEMBLY_BODY                                       \
+#define PTO_REGION_TCVT_ASSEMBLY_PREFIX                                    \
   "BSTART.TEPL 27, %D1\n"                                                  \
   PTO_REGION_TCVT_DATR_ASM                                                 \
-  "B.DIM zero, %c4, ->lb0\n"                                                   \
-  "B.DIM zero, %c5, ->lb1\n"                                                   \
-  "B.DIM zero, %c6, ->lb2\n"                                              \
+  "B.DIM zero, %c4, ->lb0\n"                                               \
+  "B.DIM zero, %c5, ->lb1\n"
+#define PTO_REGION_TCVT_ASSEMBLY_SUFFIX                                    \
   "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"                                 \
   "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
 #define PTO_REGION_TCVT_ASSEMBLY_INPUTS                                    \
@@ -770,28 +759,47 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   "r"(range_base_units), "i"(writer_size), "i"(Init), "i"(Last),            \
   [RMode] "i"(RMode)
   if constexpr (Init) {
-    asm volatile(PTO_REGION_TCVT_ASSEMBLY_BODY
+    if constexpr (SourceCubeM) {
+      asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
+                   PTO_REGION_TCVT_ASSEMBLY_SUFFIX
+                   : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
+                   : PTO_REGION_TCVT_ASSEMBLY_INPUTS
+                   : "memory");
+    } else {
+      asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
+                   "B.DIM zero, %c6, ->lb2\n"
+                   PTO_REGION_TCVT_ASSEMBLY_SUFFIX
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
                  : PTO_REGION_TCVT_ASSEMBLY_INPUTS
                  : "memory");
+    }
   } else {
     // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder
     // carries the ParentRef; the math input stays source-only.
-    asm volatile("BSTART.TEPL 27, %D1\n"
-                 PTO_REGION_TCVT_DATR_ASM
-                 "B.DIM zero, %c4, ->lb0\n"
-                 "B.DIM zero, %c5, ->lb1\n"
-                 "B.DIM zero, %c6, ->lb2\n"
-                 "B.IOT %3, mask=1111, last\n"
-                 "B.IOT %0, mask=1111\n"
-                 "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
-                 :
-                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
-                   PTO_REGION_TCVT_ASSEMBLY_INPUTS
-                 : "memory");
+    if constexpr (SourceCubeM) {
+      asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
+                   "B.IOT %3, mask=1111, last\n"
+                   "B.IOT %0, mask=1111\n"
+                   "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
+                   :
+                   : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                     PTO_REGION_TCVT_ASSEMBLY_INPUTS
+                   : "memory");
+    } else {
+      asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
+                   "B.DIM zero, %c6, ->lb2\n"
+                   "B.IOT %3, mask=1111, last\n"
+                   "B.IOT %0, mask=1111\n"
+                   "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
+                   :
+                   : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                     PTO_REGION_TCVT_ASSEMBLY_INPUTS
+                   : "memory");
+    }
   }
 #undef PTO_REGION_TCVT_ASSEMBLY_INPUTS
-#undef PTO_REGION_TCVT_ASSEMBLY_BODY
+#undef PTO_REGION_TCVT_ASSEMBLY_SUFFIX
+#undef PTO_REGION_TCVT_ASSEMBLY_PREFIX
 }
 
 template <int ParentSize, int RMode, typename SubTile, typename In>
