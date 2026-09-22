@@ -50,6 +50,23 @@ for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
     "$ROOT/test/tileop_api/src/$source"
 done
 
+# Issue #172: the role view must let one published Shared handle participate in
+# both operand slots, including the Shared transpose path, without introducing
+# a second load or a Shared move/publication.  Inspect LLVM rather than only
+# checking that the source compiles, because the contract is specifically
+# zero-instruction and non-owning.
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/SharedRoleView.cpp" -o "$OUT/SharedRoleView.ll"
+grep -q 'BSTART.CUBE TMATMUL' "$OUT/SharedRoleView.ll"
+if grep -Eq 'BSTART\.(TLOAD|TMOV)' "$OUT/SharedRoleView.ll"; then
+  echo "FAIL: SharedRoleView emitted a load or Shared move" >&2
+  exit 1
+fi
+if [[ $(grep -c 'BSTART.CUBE TMATMUL' "$OUT/SharedRoleView.ll") -ne 2 ]]; then
+  echo "FAIL: SharedRoleView did not emit exactly two TMATMUL operations" >&2
+  exit 1
+fi
+
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/GMov.cpp" -o "$OUT/GMov.ll"
 grep -q 'BSTART.GMOV' "$OUT/GMov.ll"

@@ -1543,6 +1543,87 @@ struct is_shared_tile<SharedTile<LocalTile>> : std::true_type {};
 template <typename T>
 concept is_shared_tile_v = is_shared_tile<T>::value;
 
+// Zero-instruction Shared matrix-role view.  A Shared handle carries storage
+// and payload identity; the Left/Right role is metadata consumed by the cube
+// operand selector.  This view deliberately aliases the source handle instead
+// of creating another Shared allocation or issuing a move/publication.
+template <Location Role_, typename SourceSharedTile>
+class SharedTileRoleView {
+  static_assert(Role_ == Location::Left || Role_ == Location::Right,
+                "SharedTileRoleView role must be Left or Right");
+  static_assert(is_shared_tile<SourceSharedTile>::value,
+                "SharedTileRoleView source must be a SharedTile");
+  static_assert(SourceSharedTile::Role == Location::Left ||
+                    SourceSharedTile::Role == Location::Right,
+                "SharedTileRoleView source must be a Shared matrix");
+  static_assert(SourceSharedTile::Role != Role_,
+                "SharedTileRoleView must change the matrix role");
+  static_assert(SourceSharedTile::BFractal == BLayout::RowMajor &&
+                    SourceSharedTile::SFractal == SLayout::NoneBox,
+                "SharedTileRoleView requires an ordinary RowMajor Shared "
+                "matrix layout");
+
+ public:
+  using Source = SourceSharedTile;
+  using LocalTileType = typename SourceSharedTile::LocalTileType;
+  using DType = typename SourceSharedTile::DType;
+  using TileDType = typename SourceSharedTile::TileDType;
+
+  static constexpr Location Loc = Location::Shared;
+  static constexpr Location Role = Role_;
+  static constexpr int Rows = SourceSharedTile::Rows;
+  static constexpr int Cols = SourceSharedTile::Cols;
+  static constexpr int RowStride = SourceSharedTile::RowStride;
+  static constexpr int ColStride = SourceSharedTile::ColStride;
+  static constexpr int ValidRow = SourceSharedTile::ValidRow;
+  static constexpr int ValidCol = SourceSharedTile::ValidCol;
+  static constexpr BLayout BFractal = SourceSharedTile::BFractal;
+  static constexpr SLayout SFractal = SourceSharedTile::SFractal;
+  static constexpr int SFractalSize = SourceSharedTile::SFractalSize;
+  static constexpr PadValue PadVal = SourceSharedTile::PadVal;
+  static constexpr CompactMode Compact = SourceSharedTile::Compact;
+  static constexpr bool IsCubeLayout = SourceSharedTile::IsCubeLayout;
+  static constexpr int LogicalTileBytes = SourceSharedTile::LogicalTileBytes;
+  static constexpr int TilesizeCode = SourceSharedTile::TilesizeCode;
+  static constexpr bool IsValidActiveSize = SourceSharedTile::IsValidActiveSize;
+  static constexpr bool isRowMajor = SourceSharedTile::isRowMajor;
+  static constexpr bool isBoxedLayout = SourceSharedTile::isBoxedLayout;
+  static constexpr bool isInnerRowMajor = SourceSharedTile::isInnerRowMajor;
+  static constexpr bool isInnerColMajor = SourceSharedTile::isInnerColMajor;
+  static constexpr int InnerRows = SourceSharedTile::InnerRows;
+  static constexpr int InnerCols = SourceSharedTile::InnerCols;
+  static constexpr int InnerNumel = SourceSharedTile::InnerNumel;
+  static constexpr int Numel = SourceSharedTile::Numel;
+  static constexpr int byteSize = SourceSharedTile::byteSize;
+  static constexpr int kBytes = SourceSharedTile::kBytes;
+
+  explicit constexpr SharedTileRoleView(SourceSharedTile &source)
+      : SourceValue(source) {}
+
+  int GetValidRow() const { return SourceValue.GetValidRow(); }
+  int GetValidCol() const { return SourceValue.GetValidCol(); }
+  unsigned long handle() const { return SourceValue.handle(); }
+  unsigned long &handle_ref() { return SourceValue.handle_ref(); }
+
+ private:
+  SourceSharedTile &SourceValue;
+};
+
+template <Location Role_, typename SourceSharedTile>
+struct is_shared_tile<SharedTileRoleView<Role_, SourceSharedTile>>
+    : std::true_type {};
+
+// Reinterpret the matrix role of an existing Shared handle.  This is not
+// reinterpret_tile: dtype and the physical storage remain unchanged, and no
+// instruction is emitted.  The named lvalue requirement prevents a view from
+// outliving its Shared handle source.
+template <Location Role_, is_shared_tile_v SourceSharedTile>
+inline auto reinterpret_shared_tile(SourceSharedTile &source) {
+  static_assert(Role_ == Location::Left || Role_ == Location::Right,
+                "reinterpret_shared_tile target role must be Left or Right");
+  return SharedTileRoleView<Role_, SourceSharedTile>(source);
+}
+
 // An ordinary (non-Shared) Tile that can own a Local register payload.
 template <typename T>
 concept is_local_tile_v =

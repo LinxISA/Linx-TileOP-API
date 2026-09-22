@@ -59,6 +59,15 @@ TADD(local_dst, local_lhs, local_rhs);
 - Shared full store 使用 `TSTORE(gm, shared)` 和固定 mask `1111`；部分 store 使用
   `TSTORE_PART<PEMask>(gm, shared)`，且 `PEMask` 必须是公开接口接受的非零集合。
 
+### Shared operand-role view
+
+`reinterpret_shared_tile<Location::Left|Location::Right>(shared)` 创建已有
+Shared 矩阵 handle 的非 owning、零指令 view。它复用同一 handle，并保留 dtype、
+shape、layout 和 valid region；不会产生 Shared 分配、publication、复制或 load。
+只有 TMATMUL 看到的 operand role 改变，因此同一个 K tile 可同时作为 A/Left
+和 B/Right 使用。源必须是具名 Shared 矩阵左值，并使用普通 RowMajor/NoneBox
+布局；同 role、Local、非法 layout 和临时对象都会在编译期被拒绝。
+
 ### C++ 接口
 
 以下是 Local/Shared 移动接口的完整公开形式。`PEMask` 是编译期 PE
