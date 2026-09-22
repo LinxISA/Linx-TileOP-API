@@ -308,6 +308,13 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         # physical destination element outside ValidRow x ValidCol", so the
         # Pad template parameter cannot be a compile-time-only descriptor.
         self.assertIn("PTO_GATHER_PAD_ASM", self.header)
+        # CUBE_M32 is the one indexed-transfer layout that needs an explicit
+        # direct Local-layout selector.  Other layouts keep the NORM spelling.
+        self.assertIn(
+            '".if %c[ElemLayout] == 29\\n"', self.header)
+        self.assertIn(
+            '".if %c[PadValue] == 0\\nB.DATR CUBE_M32, Zero\\n"',
+            self.header)
         for directive, code, name in ((".if", 0, "Zero"), (".elseif", 1, "Max"),
                                       (".elseif", 2, "Min")):
             self.assertIn(
@@ -321,6 +328,17 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             body = match.group(0)
             self.assertEqual(body.count("PTO_GATHER_PAD_ASM"), 4, op)
             self.assertNotIn('"B.DATR Null', body, op)
+
+    def test_mscatter_m32_layout_reaches_the_encoding(self) -> None:
+        self.assertIn("PTO_SCATTER_LAYOUT_ASM", self.header)
+        self.assertIn(
+            '".if %c[ElemLayout] == 29\\nB.DATR CUBE_M32, Zero\\n.endif\\n"',
+            self.header)
+        for op in ("MSCATTER", "MSCATTER_MASK"):
+            match = re.search(r'^inline void ' + op + r'\(.*?\n}\n',
+                              self.header, re.S | re.M)
+            self.assertIsNotNone(match, op)
+            self.assertEqual(match.group(0).count("PTO_SCATTER_LAYOUT_ASM"), 4, op)
 
     def test_tcvt_cube_m_layout_is_location_independent(self) -> None:
         # PTO-ISA #291 retires the Matrix-location half of the TCVT CUBE
