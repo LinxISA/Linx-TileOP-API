@@ -4356,7 +4356,6 @@ PTO_DEFINE_MSCATTER_ATOM(MSCATTER_XOR, "MSCATTER.XOR", value,
 #undef PTO_ATOM_TYPES_MINMAX
 #undef PTO_ATOM_TYPES_BITWISE
 #undef PTO_ATOM_TYPES_U32
-#undef PTO_ATOM_LAYOUT_ASM
 
 // MSCATTER_POPC: population-count reduction (PTO ISA TLSU function 27,
 // GM_RED_POPC). Only an index tile participates -- each valid effective GM
@@ -4438,6 +4437,8 @@ void MSCATTER_POPC(uint64_t base, IndexTile &elementIndices, uint32_t validCol,
         : "memory");
   }
 }
+
+#undef PTO_ATOM_LAYOUT_ASM
 
 // Low-level v5 GMOV. All four PEs must reach the same dynamic instance;
 // PEMask only selects requesters and does not reduce the Core4 collective.
