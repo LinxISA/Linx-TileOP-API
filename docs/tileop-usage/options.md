@@ -267,6 +267,13 @@ TMATMUL(d, a, b, fixp::f16().prelu(prelu));
 
 ## 6.1 Reduction result prefix views
 
+## 6.2 TCMPS predicate GPR carriers
+
+`TCMPS` 的 CUBE GPR 输出重载使用 source-only `B.IOT` 和带 destination GPR
+的 `B.IOR`，不会分配 PredicateCell。非 `U8` 类型使用低半 predicate carrier；
+`U8` 可通过 `High=true` 选择高半 carrier。valid shape 必须满足一个 GPR
+carrier 的字段容量，跨多个 GPR 的结果需要由调用者拆分 source view 或分组处理。
+
 PTO #311 row-reduction results may retain a wide physical CUBE carrier while
 publishing only `ValidCol=1`. Use `TREDUCEPREFIXVIEW<OneCellTile>(reduction)`
 to borrow the first 128-byte CELL without a `TCVT` copy. The view is accepted
