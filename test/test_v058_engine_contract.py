@@ -393,6 +393,56 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn(
             '[ElemLayout] "i"(local_layout_code_v<tile_shape_src>)', body)
 
+    def test_gm_atom_red_wrappers_select_local_layout(self) -> None:
+        # TLSU GM atom/red bundles use one shared B.DATR.Layout for all Local
+        # operands.  CUBE_M16/M32 must be explicit; RowMajor remains the
+        # omitted-B.DATR encoding.  Index tiles follow the ISA's S/U32/S/U64
+        # legality, and CAS additionally requires all four Local tiles to
+        # share the selected layout.
+        atom_ops = (
+            "MGATHER_CAS", "MGATHER_EXCH", "MGATHER_MAX", "MGATHER_MIN",
+            "MGATHER_ADD", "MGATHER_INC", "MGATHER_DEC", "MGATHER_AND",
+            "MGATHER_OR", "MGATHER_XOR", "MSCATTER_MAX", "MSCATTER_MIN",
+            "MSCATTER_ADD", "MSCATTER_INC", "MSCATTER_DEC", "MSCATTER_AND",
+            "MSCATTER_OR", "MSCATTER_XOR", "MSCATTER_POPC",
+        )
+        self.assertIn(
+            '".if %c[ElemLayout] == 29\\nB.DATR CUBE_M32, Zero\\n"',
+            self.header)
+        self.assertIn(
+            '".elseif %c[ElemLayout] == 31\\nB.DATR CUBE_M16, Zero\\n"',
+            self.header)
+        for op in atom_ops:
+            if op == "MGATHER_CAS":
+                body_match = re.search(
+                    r'^void MGATHER_CAS\(.*?\n}\n', self.header,
+                    re.S | re.M)
+            elif op == "MSCATTER_POPC":
+                body_match = re.search(
+                    r'^void MSCATTER_POPC\(.*?\n}\n', self.header,
+                    re.S | re.M)
+            else:
+                # Macro-generated wrappers are validated over their shared
+                # definition rather than an unavailable post-preprocessor body.
+                body_match = re.search(
+                    r'#define PTO_DEFINE_(?:MGATHER|MSCATTER)_ATOM\(.*?\n'
+                    r'.*?#undef PTO_ATOM_LAYOUT_ASM', self.header, re.S)
+            self.assertIsNotNone(body_match, op)
+        self.assertIn(
+            'IndexType == __type_int32 || IndexType == __type_uint32 ||',
+            self.header)
+        self.assertIn(
+            'IndexType == __type_int64 || IndexType == __type_uint64',
+            self.header)
+        self.assertIn(
+            'MGATHER_CAS index, expected, replacement, and destination',
+            self.header)
+        self.assertIn(
+            'IndexTile::BFractal == ValueTile::BFractal', self.header)
+        # Four explicit CAS branches, four POPC branches, and the two
+        # macro definitions (one each for gather/scatter atomics).
+        self.assertEqual(self.header.count('PTO_ATOM_LAYOUT_ASM'), 18)
+
     def test_cube_load_ass_uses_the_canonical_layout_name(self) -> None:
         # The CUBE transport selectors have no numeric B.DATR spelling: the
         # parser reads the Layout field as a BArgFormat identifier, so the

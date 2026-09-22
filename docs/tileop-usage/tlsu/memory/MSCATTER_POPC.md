@@ -98,7 +98,7 @@ BSTOP
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using ElementIndices = Tile<Location::Vec, int16_t, 8, 256, BLayout::RowMajor>;
+using ElementIndices = Tile<Location::Vec, int32_t, 8, 256, BLayout::RowMajor>;
 
 void popc_reduce(ElementIndices &element_indices) {
   // 每个 index 是相对于 base 的逻辑线性元素下标；每个有效地址贡献一次 U32 自增。
