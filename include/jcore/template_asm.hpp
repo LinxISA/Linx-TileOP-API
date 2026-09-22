@@ -97,14 +97,27 @@ using namespace pto;
 // is a real field (asl/tile/memory-and-data-movement/irregular/MGATHER.asl:
 // "An explicit encoded PadValue is used for every physical destination element
 // outside ValidRow x ValidCol"), so the wrapper's Pad template parameter has to
-// reach the encoding. Layout stays NORM here: the indexed TLSU family requires
-// generic indexing, which rejects every CUBE layout.
+// reach the encoding. M32 Local tiles additionally require an explicit direct
+// Local-layout selector; ordinary tiles retain the NORM selector.
 #define PTO_GATHER_PAD_ASM                                                     \
-  ".if %c[PadValue] == 0\nB.DATR NORM, Zero\n"                               \
-  ".elseif %c[PadValue] == 1\nB.DATR NORM, Max\n"                            \
-  ".elseif %c[PadValue] == 2\nB.DATR NORM, Min\n"                            \
-  ".else\nB.DATR NORM, Null\n"                                               \
+  ".if %c[ElemLayout] == 29\n"                                              \
+  ".if %c[PadValue] == 0\nB.DATR CUBE_M32, Zero\n"                         \
+  ".elseif %c[PadValue] == 1\nB.DATR CUBE_M32, Max\n"                      \
+  ".elseif %c[PadValue] == 2\nB.DATR CUBE_M32, Min\n"                      \
+  ".else\nB.DATR CUBE_M32, Null\n"                                         \
+  ".endif\n"                                                               \
+  ".else\n"                                                               \
+  ".if %c[PadValue] == 0\nB.DATR NORM, Zero\n"                             \
+  ".elseif %c[PadValue] == 1\nB.DATR NORM, Max\n"                          \
+  ".elseif %c[PadValue] == 2\nB.DATR NORM, Min\n"                          \
+  ".else\nB.DATR NORM, Null\n"                                             \
+  ".endif\n"                                                               \
   ".endif\n"
+
+// MSCATTER has no padding operand, but an M32 source still needs the direct
+// Local-layout selector before its indexed store body.
+#define PTO_SCATTER_LAYOUT_ASM                                                  \
+  ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32, Zero\n.endif\n"
 
 // The CUBE transport selectors have no numeric B.DATR spelling: the parser
 // reads the Layout field as a BArgFormat identifier, so `layout<code>` never
@@ -855,6 +868,7 @@ asm volatile(
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
         [PadValue] "i"(static_cast<int>(Pad)),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -875,6 +889,7 @@ asm volatile(
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
         [PadValue] "i"(static_cast<int>(Pad)),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -895,6 +910,7 @@ asm volatile(
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
         [PadValue] "i"(static_cast<int>(Pad)),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -915,6 +931,7 @@ asm volatile(
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
         [PadValue] "i"(static_cast<int>(Pad)),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -935,6 +952,7 @@ inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
   if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -944,6 +962,7 @@ asm volatile(
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
@@ -952,6 +971,7 @@ asm volatile(
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
       "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -961,6 +981,7 @@ asm volatile(
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
@@ -969,6 +990,7 @@ asm volatile(
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -978,6 +1000,7 @@ asm volatile(
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
@@ -986,6 +1009,7 @@ asm volatile(
   else {
 asm volatile(
       "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -995,6 +1019,7 @@ asm volatile(
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
@@ -1025,6 +1050,7 @@ asm volatile(
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
         [PadValue] "i"(static_cast<int>(Pad)),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -1046,6 +1072,7 @@ asm volatile(
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
         [PadValue] "i"(static_cast<int>(Pad)),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -1067,6 +1094,7 @@ asm volatile(
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
         [PadValue] "i"(static_cast<int>(Pad)),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -1088,6 +1116,7 @@ asm volatile(
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
         [PadValue] "i"(static_cast<int>(Pad)),
         [TileSize] "i"(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
@@ -1110,6 +1139,7 @@ inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
   if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -1120,6 +1150,7 @@ asm volatile(
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
@@ -1128,6 +1159,7 @@ asm volatile(
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
       "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -1138,6 +1170,7 @@ asm volatile(
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
@@ -1146,6 +1179,7 @@ asm volatile(
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
       "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -1156,6 +1190,7 @@ asm volatile(
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
         [Col] "i"(tile_shape_offset::Cols),
@@ -1164,6 +1199,7 @@ asm volatile(
   else {
 asm volatile(
       "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
@@ -1174,6 +1210,7 @@ asm volatile(
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
         [Col] "i"(tile_shape_offset::Cols),
