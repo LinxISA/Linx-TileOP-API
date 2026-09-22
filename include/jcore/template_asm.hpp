@@ -13838,6 +13838,78 @@ asm volatile(
   }
 }
 
+// TCMPS CUBE GPR carrier form.  The source-only B.IOT publishes the compare
+// result through the following B.IOR destination GPR instead of allocating a
+// PredicateCell destination.  For U8, High selects the high predicate half;
+// all other supported types use the low half.
+template <CmpMode Mode, bool High = false, is_tile_data_v tile_shape_in>
+uint64_t TCMPS(tile_shape_in &src, typename tile_shape_in::DType s) {
+  static_assert(is_valid_cmp_mode(Mode), "TCMPS requires a valid CmpMode");
+  static_assert(tile_shape_in::Loc == Location::Vec,
+                "TCMPS GPR output requires a VEC source");
+  static_assert(tile_shape_in::BFractal == BLayout::CubeM16 ||
+                    tile_shape_in::BFractal == BLayout::CubeM32,
+                "TCMPS GPR output requires a CUBE_M16 or CUBE_M32 source");
+  static_assert(tile_shape_in::ValidRow > 0 && tile_shape_in::ValidCol > 0,
+                "TCMPS GPR output requires a static valid shape");
+  constexpr int TypeCode = type_traits<typename tile_shape_in::DType>::TypeCode;
+  constexpr bool Supported =
+      TypeCode == __type_fp32 || TypeCode == __type_tf32 ||
+      TypeCode == __type_hf32 || TypeCode == __type_fp16 ||
+      TypeCode == __type_bf16 || TypeCode == __type_fp8_e4m3 ||
+      TypeCode == __type_fp8_e5m2 || TypeCode == __type_int32 ||
+      TypeCode == __type_int16 || TypeCode == __type_int8 ||
+      TypeCode == __type_uint32 || TypeCode == __type_uint16 ||
+      TypeCode == __type_uint8;
+  static_assert(Supported,
+                "TCMPS GPR output requires an ASL-supported CUBE type");
+  static_assert(TypeCode == __type_uint8 || !High,
+                "TCMPS high GPR carrier is only valid for U8");
+  constexpr int FieldCount = tile_shape_in::BFractal == BLayout::CubeM32
+                                  ? 2
+                                  : (type_traits<typename tile_shape_in::DType>::bits == 32
+                                         ? 2
+                                         : 4);
+  constexpr int CarrierCount = TypeCode == __type_uint8 ? 2 : 1;
+  static_assert(tile_shape_in::ValidCol <= FieldCount * CarrierCount,
+                "TCMPS GPR output exceeds one predicate carrier");
+
+  typename tile_shape_in::DType scalar_value = s;
+  asm("" : "+r"(scalar_value));
+  uint64_t result;
+
+#define PTO_TCMPS_GPR_CASE(CMODE)                                             \
+  if constexpr (Mode == CmpMode::CMODE) {                                    \
+    asm volatile(                                                            \
+        "BSTART.TEPL 45, %D[Type]\n"                                        \
+        ".if %c[Sat]\n"                                                       \
+        "B.DATR Zero, " #CMODE ", RNONE, sat\n"                              \
+        ".else\n"                                                            \
+        "B.DATR Zero, " #CMODE "\n"                                         \
+        ".endif\n"                                                          \
+        "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+        "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+        "B.DIM zero, %c[Cols], ->lb2\n"                                     \
+        "B.IOT %[Src], mask=1111, last\n"                                    \
+        "B.IOR [%[Scalar]], %[Dst]\n"                                        \
+        : [Dst] "=r"(result)                                                 \
+        : [Type] "i"(TypeCode), [VCOL] "i"(tile_shape_in::ValidCol),        \
+          [VROW] "i"(tile_shape_in::ValidRow), [Cols] "i"(tile_shape_in::Cols), \
+          [Sat] "i"(High && TypeCode == __type_uint8),                       \
+          [Src] "Tr"(src.data()), [Scalar] "r"(scalar_value)                \
+        : "memory");                                                         \
+  }
+
+  PTO_TCMPS_GPR_CASE(EQ)
+  else PTO_TCMPS_GPR_CASE(NE)
+  else PTO_TCMPS_GPR_CASE(LT)
+  else PTO_TCMPS_GPR_CASE(GT)
+  else PTO_TCMPS_GPR_CASE(LE)
+  else PTO_TCMPS_GPR_CASE(GE)
+#undef PTO_TCMPS_GPR_CASE
+  return result;
+}
+
 // Deprecated EQ-default form retained for old callers.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCMPS(tile_shape_out &dst, tile_shape_in &src,

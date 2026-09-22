@@ -11,6 +11,8 @@ template <CmpMode Mode, is_tile_data_v tile_shape_out, is_tile_data_v tile_shape
 void TCMPS(tile_shape_out &dst, tile_shape_in &src, typename tile_shape_in::DType s);
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCMPS(tile_shape_out &dst, tile_shape_in &src, typename tile_shape_in::DType s);
+template <CmpMode Mode, bool High = false, is_tile_data_v tile_shape_in>
+uint64_t TCMPS(tile_shape_in &src, typename tile_shape_in::DType s);
 ```
 
 ### Destination assembly：`TCMPS_ASS`
@@ -40,6 +42,11 @@ scalar、assembled destination。
 | `src` | 输入 Tile 或源数据。 |
 | `s` | 标量或标量 Tile 操作数；具体载体由重载决定。 |
 
+GPR 输出重载仅接受 `VEC` 上的 `CUBE_M16`/`CUBE_M32` source，并返回打包到一个
+`uint64_t` carrier 中的 predicate bits。`High=true` 只对 `U8` 选择高半 carrier；
+其他类型只能选择低半 carrier。调用者必须保证 valid shape 可以放入规范定义的
+一个 carrier，不能用该重载表达跨多个 GPR 的完整结果。
+
 ### 重载选择
 
 这些重载覆盖不同的 Tile location、返回方式或可选操作数。优先选择参数最少且能表达当前数据流的形式；不要通过传入无意义的零值来模拟另一个重载。
@@ -50,6 +57,8 @@ scalar、assembled destination。
 - Tile 类型必须满足接口模板约束；
 - 数据类型、形状、有效区域、布局、容量和存储位置必须满足该操作要求；
 - 输入 Tile 必须已初始化，输出 Tile 必须具有足够容量；
+- GPR 输出重载不分配输出 Tile，直接通过 `B.IOR` 写入普通 GPR；source 必须是
+  `CUBE_M16` 或 `CUBE_M32`，且 valid columns 不得超过一个 carrier 可容纳的范围；
 - 参数顺序必须与接口声明一致，不要添加接口未声明的操作数。
 
 ## 约束
@@ -88,6 +97,9 @@ scalar、assembled destination。
 
     成功调用后，`TCMPS` 更新输出 Tile 的有效区域；输入 Tile 通常保持不变，输出 padding 和未明确声明的副作用不可依赖。若操作的约束或参数说明另有规定，以对应说明为准。
 
+GPR 输出重载不更新 Tile destination，而是返回由 `B.IOR` 写入的 predicate carrier；
+输入 Tile 保持不变。
+
 ## Bundle 组成
 
 开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
@@ -101,6 +113,13 @@ B.DIM       rCol, 0, ->LB2  ; (optional)
 B.IOT       SrcTile, mask=PE_MASK, last, ->Predicate<TSize>
 B.IOR       ScalarGPR, zero, zero, ->zero (optional)
 BSTOP
+```
+
+GPR 输出形式将末两条替换为：
+
+```asm
+B.IOT       SrcTile, mask=1111, last
+B.IOR       [ScalarGPR], PredicateGPR
 ```
 
 ## 使用示例
