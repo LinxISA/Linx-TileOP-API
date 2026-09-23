@@ -143,7 +143,7 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
 
 ## 约束
 
-矩阵 MX 的 A/B 主输入分别独立选择 scale contract；普通 MX 类型使用 E8M0/group-32，而 HiF4X2 只能用于 Matrix-MX，并使用 `uint32_t`/group-64。ScaleA/ScaleB 的 shape、layout 和 storage 必须分别跟随 A/B 主输入。
+矩阵 MX 的 A/B 主输入分别独立选择 scale contract；普通 MX 类型使用 E8M0/group-32，而 HiF4X2 只能用于 Matrix-MX，并使用 `uint32_t`/group-64。ScaleA/ScaleB 的 storage 必须分别跟随 A/B 主输入，但 physical shape 需区分 Local 与 Shared：Local ScaleA/ScaleB 保持既有 `[M, G_A]` / `[G_B, N]` layout；Shared ScaleA 始终为 `[M, G_A]`，Shared ScaleB 始终为 `[N, G_B]`，均不随对应的 `TransA`/`TransB` 改变。转置只作用于对应的 Shared primary matrix。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 

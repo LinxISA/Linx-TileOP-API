@@ -39,7 +39,7 @@ template <typename T> using MA16 = Tile<Location::Left, T, 16, 32, BLayout::Cube
 using SA = Tile<Location::Scaling, __fp8_e8m0, 16, 1, BLayout::RowMajor>;
 // Shared B declares its physical [N, K] shape (pto-spec #257): N=16, K=32.
 template <typename T> using ShB = SharedMatrixRight<T, 16, 32>;
-// Shared ScaleB physical [N, KBlocks] = [16, 1] (pto-spec #257).
+// Shared ScaleB physical [N, KBlocks] = [16, 1] (pto-spec #343).
 using ShSB = SharedMatrixRight<__fp8_e8m0, 16, 1, 16, 1>;
 using GMF = global_tensor<float, RowMajor<16, 16>>;
 using GM16 = global_tensor<__fp8_e4m3, RowMajor<16, 32>>;

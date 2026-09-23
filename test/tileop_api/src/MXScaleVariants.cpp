@@ -40,7 +40,8 @@ using E1B = MB<__fp4_e1m2x2>;
 template <typename T> using SharedA = SharedMatrixLeft<T, 16, 32>;
 template <typename T> using SharedB = SharedMatrixRight<T, 32, 16>;
 using SharedSA = SharedMatrixLeft<__fp8_e8m0, 16, 8, 16, 1>;
-using SharedSB = SharedMatrixRight<__fp8_e8m0, 8, 16, 1, 16>;
+// Shared ScaleB is always physical [N, KBlocks] under pto-spec #343.
+using SharedSB = SharedMatrixRight<__fp8_e8m0, 16, 8, 16, 1>;
 
 __attribute__((noinline)) void carrier_zero_scale(
     float *output, float *c_input, float *bias_input,
@@ -199,7 +200,7 @@ __attribute__((noinline)) void carrier_shared_scale_b(
     __bf16 *a_input, __fp8_e5m2 *b_input, __fp8_e8m0 *sb_input) {
   SHARED_MX_COMMON_SETUP();
   GM<__bf16, 16, 32> gm_a(a_input); GM<__fp8_e5m2, 32, 16> gm_b(b_input);
-  GM<__fp8_e8m0, 8, 16> gm_sb(sb_input);
+  GM<__fp8_e8m0, 16, 8> gm_sb(sb_input);
   auto a = TLOAD<SharedA<__bf16>>(gm_a); auto b = TLOAD<SharedB<__fp8_e5m2>>(gm_b);
   auto sb = TLOAD<SharedSB>(gm_sb);
   pto_matmul_detail::NoScaleOperand none; auto opt = fixp::keep_acc();
@@ -214,7 +215,7 @@ __attribute__((noinline)) void carrier_shared_both_scales(
     __fp8_e5m2 *b_input, __fp8_e8m0 *sb_input) {
   SHARED_MX_COMMON_SETUP();
   GM<__fp8_e4m3, 16, 32> gm_a(a_input); GM<__fp8_e8m0, 16, 8> gm_sa(sa_input);
-  GM<__fp8_e5m2, 32, 16> gm_b(b_input); GM<__fp8_e8m0, 8, 16> gm_sb(sb_input);
+  GM<__fp8_e5m2, 32, 16> gm_b(b_input); GM<__fp8_e8m0, 16, 8> gm_sb(sb_input);
   auto a = TLOAD<SharedA<__fp8_e4m3>>(gm_a); auto sa = TLOAD<SharedSA>(gm_sa);
   auto b = TLOAD<SharedB<__fp8_e5m2>>(gm_b); auto sb = TLOAD<SharedSB>(gm_sb);
   auto opt = fixp::keep_acc();
