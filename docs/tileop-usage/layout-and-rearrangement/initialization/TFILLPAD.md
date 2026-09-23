@@ -1,6 +1,6 @@
 # TFILLPAD (unreleased)
 
-> **注意**：`TFILLPAD` 已从当前 PTO ISA catalog（main `961fa81e`）的活跃操作集中移除（deleted_names）。本页保留作历史参考；新代码不应使用该操作。
+> **注意**：`TFILLPAD` 已从 PTO ISA 0.58.6 active catalog 移除（deleted_names）。本页保留作历史参考；新代码不应使用该操作。
 
 `TFILLPAD` 复制有效源区域，并将绑定的标量写入目标物理区域的 padding。
 

@@ -6,21 +6,22 @@
 
 ## 版本与兼容性
 
-本目录包含两个有意并存的版本视角：
+本目录当前以 PTO-ISA/pto-spec 的 **0.58.6** 架构规范为对照基线：
 
-- 一般操作页和 range modifier 页面按 **v0.58.4.1** 的规范内容编写；
-  [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md)、
-  [TSHUF](layout-and-rearrangement/layout/TSHUF.md)、
-  [TPACK](layout-and-rearrangement/layout/TPACK.md)、
-  [TUNPACK](layout-and-rearrangement/layout/TUNPACK.md) 和
-  [TGPR2T](layout-and-rearrangement/layout/TGPR2T.md) 按 **v0.58.5** 编写。使用这些 API
-  时应配套支持对应规则的 Linx 编译器。
-- [0.58.3 迁移说明](migration/pto-0583-migration.md)与
-  [engine catalog](generated/engines.md)记录的是 **0.58.3** 的历史迁移/引擎投影，
-  不应被当作 0.58.4.1 新增 descriptor 的编译器兼容性声明。
+- architecture version：`0.58.6`
+- publication version：`0.58.6.0`
+- stable release commit：`dea0b75e803cffa873982c90f9aa0cd17c6d243b`
+- audit reference（`pto-spec/main`）：`6c41bde8cb418cbcf57e7d2ef4a61163a5378b7d`
+- encoding ABI：`pto-isa-0.58.6-mode-function-v1`
 
-不要混用不同版本的 headers、compiler 和规范内容。出现汇编编码、SizeCode 或
-bundle 字段不匹配时，先确认这三者的版本是否一致。
+PTO `main` 是开发分支；需要可复现构建时应锁定上面的 release commit。本文档描述
+的是架构规范和本仓库 wrapper 的交集，并不表示 wrapper 已实现 0.58.6 的全部操作。
+每个操作页中的 C++ 签名以本仓库头文件为准，PTO ASL/NDF 是架构合法性的权威来源。
+
+[0.58.3 迁移说明](migration/pto-0583-migration.md)是历史文档，保留用于迁移旧
+kernel；其中的旧版本数量、旧 engine inventory 和旧 encoding identity 不能当作
+当前规范。不要混用历史 headers、compiler 和规范内容；出现汇编编码、SizeCode
+或 bundle 字段不匹配时，先确认三者的版本是否一致。
 
 安装后的 `<common/pto_tileop_api_revision.hpp>` 提供以下自检宏：
 
@@ -78,7 +79,7 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
   也在该页面说明。
 - 常规逐元素算子从 [TADD](elementwise-tile-tile/arithmetic/TADD.md) 开始；按目录选择
   算术、逻辑、转换、归约、布局和不规则操作。
-- PTO ISA v0.58.5 的 CUBE layout 重排操作从
+- PTO ISA v0.58.6 的 CUBE layout 重排操作从
   [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md) 开始；pack/unpack、shuffle
   和 GPR predicate plane 转换页面位于同一目录。
 - 矩阵/向量计算使用 [CUBE TMATMUL](cube/matrix-matrix/TMATMUL.md) 或相应 GEMV 页面。

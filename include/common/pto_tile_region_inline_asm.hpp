@@ -1054,11 +1054,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary(
                 "binary region sources require matching valid shapes");
   const uintptr_t range_base0_units = src0.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %2, %6, mask=1111, last, ->%0<%Z7>\n"
+      "B.IOT %2, %6, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 0, %7, 0, %c8\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -1087,11 +1087,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary(
                 "binary region sources require matching valid shapes");
   const uintptr_t range_base1_units = src1.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %6, %2, mask=1111, last, ->%0<%Z7>\n"
+      "B.IOT %6, %2, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 1, %7, 0, %c8\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),
@@ -1193,11 +1193,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
                 "region expansion requires a static destination shape");
   const uintptr_t range_base0_units = src0.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %2, %6, mask=1111, last, ->%0<%Z7>\n"
+      "B.IOT %2, %6, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 0, %7, 0, %c8\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -1228,11 +1228,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
                 "region expansion requires a static destination shape");
   const uintptr_t range_base1_units = src1.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %6, %2, mask=1111, last, ->%0<%Z7>\n"
+      "B.IOT %6, %2, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 1, %7, 0, %c8\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),
@@ -1262,11 +1262,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
                 "region expansion requires a static destination shape");
   const uintptr_t range_base0_units = src0.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %2, %6, mask=1111, last, ->%0<%Z7>\n"
+      "B.IOT %2, %6, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 0, %7, 0, %c8\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -1297,11 +1297,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
                 "region expansion requires a static destination shape");
   const uintptr_t range_base1_units = src1.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %6, %2, mask=1111, last, ->%0<%Z7>\n"
+      "B.IOT %6, %2, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 1, %7, 0, %c8\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),

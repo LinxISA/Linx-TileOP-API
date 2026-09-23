@@ -5,6 +5,19 @@ using namespace pto;
 using Local = CubeTileM16<float, 16, 16>;
 using GM = global_tensor<float, RowMajor<16, 16>>;
 
+#if defined(SHOULD_FAIL_TADD_ASS_INIT) || defined(SHOULD_FAIL_TADD_MIDDLE)
+using VecTile = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
+void reject_tadd_range(VecTile &a, VecTile &b, VecTile &d) {
+  auto init = range::assemble(d);
+#if defined(SHOULD_FAIL_TADD_ASS_INIT)
+  TADD_ASS(init, a, b);
+#else
+  auto middle = range::assemble_middle(d);
+  TADD(middle, a, b);
+#endif
+}
+#endif
+
 #if defined(SHOULD_FAIL_SUBVIEW_DEST)
 void subview_cannot_be_tload_destination(GM &src, Local &dst) {
   range::Subview<Local, 1> view(dst);

@@ -16,12 +16,16 @@
 
 #include <common/pto_tileop.hpp>
 
+#include <cstdint>
+
 using namespace pto;
 
 using Dst = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
 using MaxDst = Tile<Location::Vec, float, 256, 256, BLayout::RowMajor>;
 using GMDst = global_tensor<float, RowMajor<4, 8>>;
 using MaxGMDst = global_tensor<float, RowMajor<256, 256>>;
+using SubviewParent = CubeTileM32<uint32_t, 32, 64>;
+using SubviewDst = Tile<Location::Vec, uint32_t, 32, 16, BLayout::RowMajor>;
 
 // Local destination assemble: load GM into an Assemble-wrapped destination.
 // INIT/LAST/Offset/RegSrc are compile-time in the wrapper so the B.ASSEMBLE
@@ -31,6 +35,28 @@ __attribute__((noinline)) void assemble_dest_tload(
   range::Assemble<MaxDst, 12, /*INIT*/ true, /*LAST*/ false, /*Off*/ 0,
                   /*RegSrc*/ 0> as(d, 0);
   TLOAD(as, src); // -> B.ASSEMBLE 1, 0, zero, 0, 12
+}
+
+__attribute__((noinline)) void assemble_tadd_session(Dst &a, Dst &b, Dst &d) {
+  auto init = range::assemble(d);
+  TADD(init, a, b); // Plain TADD opens the INIT slot.
+
+  auto middle = range::assemble_middle(d);
+  TADD_ASS(middle, a, b); // _ASS continues the existing session.
+
+  auto last = range::assemble_last(d);
+  TADD_ASS(last, a, b); // _ASS closes the session.
+}
+
+// Binary _ASS sources may be range::subview carriers.  Each source keeps its
+// parent-relative offset through a source-side B.SUBVIEW, while the result
+// remains an assembled destination with its own B.ASSEMBLE modifier.
+__attribute__((noinline)) void assemble_tadd_subviews(
+    SubviewParent &lhs_parent, SubviewParent &rhs_parent, SubviewDst &d) {
+  auto lhs = range::subview<4, 4>(lhs_parent);
+  auto rhs = range::subview<4, 8>(rhs_parent);
+  auto assembled = range::assemble_last(d);
+  TADD_ASS(assembled, lhs, rhs);
 }
 
 __attribute__((noinline)) void assemble_ass_tload(GMDst &src, MaxDst &d) {
@@ -110,8 +136,15 @@ int main() {
   GMDst gs(src_buf);
   MaxGMDst max_gs(max_src_buf);
   Dst d;
+  Dst a;
+  Dst b;
   MaxDst max_d;
   assemble_dest_tload(max_gs, max_d);
+  assemble_tadd_session(a, b, d);
+  SubviewParent lhs_parent;
+  SubviewParent rhs_parent;
+  SubviewDst subview_d;
+  assemble_tadd_subviews(lhs_parent, rhs_parent, subview_d);
   assemble_regsrc23_tload(max_gs, max_d);
   assemble_size0_tload(gs, d);
   assemble_factory_tload(gs, d);
