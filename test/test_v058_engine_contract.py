@@ -175,6 +175,36 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn('TCVT(dst, src);', cube_fixture)
         self.assertIn('__tilesize_1KB', cube_fixture)
 
+    def test_tcvt_cube_m_encodes_only_source_valid_col_and_row(self) -> None:
+        """CUBE-M TCVT must omit the non-defaultable LB2 field."""
+        tcvt = re.search(
+            r'(?s)template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,'
+            r'\s*is_tile_data_v tile_shape_in>\n'
+            r'void TCVT_T\(.*?\n}\n\n\n// PTO ISA 0.58 generic Local-to-Local TMOV',
+            self.header,
+        )
+        self.assertIsNotNone(tcvt)
+        carrier = tcvt.group(0)
+        cube_branch = carrier.split('if constexpr (IsCubeMSource) {', 1)[1].split(
+            '} else {', 1)[0]
+        ordinary_branch = carrier.split('} else {', 1)[1]
+
+        # All four CUBE-M valid-shape lowering paths must bind LB0 and LB1.
+        self.assertGreaterEqual(cube_branch.count('->lb0'), 4)
+        self.assertGreaterEqual(cube_branch.count('->lb1'), 4)
+        self.assertNotIn('->lb2', cube_branch)
+
+        # LB2 remains part of ordinary TCVT; this test must not be satisfied by
+        # accidentally deleting it from every TCVT path.
+        self.assertIn('->lb2', ordinary_branch)
+
+        fixture = (ROOT / 'test' / 'tileop_api' / 'src' /
+                   'IssueA2CubeMxFp4Tcvt.cpp').read_text(encoding='utf-8')
+        self.assertIn('__fp4_e2m1x2', fixture)
+        self.assertIn('__bf16', fixture)
+        self.assertIn('CubeTileM16', fixture)
+        self.assertIn('CubeTileM32', fixture)
+
     def test_range_modifiers_expose_simple_factories(self) -> None:
         tile_header = PTO_TILE.read_text(encoding="utf-8")
         tile = (ROOT / "test" / "tileop_api" / "src" /
