@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Generate the v0.58.3 engine index from the pinned LinxISA projection.
+"""Generate the wrapper engine compatibility view from the pinned projection.
 
-The output mirrors the PTO ISA 0.58.3 tile-operation catalog
+The output mirrors the active portion exposed by this wrapper. The checked-in
+projection is historical LinxISA/PTO 0.58.3 data and is not a replacement for
+the PTO ISA 0.58.6 catalog.
 (spec/catalog/tile-operations.json) for the four architectural engine
 classes: **VEC**, **SFU**, **TLSU**, and **CUBE**.  Engine and
 classification are decoupled (per ADR 0057): TEXP/TLOG/... are SFU-executed
@@ -28,15 +30,15 @@ def render() -> str:
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
     deleted_names = set(contract.get("deleted_tile_names", []))
     lines = [
-        "# LinxISA / PTO ISA v0.58.3 执行引擎",
+        "# LinxISA / PTO ISA v0.58.6 wrapper engine compatibility view",
         "",
         "架构定义的引擎类别只有 **VEC**, **TLSU**, **CUBE**, and **SFU**。",
         "VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。",
         "TEPL 仍是唯一的编译 carrier 标识。`BSTART.VEC` 和 `BSTART.SFU` 是特定引擎的汇编别名；",
         "inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。",
         "",
-        "下表根据固定版本的 LinxISA 权威数据生成，数据记录在",
-        "[`contracts/linxisa-v0.58-engine-ops.json`](../../contracts/linxisa-v0.58-engine-ops.json) 中。",
+        "下表根据本仓库固定的 LinxISA 历史投影生成，数据记录在",
+        "[`contracts/linxisa-v0.58-engine-ops.json`](../../../contracts/linxisa-v0.58-engine-ops.json) 中。",
         "",
     ]
 
@@ -51,9 +53,10 @@ def render() -> str:
             ]
         )
         for row in rows:
-            suffix = " (unreleased)" if row['name'] in deleted_names else ""
+            if row["name"] in deleted_names:
+                continue
             lines.append(
-                f"| `{row['name']}{suffix}` | `BSTART.{engine} {row['name']}` | "
+                f"| `{row['name']}` | `BSTART.{engine} {row['name']}` | "
                 f"{row['logical_selector']} | {row['classification']} |"
             )
         lines.append("")
@@ -68,15 +71,17 @@ def render() -> str:
             ]
         )
         for row in contract[key]:
-            suffix = " (unreleased)" if row['name'] in deleted_names else ""
-            lines.append(f"| `{row['name']}{suffix}` | `{row['mnemonic']}` | {row['function']} |")
+            if row["name"] in deleted_names:
+                continue
+            lines.append(f"| `{row['name']}` | `{row['mnemonic']}` | {row['function']} |")
         lines.append("")
 
     lines.extend(
         [
             "## 分类语义",
             "",
-            "PTO ISA 0.58.3（ADR 0057）将执行引擎与操作分类解耦。`elementwise-tile-tile`",
+            "PTO ISA 0.58.6 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；",
+            "其底层投影仍保留历史版本的 selector 数据。`elementwise-tile-tile`",
             "和 `tile-scalar-and-immediate` 类别在 VEC 上执行逐元素操作，但其中的",
             "`TEXP`、`TLOG`、`TRECIP`、`TSQRT`、`TRSQRT` 由 SFU 执行。",
             "`reduce-and-expand`、`layout-and-rearrangement` 和 `irregular-and-complex` 类别由 SFU 执行。",
@@ -92,8 +97,8 @@ def render() -> str:
             [
                 "## 早期版本中移除的操作",
                 "",
-                "0.58 之前的版本还提供了一些已从当前目录移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。",
-                "本库不会生成任何已移除的操作；废弃名称的规范列表记录在 contract 的 `deleted_tile_names` 字段中。",
+                "历史版本还提供了一些已从 PTO 0.58.6 active catalog 移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。",
+                "本库不会把已退役的操作生成到当前目录；退役名称的规范列表记录在 contract 的 `deleted_tile_names` 字段中。",
                 "",
             ]
         )
