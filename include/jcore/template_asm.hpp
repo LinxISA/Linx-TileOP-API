@@ -5190,7 +5190,8 @@ inline MatmulShape resolve_matmul_shape_runtime(const C &c, const A &a,
   return resolve_matmul_shape<Attr, C, A, B>();
 }
 
-template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B>
+template <FixpAttr Attr = FixpAttr{}, bool KillShared = false, typename Dst,
+          typename A, typename B>
 PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
                               size_t K) {
   // M is the value encoded into LB0: for Local/Local it is the Local M;
@@ -5209,36 +5210,73 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
-    asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
-        : [Dst] "=&Tr"(dst.data())
-        : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),
-          PTO_FIXP_ATTR_INPUTS,
-          PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
-        : "memory");
+    if constexpr (KillShared) {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
+          "B.IOS %K[SharedA], mask=1111\n"
+          "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),
+            PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    } else {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
+          "B.IOS %S[SharedA], mask=1111\n"
+          "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),
+            PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    }
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
-    asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT %[A], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
-        : [Dst] "=&Tr"(dst.data())
-        : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),
-          PTO_FIXP_ATTR_INPUTS,
-          PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
-        : "memory");
+    if constexpr (KillShared) {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
+          "B.IOS %K[SharedB], mask=1111\n"
+          "B.IOT %[A], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),
+            PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    } else {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
+          "B.IOS %S[SharedB], mask=1111\n"
+          "B.IOT %[A], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),
+            PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    }
   } else {
-    asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
-        : [Dst] "=&Tr"(dst.data())
-        : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),
-          PTO_FIXP_ATTR_INPUTS,
-          PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
-        : "memory");
+    if constexpr (KillShared) {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
+          "B.IOS %K[SharedA], mask=1111\n"
+          "B.IOS %K[SharedB], mask=1111\n"
+          "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),
+            PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    } else {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
+          "B.IOS %S[SharedA], mask=1111\n"
+          "B.IOS %S[SharedB], mask=1111\n"
+          "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),
+            PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    }
   }
 }
 
@@ -5299,8 +5337,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
 
 PTO_DEFINE_MATMUL_3SRC_HELPER(matmul_bias, "TMATMUL.BIAS")
 
-template <FixpAttr Attr = FixpAttr{}, typename Dst, typename C, typename A,
-          typename B>
+template <FixpAttr Attr = FixpAttr{}, bool KillShared = false, typename Dst,
+          typename C, typename A, typename B>
 PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
                                   size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
@@ -5317,39 +5355,79 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
-    asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOT %[C], mask=1111\n"
-        "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
-        : [Dst] "=&Tr"(dst.data())
-        : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()),
-          [B] "Tr"(b.data()), PTO_FIXP_ATTR_INPUTS,
-          PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
-        : "memory");
+    if constexpr (KillShared) {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
+          "B.IOT %[C], mask=1111\n"
+          "B.IOS %K[SharedA], mask=1111\n"
+          "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()),
+            [B] "Tr"(b.data()), PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    } else {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
+          "B.IOT %[C], mask=1111\n"
+          "B.IOS %S[SharedA], mask=1111\n"
+          "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()),
+            [B] "Tr"(b.data()), PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    }
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
-    asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOT %[C], %[A], mask=1111\n"
-        "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
-        : [Dst] "=&Tr"(dst.data())
-        : [C] "Tr"(c.data()), [A] "Tr"(a.data()),
-          [SharedB] "Sr"(b.handle()), PTO_FIXP_ATTR_INPUTS,
-          PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
-        : "memory");
+    if constexpr (KillShared) {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
+          "B.IOT %[C], %[A], mask=1111\n"
+          "B.IOS %K[SharedB], mask=1111\n"
+          "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [C] "Tr"(c.data()), [A] "Tr"(a.data()),
+            [SharedB] "Sr"(b.handle()), PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    } else {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
+          "B.IOT %[C], %[A], mask=1111\n"
+          "B.IOS %S[SharedB], mask=1111\n"
+          "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [C] "Tr"(c.data()), [A] "Tr"(a.data()),
+            [SharedB] "Sr"(b.handle()), PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    }
   } else {
-    asm volatile(
-        PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOT %[C], mask=1111\n"
-        "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
-        : [Dst] "=&Tr"(dst.data())
-        : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()),
-          [SharedB] "Sr"(b.handle()), PTO_FIXP_ATTR_INPUTS,
-          PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
-        : "memory");
+    if constexpr (KillShared) {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
+          "B.IOT %[C], mask=1111\n"
+          "B.IOS %K[SharedA], mask=1111\n"
+          "B.IOS %K[SharedB], mask=1111\n"
+          "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()),
+            [SharedB] "Sr"(b.handle()), PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    } else {
+      asm volatile(
+          PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
+          "B.IOT %[C], mask=1111\n"
+          "B.IOS %S[SharedA], mask=1111\n"
+          "B.IOS %S[SharedB], mask=1111\n"
+          "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+          : [Dst] "=&Tr"(dst.data())
+          : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()),
+            [SharedB] "Sr"(b.handle()), PTO_FIXP_ATTR_INPUTS,
+            PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
+          : "memory");
+    }
   }
 }
 
@@ -8142,6 +8220,192 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   pto_matmul_detail::emit_fixp<Attr, SrcMask, OutMask, IorMode>(
       d, a, b, row_in, quant_tile, relu_tile, row_out, group_out,
       quant_gpr, lrelu_gpr, M, N, K);
+}
+
+// Explicit Shared last-use entry points. These names are intentionally
+// separate from TMATMUL/TMATMUL_ACC: ordinary calls retain every Shared
+// allocation (`B.IOS ... .reuse`), while callers use these functions only
+// when every Shared primary operand in this operation has no later dynamic
+// read. The virtual S-register identity remains valid, but its physical cell
+// may be released after the bundle consumes it.
+namespace pto_matmul_detail {
+
+template <typename A, typename B>
+constexpr void validate_shared_last_use() {
+  static_assert(is_shared_tile_v<A> || is_shared_tile_v<B>,
+                "TMATMUL*_LAST_USE requires at least one Shared primary operand");
+}
+
+template <FixpAttr Attr, typename A, typename B>
+PTO_SHARED_INLINE void validate_last_use_groupm(const char *operation,
+                                                 size_t groupM) {
+  if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
+    pto_matmul_groupm_detail::validate_local_a_shared_b<A, B>(operation);
+  } else {
+    static_assert(is_shared_tile_v<A> && is_shared_tile_v<B>,
+                  "explicit groupM requires Local-A/Shared-B or "
+                  "Shared-A/Shared-B cooperative operands");
+    constexpr size_t EffectiveM = Attr.TransA ? A::ValidCol : A::ValidRow;
+    if (groupM != EffectiveM) {
+      __builtin_printf(
+          "TMATMUL*_LAST_USE: Shared-A groupM must match A's effective rows\n");
+      __builtin_trap();
+    }
+  }
+  pto_matmul_groupm_detail::validate_groupm_runtime(operation, groupM);
+}
+
+template <typename Options>
+constexpr void validate_last_use_options() {
+  constexpr FixpAttr Attr = Options::Attr;
+  static_assert(!is_vector_fixp_pre_quant(Attr.PreQuant) &&
+                    !is_scalar_fixp_pre_quant(Attr.PreQuant) &&
+                    !Attr.RowMaxInit && !Attr.RowMaxEn && !Attr.GroupMaxEn &&
+                    Attr.Relu != FixpReluMode::PRelu &&
+                    Attr.Relu != FixpReluMode::LRelu && !Attr.CScaleEn,
+                "TMATMUL*_LAST_USE options currently support parameter-free "
+                "FPATR modes, including raw_acc; quant, PReLU, LReLU, "
+                "RowMax, GroupMax and CScale require the retaining API");
+}
+
+} // namespace pto_matmul_detail
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b>
+PTO_SHARED_INLINE void TMATMUL_LAST_USE(tile_shape_d &d, tile_shape_a &a,
+                                        tile_shape_b &b) {
+  pto_matmul_detail::validate_shared_last_use<tile_shape_a, tile_shape_b>();
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_LAST_USE template options must be parameter-free");
+  auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  pto_matmul_detail::matmul<Attr, true>(d, a, b, shape.M, shape.N, shape.K);
+}
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b>
+PTO_SHARED_INLINE void TMATMUL_LAST_USE(tile_shape_d &d, tile_shape_a &a,
+                                        tile_shape_b &b, size_t groupM) {
+  pto_matmul_detail::validate_shared_last_use<tile_shape_a, tile_shape_b>();
+  pto_matmul_detail::validate_last_use_groupm<Attr, tile_shape_a,
+                                               tile_shape_b>(
+      "TMATMUL_LAST_USE", groupM);
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_LAST_USE template options must be parameter-free");
+  auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  pto_matmul_detail::matmul<Attr, true>(d, a, b, groupM, shape.N, shape.K);
+}
+
+template <is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_LAST_USE(tile_shape_d &d, tile_shape_a &a,
+                                        tile_shape_b &b,
+                                        const Options &options) {
+  (void)options;
+  constexpr FixpAttr Attr = Options::Attr;
+  pto_matmul_detail::validate_shared_last_use<tile_shape_a, tile_shape_b>();
+  pto_matmul_detail::validate_last_use_options<Options>();
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_LAST_USE destination dtype does not match PreQuantMode");
+  auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  pto_matmul_detail::matmul<Attr, true>(d, a, b, shape.M, shape.N, shape.K);
+}
+
+template <is_tile_data_v tile_shape_d,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_LAST_USE(tile_shape_d &d, tile_shape_a &a,
+                                        tile_shape_b &b,
+                                        const Options &options,
+                                        size_t groupM) {
+  (void)options;
+  constexpr FixpAttr Attr = Options::Attr;
+  pto_matmul_detail::validate_shared_last_use<tile_shape_a, tile_shape_b>();
+  pto_matmul_detail::validate_last_use_groupm<Attr, tile_shape_a,
+                                               tile_shape_b>(
+      "TMATMUL_LAST_USE", groupM);
+  pto_matmul_detail::validate_last_use_options<Options>();
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_LAST_USE destination dtype does not match PreQuantMode");
+  auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  pto_matmul_detail::matmul<Attr, true>(d, a, b, groupM, shape.N, shape.K);
+}
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
+          is_tile_data_v tile_shape_c, is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b>
+PTO_SHARED_INLINE void TMATMUL_ACC_LAST_USE(tile_shape_d &d, tile_shape_c &c,
+                                            tile_shape_a &a,
+                                            tile_shape_b &b) {
+  pto_matmul_detail::validate_shared_last_use<tile_shape_a, tile_shape_b>();
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_ACC_LAST_USE template options must be parameter-free");
+  auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  pto_matmul_detail::matmul_acc<Attr, true>(d, c, a, b, shape.M, shape.N,
+                                            shape.K);
+}
+
+template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_d,
+          is_tile_data_v tile_shape_c, is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b>
+PTO_SHARED_INLINE void TMATMUL_ACC_LAST_USE(tile_shape_d &d, tile_shape_c &c,
+                                            tile_shape_a &a,
+                                            tile_shape_b &b, size_t groupM) {
+  pto_matmul_detail::validate_shared_last_use<tile_shape_a, tile_shape_b>();
+  pto_matmul_detail::validate_last_use_groupm<Attr, tile_shape_a,
+                                               tile_shape_b>(
+      "TMATMUL_ACC_LAST_USE", groupM);
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_ACC_LAST_USE template options must be parameter-free");
+  auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  pto_matmul_detail::matmul_acc<Attr, true>(d, c, a, b, groupM, shape.N,
+                                            shape.K);
+}
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_ACC_LAST_USE(tile_shape_d &d, tile_shape_c &c,
+                                            tile_shape_a &a,
+                                            tile_shape_b &b,
+                                            const Options &options) {
+  (void)options;
+  constexpr FixpAttr Attr = Options::Attr;
+  pto_matmul_detail::validate_shared_last_use<tile_shape_a, tile_shape_b>();
+  pto_matmul_detail::validate_last_use_options<Options>();
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_ACC_LAST_USE destination dtype does not match PreQuantMode");
+  auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  pto_matmul_detail::matmul_acc<Attr, true>(d, c, a, b, shape.M, shape.N,
+                                            shape.K);
+}
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_ACC_LAST_USE(tile_shape_d &d, tile_shape_c &c,
+                                            tile_shape_a &a,
+                                            tile_shape_b &b,
+                                            const Options &options,
+                                            size_t groupM) {
+  (void)options;
+  constexpr FixpAttr Attr = Options::Attr;
+  pto_matmul_detail::validate_shared_last_use<tile_shape_a, tile_shape_b>();
+  pto_matmul_detail::validate_last_use_groupm<Attr, tile_shape_a,
+                                               tile_shape_b>(
+      "TMATMUL_ACC_LAST_USE", groupM);
+  pto_matmul_detail::validate_last_use_options<Options>();
+  static_assert(is_valid_fixp_attr(Attr), "invalid B.FPATR configuration");
+  static_assert(is_fixp_output_type<Attr, typename tile_shape_d::DType>(),
+                "TMATMUL_ACC_LAST_USE destination dtype does not match PreQuantMode");
+  auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  pto_matmul_detail::matmul_acc<Attr, true>(d, c, a, b, groupM, shape.N,
+                                            shape.K);
 }
 
 // TMATMUL_BIAS: C = A*B + bias (BSTART.CUBE TMATMUL.BIAS).

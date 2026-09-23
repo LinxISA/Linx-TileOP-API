@@ -38,6 +38,36 @@ original 0.58.3 release. For current range-modifier legality, use the
 - Matrix ACC forms retain explicit C input and an early-clobbered D output;
   the compiler must allocate distinct Local Tile indices.
 
+## Explicit Shared last use
+
+Cooperative matrix callers can opt in to early physical-cell release with
+`TMATMUL_LAST_USE(...)` and `TMATMUL_ACC_LAST_USE(...)`. Their basic,
+`fixp::Options`, `groupM`, and `fixp::Options + groupM` signatures mirror the
+corresponding ordinary entry points. The options forms currently accept only
+parameter-free FPATR modes (including `raw_acc()` and `acc_hint()`); modes with
+quant/PReLU/LReLU/RowMax/GroupMax/CScale operands continue to use the retaining
+API.
+
+The opt-in call marks every Shared A/B primary as its final dynamic read. It
+emits `B.IOS` without `.reuse` through LLVM's `%K` operand modifier, allowing
+hardware to release the physical Shared cell while retaining the virtual
+S-register identity. A later read of that virtual identity is illegal. The
+ordinary `TMATMUL(...)` and `TMATMUL_ACC(...)` APIs remain conservative and
+emit `.reuse`; use them whenever any Shared primary may be read again, such as
+in a loop-carried or shared-across-output-tile path.
+
+Shared A and Shared B must also denote distinct physical S handles. Passing
+the same Shared handle in both primary positions would emit two source
+occurrences: the first last-use `B.IOS` can release the cell before the second
+occurrence reads it. This duplicated-source alias is therefore illegal for the
+`*_LAST_USE` APIs.
+
+```cpp
+TMATMUL(d0, shared_a, shared_b, options);          // both retained
+TMATMUL_ACC_LAST_USE(d1, d0, shared_a, shared_b,   // final read of both
+                     options.acc_hint());
+```
+
 ## Range modifier interface
 
 PTO-ISA 0.58.4 introduced the source-side contract; 0.58.5/0.58.6 extend the

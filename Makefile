@@ -25,6 +25,7 @@ check:
 		-fsyntax-only -Iinclude test/pto0583_contract.cpp
 	bash -n test/tileop_api/compile.all test/tileop_api/run_negatives.sh \
 		test/tileop_api/verify_pto0583_asm.sh \
+		test/tileop_api/verify_shared_last_use.sh \
 		test/tileop_api/verify_target_cxx_frontend.sh
 	@if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
 		git diff --check; \
