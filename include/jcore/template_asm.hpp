@@ -8153,6 +8153,14 @@ constexpr void validate_last_use_options() {
                 "TMATMUL*_LAST_USE options currently support parameter-free "
                 "FPATR modes, including raw_acc; quant, PReLU, LReLU, "
                 "RowMax, GroupMax and CScale require the retaining API");
+  static_assert(
+      std::is_same_v<typename Options::QuantTile, fixp::NoOperand> &&
+          std::is_same_v<typename Options::ReluTile, fixp::NoOperand> &&
+          std::is_same_v<typename Options::RowMaxIn, fixp::NoOperand> &&
+          std::is_same_v<typename Options::RowMaxOut, fixp::NoOperand> &&
+          std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand> &&
+          std::is_same_v<typename Options::CScaleTile, fixp::NoOperand>,
+      "TMATMUL*_LAST_USE options must not carry auxiliary operands");
 }
 
 } // namespace pto_matmul_detail

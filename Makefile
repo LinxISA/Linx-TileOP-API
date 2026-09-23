@@ -7,7 +7,7 @@ HEADERS = $(wildcard include/*.h) $(wildcard include/*.hpp) include/jcore includ
 CLANG_PREFIX ?=
 INSTALL_DIR = $(shell $(CLANG_PREFIX)/bin/clang -print-resource-dir)/include/$(LIBNAME)
 
-.PHONY: check install uninstall
+.PHONY: check shared-last-use-check install uninstall
 
 check:
 	python3 tools/generate_engine_docs.py --check
@@ -27,6 +27,11 @@ check:
 	@if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
 		git diff --check; \
 	fi
+
+# Requires the compiler-side `%K` support from Linx LLVM PR #108. This stays
+# separate from `check` until the hosted gate's LLVM_REF contains that change.
+shared-last-use-check:
+	test/tileop_api/verify_shared_last_use.sh
 
 install:
 	@echo "Installing $(LIBNAME) to Clang toolchain at $(INSTALL_DIR)"

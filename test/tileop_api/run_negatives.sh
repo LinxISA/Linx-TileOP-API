@@ -144,6 +144,12 @@ for c in $TCVT_CASES; do
     echo "PASS (rejected): tcvt_$c"; PASS=$((PASS+1))
   fi
 done
+expect_rejected "shared_last_use_aux_matmul" \
+  SHOULD_FAIL_LAST_USE_AUX_MATMUL SharedLastUseNegatives.cpp \
+  'TMATMUL\*_LAST_USE options must not carry auxiliary operands'
+expect_rejected "shared_last_use_aux_acc" \
+  SHOULD_FAIL_LAST_USE_AUX_ACC SharedLastUseNegatives.cpp \
+  'TMATMUL\*_LAST_USE options must not carry auxiliary operands'
 PACK_CASES="left_zero left_too_wide sum_too_wide high_bits right_zero"
 UNPACK_CASES="offset_too_large count_zero count_too_large sum_too_wide high_bits"
 for c in $PACK_CASES; do

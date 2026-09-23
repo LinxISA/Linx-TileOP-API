@@ -34,6 +34,21 @@ LLVM. Run `test/tileop_api/compile.all`, `run_negatives.sh`, and the
 disassembly checks with that exact compiler build; a 0.58.1 compiler is
 expected to reject the nine-field B.FPATR and new layout/PEMode encodings.
 
+The explicit Shared last-use object/encoding gate additionally requires the
+`%K` support from Linx LLVM PR #108:
+
+```sh
+TC_DIR=/path/to/llvm-pr108/bin \
+LINX_SYSROOT=/path/to/linx/sysroot \
+make shared-last-use-check
+```
+
+This target is kept separate from `make check` because the hosted workflow's
+current `LLVM_REF` does not contain PR #108 yet. It compiles the focused
+fixture, checks the ordinary non-final `.reuse` path, and requires exactly four
+last-use Shared operand occurrences across Local/Shared and Shared/Shared
+TMATMUL branches, including a raw B.IOS word with bit26 set.
+
 To refresh the pinned projection from the clean, exact reviewed LinxISA
 authority commit recorded by the generator:
 
