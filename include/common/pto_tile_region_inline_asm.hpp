@@ -1054,7 +1054,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary(
                 "binary region sources require matching valid shapes");
   const uintptr_t range_base0_units = src0.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
@@ -1087,7 +1087,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary(
                 "binary region sources require matching valid shapes");
   const uintptr_t range_base1_units = src1.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
@@ -1193,7 +1193,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
                 "region expansion requires a static destination shape");
   const uintptr_t range_base0_units = src0.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
@@ -1228,7 +1228,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
                 "region expansion requires a static destination shape");
   const uintptr_t range_base1_units = src1.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
@@ -1262,7 +1262,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
                 "region expansion requires a static destination shape");
   const uintptr_t range_base0_units = src0.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
@@ -1297,7 +1297,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
                 "region expansion requires a static destination shape");
   const uintptr_t range_base1_units = src1.GetRangeBase();
   asm volatile(
-      "BSTART.TEPL %c9, %D1\n"
+      "BSTART.TEPL %c10, %D1\n"
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
