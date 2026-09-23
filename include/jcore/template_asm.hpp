@@ -14445,16 +14445,13 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src, TIMG2COLParams params) {
   static_assert(tile_shape_out::ValidRow != 0 &&
                     tile_shape_out::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+  static_assert(is_timg2col_type_code(
+                    type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
+  if (!is_timg2col_params_base_legal(params)) {
+    __builtin_printf("TIMG2COL: invalid parameter words\n");
+    __builtin_trap();
+  }
   uint64_t param0 = params.param0;
   asm("" : "+r"(param0));
   uint64_t param1 = params.param1;
@@ -14571,16 +14568,14 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src,
               size_t groupRows) {
   static_assert(tile_shape_out::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+  static_assert(is_timg2col_type_code(
+                    type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
+  const TIMG2COLParams params{param0, param1, param2};
+  if (!is_timg2col_params_base_legal(params)) {
+    __builtin_printf("TIMG2COL: invalid parameter words\n");
+    __builtin_trap();
+  }
   uint64_t p0 = param0;
   asm("" : "+r"(p0));
   uint64_t p1 = param1;
@@ -14637,16 +14632,13 @@ void TIMG2COL(SharedTile<shp> &dst, gm_shape &src, TIMG2COLParams params) {
   static_assert(shp::ValidRow != 0 &&
                     shp::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+  static_assert(is_timg2col_type_code(
+                    type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
+  if (!is_timg2col_params_base_legal(params)) {
+    __builtin_printf("TIMG2COL: invalid parameter words\n");
+    __builtin_trap();
+  }
   static_assert(
       tile_type_traits<typename shp::TileDType>::
           IsValidSharedActiveSize,
@@ -14693,21 +14685,18 @@ void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
   static_assert(shp::ValidRow != 0 &&
                     shp::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+  static_assert(is_timg2col_type_code(
+                    type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
+  if (!is_timg2col_params_base_legal(params)) {
+    __builtin_printf("TIMG2COL_SPART: invalid parameter words\n");
+    __builtin_trap();
+  }
   static_assert(
       tile_type_traits<typename shp::TileDType>::
           IsValidSharedActiveSize,
       "TIMG2COL Shared destination size must be 128 B..256 KB");
-  if (PEMask == 0 || (PEMask & (PEMask - 1)) != 0) {
+  if (!range::is_timg2col_single_pe_mask(PEMask)) {
     __builtin_printf("TIMG2COL_SPART: mask must have exactly one PE bit\n");
     __builtin_trap();
   }

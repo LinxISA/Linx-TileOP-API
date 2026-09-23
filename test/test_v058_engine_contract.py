@@ -964,6 +964,17 @@ int main() { return sizeof(Bad); }
         self.assertRegex(self.header, r'B\.IOR \[%\[Param0\], %\[Param1\], %\[Param2\]\], \[\]')
         self.assertRegex(self.header, r'B\.IOT mask=1111, last, ->%\[Dst\]')
 
+    def test_timg2col_parameter_words_follow_pto_0586_layout(self) -> None:
+        tile_header = PTO_TILE.read_text(encoding="utf-8")
+        self.assertIn('decode_timg2col_params', tile_header)
+        self.assertIn('p.param0 >> 48', tile_header)
+        self.assertIn('p.param1 >> 55', tile_header)
+        self.assertIn('p.param1 >> 59', tile_header)
+        self.assertIn('p.param2 >> 32', tile_header)
+        self.assertIn('is_timg2col_params_base_legal(params)', self.header)
+        self.assertIn('ParamVersion[58:55]',
+                      (ROOT / 'docs' / 'block' / 'TIMG2COL.md').read_text())
+
     def test_timg2col_uses_destination_geometry_and_cube_output(self) -> None:
         body = self.header[self.header.index("void TIMG2COL"):self.header.index("// TFILLPAD")]
         self.assertIn(

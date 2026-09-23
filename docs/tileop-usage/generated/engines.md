@@ -1,12 +1,12 @@
-# LinxISA / PTO ISA v0.58.3 执行引擎
+# LinxISA / PTO ISA v0.58.6 wrapper engine compatibility view
 
 架构定义的引擎类别只有 **VEC**, **TLSU**, **CUBE**, and **SFU**。
 VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。
 TEPL 仍是唯一的编译 carrier 标识。`BSTART.VEC` 和 `BSTART.SFU` 是特定引擎的汇编别名；
 inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 
-下表根据固定版本的 LinxISA 权威数据生成，数据记录在
-[`contracts/linxisa-v0.58-engine-ops.json`](../../contracts/linxisa-v0.58-engine-ops.json) 中。
+下表根据本仓库固定的 LinxISA 历史投影生成，数据记录在
+[`contracts/linxisa-v0.58-engine-ops.json`](../../../contracts/linxisa-v0.58-engine-ops.json) 中。
 
 ## VEC
 
@@ -89,7 +89,6 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 | `TEXTRACT` | `BSTART.SFU TEXTRACT` | 98 | layout-and-rearrangement |
 | `TINSERT` | `BSTART.SFU TINSERT` | 99 | layout-and-rearrangement |
 | `TIMG2COL` | `BSTART.SFU TIMG2COL` | 100 | layout-and-rearrangement |
-| `TFILLPAD (unreleased)` | `BSTART.SFU TFILLPAD` | 101 | layout-and-rearrangement |
 | `TCI` | `BSTART.SFU TCI` | 102 | irregular-and-complex |
 | `TTRI` | `BSTART.SFU TTRI` | 103 | irregular-and-complex |
 | `THISTOGRAM` | `BSTART.SFU THISTOGRAM` | 104 | irregular-and-complex |
@@ -97,13 +96,8 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 | `TDEQUANT` | `BSTART.SFU TDEQUANT` | 107 | irregular-and-complex |
 | `TSORT` | `BSTART.SFU TSORT` | 108 | irregular-and-complex |
 | `TMRGSORT` | `BSTART.SFU TMRGSORT` | 109 | irregular-and-complex |
-| `TTRANS (unreleased)` | `BSTART.SFU TTRANS` | 110 | layout-and-rearrangement |
 | `TGATHER` | `BSTART.SFU TGATHER` | 111 | irregular-and-complex |
 | `TSCATTER` | `BSTART.SFU TSCATTER` | 112 | irregular-and-complex |
-| `TPARTADD (unreleased)` | `BSTART.SFU TPARTADD` | 113 | irregular-and-complex |
-| `TPARTMUL (unreleased)` | `BSTART.SFU TPARTMUL` | 114 | irregular-and-complex |
-| `TPARTMAX (unreleased)` | `BSTART.SFU TPARTMAX` | 115 | irregular-and-complex |
-| `TPARTMIN (unreleased)` | `BSTART.SFU TPARTMIN` | 116 | irregular-and-complex |
 
 ## TLSU
 
@@ -139,7 +133,8 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 
 ## 分类语义
 
-PTO ISA 0.58.3（ADR 0057）将执行引擎与操作分类解耦。`elementwise-tile-tile`
+PTO ISA 0.58.6 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；
+其底层投影仍保留历史版本的 selector 数据。`elementwise-tile-tile`
 和 `tile-scalar-and-immediate` 类别在 VEC 上执行逐元素操作，但其中的
 `TEXP`、`TLOG`、`TRECIP`、`TSQRT`、`TRSQRT` 由 SFU 执行。
 `reduce-and-expand`、`layout-and-rearrangement` 和 `irregular-and-complex` 类别由 SFU 执行。
@@ -148,8 +143,8 @@ PTO ISA 0.58.3（ADR 0057）将执行引擎与操作分类解耦。`elementwise-
 
 ## 早期版本中移除的操作
 
-0.58 之前的版本还提供了一些已从当前目录移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。
-本库不会生成任何已移除的操作；废弃名称的规范列表记录在 contract 的 `deleted_tile_names` 字段中。
+历史版本还提供了一些已从 PTO 0.58.6 active catalog 移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。
+本库不会把已退役的操作生成到当前目录；退役名称的规范列表记录在 contract 的 `deleted_tile_names` 字段中。
 
 ## 使用示例
 
