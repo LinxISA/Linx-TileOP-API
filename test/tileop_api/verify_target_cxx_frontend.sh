@@ -78,6 +78,26 @@ done
   "$ROOT/test/tileop_api/src/SharedTLoad.cpp" -o "$OUT/SharedTLoad.ll"
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/RangeSubview.cpp" -o "$OUT/RangeSubview.ll"
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/RangeAssemble.cpp" -o "$OUT/RangeAssemble.ll"
+python3 - "$OUT/RangeAssemble.ll" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = next((part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+             if "assemble_tadd_subviews" in part), None)
+if body is None:
+    raise SystemExit("missing TADD_ASS subview fixture")
+if body.count("B.SUBVIEW") != 2:
+    raise SystemExit("assemble_tadd_subviews: expected two source B.SUBVIEW modifiers")
+if body.count("B.ASSEMBLE") != 1:
+    raise SystemExit("assemble_tadd_subviews: expected one destination B.ASSEMBLE modifier")
+if not re.search(r"B\\.IOT.*B\\.SUBVIEW.*B\\.SUBVIEW.*B\\.IOT.*B\\.ASSEMBLE", body):
+    raise SystemExit("assemble_tadd_subviews: invalid source/destination modifier order")
+PY
 grep -q '<256 x i32> asm sideeffect' "$OUT/SharedTLoad.ll"
 grep -q 'i64 asm sideeffect.*=@2Sr' "$OUT/SharedTLoad.ll"
 grep -q '<256 x i32> asm sideeffect.*@2Sr' "$OUT/SharedTLoad.ll"

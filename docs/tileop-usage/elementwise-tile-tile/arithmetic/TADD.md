@@ -22,7 +22,18 @@ template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 void TADD_ASS(D &assembled_dst, A &src0, B &src1);
 ```
 
-`assembled_dst` 必须是 `range::assemble` carrier；三个 Tile 的 dtype 必须相同，参数顺序为 destination、两个 source。
+`assembled_dst` 必须是 `range::assemble_middle` 或 `range::assemble_last` carrier；三个 Tile 的 dtype 必须相同，参数顺序为 destination、两个 source。INIT slot 使用下面的 plain `TADD` producer。
+
+两个 binary source 也可以是合法的 `range::subview` carrier。此时 source
+`B.IOT` 后分别发射对应的 `B.SUBVIEW`，assembled destination 仍按原有规则
+发射 `B.ASSEMBLE`：
+
+```cpp
+auto lhs = range::subview<4, 4>(lhs_parent);
+auto rhs = range::subview<4, 8>(rhs_parent);
+auto last = range::assemble_last(parent);
+TADD_ASS(last, lhs, rhs);
+```
 
 ### 支持的数据类型
 
@@ -39,6 +50,19 @@ void TADD_ASS(D &assembled_dst, A &src0, B &src1);
 | `src1` | 第二个输入 Tile。 |
 
 
+
+## Assembly destination
+
+plain `TADD` 可以把 `range::assemble(parent)` 作为 INIT destination，并发射分配型 `B.IOT` 后的 `B.ASSEMBLE INIT`。MIDDLE/LAST slot 必须使用 `TADD_ASS`；`TADD_ASS(range::assemble(parent), ...)` 会在编译期拒绝。
+
+```cpp
+auto init = range::assemble(parent);
+TADD(init, a, b);
+auto middle = range::assemble_middle(parent);
+TADD_ASS(middle, a, b);
+auto last = range::assemble_last(parent);
+TADD_ASS(last, a, b);
+```
 
 ## 使用要求
 

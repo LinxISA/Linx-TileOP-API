@@ -313,10 +313,10 @@ void load_head(GM &gm, Dst &tile) {
 ### INIT slot 与后续 slot 的接口约束（编译期强制）
 
 一个 assembly session 的**第一个（INIT）slot 必须由普通分配型接口写入**
-（`TLOAD`/`TMOV_L2S_*` 等），**后续 MIDDLE/LAST slot 必须用
+（`TLOAD`/`TADD`/`TMOV_L2S_*` 等），**后续 MIDDLE/LAST slot 必须用
 `_ASS` 接口追加**。`static_assert` 强制：
 
-- 普通 `TLOAD` 收到非 INIT carrier（`assemble_middle`/`assemble_last`）→ 拒绝；
+- 普通 producer（包括 `TLOAD`、plain `TADD`）收到非 INIT carrier（`assemble_middle`/`assemble_last`）→ 拒绝；
 - `_ASS` 接口收到 INIT carrier（`range::assemble` 默认形式）→ 拒绝。
 
 ```cpp
