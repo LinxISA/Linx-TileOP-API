@@ -1366,6 +1366,64 @@ struct TIMG2COLParams {
   uint64_t param2 = 0;
 };
 
+// PTO-BSTART-TIMG2COL-PARAMS-001.  Keep TIMG2COLParams ABI-compatible as
+// three opaque words, but expose the normative decode here so wrappers can
+// reject malformed runtime parameters before emitting the bundle.
+struct TIMG2COLDecodedParams {
+  uint32_t input_h;
+  uint32_t input_w;
+  uint32_t cin;
+  uint32_t kernel_h;
+  uint32_t kernel_w;
+  uint32_t pad_top;
+  uint32_t pad_left;
+  uint32_t pad_bottom;
+  uint32_t pad_right;
+  uint32_t dilation_h;
+  uint32_t dilation_w;
+  uint32_t conv_stride_h;
+  uint32_t conv_stride_w;
+  uint32_t param_version;
+  uint32_t extension_class;
+  uint64_t row_start;
+  uint64_t col_start;
+};
+
+constexpr TIMG2COLDecodedParams decode_timg2col_params(TIMG2COLParams p) {
+  return {
+      static_cast<uint32_t>(p.param0 & 0xffff),
+      static_cast<uint32_t>((p.param0 >> 16) & 0xffff),
+      static_cast<uint32_t>((p.param0 >> 32) & 0xffff),
+      static_cast<uint32_t>((p.param0 >> 48) & 0xff),
+      static_cast<uint32_t>((p.param0 >> 56) & 0xff),
+      static_cast<uint32_t>(p.param1 & 0xff),
+      static_cast<uint32_t>((p.param1 >> 8) & 0xff),
+      static_cast<uint32_t>((p.param1 >> 16) & 0xff),
+      static_cast<uint32_t>((p.param1 >> 24) & 0xff),
+      static_cast<uint32_t>((p.param1 >> 32) & 0x1f),
+      static_cast<uint32_t>((p.param1 >> 37) & 0x1f),
+      static_cast<uint32_t>((p.param1 >> 42) & 0x3f),
+      static_cast<uint32_t>((p.param1 >> 48) & 0x3f),
+      static_cast<uint32_t>((p.param1 >> 55) & 0xf),
+      static_cast<uint32_t>((p.param1 >> 59) & 0xf),
+      p.param2 & 0xffffffffULL,
+      p.param2 >> 32};
+}
+
+constexpr bool is_timg2col_params_base_extension_legal(TIMG2COLParams p) {
+  return ((p.param1 >> 54) & 1) == 0 && ((p.param1 >> 63) & 1) == 0 &&
+         ((p.param1 >> 55) & 0xff) == 0;
+}
+
+constexpr bool is_timg2col_params_base_legal(TIMG2COLParams p) {
+  const auto d = decode_timg2col_params(p);
+  return d.input_h != 0 && d.input_w != 0 && d.cin != 0 &&
+         d.kernel_h != 0 && d.kernel_w != 0 && d.dilation_h != 0 &&
+         d.dilation_w != 0 && d.conv_stride_h != 0 &&
+         d.conv_stride_w != 0 && d.param_version == 0 &&
+         d.extension_class == 0 && is_timg2col_params_base_extension_legal(p);
+}
+
 // Packed operands for the PTO weight-mode TLOAD contract.  ShapeWord packs
 // Cin[15:0], Cout[31:16], KernelH[39:32], KernelW[47:40], with [63:48]
 // reserved and zero.  StartWord packs NStart[31:0] and KStart[63:32].
@@ -2147,6 +2205,37 @@ inline constexpr std::size_t RangeAddressUnitBytes = 128;
 
 constexpr bool is_valid_parent_size_code(unsigned code) {
   return code <= 12; // 0 is legal on non-INIT modifiers; 13..15 reserved
+}
+
+// PTO 0.58.6 TIMG2COL accepts the scalar feature-map types below.  Keep this
+// predicate separate from GMOV and matrix predicates: TIMG2COL has its own
+// architectural data-type domain and, in particular, does not accept packed
+// MX carriers merely because they have a one-byte storage representation.
+constexpr bool is_timg2col_type_code(int type_code) {
+  switch (type_code) {
+  case __type_fp32:
+  case __type_tf32:
+  case __type_hf32:
+  case __type_fp16:
+  case __type_bf16:
+  case __type_hif8:
+  case __type_fp8_e4m3:
+  case __type_fp8_e5m2:
+  case __type_fp8_e8m0:
+  case __type_int32:
+  case __type_int16:
+  case __type_int8:
+  case __type_uint32:
+  case __type_uint16:
+  case __type_uint8:
+    return true;
+  default:
+    return false;
+  }
+}
+
+constexpr bool is_timg2col_single_pe_mask(unsigned mask) {
+  return mask == 1 || mask == 2 || mask == 4 || mask == 8;
 }
 constexpr bool is_valid_subview_size_code(unsigned code) {
   return code >= 1 && code <= 12;
