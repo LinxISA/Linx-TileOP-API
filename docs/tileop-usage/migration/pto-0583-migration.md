@@ -172,6 +172,6 @@ select the existing implementation based on `Tile::IsCubeLayout`.
 
 **影响**：仅非方阵 Shared B（方阵两布局字节等价，不受影响）。K 匹配断言语义相应变化：非转置 B 的有效 K 取声明的**第二**维。
 
-**迁移**：翻转非方阵非转置 Shared B 的两个模板实参；转置场景改为直接声明物理 `[K,N]`。Shared MX ScaleB 同步（非转置为 `[N, ceil(K/group)]`）。
+**迁移**：翻转非方阵非转置 Shared B 的两个模板实参；转置场景改为直接声明物理 `[K,N]`。Shared MX ScaleB 不随 `TransB` 翻转，统一声明物理 `[N, ceil(K/group)]`；Local ScaleB 保持既有 `[ceil(K/group), N]` layout。
 
 **依据**：`asl/block/model/dispatch/shared-cube-matrix.asl` `BundleMatrixSharedBPrimarySchemaLegal`（PTO-ISA 0.58.6）。

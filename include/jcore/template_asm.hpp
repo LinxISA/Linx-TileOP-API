@@ -5011,13 +5011,14 @@ constexpr void validate_matrix_scale_contract() {
     }
     static_assert(is_shared_tile_v<ScaleA> == is_shared_tile_v<A>,
                   "MX ScaleA storage must match A storage");
-    // A Shared ScaleA follows the same A-major physical rule as its primary
-    // (pto-spec #257): stored [M, KBlocks] without TransA, [KBlocks, M] with
-    // it. Local ScaleA keeps the logical [M, KBlocks] shape.
-    if constexpr (is_shared_tile_v<ScaleA> && Attr.TransA) {
-      static_assert(ScaleA::ValidRow == KBlocksA && ScaleA::ValidCol == M,
-                    "Shared transposed MX ScaleA is declared as its "
-                    "physical [ceil(K/groupA), M] shape");
+    // PTO spec #343: transpose controls apply only to the corresponding
+    // Shared primary operand. Shared ScaleA is always physically [M,
+    // KBlocksA], while Local ScaleA keeps its existing logical [M,
+    // KBlocksA] shape.
+    if constexpr (is_shared_tile_v<ScaleA>) {
+      static_assert(ScaleA::ValidRow == M && ScaleA::ValidCol == KBlocksA,
+                    "Shared MX ScaleA physical shape must be "
+                    "[M, ceil(K/groupA)] regardless of TransA");
     } else {
       static_assert(ScaleA::ValidRow == M && ScaleA::ValidCol == KBlocksA,
                     "MX ScaleA valid shape must be M x ceil(K/groupA)");
@@ -5032,13 +5033,14 @@ constexpr void validate_matrix_scale_contract() {
                   "MX ScaleB must use ordinary RowMajor layout");
     static_assert(is_shared_tile_v<ScaleB> == is_shared_tile_v<B>,
                   "MX ScaleB storage must match B storage");
-    // A Shared ScaleB follows the same B-major physical rule as its primary
-    // (pto-spec #257): stored [N, KBlocks] without TransB, [KBlocks, N] with
-    // it. Local ScaleB keeps the logical [KBlocks, N] shape.
-    if constexpr (is_shared_tile_v<ScaleB> && !Attr.TransB) {
+    // PTO spec #343: transpose controls apply only to the corresponding
+    // Shared primary operand. Shared ScaleB is always physically [N,
+    // KBlocksB], while Local ScaleB keeps its existing logical [KBlocksB,
+    // N] shape.
+    if constexpr (is_shared_tile_v<ScaleB>) {
       static_assert(ScaleB::ValidRow == N && ScaleB::ValidCol == KBlocksB,
-                    "Shared non-transposed MX ScaleB is declared as its "
-                    "physical [N, ceil(K/groupB)] shape");
+                    "Shared MX ScaleB physical shape must be "
+                    "[N, ceil(K/groupB)] regardless of TransB");
     } else {
       static_assert(ScaleB::ValidRow == KBlocksB && ScaleB::ValidCol == N,
                     "MX ScaleB valid shape must be ceil(K/groupB) x N");
