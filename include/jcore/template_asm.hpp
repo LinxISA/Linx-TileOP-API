@@ -9744,6 +9744,45 @@ concept reduction_prefix_operand_for =
 
 namespace pto_elementwise_user_dims {
 
+// Plain TEPL producer for an assembly INIT slot.  Unlike *_ASS, the
+// destination is an allocating B.IOT result; B.ASSEMBLE then publishes the
+// newly opened destination-side range session.
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+PTO_SHARED_INLINE void emit_binary_assemble_init(D &dst, A &src0, B &src1) {
+  static_assert(is_assemble_v<D>,
+                "plain TADD assembled destination must be a range::assemble carrier");
+  static_assert(D::INIT,
+                "plain TADD only supports an INIT assemble carrier; use TADD_ASS for MIDDLE/LAST");
+  static_assert(std::is_same_v<typename A::DType, typename B::DType>,
+                "TADD sources must have matching dtypes");
+  static_assert(std::is_same_v<typename D::DType, typename A::DType>,
+                "TADD destination and sources must have matching dtypes");
+  static_assert(D::RegSrc == 0 || D::RegSrc == range::AutoRegSrc,
+                "plain TADD with an explicit B.ASSEMBLE RegSrc selector is not supported");
+
+  const size_t col = src0.GetValidCol();
+  const size_t row = src0.GetValidRow();
+  const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
+  constexpr unsigned WriterSizeCode = D::WriterSizeCode;
+  asm volatile(
+      "BSTART.TEPL 0, %D[Type]\n"
+      "B.DIM %[Col], 0, ->lb0\n"
+      "B.DIM %[Row], 0, ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Type] "i"(type_traits<typename A::DType>::TypeCode),
+        [Col] "r"(col), [Row] "r"(row), [Cols] "i"(A::Cols),
+        [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+        [TileSize] "i"(tile_type_traits<typename D::TileDType>::TilesizeCode),
+        [Init] "i"(static_cast<int>(D::INIT)),
+        [Last] "i"(static_cast<int>(D::LAST)),
+        [RegSrc] "r"(range_base), [Off] "i"(D::OffsetUnits),
+        [WriterSize] "i"(WriterSizeCode)
+      : "memory");
+}
+
 // The optional ValidCol/ValidRow arguments let a caller narrow the B.DIM
 // geometry of the emitted bundle without changing the tile types: 0 (the
 // default) emits the type-derived dimension; N > 0 overrides it via the
@@ -9788,6 +9827,18 @@ PTO_SHARED_INLINE void emit_binary_user(
 template <is_tile_data_v tile_shape>
 void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
           unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  if constexpr (is_assemble_v<tile_shape>) {
+    static_assert(tile_shape::INIT,
+                  "plain TADD requires an INIT assemble carrier; use TADD_ASS for MIDDLE/LAST");
+    // UserValidCol/UserValidRow are function parameters, not constant
+    // expressions, so they cannot participate in static_assert.  An
+    // assembled INIT destination uses the carrier geometry for its writer;
+    // reject unsupported runtime overrides before emitting the bundle.
+    if (UserValidCol != 0 || UserValidRow != 0)
+      __builtin_trap();
+    pto_elementwise_user_dims::emit_binary_assemble_init(dst, src0, src1);
+    return;
+  }
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape);
   if constexpr (tile_shape::ValidCol > 0 || tile_shape::ValidRow > 0) {
     if (UserValidCol != 0 || UserValidRow != 0) {
@@ -18258,35 +18309,46 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
   if constexpr (is_subtile_view_v<A> || is_subtile_view_v<B> ||
                 is_subview_v<A> || is_subview_v<B>) {
     // TPARTVIEW and range::subview sources carry a parent-relative range
-    // offset. Keep the source B.IOT binders first, then attach one B.SUBVIEW
-    // to each source before publishing the assembled destination.
-    static_assert(Opcode == 7,
-                  "only TOR_ASS currently supports B.SUBVIEW sources");
-    static_assert((is_subtile_view_v<A> || is_subview_v<A>) &&
-                      (is_subtile_view_v<B> || is_subview_v<B>),
-                  "TOR_ASS subview form requires both sources to carry "
-                  "B.SUBVIEW range metadata");
+    // offset.  The source binder is still shared by the two logical inputs;
+    // each input that has range metadata gets its own B.SUBVIEW immediately
+    // after that binder.  This is valid for every tile/tile TEPL opcode, not
+    // just TOR (the old restriction made TADD_ASS et al. reject legal source
+    // carriers).
     if constexpr (is_subview_v<A>)
       static_assert(A::RegSrc == 0 || A::RegSrc == range::AutoRegSrc,
-                    "TOR_ASS range::Subview sources with explicit fixed "
+                    "TEPL _ASS range::Subview sources with explicit fixed "
                     "RegSrc are not supported");
     if constexpr (is_subview_v<B>)
       static_assert(B::RegSrc == 0 || B::RegSrc == range::AutoRegSrc,
-                    "TOR_ASS range::Subview sources with explicit fixed "
+                    "TEPL _ASS range::Subview sources with explicit fixed "
                     "RegSrc are not supported");
-    const uintptr_t source0_base = src0.GetRangeBase();
-    const uintptr_t source1_base = src1.GetRangeBase();
+    const uintptr_t source0_base = [&] {
+      if constexpr (is_subtile_view_v<A> || is_subview_v<A>)
+        return src0.GetRangeBase();
+      else
+        return uintptr_t{0};
+    }();
+    const uintptr_t source1_base = [&] {
+      if constexpr (is_subtile_view_v<B> || is_subview_v<B>)
+        return src1.GetRangeBase();
+      else
+        return uintptr_t{0};
+    }();
     constexpr unsigned source0_size = [] {
       if constexpr (is_subtile_view_v<A>)
         return A::TilesizeCode;
-      else
+      else if constexpr (is_subview_v<A>)
         return A::SubviewSizeCode;
+      else
+        return A::TilesizeCode;
     }();
     constexpr unsigned source1_size = [] {
       if constexpr (is_subtile_view_v<B>)
         return B::TilesizeCode;
-      else
+      else if constexpr (is_subview_v<B>)
         return B::SubviewSizeCode;
+      else
+        return B::TilesizeCode;
     }();
     constexpr unsigned source0_offset = [] {
       if constexpr (is_subview_v<A>)
@@ -18306,8 +18368,12 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
         "B.DIM %[Row], 0, ->lb1\n"
         "B.DIM zero, %c[Cols], ->lb2\n"
         "B.IOT %[Src0], %[Src1], mask=1111\n"
+        ".if %c[HasSrc0View]\n"
         "B.SUBVIEW 0, %[Src0Base], %c[Src0Off], %c[Src0Size]\n"
+        ".endif\n"
+        ".if %c[HasSrc1View]\n"
         "B.SUBVIEW 1, %[Src1Base], %c[Src1Off], %c[Src1Size]\n"
+        ".endif\n"
         "B.IOT %[Dst], mask=1111, last\n"
         "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
         :
@@ -18317,6 +18383,8 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
           [Src0Base] "r"(source0_base), [Src1Base] "r"(source1_base),
           [Src0Size] "i"(source0_size), [Src1Size] "i"(source1_size),
           [Src0Off] "i"(source0_offset), [Src1Off] "i"(source1_offset),
+          [HasSrc0View] "i"(static_cast<int>(is_subtile_view_v<A> || is_subview_v<A>)),
+          [HasSrc1View] "i"(static_cast<int>(is_subtile_view_v<B> || is_subview_v<B>)),
           [Opcode] "i"(Opcode), [Dst] "Tr"(dst.data()),
           [RegSrc] "r"(range_base),
           [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
