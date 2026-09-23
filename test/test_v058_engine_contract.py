@@ -361,12 +361,11 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn('tile_shape_out::ValidRow == tile_shape_in::ValidRow',
                       cube_branch)
 
-    def test_matrix_bias_carries_the_resolved_m_layout(self) -> None:
-        # PTO-ISA #291: Bias uses the resolver-selected M layout ML and must
-        # match D (Bias.layout == ML == D.layout), so it is a CUBE_M16/M32
-        # Tile rather than an ordinary RowMajor rectangle.
+    def test_matrix_bias_uses_local_cube_n8(self) -> None:
+        # PTO-ISA #339: Bias is a Local CUBE_N8 [1, N] operand constructed
+        # through the ND2N8 transport, not a CUBE_M16/M32 carrier.
         self.assertIn(
-            'static_assert(Bias::BFractal == Dst::BFractal && is_cube_m_layout_v<Bias>',
+            'static_assert(Bias::BFractal == BLayout::CubeN8 &&',
             self.header)
         self.assertIn('using CubeBias =', PTO_TILE.read_text(encoding='utf-8'))
         for fixture in ("TMatmulAllOptions.cpp", "TGEMVAllOptions.cpp",

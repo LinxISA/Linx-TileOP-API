@@ -3554,6 +3554,9 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
                 "TSTORE_CUBE requires matching GM and CUBE dtypes");
   static_assert(cube_shape::IsValidActiveSize,
                 "TSTORE_CUBE Local CUBE capacity must be 128 B..256 KiB");
+  static_assert(!(cube_shape::BFractal == BLayout::CubeN8 &&
+                  cube_shape::CubeElementBits == 64),
+                "U64 CUBE_N8 has no legal Local-to-GM store transport");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   // Persistent CUBE cell layout selects the canonical Local->GM transport
@@ -4953,14 +4956,11 @@ template <FixpAttr Attr, typename Dst, typename Bias, typename A, typename B,
 constexpr void validate_matrix_bias_contract() {
   static_assert(matrix_accumulator_type_legal<A, B, Bias, MX>(),
                 "Matrix Bias dtype must match the derived accumulator type");
-  // PTO-ISA #291: Bias carries the resolver-selected M layout ML
-  // (asl/block/model/dispatch/shared-cube-matrix.asl
-  // BundleMatrixCooperativeMLayout), so it matches D and Local A rather than
-  // an ordinary RowMajor rectangle: Bias.layout == ML == D.layout.
-  static_assert(Bias::BFractal == Dst::BFractal && is_cube_m_layout_v<Bias> &&
+  // PTO-ISA #339: Bias is a Local CUBE_N8 [1, N] operand. It is constructed
+  // through the ND2N8 transport rather than a direct CUBE_M selector.
+  static_assert(Bias::BFractal == BLayout::CubeN8 &&
                     Bias::SFractal == SLayout::NoneBox,
-                "Matrix Bias must use the resolved M layout (CUBE_M16 or "
-                "CUBE_M32) matching the destination");
+                "Matrix Bias must use Local CUBE_N8 layout");
   static_assert(Bias::ValidRow != DYNAMIC && Bias::ValidCol != DYNAMIC &&
                     B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC,
                 "Matrix Bias dynamic valid shapes are not supported");
@@ -5049,7 +5049,7 @@ constexpr void validate_matrix_scale_contract() {
 }
 
 template <FixpAttr Attr, int SrcMask, int OutMask, typename A, typename B,
-          typename RowIn, typename QuantTile, typename ReluTile,
+          typename Dst, typename RowIn, typename QuantTile, typename ReluTile,
           typename RowOut, typename GroupOut, bool MX = false,
           bool IsAccForm = true>
 constexpr void validate_matrix_postprocess_contract() {
@@ -5082,18 +5082,26 @@ constexpr void validate_matrix_postprocess_contract() {
       (is_shared_tile_v<A> || is_shared_tile_v<B>)
           ? pto_matmul_detail::cooperative_group_m_rows_per_pe(M)
           : M;
+  static_assert(Dst::IsCubeLayout && is_cube_m_layout_v<Dst>,
+                "Matrix post-process requires a CUBE_M16/CUBE_M32 destination");
   if constexpr ((OutMask & 1) != 0) {
     static_assert(type_traits<typename RowOut::DType>::TypeCode == AccCode,
                   "RowMaxOut dtype must match the derived accumulator type");
     static_assert(RowOut::ValidRow == PPRows && RowOut::ValidCol == 1,
                   "RowMaxOut valid shape must be per-PE M rows x 1 "
                   "(group_M block for cooperative, effective M otherwise)");
+    static_assert(RowOut::BFractal == Dst::BFractal &&
+                      RowOut::SFractal == SLayout::NoneBox,
+                  "RowMaxOut must use the primary destination CUBE layout");
   }
   if constexpr ((SrcMask & 1) != 0) {
     static_assert(type_traits<typename RowIn::DType>::TypeCode == AccCode,
                   "RowMaxIn dtype must match the derived accumulator type");
     static_assert(RowIn::ValidRow == M && RowIn::ValidCol == 1,
                   "RowMaxIn valid shape must be M x 1");
+    static_assert(RowIn::BFractal == Dst::BFractal &&
+                      RowIn::SFractal == SLayout::NoneBox,
+                  "RowMaxIn must use the primary destination CUBE layout");
   }
   if constexpr ((OutMask & 2) != 0) {
     constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
@@ -5103,6 +5111,9 @@ constexpr void validate_matrix_postprocess_contract() {
                       GroupOut::ValidCol == (N + GroupN - 1) / GroupN,
                   "GroupMaxOut valid shape must be per-PE M rows x "
                   "ceil(N/GroupN)");
+    static_assert(GroupOut::BFractal == Dst::BFractal &&
+                      GroupOut::SFractal == SLayout::NoneBox,
+                  "GroupMaxOut must use the primary destination CUBE layout");
   }
   if constexpr ((SrcMask & 2) != 0) {
     static_assert(type_traits<typename QuantTile::DType>::TypeCode == __type_uint64,
@@ -6820,7 +6831,7 @@ PTO_SHARED_INLINE void emit_fixp(
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_EMIT_LOCAL);
@@ -6855,7 +6866,7 @@ PTO_SHARED_INLINE void emit_matmul_acc_fixp(
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_accumulator_contract<Attr, Dst, C_, A, B>();
   validate_cscale_contract<Attr, C_, CScale>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_ACC_EMIT_LOCAL);
@@ -6879,7 +6890,7 @@ PTO_SHARED_INLINE void emit_matmul_bias_fixp(
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_bias_contract<Attr, Dst, BiasT, A, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_BIAS_EMIT_LOCAL);
@@ -6909,7 +6920,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
   validate_matrix_contract<Attr, Dst, A, B, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_LOCAL); }
@@ -6947,7 +6958,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
   validate_cscale_contract<Attr, C_, CScale>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_LOCAL); }
@@ -6983,7 +6994,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
   validate_matrix_bias_contract<Attr, Dst, BiasT, A, B, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_LOCAL); }
@@ -7069,7 +7080,7 @@ PTO_SHARED_INLINE void emit_gemv_fixp(
     RowOut &row_out, GroupOut &group_out,
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GV_EMIT_LOCAL);
 }
@@ -7088,7 +7099,7 @@ PTO_SHARED_INLINE void emit_gemv_bias_fixp(
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_bias_contract<Attr, Dst, BiasT, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVB_EMIT_LOCAL);
 }
@@ -7107,7 +7118,7 @@ PTO_SHARED_INLINE void emit_gemv_acc_fixp(
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, true>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVA_EMIT_LOCAL);
 }
@@ -7132,7 +7143,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_fixp(
   validate_gemv_contract<Attr, Dst, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_PLAIN); }
@@ -7160,7 +7171,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
   validate_matrix_bias_contract<Attr, Dst, BiasT, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_BIAS); }
@@ -7188,7 +7199,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
   validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, true>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_ACC); }

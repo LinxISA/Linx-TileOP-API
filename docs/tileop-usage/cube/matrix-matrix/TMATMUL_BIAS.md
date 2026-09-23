@@ -62,13 +62,12 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
 
 ### Bias Tile 契约
 
-Bias 是普通 Local RowMajor Tile，而不是 CUBE CELL Tile。它的 dtype 必须与
-该输入组合派生出的 accumulator 类型一致；例如 FP16 矩阵输入使用 FP32
-accumulator，因此 Bias 也使用 FP32。Bias 的有效区域固定为 `1 x N`，其中
-`N` 与矩阵结果列数一致；物理 shape 可以更大，但不能把 padding 当作 Bias。
+Bias 是 Local `CUBE_N8` Tile。它的 dtype 必须与该输入组合派生出的 accumulator
+类型一致；例如 FP16 矩阵输入使用 FP32 accumulator，因此 Bias 也使用 FP32。
+Bias 的有效区域固定为 `1 x N`，其中 `N` 与矩阵结果列数一致。
 
-Bias 从 GM 加载时使用普通 `TLOAD(bias, bias_gm)`（Bias 是普通 Tile，不是
-CUBE layout）。
+Bias 从 GM 加载时使用 `TLOAD(bias, bias_gm)`，由 `CUBE_N8` 选择合法的
+`ND2N8` transport。
 
 ### 重载选择
 

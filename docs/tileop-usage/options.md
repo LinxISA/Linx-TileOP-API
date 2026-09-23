@@ -325,8 +325,7 @@ GroupN 必须是 `8, 16, 32, 48, 64, 80, 96, 112, 128` 之一，对应 `GroupNCo
 编码 0 表示关闭 GroupMax。
 
 ```cpp
-using Group = Tile<Location::Vec, __fp32, 32, 8,
-                   BLayout::RowMajor, 32, 4>;
+using Group = CubeAccumulatorM32<__fp32, 32, 32, 32, 4>;
 Group group_out;
 TMATMUL(d, a, b, fixp::keep_acc().group_max<8>(group_out));
 ```
@@ -475,10 +474,8 @@ using A = CubeTileM32<float, 32, 64>;
 using B = CubeTileN8<float, 64, 32>; // local B is logical [K, N]
 using Param = Tile<Location::Vec, unsigned long, 2, 32,
                    BLayout::RowMajor, 1, 32>;
-using Row = Tile<Location::Vec, float, 32, 32,
-                 BLayout::RowMajor, 32, 1>;
-using Group = Tile<Location::Vec, float, 32, 32,
-                   BLayout::RowMajor, 32, 2>;
+using Row = CubeAccumulatorM32<float, 32, 32, 32, 1>;
+using Group = CubeAccumulatorM32<float, 32, 32, 32, 2>;
 using CScale = Tile<Location::Vec, uint8_t, 32, 32,
                     BLayout::CubeM32, 32, 1>;
 

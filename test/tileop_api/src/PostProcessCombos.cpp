@@ -21,9 +21,9 @@ using MXSB = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
 // quant/PReLU param: 1xN logical, physical 2x32 (>= 128 B)
 using P = Tile<Location::Vec, uint64_t, 2, 32, BLayout::RowMajor, 1, 32>;
 // RowMaxOut (Mx1) / GroupMaxOut (Mx2 for GroupN=16, N=32)
-using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
-using G = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 2>;
-using Bias = CubeBias<float, 32, 32>;
+using R = CubeAccumulatorM32<float, 32, 32, 32, 1>;
+using G = CubeAccumulatorM32<float, 32, 32, 32, 2>;
+using Bias = CubeBias<float, 32>;
 
 // TGEMV shapes: d 1xN, vec 1xK, mtx KxN
 using GV_D = CubeAccumulatorM16<float, 1, 32>;
@@ -37,10 +37,8 @@ using GV_MXSA = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
                      BLayout::RowMajor, 1, 2>;
 using GV_MXSB = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
                      BLayout::RowMajor, 2, 32>;
-using GV_R = Tile<Location::Vec, float, 16, 8,
-                  BLayout::RowMajor, 1, 1>;
-using GV_G = Tile<Location::Vec, float, 16, 8,
-                  BLayout::RowMajor, 1, 2>;
+using GV_R = CubeAccumulatorM16<float, 16, 32, 1, 1>;
+using GV_G = CubeAccumulatorM16<float, 16, 32, 1, 2>;
 
 static constexpr uint64_t s8_desc =
     (static_cast<uint64_t>(0x7) << 13) |  // fp19 scale = 7

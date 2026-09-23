@@ -39,7 +39,7 @@ if ! "$CXX" "${FLAGS[@]}" -H -fsyntax-only src/RangeSubview.cpp \
   sed -n '1,30p' "$TRACE" >&2
   exit 2
 fi
-CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose old_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b hif4_ordinary_matmul hif4_missing_scale_a hif4_missing_scale_b hif4_scale_dtype hif4_scale_shape bad_transpose_d group_shape group_k group_n group_dynamic"
+CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose old_rowmajor aux_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b hif4_ordinary_matmul hif4_missing_scale_a hif4_missing_scale_b hif4_scale_dtype hif4_scale_shape bad_transpose_d group_shape group_k group_n group_dynamic"
 TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_large"
 RANGE_CASES="subview_dest assemble_source subview_length"
 ROLE_VIEW_CASES="same_role local rvalue layout"
