@@ -11,10 +11,8 @@ using UA = CubeTileM16<uint8_t, 16, 32>;
 using UB = CubeTileN8<uint8_t, 32, 16>;
 using UD = CubeAccumulatorM16<uint32_t, 16, 16>;
 using UBias = CubeBias<uint32_t, 16>;
-using SRow = Tile<Location::Vec, int32_t, 16, 8,
-                  BLayout::RowMajor, 16, 1>;
-using URow = Tile<Location::Vec, uint32_t, 16, 8,
-                  BLayout::RowMajor, 16, 1>;
+using SRow = CubeAccumulatorM16<int32_t, 16, 16, 16, 1>;
+using URow = CubeAccumulatorM16<uint32_t, 16, 16, 16, 1>;
 
 void signed_matrix(SD &d, SD &c, SA &a, SB &b, SBias &bias,
                    SRow &row) {

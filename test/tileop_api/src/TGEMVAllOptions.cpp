@@ -14,8 +14,8 @@ using SV = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
                 BLayout::RowMajor, 1, 2>;
 using SM = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
                 BLayout::RowMajor, 2, 32>;
-using R = Tile<Location::Vec, float, 16, 8, BLayout::RowMajor, 1, 1>;
-using G = Tile<Location::Vec, float, 16, 8, BLayout::RowMajor, 1, 1>;
+using R = CubeAccumulatorM16<float, 16, 32, 1, 1>;
+using G = CubeAccumulatorM16<float, 16, 32, 1, 1>;
 using Bias = CubeBias<float, 32>;
 
 void all_variants(D &d, D &c, Bias &bias, V &v, Mtx &mtx,

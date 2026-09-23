@@ -302,8 +302,7 @@ __attribute__((noinline)) void carrier_gemv_both_scales(
 using D8 = CubeAccumulatorM16<int8_t, 16, 16>;
 using Param = Tile<Location::Vec, uint64_t, 2, 16,
                    BLayout::RowMajor, 1, 16>;
-using RowMax = Tile<Location::Vec, float, 16, 8,
-                    BLayout::RowMajor, 16, 1>;
+using RowMax = CubeAccumulatorM16<float, 16, 8, 16, 1>;
 
 __attribute__((noinline)) void carrier_postprocess_all_sources(
     int8_t *output, __fp8_e4m3 *a_input, __fp8_e8m0 *scale_a_input,

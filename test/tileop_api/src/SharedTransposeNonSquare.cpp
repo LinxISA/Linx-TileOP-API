@@ -9,10 +9,8 @@ using namespace pto;
 using StoredA = SharedMatrixLeft<float, 32, 16>;
 using StoredB = SharedMatrixRight<float, 32, 24>;
 using D = CubeAccumulatorM16<float, 16, 24>;
-using RowMax = Tile<Location::Vec, float, 16, 8,
-                    BLayout::RowMajor, 16, 1>;
-using GroupMax = Tile<Location::Vec, float, 16, 8,
-                      BLayout::RowMajor, 16, 3>;
+using RowMax = CubeAccumulatorM16<float, 16, 8, 16, 1>;
+using GroupMax = CubeAccumulatorM16<float, 16, 8, 16, 3>;
 
 void non_square_transpose(D &d, StoredA &stored_a, StoredB &stored_b,
                           RowMax &row_max, GroupMax &group_max) {

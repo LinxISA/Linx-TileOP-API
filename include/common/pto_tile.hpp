@@ -964,9 +964,10 @@ public:
     if constexpr (BFractal_ == BLayout::CubeM16) return 16;
     if constexpr (BFractal_ == BLayout::CubeM32) return 32;
     if constexpr (BFractal_ == BLayout::CubeN8)
-      return CubeElementBits == 32 ? 4 : CubeElementBits == 16 ? 8
-                                  : CubeElementBits == 8      ? 16
-                                                               : 32;
+      return CubeElementBits == 64 ? 2 : CubeElementBits == 32 ? 4
+                                  : CubeElementBits == 16 ? 8
+                                  : CubeElementBits == 8  ? 16
+                                                          : 32;
     return 0;
   }();
   static constexpr int CubeCellCols = [] {
@@ -1048,8 +1049,12 @@ public:
                 "Invalid Tile Layout.");
   static_assert(!IsCubeLayout ||
                     (CubeElementBits == 4 || CubeElementBits == 8 ||
-                     CubeElementBits == 16 || CubeElementBits == 32),
-                "CUBE CELL layouts support only 4/8/16/32-bit element widths");
+                     CubeElementBits == 16 || CubeElementBits == 32 ||
+                     (BFractal_ == BLayout::CubeN8 && CubeElementBits == 64)),
+                "CUBE CELL layouts support only 4/8/16/32-bit widths, or U64 CUBE_N8");
+  static_assert(BFractal_ != BLayout::CubeM16 &&
+                    BFractal_ != BLayout::CubeM32 || CubeElementBits != 64,
+                "U64 CUBE_M16/CUBE_M32 layouts are not supported");
   static_assert(BFractal_ != BLayout::CubeM16 || Rows <= 16,
                 "CUBE_M16 supports at most 16 logical rows");
   static_assert(BFractal_ != BLayout::CubeM32 || Rows <= 32,
@@ -1232,15 +1237,16 @@ using CubeAccumulatorM32 =
   Tile<Location::Acc, Element_, Rows_, Cols_, BLayout::CubeM32,
        RowValid_, ColValid_>;
 
-// PTO-ISA #291: Matrix Bias carries the resolver-selected M layout ML and
-// must match D, so it is a logical 1xN CUBE_M16/M32 Tile rather than an
-// ordinary RowMajor rectangle. The physical rows are the CELL height (16 for
-// M16, 32 for M32) and select which M layout the Bias declares.
-template <typename Element_, const int Cols_, const int Rows_ = 16,
-          const int ColValid_ = Cols_>
+// PTO-ISA #339: Matrix Bias is a logical 1xN Local CUBE_N8 operand. The
+// physical row count is the N8 CELL height for the element width.
+template <typename Element_, const int Cols_, const int ColValid_ = Cols_>
 using CubeBias =
-  Tile<Location::Bias, Element_, Rows_, Cols_,
-       Rows_ == 32 ? BLayout::CubeM32 : BLayout::CubeM16, 1, ColValid_>;
+  Tile<Location::Bias, Element_,
+       type_traits<Element_>::bits == 64 ? 2 :
+       type_traits<Element_>::bits == 32 ? 4 :
+       type_traits<Element_>::bits == 16 ? 8 :
+       type_traits<Element_>::bits == 8 ? 16 : 32,
+       Cols_, BLayout::CubeN8, 1, ColValid_>;
 
 // Cooperative Shared matrix primaries are published as ordinary RowMajor
 // rectangles. Their Left/Right role controls CUBE operand ordering; CELL

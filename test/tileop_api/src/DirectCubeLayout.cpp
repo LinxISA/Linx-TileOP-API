@@ -6,7 +6,7 @@
 //   2. TCVT is legal on Vec-location CUBE_M16/M32 tiles (issue #267): the
 //      CUBE layout is preserved while the element width may change;
 //   3. GMOV copies same-layout CUBE_M16/M32 peers (CUBE_N8 stays illegal);
-//   4. Matrix Bias carries the resolver-selected M layout and matches D.
+//   4. Matrix Bias uses the Local CUBE_N8 layout.
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
@@ -147,7 +147,7 @@ __attribute__((noinline)) void unpack_cube_m32(CellM32U32 &d, CellM32U32 &a) {
   TUNPACK(d, a, 0x00000201);
 }
 
-// --- 4. Matrix Bias carries the resolved M layout ---
+// --- 4. Matrix Bias uses the Local CUBE_N8 layout ---
 using M16A = CubeTileM16<float, 16, 16>;
 using M16B = CubeTileN8<float, 16, 16>;
 using M16D = CubeAccumulatorM16<float, 16, 16>;
@@ -156,12 +156,12 @@ using M16Bias = CubeBias<float, 16>;
 using M32A = CubeTileM32<float, 32, 32>;
 using M32B = CubeTileN8<float, 32, 32>;
 using M32D = CubeAccumulatorM32<float, 32, 32>;
-using M32Bias = CubeBias<float, 32, 32>;
+using M32Bias = CubeBias<float, 32>;
 
-static_assert(M16Bias::BFractal == BLayout::CubeM16 && M16Bias::ValidRow == 1,
-              "CubeBias<_, 16> declares the CUBE_M16 M layout");
-static_assert(M32Bias::BFractal == BLayout::CubeM32 && M32Bias::ValidRow == 1,
-              "CubeBias<_, 32> declares the CUBE_M32 M layout");
+static_assert(M16Bias::BFractal == BLayout::CubeN8 && M16Bias::ValidRow == 1,
+              "CubeBias<_, 16> declares the CUBE_N8 layout");
+static_assert(M32Bias::BFractal == BLayout::CubeN8 && M32Bias::ValidRow == 1,
+              "CubeBias<_, 32> declares the CUBE_N8 layout");
 static_assert(M16Bias::Loc == Location::Bias && M32Bias::Loc == Location::Bias,
               "CubeBias keeps the Bias operand role");
 

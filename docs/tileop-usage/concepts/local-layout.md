@@ -113,23 +113,16 @@ void copy(M32 &dst, M32 &src, uint64_t peer_tid) {
 }
 ```
 
-## 4. Matrix Bias 使用解析出的 M 布局
+## 4. Matrix Bias 使用 Local CUBE_N8
 
-Bias 不再固定为普通 RowMajor 矩形，而是携带 resolver 选出的 M 布局 ML：
-
-```
-Bias.layout == ML == D.layout
-```
-
-ML 由 `BundleMatrixCooperativeMLayout` 决定：存在 Local A/C 时取其 layout，否则由
-per-PE M 推导（M ≤ 16 → CUBE_M16，M ≤ 32 → CUBE_M32）。CUBE_M16 只覆盖至多 16 个
-逻辑行，CUBE_M32 至多 32 行。
+PTO-ISA #339 将 Matrix Bias 定义为 Local `CUBE_N8`，逻辑形状为 `[1, N]`，通过
+`ND2N8` transport 构造；它不再携带 primary 的 `CUBE_M16/M32` 布局。
 
 TileOP 用 `CubeBias` 表达这个契约：
 
 ```cpp
-using Bias = CubeBias<float, 16>;       // 声明 CUBE_M16 的 1xN Bias
-using Bias32 = CubeBias<float, 32, 32>; // 32 行 CELL，声明 CUBE_M32
+using Bias = CubeBias<float, 16>;       // 声明 CUBE_N8 的 1xN Bias
+using Bias32 = CubeBias<float, 32>;     // 声明 CUBE_N8 的 1xN Bias
 
 using D = CubeAccumulatorM16<float, 16, 16>;
 using A = CubeTileM16<float, 16, 16>;
@@ -140,9 +133,9 @@ void bias_add(D &d, A &a, B &b, Bias &bias) {
 }
 ```
 
-`CubeBias<Element, Cols, Rows = 16, ColValid = Cols>` 的第一个模板参数是元素类型，
-第二个是逻辑 N（`ValidCol`），第三个是物理 CELL 行数并据此选择 M16/M32。
-Bias 的 `ValidRow` 恒为 1。
+`CubeBias<Element, Cols, ColValid = Cols>` 的第一个模板参数是元素类型，第二个是逻辑 N
+（`ValidCol`）。它声明 Local `CUBE_N8`，Bias 的 `ValidRow` 恒为 1；物理 CELL 行数由
+元素宽度派生，U64 使用唯一允许的 `K2 x N8` CUBE 几何。
 
 ## 尚未覆盖
 
@@ -163,7 +156,7 @@ Bias 的 `ValidRow` 恒为 1。
 ## 迁移提示
 
 - 原来写 `Tile<Location::Bias, T, Rows, Cols, BLayout::RowMajor, 1, N>` 的 Bias，
-  改为 `CubeBias<T, N>`（或 `CubeBias<T, N, 32>`）。
+  改为 `CubeBias<T, N>`。
 - 原来因为 location 断言而绕开 CUBE 布局、改走 GM 往返或 Matrix 转换的 kernel，
   现在可以直接对 `VecTileM16/M32` 调用 TCVT、逐元素算子与归约/广播算子；
   CELL 重排（TPERMUTE/TSHUF/TPACK/TUNPACK）本来就只接受 CUBE 布局。
