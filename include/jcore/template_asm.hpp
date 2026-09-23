@@ -14518,6 +14518,7 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src,
   static_assert(is_timg2col_type_code(
                     type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
+  const TIMG2COLParams params{param0, param1, param2};
   if (!is_timg2col_params_base_legal(params)) {
     __builtin_printf("TIMG2COL: invalid parameter words\n");
     __builtin_trap();
@@ -14642,7 +14643,7 @@ void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
       tile_type_traits<typename shp::TileDType>::
           IsValidSharedActiveSize,
       "TIMG2COL Shared destination size must be 128 B..256 KB");
-  if (!is_timg2col_single_pe_mask(PEMask)) {
+  if (!range::is_timg2col_single_pe_mask(PEMask)) {
     __builtin_printf("TIMG2COL_SPART: mask must have exactly one PE bit\n");
     __builtin_trap();
   }
