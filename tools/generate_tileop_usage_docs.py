@@ -15,7 +15,7 @@ HEADER = ROOT / "include/jcore/template_asm.hpp"
 DOC_ROOT = ROOT / "docs/tileop-usage"
 SPEC_DOC_ROOT = SPEC_ROOT / "docs/tile"
 ASL_ROOT = SPEC_ROOT / "asl/tile"
-PTO_SPEC_REF = "v0.58.4.1"
+PTO_SPEC_REF = "v0.58.6"
 
 # Names used by the TileDataType encoding.  Keeping this list here makes the
 # documentation generator independent of prose wording in individual SPEC

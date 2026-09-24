@@ -31,6 +31,11 @@ kernel；其中的旧版本数量、旧 engine inventory 和旧 encoding identit
 - `PTO_TILEOP_API_REVISION_IS_EXACT`：revision 是否来自干净 checkout；
 - `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX`：local Right B 使用逻辑 `[K,N]` 契约。
 
+当前 wrapper 与 PTO 0.58.6 catalog 的覆盖边界见
+[统一支持状态表](support-status.md)。该表区分“已实现”“仅部分 layout 支持”“尚无
+wrapper”和“仅历史参考”；PTO catalog 中存在某个操作名，不等于本 C++ wrapper
+已经提供完整重载或完整 layout/属性组合。
+
 消费方应优先使用 feature 宏检查所需修复，而不是比较 revision 字符串。例如：
 
 ```cpp
@@ -80,8 +85,11 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
 - 常规逐元素算子从 [TADD](elementwise-tile-tile/arithmetic/TADD.md) 开始；按目录选择
   算术、逻辑、转换、归约、布局和不规则操作。
 - PTO ISA v0.58.6 的 CUBE layout 重排操作从
-  [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md) 开始；pack/unpack、shuffle
-  和 GPR predicate plane 转换页面位于同一目录。
+  [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md) 开始；
+  [TSHUF](layout-and-rearrangement/layout/TSHUF.md)、
+  [TPACK](layout-and-rearrangement/layout/TPACK.md)、
+  [TUNPACK](layout-and-rearrangement/layout/TUNPACK.md) 和
+  [TGPR2T](layout-and-rearrangement/layout/TGPR2T.md) 页面位于同一目录。
 - 矩阵/向量计算使用 [CUBE TMATMUL](cube/matrix-matrix/TMATMUL.md) 或相应 GEMV 页面。
 - 需要启用矩阵后处理属性时，先阅读 [`fixp::Options` 指南](options.md)。
 - 需要绑定 Tile range 或分区/组装时，阅读

@@ -1,7 +1,8 @@
 # Linx TileOP API
 
-Header-only C++ TileOP bindings for the LinxISA / PTO ISA v0.58 architectural contract,
-including the PTO ISA v0.58.5 layout-and-rearrangement additions.
+Header-only C++ TileOP bindings for the LinxISA / PTO ISA 0.58.6 architectural contract.
+The checked-in catalog and documentation are generated against the PTO ISA 0.58.6
+baseline (`0.58.6.0`, ABI `pto-isa-0.58.6-mode-function-v1`).
 
 Installed headers expose their provenance through
 `<common/pto_tileop_api_revision.hpp>`. `PTO_TILEOP_API_VERSION` and
@@ -10,13 +11,12 @@ Installed headers expose their provenance through
 `make install`. Feature macros such as `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX`
 allow consumers to reject toolchains that predate a required fix.
 
-The normative instruction names, encodings, and execution-engine classification come from the
-pinned LinxISA projection in
-[`contracts/linxisa-v0.58-engine-ops.json`](contracts/linxisa-v0.58-engine-ops.json). The public
-bindings retain the unique compiled `BSTART.TEPL` carrier for VEC/SFU source
-compatibility and emit the named TLSU/CUBE operation forms accepted by the
-current Linx compiler. The generated engine index shows the corresponding
-canonical aliases.
+The normative operation inventory comes from the checked-in PTO catalog at
+[`contracts/pto-isa-0.58.6-tile-operations.json`](contracts/pto-isa-0.58.6-tile-operations.json).
+The public bindings retain the unique compiled `BSTART.TEPL` carrier for VEC/SFU
+source compatibility and emit the named TLSU/CUBE operation forms accepted by
+the current Linx compiler. The generated engine index is a wrapper compatibility
+view, not a replacement for the PTO ASL/NDF semantics.
 
 ## Documentation
 
@@ -25,7 +25,7 @@ canonical aliases.
 - [CUBE operations](docs/tileop-usage/cube/matrix-matrix/TMATMUL.md)
 - [Tile and Shared-register constraints](docs/tileop-usage/concepts/tile-constraints.md)
 - [Layout helpers](docs/tileop-usage/layout-and-rearrangement/layout/TCONCAT.md)
-- [PTO ISA v0.58.5 CUBE layout operations](docs/tileop-usage/layout-and-rearrangement/layout/TPERMUTE.md)
+- [PTO ISA 0.58.6 CUBE layout operations](docs/tileop-usage/layout-and-rearrangement/layout/TPERMUTE.md)
 - [Comparison operations](docs/tileop-usage/elementwise-tile-tile/logical/TCMP.md)
 - [Sorting operations](docs/tileop-usage/irregular-and-complex/sorting/TSORT.md)
 - [Fixed-point matrix wrappers](docs/tileop-usage/options.md)
@@ -36,10 +36,11 @@ canonical aliases.
 make check
 ```
 
-Target compilation additionally requires the matching PTO ISA 0.58.3 Linx
-LLVM. Run `test/tileop_api/compile.all`, `run_negatives.sh`, and the
-disassembly checks with that exact compiler build; a 0.58.1 compiler is
-expected to reject the nine-field B.FPATR and new layout/PEMode encodings.
+Target compilation requires a Linx LLVM build supporting the PTO ISA 0.58.6
+encoding ABI. The old PTO ISA 0.58.3 Linx LLVM requirement belongs only to the
+historical migration fixtures under `test/tileop_api` and
+`docs/tileop-usage/migration/pto-0583-migration.md`; it is not the current API
+baseline. Run the catalog and documentation checks before target compilation.
 
 To refresh the pinned projection from the clean, exact reviewed LinxISA
 authority commit recorded by the generator:

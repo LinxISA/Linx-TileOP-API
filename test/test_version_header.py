@@ -13,7 +13,7 @@ UMBRELLA_HEADER = ROOT / "include/common/pto_tileop.hpp"
 class TileOpApiVersionHeaderTest(unittest.TestCase):
     def test_source_header_exposes_version_and_feature(self):
         header = SOURCE_HEADER.read_text(encoding="utf-8")
-        self.assertIn('#define PTO_TILEOP_API_VERSION "0.58.3"', header)
+        self.assertIn('#define PTO_TILEOP_API_VERSION "0.58.6"', header)
         self.assertIn('#define PTO_TILEOP_API_SPEC_VERSION "0.58.6"', header)
         self.assertIn('#define PTO_TILEOP_API_REVISION "source-tree"', header)
         self.assertIn('#define PTO_TILEOP_API_REVISION_IS_EXACT 0', header)
