@@ -299,18 +299,18 @@ __attribute__((noinline)) void carrier_gemv_both_scales(
   TSTORE_CUBE(gm_d, d);
 }
 
-using D8 = CubeAccumulatorM16<int8_t, 16, 16>;
+using D8 = CubeAccumulatorM16<float, 16, 16>;
 using Param = Tile<Location::Vec, uint64_t, 2, 16,
                    BLayout::RowMajor, 1, 16>;
 using RowMax = Tile<Location::Vec, float, 16, 8,
                     BLayout::RowMajor, 16, 1>;
 
 __attribute__((noinline)) void carrier_postprocess_all_sources(
-    int8_t *output, __fp8_e4m3 *a_input, __fp8_e8m0 *scale_a_input,
+    float *output, __fp8_e4m3 *a_input, __fp8_e8m0 *scale_a_input,
     __fp8_e5m2 *b_input, __fp8_e8m0 *scale_b_input,
     uint64_t *quant_input, uint64_t *prelu_input,
     float *row_in_input, float *row_out_input) {
-  GM<int8_t, 16, 16> gm_d(output);
+  GM<float, 16, 16> gm_d(output);
   GM<__fp8_e4m3, 16, 32> gm_a(a_input);
   GM<__fp8_e8m0, 16, 8> gm_sa(scale_a_input);
   GM<__fp8_e5m2, 32, 16> gm_b(b_input);
@@ -322,6 +322,6 @@ __attribute__((noinline)) void carrier_postprocess_all_sources(
   TLOAD_CUBE(b, gm_b); TLOAD(sb, gm_sb);
   TLOAD(q, gm_q); TLOAD(p, gm_p); TLOAD(ri, gm_ri); TLOAD(ro, gm_ro);
   TMATMUL_MX(d, a, sa, b, sb,
-             fixp::s8(q).prelu(p).row_max(ri, ro));
+             fixp::keep_acc().prelu(p).row_max(ri, ro));
   TSTORE_CUBE(gm_d, d);
 }

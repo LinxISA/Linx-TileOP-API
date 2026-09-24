@@ -47,6 +47,14 @@ class PTO0585LayoutInterfaceTest(unittest.TestCase):
             self.assertIn("## 使用示例", content)
             self.assertIn(f"layout-and-rearrangement/layout/{name}.md", doc_index)
 
+    def test_carrier_field_semantics(self):
+        self.assertIn("TPACK destination must be Local U8/U16/U32", HEADER)
+        self.assertIn("TUNPACK destination must be Local U8/U16/U32", HEADER)
+        self.assertIn("tpack_type_bytes_v", HEADER)
+        self.assertIn("tunpack_groups_per_row_v", HEADER)
+        self.assertIn("U8 + U16 -> U32", (DOC_ROOT / "TPACK.md").read_text())
+        self.assertIn("B32 group", (DOC_ROOT / "TUNPACK.md").read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

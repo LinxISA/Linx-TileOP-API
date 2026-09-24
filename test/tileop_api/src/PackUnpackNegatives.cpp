@@ -4,6 +4,8 @@ using namespace pto;
 
 using WordsM16 = CubeTileM16<uint32_t, 16, 16>;
 using WordsM32 = CubeTileM32<uint32_t, 32, 32>;
+using BytesM16 = CubeTileM16<uint8_t, 16, 16>;
+using HalfWordsM16 = CubeTileM16<uint16_t, 16, 16>;
 
 #if defined(SHOULD_FAIL_PACK_LEFT_ZERO)
 void zero_left_width(WordsM32 &dst, WordsM32 &a, WordsM32 &b) { TPACK(dst, a, b, 0x00000200); }
@@ -20,6 +22,9 @@ void nonzero_high_control_bits(WordsM32 &dst, WordsM32 &a, WordsM32 &b) { TPACK(
 #if defined(SHOULD_FAIL_PACK_RIGHT_ZERO)
 void zero_right_width(WordsM16 &dst, WordsM16 &a, WordsM16 &b) { TPACK(dst, a, b, 0x00000002); }
 #endif
+#if defined(SHOULD_FAIL_PACK_SOURCE_WIDTH)
+void source_width(HalfWordsM16 &dst, BytesM16 &a, BytesM16 &b) { TPACK(dst, a, b, 0x00000202); }
+#endif
 #if defined(SHOULD_FAIL_UNPACK_OFFSET_TOO_LARGE)
 void oversized_offset(WordsM32 &dst, WordsM32 &a) { TUNPACK(dst, a, 0x00000104); }
 #endif
@@ -34,6 +39,13 @@ void offset_count_overflow(WordsM32 &dst, WordsM32 &a) { TUNPACK(dst, a, 0x00000
 #endif
 #if defined(SHOULD_FAIL_UNPACK_HIGH_BITS)
 void nonzero_high_control_bits(WordsM16 &dst, WordsM16 &a) { TUNPACK(dst, a, 0x0000000100000201); }
+#endif
+#if defined(SHOULD_FAIL_UNPACK_INCOMPLETE_GROUP)
+using IncompleteSource = CubeTileM32<uint16_t, 32, 5>;
+using IncompleteDestination = CubeTileM32<uint16_t, 32, 3>;
+void incomplete_group(IncompleteDestination &dst, IncompleteSource &src) {
+  TUNPACK(dst, src, 0x00000201);
+}
 #endif
 
 int main() { return 0; }

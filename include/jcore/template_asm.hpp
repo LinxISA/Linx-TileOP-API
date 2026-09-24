@@ -5048,7 +5048,8 @@ constexpr void validate_matrix_scale_contract() {
   }
 }
 
-template <FixpAttr Attr, int SrcMask, int OutMask, typename A, typename B,
+template <FixpAttr Attr, int SrcMask, int OutMask, typename Dst,
+          typename A, typename B,
           typename RowIn, typename QuantTile, typename ReluTile,
           typename RowOut, typename GroupOut, bool MX = false,
           bool IsAccForm = true>
@@ -5070,6 +5071,7 @@ constexpr void validate_matrix_postprocess_contract() {
       ? __type_fp32
       : matrix_accumulator_type_code(
             type_traits<typename A::DType>::TypeCode);
+  constexpr int DCode = type_traits<typename Dst::DType>::TypeCode;
   constexpr int M = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidCol : A::ValidRow;
   // Shared B declares its physical stored shape (pto-spec #257): [N, K]
@@ -5083,22 +5085,28 @@ constexpr void validate_matrix_postprocess_contract() {
           ? pto_matmul_detail::cooperative_group_m_rows_per_pe(M)
           : M;
   if constexpr ((OutMask & 1) != 0) {
-    static_assert(type_traits<typename RowOut::DType>::TypeCode == AccCode,
-                  "RowMaxOut dtype must match the derived accumulator type");
+    static_assert(matrix_final_d_reduction_type_legal(DCode),
+                  "RowMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowOut::DType>::TypeCode == DCode,
+                  "RowMaxOut dtype must match final D dtype");
     static_assert(RowOut::ValidRow == PPRows && RowOut::ValidCol == 1,
                   "RowMaxOut valid shape must be per-PE M rows x 1 "
                   "(group_M block for cooperative, effective M otherwise)");
   }
   if constexpr ((SrcMask & 1) != 0) {
-    static_assert(type_traits<typename RowIn::DType>::TypeCode == AccCode,
-                  "RowMaxIn dtype must match the derived accumulator type");
+    static_assert(matrix_final_d_reduction_type_legal(DCode),
+                  "RowMaxIn requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowIn::DType>::TypeCode == DCode,
+                  "RowMaxIn dtype must match final D dtype");
     static_assert(RowIn::ValidRow == M && RowIn::ValidCol == 1,
                   "RowMaxIn valid shape must be M x 1");
   }
   if constexpr ((OutMask & 2) != 0) {
     constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
-    static_assert(type_traits<typename GroupOut::DType>::TypeCode == AccCode,
-                  "GroupMaxOut dtype must match the derived accumulator type");
+    static_assert(matrix_final_d_reduction_type_legal(DCode),
+                  "GroupMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename GroupOut::DType>::TypeCode == DCode,
+                  "GroupMaxOut dtype must match final D dtype");
     static_assert(GroupOut::ValidRow == PPRows &&
                       GroupOut::ValidCol == (N + GroupN - 1) / GroupN,
                   "GroupMaxOut valid shape must be per-PE M rows x "
@@ -6820,7 +6828,7 @@ PTO_SHARED_INLINE void emit_fixp(
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_EMIT_LOCAL);
@@ -6855,7 +6863,7 @@ PTO_SHARED_INLINE void emit_matmul_acc_fixp(
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_accumulator_contract<Attr, Dst, C_, A, B>();
   validate_cscale_contract<Attr, C_, CScale>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_ACC_EMIT_LOCAL);
@@ -6879,7 +6887,7 @@ PTO_SHARED_INLINE void emit_matmul_bias_fixp(
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_bias_contract<Attr, Dst, BiasT, A, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_BIAS_EMIT_LOCAL);
@@ -6909,7 +6917,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
   validate_matrix_contract<Attr, Dst, A, B, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_LOCAL); }
@@ -6947,7 +6955,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
   validate_cscale_contract<Attr, C_, CScale>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_LOCAL); }
@@ -6983,7 +6991,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
   validate_matrix_bias_contract<Attr, Dst, BiasT, A, B, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_LOCAL); }
@@ -7069,7 +7077,7 @@ PTO_SHARED_INLINE void emit_gemv_fixp(
     RowOut &row_out, GroupOut &group_out,
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GV_EMIT_LOCAL);
 }
@@ -7088,7 +7096,7 @@ PTO_SHARED_INLINE void emit_gemv_bias_fixp(
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_bias_contract<Attr, Dst, BiasT, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVB_EMIT_LOCAL);
 }
@@ -7107,7 +7115,7 @@ PTO_SHARED_INLINE void emit_gemv_acc_fixp(
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, true>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVA_EMIT_LOCAL);
 }
@@ -7132,7 +7140,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_fixp(
   validate_gemv_contract<Attr, Dst, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_PLAIN); }
@@ -7160,7 +7168,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
   validate_matrix_bias_contract<Attr, Dst, BiasT, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_BIAS); }
@@ -7188,7 +7196,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
   validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, true>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_ACC); }
@@ -8053,9 +8061,12 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                   "(group_M block for cooperative, effective M otherwise)");
     static_assert(RowOut::ValidCol == -1 || RowOut::ValidCol == 1,
                   "TMATMUL RowMaxOut must have ValidCol=1");
-    static_assert(matrix_accumulator_type_legal<tile_shape_a, tile_shape_b,
-                                                RowOut>(),
-                  "TMATMUL RowMaxOut dtype must match FP32/S32/U32 AccType");
+    static_assert(matrix_final_d_reduction_type_legal(
+                      type_traits<typename tile_shape_d::DType>::TypeCode),
+                  "TMATMUL RowMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowOut::DType>::TypeCode ==
+                      type_traits<typename tile_shape_d::DType>::TypeCode,
+                  "TMATMUL RowMaxOut dtype must match final D dtype");
     static_assert(
         tile_type_traits<typename RowOut::TileDType>::IsValidActiveSize,
         "TMATMUL RowMaxOut physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
@@ -8073,6 +8084,12 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     static_assert(std::is_same_v<typename RowIn::DType,
                                  typename RowOut::DType>,
                   "TMATMUL RowMaxIn/RowMaxOut dtypes must match");
+    static_assert(matrix_final_d_reduction_type_legal(
+                      type_traits<typename tile_shape_d::DType>::TypeCode),
+                  "TMATMUL RowMaxIn requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowIn::DType>::TypeCode ==
+                      type_traits<typename tile_shape_d::DType>::TypeCode,
+                  "TMATMUL RowMaxIn dtype must match final D dtype");
     static_assert(
         tile_type_traits<typename RowIn::TileDType>::IsValidActiveSize,
         "TMATMUL RowMaxIn physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
@@ -8088,9 +8105,12 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     static_assert(GroupOut::ValidCol == -1 || ExpectedCols == -1 ||
                       GroupOut::ValidCol == ExpectedCols,
                   "TMATMUL GroupMaxOut must have ValidCol=ceil(N/GroupN)");
-    static_assert(matrix_accumulator_type_legal<tile_shape_a, tile_shape_b,
-                                                GroupOut>(),
-                  "TMATMUL GroupMaxOut dtype must match FP32/S32/U32 AccType");
+    static_assert(matrix_final_d_reduction_type_legal(
+                      type_traits<typename tile_shape_d::DType>::TypeCode),
+                  "TMATMUL GroupMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename GroupOut::DType>::TypeCode ==
+                      type_traits<typename tile_shape_d::DType>::TypeCode,
+                  "TMATMUL GroupMaxOut dtype must match final D dtype");
     static_assert(
         tile_type_traits<typename GroupOut::TileDType>::IsValidActiveSize,
         "TMATMUL GroupMaxOut physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
@@ -18162,37 +18182,139 @@ void TSHUF(D &dst, S &src, C &controls, uint64_t control) {
 }
 
 // PTO-ISA layout-and-rearrangement control words: bits [63:32] must be zero
-// and only the low two control bytes carry the pack/unpack fields.
-constexpr bool tpack_control_legal_v(uint64_t control) {
+// and only the low two control bytes carry the pack/unpack fields.  The
+// carrier width is part of the instruction's BSTART type, while source
+// widths are taken from the source descriptors.
+constexpr unsigned tpack_source_bytes(unsigned bits) {
+  return bits / 8;
+}
+
+constexpr bool tpack_control_legal_v(uint64_t control, unsigned left_width,
+                                     unsigned right_width,
+                                     unsigned destination_width) {
   if (control >> 32)
     return false;
   const unsigned left_bytes = control & 0xff;
   const unsigned right_bytes = (control >> 8) & 0xff;
-  return left_bytes >= 1 && left_bytes <= 3 && right_bytes >= 1 &&
-         right_bytes <= 3 && left_bytes + right_bytes <= 4;
+  return left_bytes >= 1 && left_bytes <= left_width &&
+         right_bytes >= 1 && right_bytes <= right_width &&
+         left_bytes + right_bytes <= destination_width;
 }
 
-constexpr bool tunpack_control_legal_v(uint64_t control) {
+constexpr bool tunpack_control_legal_v(uint64_t control,
+                                       unsigned destination_width) {
   if (control >> 32)
     return false;
   const unsigned offset = control & 0xff;
   const unsigned count = (control >> 8) & 0xff;
-  return offset <= 3 && count >= 1 && count <= 4 && offset + count <= 4;
+  return offset <= 3 && count >= 1 && count <= destination_width &&
+         offset + count <= 4;
+}
+
+template <typename T>
+constexpr bool tpack_source_type_legal_v =
+    (type_traits<T>::TypeCode == __type_uint8 ||
+     type_traits<T>::TypeCode == __type_uint16 ||
+     type_traits<T>::TypeCode == __type_uint32);
+
+template <typename T>
+constexpr bool tpack_destination_type_legal_v =
+    type_traits<T>::TypeCode == __type_uint8 ||
+    type_traits<T>::TypeCode == __type_uint16 ||
+    type_traits<T>::TypeCode == __type_uint32;
+
+template <typename T>
+constexpr bool tunpack_destination_type_legal_v =
+    type_traits<T>::TypeCode == __type_uint8 ||
+    type_traits<T>::TypeCode == __type_uint16 ||
+    type_traits<T>::TypeCode == __type_uint32;
+
+template <typename T>
+constexpr bool tpack_type_is_local_numeric_v =
+    tpack_source_type_legal_v<T>;
+
+template <typename T>
+constexpr unsigned tpack_type_bytes_v = tpack_source_bytes(type_traits<T>::bits);
+
+template <typename T>
+constexpr unsigned tpack_raw_words_per_row_v =
+    T::ValidCol * tpack_type_bytes_v<typename T::DType> / 4;
+
+template <typename T>
+constexpr bool tpack_source_row_is_word_aligned_v =
+    (T::ValidCol * tpack_type_bytes_v<typename T::DType>) % 4 == 0;
+
+template <typename T, typename D>
+constexpr unsigned tpack_destination_cols_v =
+    tpack_raw_words_per_row_v<T> * (4 / tpack_type_bytes_v<typename D::DType>);
+
+template <typename T>
+constexpr bool tpack_cube_layout_v =
+    T::BFractal == BLayout::CubeM16 || T::BFractal == BLayout::CubeM32;
+
+template <typename T>
+constexpr bool tpack_valid_shape_v = T::ValidRow > 0 && T::ValidCol > 0;
+
+template <typename T>
+constexpr bool tpack_is_local_v = T::Loc != Location::Shared;
+
+template <typename T>
+constexpr bool tpack_source_descriptor_legal_v =
+    tpack_type_is_local_numeric_v<typename T::DType> && tpack_cube_layout_v<T> &&
+    tpack_valid_shape_v<T> && tpack_is_local_v<T>;
+
+template <typename T>
+constexpr bool tpack_operation_descriptor_legal_v =
+    tpack_destination_type_legal_v<typename T::DType> && tpack_cube_layout_v<T> &&
+    tpack_valid_shape_v<T> && tpack_is_local_v<T>;
+
+template <typename T>
+constexpr bool tunpack_operation_descriptor_legal_v =
+    tunpack_destination_type_legal_v<typename T::DType> && tpack_cube_layout_v<T> &&
+    tpack_valid_shape_v<T> && tpack_is_local_v<T>;
+
+template <typename T>
+constexpr bool tunpack_source_descriptor_legal_v =
+    tpack_source_descriptor_legal_v<T>;
+
+template <typename T>
+constexpr unsigned tunpack_groups_per_row_v =
+    tpack_raw_words_per_row_v<T>;
+
+template <typename T, typename D>
+constexpr unsigned tunpack_destination_cols_v =
+    tpack_destination_cols_v<T, D>;
+
+template <typename T>
+constexpr bool tunpack_source_row_is_b32_aligned_v =
+    (T::ValidCol * tpack_type_bytes_v<typename T::DType>) % 4 == 0;
+
+constexpr bool tpack_control_legal_v(uint64_t control) {
+  return tpack_control_legal_v(control, 4, 4, 4);
+}
+
+constexpr bool tunpack_control_legal_v(uint64_t control) {
+  return tunpack_control_legal_v(control, 4);
 }
 
 template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
-  static_assert(type_traits<typename D::DType>::TypeCode == __type_uint32 &&
-                    type_traits<typename A::DType>::TypeCode == __type_uint32 &&
-                    type_traits<typename B::DType>::TypeCode == __type_uint32,
-                "TPACK requires U32 tiles");
+  static_assert(tpack_operation_descriptor_legal_v<D>,
+                "TPACK destination must be Local U8/U16/U32 CUBE_M16/M32");
+  static_assert(tpack_source_descriptor_legal_v<A> &&
+                    tpack_source_descriptor_legal_v<B>,
+                "TPACK sources must be Local 8/16/32-bit numeric CUBE tiles");
   static_assert(D::BFractal == A::BFractal && D::BFractal == B::BFractal &&
-                    (D::BFractal == BLayout::CubeM16 ||
-                     D::BFractal == BLayout::CubeM32),
-                "TPACK requires matching CUBE_M16 or CUBE_M32 layouts");
-  static_assert(D::ValidRow > 0 && D::ValidCol > 0,
-                "TPACK currently requires a static valid shape");
-  if (!tpack_control_legal_v(control))
+                    D::ValidRow == A::ValidRow && D::ValidRow == B::ValidRow &&
+                    tpack_source_row_is_word_aligned_v<A> &&
+                    tpack_source_row_is_word_aligned_v<B> &&
+                    tpack_raw_words_per_row_v<A> == tpack_raw_words_per_row_v<B> &&
+                    D::ValidCol == tpack_destination_cols_v<A, D>,
+                "TPACK requires matching layout/rows and raw-word shape");
+  if (!tpack_control_legal_v(
+          control, tpack_type_bytes_v<typename A::DType>,
+          tpack_type_bytes_v<typename B::DType>,
+          4))
     __builtin_trap();
   uint64_t controlValue = control;
   asm("" : "+r"(controlValue));
@@ -18206,7 +18328,8 @@ void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
       "B.IOR [%[Control]],[]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
-        [Control] "r"(controlValue), [Type] "i"(__type_uint32),
+        [Control] "r"(controlValue),
+        [Type] "i"(type_traits<typename D::DType>::TypeCode),
         [Cols] "i"(D::ValidCol), [Rows] "i"(D::ValidRow),
         [FullCols] "i"(D::Cols), [Size] "i"(D::TilesizeCode),
         [ElemLayout] "i"(local_layout_code_v<D>));
@@ -18214,16 +18337,17 @@ void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
 
 template <is_tile_data_v D, is_tile_data_v S>
 void TUNPACK(D &dst, S &src, uint64_t control) {
-  static_assert(type_traits<typename D::DType>::TypeCode == __type_uint32 &&
-                    type_traits<typename S::DType>::TypeCode == __type_uint32,
-                "TUNPACK requires U32 tiles");
+  static_assert(tunpack_operation_descriptor_legal_v<D>,
+                "TUNPACK destination must be Local U8/U16/U32 CUBE_M16/M32");
+  static_assert(tunpack_source_descriptor_legal_v<S>,
+                "TUNPACK source must be a Local 8/16/32-bit numeric CUBE tile");
   static_assert(D::BFractal == S::BFractal &&
-                    (D::BFractal == BLayout::CubeM16 ||
-                     D::BFractal == BLayout::CubeM32),
-                "TUNPACK requires matching CUBE_M16 or CUBE_M32 layouts");
-  static_assert(D::ValidRow > 0 && D::ValidCol > 0,
-                "TUNPACK currently requires a static valid shape");
-  if (!tunpack_control_legal_v(control))
+                    D::ValidRow == S::ValidRow &&
+                    tunpack_source_row_is_b32_aligned_v<S> &&
+                    D::ValidCol == tunpack_destination_cols_v<S, D>,
+                "TUNPACK requires matching layout/rows and B32-group shape");
+  if (!tunpack_control_legal_v(
+          control, 4))
     __builtin_trap();
   uint64_t controlValue = control;
   asm("" : "+r"(controlValue));
@@ -18237,7 +18361,8 @@ void TUNPACK(D &dst, S &src, uint64_t control) {
       "B.IOR [%[Control]],[]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src] "Tr"(src.data()), [Control] "r"(controlValue),
-        [Type] "i"(__type_uint32), [Cols] "i"(D::ValidCol),
+        [Type] "i"(type_traits<typename D::DType>::TypeCode),
+        [Cols] "i"(D::ValidCol),
         [Rows] "i"(D::ValidRow), [FullCols] "i"(D::Cols),
         [Size] "i"(D::TilesizeCode),
         [ElemLayout] "i"(local_layout_code_v<D>));

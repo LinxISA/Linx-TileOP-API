@@ -37,8 +37,8 @@ TMATMUL(d, a, b, fixp::keep_acc()
 builder 返回新的 options，可以继续链式配置：
 
 ```cpp
-auto options = fixp::s8(descriptor)
-                   .lrelu(fp19_slope)
+auto options = fixp::keep_acc()
+                   .relu()
                    .row_max(row_in, row_out)
                    .group_max<16>(group_out)
                    .max_abs();
@@ -303,8 +303,11 @@ TMULS(scale, amax, 0.25f);
 ```
 
 
-RowMax 在 ReLU、quant 和 convert **之前**基于 FullAcc 计算，输入/输出 dtype 必须是 FP32
-或 S32 AccType，valid shape 必须是 `M x 1`，且输入输出 dtype/valid shape 一致。
+根据 PTO #346，RowMax/GroupMax 在完整后处理流水线之后基于 **final encoded D** 计算。
+`RowMaxIn`、`RowMaxOut` 和 `GroupMaxOut` 的 dtype 都必须与 final D dtype 一致；reduction
+只允许 final D 为 FP32、FP16 或 BF16。S32/U32 以及整数、FP8 等 final-D reduction
+组合必须在编译期拒绝。RowMax 输入/输出的 valid shape 必须是 `M x 1`，且二者 dtype
+与 valid shape 一致。
 
 ```cpp
 using Row = Tile<Location::Vec, __fp32, 32, 8,
@@ -331,7 +334,8 @@ Group group_out;
 TMATMUL(d, a, b, fixp::keep_acc().group_max<8>(group_out));
 ```
 
-`GroupMaxOut` 的 valid shape 必须为 `M x ceil(N / GroupN)`，dtype 为 FP32/S32 AccType，
+`GroupMaxOut` 的 valid shape 必须为 `M x ceil(N / GroupN)`，dtype 必须与 final D 相同，
+且 final D 只能是 FP32、FP16 或 BF16；
 物理 active-size 同样必须处于当前实现允许的 `128 B..256 KiB` 范围内。例如 `N=32,
 GroupN=8` 时有效列数为 4。
 `.max_abs()` 必须在 RowMax 或 GroupMax 已启用后调用，并同时作用于所有已启用的 max reduction：
