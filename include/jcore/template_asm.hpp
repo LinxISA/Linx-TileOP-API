@@ -5049,8 +5049,8 @@ constexpr void validate_matrix_scale_contract() {
 }
 
 template <FixpAttr Attr, int SrcMask, int OutMask, typename Dst,
-          typename A, typename B, typename RowIn, typename QuantTile,
-          typename ReluTile,
+          typename A, typename B,
+          typename RowIn, typename QuantTile, typename ReluTile,
           typename RowOut, typename GroupOut, bool MX = false,
           bool IsAccForm = true>
 constexpr void validate_matrix_postprocess_contract() {
@@ -18182,37 +18182,139 @@ void TSHUF(D &dst, S &src, C &controls, uint64_t control) {
 }
 
 // PTO-ISA layout-and-rearrangement control words: bits [63:32] must be zero
-// and only the low two control bytes carry the pack/unpack fields.
-constexpr bool tpack_control_legal_v(uint64_t control) {
+// and only the low two control bytes carry the pack/unpack fields.  The
+// carrier width is part of the instruction's BSTART type, while source
+// widths are taken from the source descriptors.
+constexpr unsigned tpack_source_bytes(unsigned bits) {
+  return bits / 8;
+}
+
+constexpr bool tpack_control_legal_v(uint64_t control, unsigned left_width,
+                                     unsigned right_width,
+                                     unsigned destination_width) {
   if (control >> 32)
     return false;
   const unsigned left_bytes = control & 0xff;
   const unsigned right_bytes = (control >> 8) & 0xff;
-  return left_bytes >= 1 && left_bytes <= 3 && right_bytes >= 1 &&
-         right_bytes <= 3 && left_bytes + right_bytes <= 4;
+  return left_bytes >= 1 && left_bytes <= left_width &&
+         right_bytes >= 1 && right_bytes <= right_width &&
+         left_bytes + right_bytes <= destination_width;
 }
 
-constexpr bool tunpack_control_legal_v(uint64_t control) {
+constexpr bool tunpack_control_legal_v(uint64_t control,
+                                       unsigned destination_width) {
   if (control >> 32)
     return false;
   const unsigned offset = control & 0xff;
   const unsigned count = (control >> 8) & 0xff;
-  return offset <= 3 && count >= 1 && count <= 4 && offset + count <= 4;
+  return offset <= 3 && count >= 1 && count <= destination_width &&
+         offset + count <= 4;
+}
+
+template <typename T>
+constexpr bool tpack_source_type_legal_v =
+    (type_traits<T>::TypeCode == __type_uint8 ||
+     type_traits<T>::TypeCode == __type_uint16 ||
+     type_traits<T>::TypeCode == __type_uint32);
+
+template <typename T>
+constexpr bool tpack_destination_type_legal_v =
+    type_traits<T>::TypeCode == __type_uint8 ||
+    type_traits<T>::TypeCode == __type_uint16 ||
+    type_traits<T>::TypeCode == __type_uint32;
+
+template <typename T>
+constexpr bool tunpack_destination_type_legal_v =
+    type_traits<T>::TypeCode == __type_uint8 ||
+    type_traits<T>::TypeCode == __type_uint16 ||
+    type_traits<T>::TypeCode == __type_uint32;
+
+template <typename T>
+constexpr bool tpack_type_is_local_numeric_v =
+    tpack_source_type_legal_v<T>;
+
+template <typename T>
+constexpr unsigned tpack_type_bytes_v = tpack_source_bytes(type_traits<T>::bits);
+
+template <typename T>
+constexpr unsigned tpack_raw_words_per_row_v =
+    T::ValidCol * tpack_type_bytes_v<typename T::DType> / 4;
+
+template <typename T>
+constexpr bool tpack_source_row_is_word_aligned_v =
+    (T::ValidCol * tpack_type_bytes_v<typename T::DType>) % 4 == 0;
+
+template <typename T, typename D>
+constexpr unsigned tpack_destination_cols_v =
+    tpack_raw_words_per_row_v<T> * (4 / tpack_type_bytes_v<typename D::DType>);
+
+template <typename T>
+constexpr bool tpack_cube_layout_v =
+    T::BFractal == BLayout::CubeM16 || T::BFractal == BLayout::CubeM32;
+
+template <typename T>
+constexpr bool tpack_valid_shape_v = T::ValidRow > 0 && T::ValidCol > 0;
+
+template <typename T>
+constexpr bool tpack_is_local_v = T::Loc != Location::Shared;
+
+template <typename T>
+constexpr bool tpack_source_descriptor_legal_v =
+    tpack_type_is_local_numeric_v<typename T::DType> && tpack_cube_layout_v<T> &&
+    tpack_valid_shape_v<T> && tpack_is_local_v<T>;
+
+template <typename T>
+constexpr bool tpack_operation_descriptor_legal_v =
+    tpack_destination_type_legal_v<typename T::DType> && tpack_cube_layout_v<T> &&
+    tpack_valid_shape_v<T> && tpack_is_local_v<T>;
+
+template <typename T>
+constexpr bool tunpack_operation_descriptor_legal_v =
+    tunpack_destination_type_legal_v<typename T::DType> && tpack_cube_layout_v<T> &&
+    tpack_valid_shape_v<T> && tpack_is_local_v<T>;
+
+template <typename T>
+constexpr bool tunpack_source_descriptor_legal_v =
+    tpack_source_descriptor_legal_v<T>;
+
+template <typename T>
+constexpr unsigned tunpack_groups_per_row_v =
+    tpack_raw_words_per_row_v<T>;
+
+template <typename T, typename D>
+constexpr unsigned tunpack_destination_cols_v =
+    tpack_destination_cols_v<T, D>;
+
+template <typename T>
+constexpr bool tunpack_source_row_is_b32_aligned_v =
+    (T::ValidCol * tpack_type_bytes_v<typename T::DType>) % 4 == 0;
+
+constexpr bool tpack_control_legal_v(uint64_t control) {
+  return tpack_control_legal_v(control, 4, 4, 4);
+}
+
+constexpr bool tunpack_control_legal_v(uint64_t control) {
+  return tunpack_control_legal_v(control, 4);
 }
 
 template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
-  static_assert(type_traits<typename D::DType>::TypeCode == __type_uint32 &&
-                    type_traits<typename A::DType>::TypeCode == __type_uint32 &&
-                    type_traits<typename B::DType>::TypeCode == __type_uint32,
-                "TPACK requires U32 tiles");
+  static_assert(tpack_operation_descriptor_legal_v<D>,
+                "TPACK destination must be Local U8/U16/U32 CUBE_M16/M32");
+  static_assert(tpack_source_descriptor_legal_v<A> &&
+                    tpack_source_descriptor_legal_v<B>,
+                "TPACK sources must be Local 8/16/32-bit numeric CUBE tiles");
   static_assert(D::BFractal == A::BFractal && D::BFractal == B::BFractal &&
-                    (D::BFractal == BLayout::CubeM16 ||
-                     D::BFractal == BLayout::CubeM32),
-                "TPACK requires matching CUBE_M16 or CUBE_M32 layouts");
-  static_assert(D::ValidRow > 0 && D::ValidCol > 0,
-                "TPACK currently requires a static valid shape");
-  if (!tpack_control_legal_v(control))
+                    D::ValidRow == A::ValidRow && D::ValidRow == B::ValidRow &&
+                    tpack_source_row_is_word_aligned_v<A> &&
+                    tpack_source_row_is_word_aligned_v<B> &&
+                    tpack_raw_words_per_row_v<A> == tpack_raw_words_per_row_v<B> &&
+                    D::ValidCol == tpack_destination_cols_v<A, D>,
+                "TPACK requires matching layout/rows and raw-word shape");
+  if (!tpack_control_legal_v(
+          control, tpack_type_bytes_v<typename A::DType>,
+          tpack_type_bytes_v<typename B::DType>,
+          4))
     __builtin_trap();
   uint64_t controlValue = control;
   asm("" : "+r"(controlValue));
@@ -18226,7 +18328,8 @@ void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
       "B.IOR [%[Control]],[]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
-        [Control] "r"(controlValue), [Type] "i"(__type_uint32),
+        [Control] "r"(controlValue),
+        [Type] "i"(type_traits<typename D::DType>::TypeCode),
         [Cols] "i"(D::ValidCol), [Rows] "i"(D::ValidRow),
         [FullCols] "i"(D::Cols), [Size] "i"(D::TilesizeCode),
         [ElemLayout] "i"(local_layout_code_v<D>));
@@ -18234,16 +18337,17 @@ void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
 
 template <is_tile_data_v D, is_tile_data_v S>
 void TUNPACK(D &dst, S &src, uint64_t control) {
-  static_assert(type_traits<typename D::DType>::TypeCode == __type_uint32 &&
-                    type_traits<typename S::DType>::TypeCode == __type_uint32,
-                "TUNPACK requires U32 tiles");
+  static_assert(tunpack_operation_descriptor_legal_v<D>,
+                "TUNPACK destination must be Local U8/U16/U32 CUBE_M16/M32");
+  static_assert(tunpack_source_descriptor_legal_v<S>,
+                "TUNPACK source must be a Local 8/16/32-bit numeric CUBE tile");
   static_assert(D::BFractal == S::BFractal &&
-                    (D::BFractal == BLayout::CubeM16 ||
-                     D::BFractal == BLayout::CubeM32),
-                "TUNPACK requires matching CUBE_M16 or CUBE_M32 layouts");
-  static_assert(D::ValidRow > 0 && D::ValidCol > 0,
-                "TUNPACK currently requires a static valid shape");
-  if (!tunpack_control_legal_v(control))
+                    D::ValidRow == S::ValidRow &&
+                    tunpack_source_row_is_b32_aligned_v<S> &&
+                    D::ValidCol == tunpack_destination_cols_v<S, D>,
+                "TUNPACK requires matching layout/rows and B32-group shape");
+  if (!tunpack_control_legal_v(
+          control, 4))
     __builtin_trap();
   uint64_t controlValue = control;
   asm("" : "+r"(controlValue));
@@ -18257,7 +18361,8 @@ void TUNPACK(D &dst, S &src, uint64_t control) {
       "B.IOR [%[Control]],[]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src] "Tr"(src.data()), [Control] "r"(controlValue),
-        [Type] "i"(__type_uint32), [Cols] "i"(D::ValidCol),
+        [Type] "i"(type_traits<typename D::DType>::TypeCode),
+        [Cols] "i"(D::ValidCol),
         [Rows] "i"(D::ValidRow), [FullCols] "i"(D::Cols),
         [Size] "i"(D::TilesizeCode),
         [ElemLayout] "i"(local_layout_code_v<D>));

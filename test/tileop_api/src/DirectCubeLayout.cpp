@@ -124,9 +124,27 @@ __attribute__((noinline)) void rowmax_rowmajor(RedRowMajor &d,
 // --- 3b. CELL rearrangement always carries a CUBE layout ---
 using CellM32F = CubeTileM32<float, 32, 32>;
 using CellM32U8 = CubeTileM32<uint8_t, 32, 32>;
+using CellM32U16 = CubeTileM32<uint16_t, 32, 32>;
 using CellM32U32 = CubeTileM32<uint32_t, 32, 32>;
 using CellM16F = CubeTileM16<float, 16, 16>;
+using CellM16U8 = CubeTileM16<uint8_t, 16, 16>;
+using CellM16U16 = CubeTileM16<uint16_t, 16, 16>;
 using CellM16U32 = CubeTileM16<uint32_t, 16, 16>;
+
+using PackM32U8Source = CubeTileM32<uint8_t, 32, 32>;
+using PackM32U16Source = CubeTileM32<uint16_t, 32, 16>;
+using PackM32U32Out = CubeTileM32<uint32_t, 32, 8>;
+using PackM16U8Source = CubeTileM16<uint8_t, 16, 16>;
+using PackM16U16Out = CubeTileM16<uint16_t, 16, 8>;
+
+using PackM16U8Out = CubeTileM16<uint8_t, 16, 32>;
+using PackM16U16Source = CubeTileM16<uint16_t, 16, 8>;
+
+__attribute__((noinline)) void pack_to_u8(PackM16U8Out &d,
+                                          CellM16U8 &a,
+                                          PackM16U16Source &b) {
+  TPACK(d, a, b, 0x00000001);
+}
 
 __attribute__((noinline)) void permute_cube_m32(CellM32F &d, CellM32F &a,
                                                 CellM32F &b, CellM32U8 &idx) {
@@ -144,6 +162,28 @@ __attribute__((noinline)) void pack_cube_m32(CellM32U32 &d, CellM32U32 &a,
 }
 
 __attribute__((noinline)) void unpack_cube_m32(CellM32U32 &d, CellM32U32 &a) {
+  TUNPACK(d, a, 0x00000201);
+}
+
+// Issue #338 carrier-field forms: source backing widths are independent from
+// the operation carrier type, while the logical CUBE shape remains shared.
+__attribute__((noinline)) void pack_u8_u16_to_u32(PackM32U32Out &d,
+                                                 PackM32U8Source &a,
+                                                 PackM32U16Source &b) {
+  TPACK(d, a, b, 0x00000201);
+}
+
+__attribute__((noinline)) void pack_u8_u8_to_u16(PackM16U16Out &d,
+                                                PackM16U8Source &a,
+                                                PackM16U8Source &b) {
+  TPACK(d, a, b, 0x00000101);
+}
+
+using UnpackM16U16 = CubeTileM16<uint16_t, 16, 16>;
+using UnpackM16U16Out = CubeTileM16<uint16_t, 16, 8>;
+
+__attribute__((noinline)) void unpack_u16_to_u16(UnpackM16U16Out &d,
+                                                 UnpackM16U16 &a) {
   TUNPACK(d, a, 0x00000201);
 }
 
@@ -215,13 +255,29 @@ int main() {
 
   CellM32F cell_f_d, cell_f_a, cell_f_b;
   CellM32U8 cell_u8;
+  CellM32U16 cell_u16;
   CellM32U32 cell_u32_d, cell_u32_a, cell_u32_b;
   CellM16F cell16_f_d, cell16_f_a;
+  CellM16U8 cell16_u8;
+  CellM16U16 cell16_u16;
   CellM16U32 cell16_u32;
   permute_cube_m32(cell_f_d, cell_f_a, cell_f_b, cell_u8);
   shuf_cube_m16(cell16_f_d, cell16_f_a, cell16_u32);
   pack_cube_m32(cell_u32_d, cell_u32_a, cell_u32_b);
   unpack_cube_m32(cell_u32_d, cell_u32_a);
+  PackM32U32Out pack_m32_d;
+  PackM32U8Source pack_m32_u8;
+  PackM32U16Source pack_m32_u16;
+  pack_u8_u16_to_u32(pack_m32_d, pack_m32_u8, pack_m32_u16);
+  PackM16U16Out pack_m16_d;
+  PackM16U8Source pack_m16_u8;
+  pack_u8_u8_to_u16(pack_m16_d, pack_m16_u8, pack_m16_u8);
+  PackM16U8Out pack_u8_dst;
+  PackM16U16Source pack_u16_src;
+  pack_to_u8(pack_u8_dst, cell16_u8, pack_u16_src);
+  UnpackM16U16 unpack16_src;
+  UnpackM16U16Out unpack16_dst;
+  unpack_u16_to_u16(unpack16_dst, unpack16_src);
 
   M16A a16;
   M16B b16;

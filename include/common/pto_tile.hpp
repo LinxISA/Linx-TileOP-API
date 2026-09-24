@@ -490,13 +490,14 @@ constexpr int matrix_accumulator_type_code(int InputTypeCode) {
   }
 }
 
-// PTO #346: RowMax/GroupMax reduce the final post-processed D value. Their
-// reduction carrier is therefore limited to the effective floating D types.
+// PTO #346: RowMax/GroupMax reduce the final post-processed D value.  Their
+// reduction carrier is therefore limited to the effective floating D types;
+// accumulator integer types and low-precision encoded types are not legal
+// reduction destinations.
 constexpr bool matrix_final_d_reduction_type_legal(int TypeCode) {
   return TypeCode == __type_fp32 || TypeCode == __type_fp16 ||
          TypeCode == __type_bf16;
 }
-
 constexpr bool matrix_mode_uses_s32_accumulator(FixpPreQuantMode Mode) {
   switch (Mode) {
   case FixpPreQuantMode::VREQS8Pre:
