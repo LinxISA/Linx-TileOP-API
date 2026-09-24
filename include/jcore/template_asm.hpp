@@ -5048,8 +5048,9 @@ constexpr void validate_matrix_scale_contract() {
   }
 }
 
-template <FixpAttr Attr, int SrcMask, int OutMask, typename A, typename B,
-          typename Dst, typename RowIn, typename QuantTile, typename ReluTile,
+template <FixpAttr Attr, int SrcMask, int OutMask, typename Dst,
+          typename A, typename B, typename RowIn, typename QuantTile,
+          typename ReluTile,
           typename RowOut, typename GroupOut, bool MX = false,
           bool IsAccForm = true>
 constexpr void validate_matrix_postprocess_contract() {
@@ -5070,6 +5071,7 @@ constexpr void validate_matrix_postprocess_contract() {
       ? __type_fp32
       : matrix_accumulator_type_code(
             type_traits<typename A::DType>::TypeCode);
+  constexpr int DCode = type_traits<typename Dst::DType>::TypeCode;
   constexpr int M = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidCol : A::ValidRow;
   // Shared B declares its physical stored shape (pto-spec #257): [N, K]
@@ -5085,8 +5087,10 @@ constexpr void validate_matrix_postprocess_contract() {
   static_assert(Dst::IsCubeLayout && is_cube_m_layout_v<Dst>,
                 "Matrix post-process requires a CUBE_M16/CUBE_M32 destination");
   if constexpr ((OutMask & 1) != 0) {
-    static_assert(type_traits<typename RowOut::DType>::TypeCode == AccCode,
-                  "RowMaxOut dtype must match the derived accumulator type");
+    static_assert(matrix_final_d_reduction_type_legal(DCode),
+                  "RowMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowOut::DType>::TypeCode == DCode,
+                  "RowMaxOut dtype must match final D dtype");
     static_assert(RowOut::ValidRow == PPRows && RowOut::ValidCol == 1,
                   "RowMaxOut valid shape must be per-PE M rows x 1 "
                   "(group_M block for cooperative, effective M otherwise)");
@@ -5095,8 +5099,10 @@ constexpr void validate_matrix_postprocess_contract() {
                   "RowMaxOut must use the primary destination CUBE layout");
   }
   if constexpr ((SrcMask & 1) != 0) {
-    static_assert(type_traits<typename RowIn::DType>::TypeCode == AccCode,
-                  "RowMaxIn dtype must match the derived accumulator type");
+    static_assert(matrix_final_d_reduction_type_legal(DCode),
+                  "RowMaxIn requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowIn::DType>::TypeCode == DCode,
+                  "RowMaxIn dtype must match final D dtype");
     static_assert(RowIn::ValidRow == M && RowIn::ValidCol == 1,
                   "RowMaxIn valid shape must be M x 1");
     static_assert(RowIn::BFractal == Dst::BFractal &&
@@ -5105,8 +5111,10 @@ constexpr void validate_matrix_postprocess_contract() {
   }
   if constexpr ((OutMask & 2) != 0) {
     constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
-    static_assert(type_traits<typename GroupOut::DType>::TypeCode == AccCode,
-                  "GroupMaxOut dtype must match the derived accumulator type");
+    static_assert(matrix_final_d_reduction_type_legal(DCode),
+                  "GroupMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename GroupOut::DType>::TypeCode == DCode,
+                  "GroupMaxOut dtype must match final D dtype");
     static_assert(GroupOut::ValidRow == PPRows &&
                       GroupOut::ValidCol == (N + GroupN - 1) / GroupN,
                   "GroupMaxOut valid shape must be per-PE M rows x "
@@ -6831,7 +6839,7 @@ PTO_SHARED_INLINE void emit_fixp(
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_EMIT_LOCAL);
@@ -6866,7 +6874,7 @@ PTO_SHARED_INLINE void emit_matmul_acc_fixp(
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_accumulator_contract<Attr, Dst, C_, A, B>();
   validate_cscale_contract<Attr, C_, CScale>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_ACC_EMIT_LOCAL);
@@ -6890,7 +6898,7 @@ PTO_SHARED_INLINE void emit_matmul_bias_fixp(
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_bias_contract<Attr, Dst, BiasT, A, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_BIAS_EMIT_LOCAL);
@@ -6920,7 +6928,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
   validate_matrix_contract<Attr, Dst, A, B, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_LOCAL); }
@@ -6958,7 +6966,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
   validate_cscale_contract<Attr, C_, CScale>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_LOCAL); }
@@ -6994,7 +7002,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
   validate_matrix_bias_contract<Attr, Dst, BiasT, A, B, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_LOCAL); }
@@ -7080,7 +7088,7 @@ PTO_SHARED_INLINE void emit_gemv_fixp(
     RowOut &row_out, GroupOut &group_out,
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GV_EMIT_LOCAL);
 }
@@ -7099,7 +7107,7 @@ PTO_SHARED_INLINE void emit_gemv_bias_fixp(
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_bias_contract<Attr, Dst, BiasT, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVB_EMIT_LOCAL);
 }
@@ -7118,7 +7126,7 @@ PTO_SHARED_INLINE void emit_gemv_acc_fixp(
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, true>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVA_EMIT_LOCAL);
 }
@@ -7143,7 +7151,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_fixp(
   validate_gemv_contract<Attr, Dst, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_PLAIN); }
@@ -7171,7 +7179,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
   validate_matrix_bias_contract<Attr, Dst, BiasT, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_BIAS); }
@@ -7199,7 +7207,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
   validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, true>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_ACC); }
@@ -8064,9 +8072,12 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                   "(group_M block for cooperative, effective M otherwise)");
     static_assert(RowOut::ValidCol == -1 || RowOut::ValidCol == 1,
                   "TMATMUL RowMaxOut must have ValidCol=1");
-    static_assert(matrix_accumulator_type_legal<tile_shape_a, tile_shape_b,
-                                                RowOut>(),
-                  "TMATMUL RowMaxOut dtype must match FP32/S32/U32 AccType");
+    static_assert(matrix_final_d_reduction_type_legal(
+                      type_traits<typename tile_shape_d::DType>::TypeCode),
+                  "TMATMUL RowMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowOut::DType>::TypeCode ==
+                      type_traits<typename tile_shape_d::DType>::TypeCode,
+                  "TMATMUL RowMaxOut dtype must match final D dtype");
     static_assert(
         tile_type_traits<typename RowOut::TileDType>::IsValidActiveSize,
         "TMATMUL RowMaxOut physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
@@ -8084,6 +8095,12 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     static_assert(std::is_same_v<typename RowIn::DType,
                                  typename RowOut::DType>,
                   "TMATMUL RowMaxIn/RowMaxOut dtypes must match");
+    static_assert(matrix_final_d_reduction_type_legal(
+                      type_traits<typename tile_shape_d::DType>::TypeCode),
+                  "TMATMUL RowMaxIn requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowIn::DType>::TypeCode ==
+                      type_traits<typename tile_shape_d::DType>::TypeCode,
+                  "TMATMUL RowMaxIn dtype must match final D dtype");
     static_assert(
         tile_type_traits<typename RowIn::TileDType>::IsValidActiveSize,
         "TMATMUL RowMaxIn physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
@@ -8099,9 +8116,12 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     static_assert(GroupOut::ValidCol == -1 || ExpectedCols == -1 ||
                       GroupOut::ValidCol == ExpectedCols,
                   "TMATMUL GroupMaxOut must have ValidCol=ceil(N/GroupN)");
-    static_assert(matrix_accumulator_type_legal<tile_shape_a, tile_shape_b,
-                                                GroupOut>(),
-                  "TMATMUL GroupMaxOut dtype must match FP32/S32/U32 AccType");
+    static_assert(matrix_final_d_reduction_type_legal(
+                      type_traits<typename tile_shape_d::DType>::TypeCode),
+                  "TMATMUL GroupMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename GroupOut::DType>::TypeCode ==
+                      type_traits<typename tile_shape_d::DType>::TypeCode,
+                  "TMATMUL GroupMaxOut dtype must match final D dtype");
     static_assert(
         tile_type_traits<typename GroupOut::TileDType>::IsValidActiveSize,
         "TMATMUL GroupMaxOut physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");

@@ -39,7 +39,7 @@ if ! "$CXX" "${FLAGS[@]}" -H -fsyntax-only src/RangeSubview.cpp \
   sed -n '1,30p' "$TRACE" >&2
   exit 2
 fi
-CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose old_rowmajor aux_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b hif4_ordinary_matmul hif4_missing_scale_a hif4_missing_scale_b hif4_scale_dtype hif4_scale_shape bad_transpose_d group_shape group_k group_n group_dynamic"
+CASES="dtype maxabs_no_max rowmax_shape groupmax_shape effective_d_aux_dtype lone_shared_a local_transpose old_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b hif4_ordinary_matmul hif4_missing_scale_a hif4_missing_scale_b hif4_scale_dtype hif4_scale_shape bad_transpose_d group_shape group_k group_n group_dynamic"
 TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_large"
 RANGE_CASES="subview_dest assemble_source subview_length tadd_ass_init tadd_middle"
 ROLE_VIEW_CASES="same_role local rvalue layout"
@@ -160,17 +160,24 @@ for c in $ROLE_VIEW_CASES; do
   expect_rejected "role_view_$c" "$define" SharedRoleViewNegatives.cpp \
     'SharedTileRoleView|reinterpret_shared_tile|Shared matrix layout|must change'
 done
-PACK_CASES="left_zero left_too_wide sum_too_wide high_bits right_zero"
-UNPACK_CASES="offset_too_large count_zero count_too_large sum_too_wide high_bits"
+PACK_CASES="left_zero left_too_wide sum_too_wide high_bits right_zero dest_u8 source_width"
+UNPACK_CASES="offset_too_large count_zero count_too_large sum_too_wide high_bits incomplete_group"
 for c in $PACK_CASES; do
   define=SHOULD_FAIL_PACK_$(echo "$c" | tr '[:lower:]' '[:upper:]')
-  expect_rejected "pack_$c" "$define" PackUnpackNegatives.cpp \
-    'TPACK control|builtin_trap'
+  case "$c" in
+    dest_u8) pattern='TPACK destination' ;;
+    source_width) pattern='TPACK control' ;;
+    *) pattern='TPACK control|builtin_trap' ;;
+  esac
+  expect_rejected "pack_$c" "$define" PackUnpackNegatives.cpp "$pattern"
 done
 for c in $UNPACK_CASES; do
   define=SHOULD_FAIL_UNPACK_$(echo "$c" | tr '[:lower:]' '[:upper:]')
-  expect_rejected "unpack_$c" "$define" PackUnpackNegatives.cpp \
-    'TUNPACK control|builtin_trap'
+  case "$c" in
+    incomplete_group) pattern='TUNPACK requires matching' ;;
+    *) pattern='TUNPACK control|builtin_trap' ;;
+  esac
+  expect_rejected "unpack_$c" "$define" PackUnpackNegatives.cpp "$pattern"
 done
 echo "== $PASS passed, $FAIL failed =="
 test "$FAIL" -eq 0
