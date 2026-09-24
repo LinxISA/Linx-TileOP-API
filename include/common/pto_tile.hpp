@@ -1615,6 +1615,62 @@ struct is_shared_tile<SharedTile<LocalTile>> : std::true_type {};
 template <typename T>
 concept is_shared_tile_v = is_shared_tile<T>::value;
 
+// A Shared slot is an architectural name, not a C++ value.  This carrier is
+// deliberately empty so a Shared producer cannot lower its result through a
+// normal i64 object, stack slot, or C++ ABI.  Operations accepting a slot
+// print S<Slot_> directly in their B.IOS operands.
+template <unsigned Slot_, typename LocalTile>
+class SharedTileSlot {
+  static_assert(Slot_ < 64, "SharedTileSlot must name S0..S63");
+  static_assert(is_tile<LocalTile>::value,
+                "SharedTileSlot<Slot, LocalTile>: LocalTile must be a Tile");
+  static_assert(LocalTile::Loc != Location::Shared,
+                "SharedTileSlot cannot wrap a SharedTile");
+
+public:
+  using LocalTileType = LocalTile;
+  using DType = typename LocalTile::DType;
+  static constexpr unsigned Slot = Slot_;
+  static constexpr Location Loc = Location::Shared;
+  static constexpr Location Role = LocalTile::Loc;
+  static constexpr int Rows = LocalTile::Rows;
+  static constexpr int Cols = LocalTile::Cols;
+  static constexpr int RowStride = LocalTile::RowStride;
+  static constexpr int ColStride = LocalTile::ColStride;
+  static constexpr int ValidRow = LocalTile::ValidRow;
+  static constexpr int ValidCol = LocalTile::ValidCol;
+  static constexpr BLayout BFractal = LocalTile::BFractal;
+  static constexpr SLayout SFractal = LocalTile::SFractal;
+  static constexpr int SFractalSize = LocalTile::SFractalSize;
+  static constexpr PadValue PadVal = LocalTile::PadVal;
+  static constexpr CompactMode Compact = LocalTile::Compact;
+  static constexpr bool IsCubeLayout = LocalTile::IsCubeLayout;
+  using TileDType = typename LocalTile::TileDType;
+  static constexpr int LogicalTileBytes = LocalTile::LogicalTileBytes;
+  static constexpr int TilesizeCode = LocalTile::TilesizeCode;
+  static constexpr bool IsValidActiveSize = LocalTile::IsValidActiveSize;
+  static constexpr bool isRowMajor = LocalTile::isRowMajor;
+  static constexpr bool isBoxedLayout = LocalTile::isBoxedLayout;
+  static constexpr bool isInnerRowMajor = LocalTile::isInnerRowMajor;
+  static constexpr bool isInnerColMajor = LocalTile::isInnerColMajor;
+  static constexpr int InnerRows = LocalTile::InnerRows;
+  static constexpr int InnerCols = LocalTile::InnerCols;
+  static constexpr int InnerNumel = LocalTile::InnerNumel;
+  static constexpr int Numel = LocalTile::Numel;
+  static constexpr int byteSize = LocalTile::byteSize;
+  static constexpr int kBytes = LocalTile::kBytes;
+};
+
+template <typename T> struct is_shared_tile_slot : std::false_type {};
+template <unsigned Slot_, typename LocalTile>
+struct is_shared_tile_slot<SharedTileSlot<Slot_, LocalTile>> : std::true_type {};
+
+template <unsigned Slot_, typename LocalTile>
+struct is_shared_tile<SharedTileSlot<Slot_, LocalTile>> : std::true_type {};
+
+template <typename T>
+concept is_shared_tile_slot_v = is_shared_tile_slot<T>::value;
+
 // Zero-instruction Shared matrix-role view.  A Shared handle carries storage
 // and payload identity; the Left/Right role is metadata consumed by the cube
 // operand selector.  This view deliberately aliases the source handle instead
