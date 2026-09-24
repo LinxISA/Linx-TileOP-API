@@ -7,6 +7,16 @@
 
 namespace pto {
 
+template <typename Element>
+inline constexpr int tile_element_bits_v =
+    type_traits<Element>::TypeCode == __type_fp4_e2m1x2 ||
+            type_traits<Element>::TypeCode == __type_fp4_e1m2x2 ||
+            type_traits<Element>::TypeCode == __type_fp4_hif4x2 ||
+            type_traits<Element>::TypeCode == __type_int4x2 ||
+            type_traits<Element>::TypeCode == __type_uint4x2
+        ? 4
+        : type_traits<Element>::bits;
+
 // PTO-ISA GMOVTypeLegal. Keep this based on architectural TypeCode values,
 // not C++ sizeof: several packed formats use an 8-bit carrier but have their
 // own legal GMOV encodings.
@@ -953,13 +963,7 @@ public:
 
   static constexpr int CubeCellBytes = 128;
   static constexpr int CubeElementBits =
-      type_traits<DType>::TypeCode == __type_fp4_e2m1x2 ||
-              type_traits<DType>::TypeCode == __type_fp4_e1m2x2 ||
-              type_traits<DType>::TypeCode == __type_fp4_hif4x2 ||
-              type_traits<DType>::TypeCode == __type_int4x2 ||
-              type_traits<DType>::TypeCode == __type_uint4x2
-          ? 4
-          : type_traits<DType>::bits;
+      tile_element_bits_v<DType>;
   static constexpr int CubeCellRows = [] {
     if constexpr (BFractal_ == BLayout::CubeM16) return 16;
     if constexpr (BFractal_ == BLayout::CubeM32) return 32;
@@ -1006,7 +1010,7 @@ public:
   static constexpr int StorageBytes =
       round_capacity(IsCubeLayout
                          ? CubeRequiredBytes
-                         : (Rows * Cols * type_traits<DType>::bits + 7) / 8);
+                         : (Rows * Cols * tile_element_bits_v<DType> + 7) / 8);
   static constexpr int CubeStorageIndex(int row, int column) {
     const int cell_elements = CubeCellRows * CubeCellCols;
     if constexpr (BFractal_ == BLayout::CubeN8) {
@@ -1032,7 +1036,8 @@ public:
     return cell_index * cell_elements + local;
   }
 
-  static constexpr int kBytes = (Rows_ * Cols_ * type_traits<DType>::bits + 7) / 8;
+  static constexpr int kBytes =
+      (Rows_ * Cols_ * tile_element_bits_v<DType> + 7) / 8;
   // static_assert(kBytes % 512 == 0, "Tile size must be 512 bytes aligned");
   // static_assert(((kBytes / 512 - 1) & (kBytes / 512)) == 0, "Tile size must by (512 * 2 ^ n) Bytes");
 
