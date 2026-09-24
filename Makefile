@@ -1,5 +1,5 @@
 LIBNAME = tileop-api
-VERSION = 0.58.3
+VERSION = 0.58.6
 HEADERS = $(wildcard include/*.h) $(wildcard include/*.hpp) include/jcore include/cpu_sim include/aarch64 include/common
 TILEOP_API_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 TILEOP_API_REVISION_IS_EXACT ?= $(shell test -z "$$(git status --porcelain --untracked-files=all 2>/dev/null)" && printf 1 || printf 0)
@@ -16,6 +16,7 @@ check:
 	python3 tools/check_issue_49_docs.py
 	python3 tools/check_tileop_usage_examples.py
 	python3 tools/check_no_legacy_tileop_api.py
+	python3 tools/check_pto_catalog_alignment.py
 	python3 test/test_v058_engine_contract.py
 	python3 test/test_pto0585_layout_interfaces.py
 	python3 test/test_version_header.py

@@ -41,10 +41,8 @@ using GV_MXSA = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
                      BLayout::RowMajor, 1, 2>;
 using GV_MXSB = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
                      BLayout::RowMajor, 2, 32>;
-using GV_R = Tile<Location::Vec, float, 16, 8,
-                  BLayout::RowMajor, 1, 1>;
-using GV_G = Tile<Location::Vec, float, 16, 8,
-                  BLayout::RowMajor, 1, 2>;
+using GV_R = CubeAccumulatorM16<float, 16, 32, 1, 1>;
+using GV_G = CubeAccumulatorM16<float, 16, 32, 1, 2>;
 
 static constexpr uint64_t s8_desc =
     (static_cast<uint64_t>(0x7) << 13) |  // fp19 scale = 7

@@ -175,6 +175,36 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn('TCVT(dst, src);', cube_fixture)
         self.assertIn('__tilesize_1KB', cube_fixture)
 
+    def test_tcvt_cube_m_encodes_only_source_valid_col_and_row(self) -> None:
+        """CUBE-M TCVT must omit the non-defaultable LB2 field."""
+        tcvt = re.search(
+            r'(?s)template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,'
+            r'\s*is_tile_data_v tile_shape_in>\n'
+            r'void TCVT_T\(.*?\n}\n\n\n// PTO ISA 0.58 generic Local-to-Local TMOV',
+            self.header,
+        )
+        self.assertIsNotNone(tcvt)
+        carrier = tcvt.group(0)
+        cube_branch = carrier.split('if constexpr (IsCubeMSource) {', 1)[1].split(
+            '} else {', 1)[0]
+        ordinary_branch = carrier.split('} else {', 1)[1]
+
+        # All four CUBE-M valid-shape lowering paths must bind LB0 and LB1.
+        self.assertGreaterEqual(cube_branch.count('->lb0'), 4)
+        self.assertGreaterEqual(cube_branch.count('->lb1'), 4)
+        self.assertNotIn('->lb2', cube_branch)
+
+        # LB2 remains part of ordinary TCVT; this test must not be satisfied by
+        # accidentally deleting it from every TCVT path.
+        self.assertIn('->lb2', ordinary_branch)
+
+        fixture = (ROOT / 'test' / 'tileop_api' / 'src' /
+                   'IssueA2CubeMxFp4Tcvt.cpp').read_text(encoding='utf-8')
+        self.assertIn('__fp4_e2m1x2', fixture)
+        self.assertIn('__bf16', fixture)
+        self.assertIn('CubeTileM16', fixture)
+        self.assertIn('CubeTileM32', fixture)
+
     def test_range_modifiers_expose_simple_factories(self) -> None:
         tile_header = PTO_TILE.read_text(encoding="utf-8")
         tile = (ROOT / "test" / "tileop_api" / "src" /
@@ -361,12 +391,11 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn('tile_shape_out::ValidRow == tile_shape_in::ValidRow',
                       cube_branch)
 
-    def test_matrix_bias_carries_the_resolved_m_layout(self) -> None:
-        # PTO-ISA #291: Bias uses the resolver-selected M layout ML and must
-        # match D (Bias.layout == ML == D.layout), so it is a CUBE_M16/M32
-        # Tile rather than an ordinary RowMajor rectangle.
+    def test_matrix_bias_uses_local_cube_n8(self) -> None:
+        # PTO-ISA #339: Bias is a Local CUBE_N8 [1, N] operand constructed
+        # through the ND2N8 transport, not a CUBE_M16/M32 carrier.
         self.assertIn(
-            'static_assert(Bias::BFractal == Dst::BFractal && is_cube_m_layout_v<Bias>',
+            'static_assert(Bias::BFractal == BLayout::CubeN8 &&',
             self.header)
         self.assertIn('using CubeBias =', PTO_TILE.read_text(encoding='utf-8'))
         for fixture in ("TMatmulAllOptions.cpp", "TGEMVAllOptions.cpp",
@@ -933,6 +962,17 @@ int main() { return sizeof(Bad); }
         self.assertRegex(self.header, r'B\.IOR \[%\[GMBase\], zero, zero\], \[\]')
         self.assertRegex(self.header, r'B\.IOR \[%\[Param0\], %\[Param1\], %\[Param2\]\], \[\]')
         self.assertRegex(self.header, r'B\.IOT mask=1111, last, ->%\[Dst\]')
+
+    def test_timg2col_parameter_words_follow_pto_0586_layout(self) -> None:
+        tile_header = PTO_TILE.read_text(encoding="utf-8")
+        self.assertIn('decode_timg2col_params', tile_header)
+        self.assertIn('p.param0 >> 48', tile_header)
+        self.assertIn('p.param1 >> 55', tile_header)
+        self.assertIn('p.param1 >> 59', tile_header)
+        self.assertIn('p.param2 >> 32', tile_header)
+        self.assertIn('is_timg2col_params_base_legal(params)', self.header)
+        self.assertIn('ParamVersion[58:55]',
+                      (ROOT / 'docs' / 'block' / 'TIMG2COL.md').read_text())
 
     def test_timg2col_uses_destination_geometry_and_cube_output(self) -> None:
         body = self.header[self.header.index("void TIMG2COL"):self.header.index("// TFILLPAD")]

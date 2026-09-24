@@ -160,11 +160,12 @@ for c in $ROLE_VIEW_CASES; do
   expect_rejected "role_view_$c" "$define" SharedRoleViewNegatives.cpp \
     'SharedTileRoleView|reinterpret_shared_tile|Shared matrix layout|must change'
 done
-PACK_CASES="left_zero left_too_wide sum_too_wide high_bits right_zero source_width"
+PACK_CASES="left_zero left_too_wide sum_too_wide high_bits right_zero dest_u8 source_width"
 UNPACK_CASES="offset_too_large count_zero count_too_large sum_too_wide high_bits incomplete_group"
 for c in $PACK_CASES; do
   define=SHOULD_FAIL_PACK_$(echo "$c" | tr '[:lower:]' '[:upper:]')
   case "$c" in
+    dest_u8) pattern='TPACK destination' ;;
     source_width) pattern='TPACK control' ;;
     *) pattern='TPACK control|builtin_trap' ;;
   esac

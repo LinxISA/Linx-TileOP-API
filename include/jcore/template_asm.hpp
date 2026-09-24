@@ -56,15 +56,15 @@ using namespace pto;
   ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Null\n"                      \
   ".endif\n"
 
-// TCVT must encode the CUBE layout, destination dtype and rounding mode in a
-// single B.DATR; consecutive B.DATR instructions do not merge attributes.
-// TCVT for a CUBE_M16/M32 source keeps the Tile descriptors' CUBE layout
-// while B.DATR.Layout stays NORM (omitted): TileOperandsLegal_TCVT requires
-// CurrentBundleDataLayout() == TileDataLayout_NORM for a CUBE M-format
-// source (pto-spec a7331d2b, issue #178). The destination CELL shape is
-// derived from the destination DataType, so only the destination dtype and
-// the rounding mode are encoded here; consecutive B.DATR instructions do
-// not merge attributes.
+// TCVT for a CUBE_M16/M32 source preserves the Tile descriptors' CUBE layout,
+// while B.DATR.Layout remains NORM and is therefore omitted. B.DATR carries
+// only the destination dtype and rounding mode: TileOperandsLegal_TCVT requires
+// CurrentBundleDataLayout() == TileDataLayout_NORM for a CUBE M-format source
+// (pto-spec a7331d2b, issue #178). The destination CELL shape and TSize are
+// derived independently from the destination DataType. CUBE-M TCVT encodes
+// source ValidCol/ValidRow in LB0/LB1 and omits LB2; the omitted field has the
+// architectural default value 1. Consecutive B.DATR instructions do not merge
+// attributes.
 #define PTO_CUBE_TCVT_DATR_ASM                                                 \
   ".if %c[RMode] == 0\nB.DATR %D2, RNONE\n"                                    \
   ".elseif %c[RMode] == 1\nB.DATR %D2, RNE\n"                                  \
@@ -3554,6 +3554,9 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
                 "TSTORE_CUBE requires matching GM and CUBE dtypes");
   static_assert(cube_shape::IsValidActiveSize,
                 "TSTORE_CUBE Local CUBE capacity must be 128 B..256 KiB");
+  static_assert(!(cube_shape::BFractal == BLayout::CubeN8 &&
+                  cube_shape::CubeElementBits == 64),
+                "U64 CUBE_N8 has no legal Local-to-GM store transport");
   const size_t valid_col = src.GetValidCol();
   const size_t valid_row = src.GetValidRow();
   // Persistent CUBE cell layout selects the canonical Local->GM transport
@@ -4953,14 +4956,11 @@ template <FixpAttr Attr, typename Dst, typename Bias, typename A, typename B,
 constexpr void validate_matrix_bias_contract() {
   static_assert(matrix_accumulator_type_legal<A, B, Bias, MX>(),
                 "Matrix Bias dtype must match the derived accumulator type");
-  // PTO-ISA #291: Bias carries the resolver-selected M layout ML
-  // (asl/block/model/dispatch/shared-cube-matrix.asl
-  // BundleMatrixCooperativeMLayout), so it matches D and Local A rather than
-  // an ordinary RowMajor rectangle: Bias.layout == ML == D.layout.
-  static_assert(Bias::BFractal == Dst::BFractal && is_cube_m_layout_v<Bias> &&
+  // PTO-ISA #339: Bias is a Local CUBE_N8 [1, N] operand. It is constructed
+  // through the ND2N8 transport rather than a direct CUBE_M selector.
+  static_assert(Bias::BFractal == BLayout::CubeN8 &&
                     Bias::SFractal == SLayout::NoneBox,
-                "Matrix Bias must use the resolved M layout (CUBE_M16 or "
-                "CUBE_M32) matching the destination");
+                "Matrix Bias must use Local CUBE_N8 layout");
   static_assert(Bias::ValidRow != DYNAMIC && Bias::ValidCol != DYNAMIC &&
                     B::ValidRow != DYNAMIC && B::ValidCol != DYNAMIC,
                 "Matrix Bias dynamic valid shapes are not supported");
@@ -5084,6 +5084,8 @@ constexpr void validate_matrix_postprocess_contract() {
       (is_shared_tile_v<A> || is_shared_tile_v<B>)
           ? pto_matmul_detail::cooperative_group_m_rows_per_pe(M)
           : M;
+  static_assert(Dst::IsCubeLayout && is_cube_m_layout_v<Dst>,
+                "Matrix post-process requires a CUBE_M16/CUBE_M32 destination");
   if constexpr ((OutMask & 1) != 0) {
     static_assert(matrix_final_d_reduction_type_legal(DCode),
                   "RowMaxOut requires final D dtype FP32, FP16, or BF16");
@@ -5092,6 +5094,9 @@ constexpr void validate_matrix_postprocess_contract() {
     static_assert(RowOut::ValidRow == PPRows && RowOut::ValidCol == 1,
                   "RowMaxOut valid shape must be per-PE M rows x 1 "
                   "(group_M block for cooperative, effective M otherwise)");
+    static_assert(RowOut::BFractal == Dst::BFractal &&
+                      RowOut::SFractal == SLayout::NoneBox,
+                  "RowMaxOut must use the primary destination CUBE layout");
   }
   if constexpr ((SrcMask & 1) != 0) {
     static_assert(matrix_final_d_reduction_type_legal(DCode),
@@ -5100,6 +5105,9 @@ constexpr void validate_matrix_postprocess_contract() {
                   "RowMaxIn dtype must match final D dtype");
     static_assert(RowIn::ValidRow == M && RowIn::ValidCol == 1,
                   "RowMaxIn valid shape must be M x 1");
+    static_assert(RowIn::BFractal == Dst::BFractal &&
+                      RowIn::SFractal == SLayout::NoneBox,
+                  "RowMaxIn must use the primary destination CUBE layout");
   }
   if constexpr ((OutMask & 2) != 0) {
     constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
@@ -5111,6 +5119,9 @@ constexpr void validate_matrix_postprocess_contract() {
                       GroupOut::ValidCol == (N + GroupN - 1) / GroupN,
                   "GroupMaxOut valid shape must be per-PE M rows x "
                   "ceil(N/GroupN)");
+    static_assert(GroupOut::BFractal == Dst::BFractal &&
+                      GroupOut::SFractal == SLayout::NoneBox,
+                  "GroupMaxOut must use the primary destination CUBE layout");
   }
   if constexpr ((SrcMask & 2) != 0) {
     static_assert(type_traits<typename QuantTile::DType>::TypeCode == __type_uint64,
@@ -14465,16 +14476,13 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src, TIMG2COLParams params) {
   static_assert(tile_shape_out::ValidRow != 0 &&
                     tile_shape_out::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+  static_assert(range::is_timg2col_type_code(
+                    type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
+  if (!is_timg2col_params_base_legal(params)) {
+    __builtin_printf("TIMG2COL: invalid parameter words\n");
+    __builtin_trap();
+  }
   uint64_t param0 = params.param0;
   asm("" : "+r"(param0));
   uint64_t param1 = params.param1;
@@ -14591,16 +14599,14 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src,
               size_t groupRows) {
   static_assert(tile_shape_out::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+  static_assert(range::is_timg2col_type_code(
+                    type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
+  const TIMG2COLParams params{param0, param1, param2};
+  if (!is_timg2col_params_base_legal(params)) {
+    __builtin_printf("TIMG2COL: invalid parameter words\n");
+    __builtin_trap();
+  }
   uint64_t p0 = param0;
   asm("" : "+r"(p0));
   uint64_t p1 = param1;
@@ -14657,16 +14663,13 @@ void TIMG2COL(SharedTile<shp> &dst, gm_shape &src, TIMG2COLParams params) {
   static_assert(shp::ValidRow != 0 &&
                     shp::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+  static_assert(range::is_timg2col_type_code(
+                    type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
+  if (!is_timg2col_params_base_legal(params)) {
+    __builtin_printf("TIMG2COL: invalid parameter words\n");
+    __builtin_trap();
+  }
   static_assert(
       tile_type_traits<typename shp::TileDType>::
           IsValidSharedActiveSize,
@@ -14713,21 +14716,18 @@ void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
   static_assert(shp::ValidRow != 0 &&
                     shp::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(type_traits<typename gm_shape::DType>::TypeCode == __type_fp32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_fp16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_bf16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_int8 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint32 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint16 ||
-                    type_traits<typename gm_shape::DType>::TypeCode == __type_uint8,
+  static_assert(range::is_timg2col_type_code(
+                    type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
+  if (!is_timg2col_params_base_legal(params)) {
+    __builtin_printf("TIMG2COL_SPART: invalid parameter words\n");
+    __builtin_trap();
+  }
   static_assert(
       tile_type_traits<typename shp::TileDType>::
           IsValidSharedActiveSize,
       "TIMG2COL Shared destination size must be 128 B..256 KB");
-  if (PEMask == 0 || (PEMask & (PEMask - 1)) != 0) {
+  if (!range::is_timg2col_single_pe_mask(PEMask)) {
     __builtin_printf("TIMG2COL_SPART: mask must have exactly one PE bit\n");
     __builtin_trap();
   }
