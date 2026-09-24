@@ -524,3 +524,25 @@ void options_example(D &d, Ds8 &d8, D &c, A &a, B &b,
 exact TileOP-API checkout through `PTO_TILEOP_API_REVISION`; consumers should
 use capability macros such as `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX` for
 compile-time requirements instead of ordering raw Git hashes.
+
+## Shared-slot matrix operands
+
+For a CUBE pipeline whose Shared inputs are produced by separate TLSU or
+TIMG2COL operations, `SharedTileSlot<S, LocalTile>` provides an explicit
+architectural Shared register name. The slot is limited to `S0..S63`; the
+producer and `TMATMUL_SLOT` consumer must name matching slots, and overlapping
+live objects must use different slots. This is a Shared-register lifetime
+interface, not a replacement for matrix `fixp::Options`.
+
+```cpp
+using A = SharedTileSlot<0, SharedMatrixLeft<float, 64, 32>>;
+using B = SharedTileSlot<1, SharedMatrixRight<float, 16, 32>>;
+
+TIMG2COL_SPART_SLOT<DN2ND, 0, 1, A::LocalTileType>(input, image_params);
+TLOAD_SLOT<OIHW2NK, 1, 1, B::LocalTileType>(weights, weight_params);
+TMATMUL_SLOT<output_tile, 0, A, 1, B>(output);
+```
+
+The slot form avoids materializing a Shared handle as an ordinary C++ integer,
+so it must not be copied into a normal object, passed through a non-inlined
+function, or mixed with scalar/tile spill assumptions.

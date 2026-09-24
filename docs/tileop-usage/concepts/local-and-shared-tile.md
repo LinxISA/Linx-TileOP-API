@@ -126,3 +126,31 @@ void shared_roundtrip(float *out, float *in) {
 需要只让部分 PE 写回 GM 时，将最后一行替换为
 `TSTORE_PART<12>(dst, shared)` 等合法 mask 形式。不要把 `shared` 保存到
 普通对象、通过非内联函数传递，或把它作为普通 Local Tile 传给 `TMOV`。
+
+### Explicit Shared slots for producer/consumer pipelines
+
+A Shared handle is an architectural register name, not an ordinary C++ integer
+value. When a producer and its consumer are separated by control flow or a
+long-lived C++ object would otherwise materialize the handle, use
+`SharedTileSlot<S, LocalTile>` instead of passing a `SharedTile` object through
+the ordinary ABI.
+
+`S` is an explicit architectural slot in `S0..S63`. The producer and consumer
+must use the same slot, and the caller is responsible for ensuring that two
+simultaneously live Shared objects do not alias a slot:
+
+```cpp
+using A = SharedTileSlot<0, SharedMatrixLeft<float, 64, 32>>;
+using B = SharedTileSlot<1, SharedMatrixRight<float, 16, 32>>;
+
+TIMG2COL_SPART_SLOT<DN2ND, 0, 1, A::LocalTileType>(input, image_params);
+TLOAD_SLOT<OIHW2NK, 1, 1, B::LocalTileType>(weights, weight_params);
+TMATMUL_SLOT<output_tile, 0, A, 1, B>(output);
+```
+
+The slot carrier is empty metadata: it has no `Handle` member and does not
+permit a Shared C++ value, copy, spill, or reload. This API does not change
+ordinary Local tile spill behavior or scalar register allocation; it only keeps
+these Shared producer/consumer operands in their architectural `S` registers.
+Use the existing `SharedTile` API for short, directly inlined operations where
+its handle never crosses a normal object or function ABI.

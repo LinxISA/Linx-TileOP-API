@@ -2989,6 +2989,53 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src,
       : "memory");
 }
 
+// Slot form for Shared-producing weight loads.  The destination is an
+// architectural Shared register selected by the type, so no C++ handle is
+// materialized and no Shared copy/spill can be introduced by the ABI.
+template <WeightLayoutEnum WeightLayout, unsigned Slot, int PEMask = 1,
+          is_tile_data_v shp, is_global_data_v gm_shape>
+PTO_SHARED_INLINE void TLOAD_SLOT(const gm_shape &src,
+                                  WeightTLOADParams params) {
+  static_assert(Slot < 64, "TLOAD_SLOT requires S0..S63");
+  using shp_dtype = typename shp::TileDType;
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0 &&
+                    (PEMask & (PEMask - 1)) == 0,
+                "TLOAD_SLOT requires one PE");
+  static_assert(WeightLayout == OHWI2NK || WeightLayout == OIHW2NK,
+                "weight TLOAD layout must be OHWI2NK or OIHW2NK");
+  static_assert(shp::isRowMajor && !shp::isBoxedLayout && !shp::IsCubeLayout,
+                "TLOAD_SLOT destination must be a row-major Shared tile");
+  static_assert(tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
+                "TLOAD_SLOT destination size must be 128 B..256 KiB");
+  uint64_t shape_word = params.shape_word;
+  uint64_t start_word = params.start_word;
+  asm("" : "+r"(shape_word));
+  asm("" : "+r"(start_word));
+  asm volatile(
+      "BSTART.TLSU TLOAD, %D[SrcType]\n"
+      ".if %c[WeightLayout] == 10\nB.DATR OHWI2NK, DTYPE_NONE, Zero\n"
+      ".elseif %c[WeightLayout] == 11\nB.DATR OIHW2NK, DTYPE_NONE, Zero\n"
+      ".endif\n"
+      "B.DIM %[ValidK], 0, ->lb0\n"
+      "B.DIM %[ValidN], 0, ->lb1\n"
+      "B.DIM zero, %c[TotalK], ->lb2\n"
+      ".if %c[PEMask] == 1\nB.IOS mask=0001, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".elseif %c[PEMask] == 2\nB.IOS mask=0010, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".elseif %c[PEMask] == 4\nB.IOS mask=0100, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".else\nB.IOS mask=1000, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".endif\n"
+      "B.IOR [%[Base],%[Shape],%[Start]], []\n"
+      :
+      : [Base] "r"(src.data()), [Shape] "r"(shape_word),
+        [Start] "r"(start_word), [PEMask] "i"(PEMask),
+        [Slot] "i"(Slot), [WeightLayout] "i"(static_cast<int>(WeightLayout)),
+        [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+        [TileSize] "i"(tile_type_traits<shp_dtype>::TilesizeCode),
+        [ValidK] "r"(shp::ValidCol), [ValidN] "r"(shp::ValidRow),
+        [TotalK] "i"(shp::Cols)
+      : "memory");
+}
+
 // TLOAD_ASS: GM -> an already-associated Shared Tile. Both operands are
 // inputs: B.IOS consumes the existing Shared handle as a source and does not
 // allocate a destination or carry a TileSize destination modifier.
@@ -5250,6 +5297,45 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   }
 }
 
+template <is_tile_data_v Dst, unsigned SlotA, typename A, unsigned SlotB,
+          typename B, FixpAttr Attr = FixpAttr{}>
+  requires(is_shared_tile_slot_v<A> && is_shared_tile_slot_v<B>)
+PTO_SHARED_INLINE void matmul_slot_impl(Dst &dst) {
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_SLOT supports only basic FPATR attributes");
+  static_assert(type_traits<typename A::DType>::TypeCode == __type_fp32 &&
+                    type_traits<typename B::DType>::TypeCode == __type_fp32,
+                "TMATMUL_SLOT currently supports FP32 Shared slots");
+  static_assert(A::Slot == SlotA && B::Slot == SlotB,
+                "TMATMUL_SLOT slot metadata mismatch");
+  constexpr size_t M = A::ValidRow;
+  constexpr size_t K = A::ValidCol;
+  constexpr size_t N = matrix_b_effective_n<B, Attr.TransB>;
+  validate_matrix_contract<Attr, Dst, A, B>();
+  validate_cube_ctrl_contract<Attr, false>();
+  constexpr int DataTypeA = type_traits<typename A::DType>::TypeCode;
+  constexpr int DataTypeB = type_traits<typename B::DType>::TypeCode;
+  constexpr int TileSize =
+      tile_type_traits<typename Dst::TileDType>::TilesizeCode;
+  asm volatile(
+      "BSTART.CUBE TMATMUL, FP32\n"
+      "B.DATR FP32, byte0, Zero, RNONE, NOSAT\n"
+      PTO_FIXP_ATTR
+      "B.DIM zero, %c[M], ->lb0\n"
+      "B.DIM zero, %c[N], ->lb1\n"
+      "B.DIM zero, %c[K], ->lb2\n"
+      "B.IOS S%c[SharedA], mask=1111\n"
+      "B.IOS S%c[SharedB], mask=1111\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [SharedA] "i"(SlotA), [SharedB] "i"(SlotB),
+        [M] "i"(M), [N] "i"(N), [K] "i"(K),
+        [CCTRL] "i"(static_cast<uint8_t>(Attr.CubeCtrl)),
+        [DataTypeA] "i"(DataTypeA), [DataTypeB] "i"(DataTypeB),
+        [TileSize] "i"(TileSize), PTO_FIXP_ATTR_INPUTS
+      : "memory");
+}
+
 #define PTO_DEFINE_MATMUL_3SRC_HELPER(Name, Opcode)                            \
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename B,      \
           typename Extra>                                                        \
@@ -7463,6 +7549,14 @@ PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_acc, "TMATMULMX.ACC", true)
 #undef PTO_MATMUL_HEADER
 
 } // namespace pto_matmul_detail
+
+template <is_tile_data_v Dst, unsigned SlotA, typename A, unsigned SlotB,
+          typename B, FixpAttr Attr = FixpAttr{}>
+  requires(is_shared_tile_slot_v<A> && is_shared_tile_slot_v<B>)
+PTO_SHARED_INLINE void TMATMUL_SLOT(Dst &dst) {
+  pto_matmul_detail::matmul_slot_impl<Dst, SlotA, A, SlotB, B, Attr>(dst);
+}
+
 namespace pto_matmul_groupm_detail {
 
 // Explicit-groupM overloads exist only for the cooperative Local-A/Shared-B
@@ -14758,6 +14852,57 @@ void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
         [ValidRow] "i"(shp::ValidRow),
         [TotalCol] "i"(shp::Cols),
         [Param0] "r"(param0), [Param1] "r"(param1), [Param2] "r"(param2),
+        [TileSize] "i"(tile_type_traits<typename shp::TileDType>::TilesizeCode),
+        [IsMask1] "i"(PEMask == 1), [IsMask2] "i"(PEMask == 2),
+        [IsMask4] "i"(PEMask == 4)
+      : "memory");
+}
+
+template <LayoutCvtEnum SourceOrder = NORM, unsigned Slot, int PEMask,
+          is_tile_data_v shp, is_global_data_v gm_shape>
+  requires(shp::isRowMajor && !shp::isBoxedLayout)
+void TIMG2COL_SPART_SLOT(gm_shape &src, TIMG2COLParams params) {
+  static_assert(Slot < 64, "TIMG2COL_SPART_SLOT requires S0..S63");
+  static_assert(SourceOrder == NORM || SourceOrder == DN2ND,
+                "TIMG2COL Shared output source order must be NORM or DN2ND");
+  static_assert(shp::ValidRow != 0 && shp::ValidCol != 0,
+                "TIMG2COL valid dimensions must be nonzero");
+  static_assert(range::is_timg2col_type_code(
+                    type_traits<typename gm_shape::DType>::TypeCode),
+                "TIMG2COL DataType is not supported by the ASL contract");
+  if (!is_timg2col_params_base_legal(params) ||
+      !range::is_timg2col_single_pe_mask(PEMask)) {
+    __builtin_trap();
+  }
+  static_assert(tile_type_traits<typename shp::TileDType>::
+                    IsValidSharedActiveSize,
+                "TIMG2COL Shared destination size must be 128 B..256 KB");
+  uint64_t param0 = params.param0;
+  uint64_t param1 = params.param1;
+  uint64_t param2 = params.param2;
+  asm("" : "+r"(param0));
+  asm("" : "+r"(param1));
+  asm("" : "+r"(param2));
+  asm volatile(
+      "BSTART.TIMG2COL %D[DataType]\n"
+      "B.DATR %c[Layout], DTYPE_NONE, Zero\n"
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM zero, %c[ValidRow], ->lb1\n"
+      "B.DIM zero, %c[TotalCol], ->lb2\n"
+      "B.IOR [%[GMBase], zero, zero], []\n"
+      "B.IOR [%[Param0], %[Param1], %[Param2]], []\n"
+      ".if %c[IsMask1]\nB.IOS mask=0001, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".elseif %c[IsMask2]\nB.IOS mask=0010, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".elseif %c[IsMask4]\nB.IOS mask=0100, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".else\nB.IOS mask=1000, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".endif\n"
+      :
+      : [GMBase] "r"(src.data()),
+        [DataType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+        [Layout] "i"(timg2col_shared_layout_code(SourceOrder)),
+        [ValidCol] "i"(shp::ValidCol), [ValidRow] "i"(shp::ValidRow),
+        [TotalCol] "i"(shp::Cols), [Param0] "r"(param0),
+        [Param1] "r"(param1), [Param2] "r"(param2), [Slot] "i"(Slot),
         [TileSize] "i"(tile_type_traits<typename shp::TileDType>::TilesizeCode),
         [IsMask1] "i"(PEMask == 1), [IsMask2] "i"(PEMask == 2),
         [IsMask4] "i"(PEMask == 4)
