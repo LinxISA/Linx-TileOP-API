@@ -14476,7 +14476,7 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src, TIMG2COLParams params) {
   static_assert(tile_shape_out::ValidRow != 0 &&
                     tile_shape_out::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(is_timg2col_type_code(
+  static_assert(range::is_timg2col_type_code(
                     type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
   if (!is_timg2col_params_base_legal(params)) {
@@ -14599,7 +14599,7 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src,
               size_t groupRows) {
   static_assert(tile_shape_out::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(is_timg2col_type_code(
+  static_assert(range::is_timg2col_type_code(
                     type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
   const TIMG2COLParams params{param0, param1, param2};
@@ -14663,7 +14663,7 @@ void TIMG2COL(SharedTile<shp> &dst, gm_shape &src, TIMG2COLParams params) {
   static_assert(shp::ValidRow != 0 &&
                     shp::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(is_timg2col_type_code(
+  static_assert(range::is_timg2col_type_code(
                     type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
   if (!is_timg2col_params_base_legal(params)) {
@@ -14716,7 +14716,7 @@ void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
   static_assert(shp::ValidRow != 0 &&
                     shp::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(is_timg2col_type_code(
+  static_assert(range::is_timg2col_type_code(
                     type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
   if (!is_timg2col_params_base_legal(params)) {
