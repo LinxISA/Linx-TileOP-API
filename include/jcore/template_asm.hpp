@@ -14802,8 +14802,8 @@ void TIMG2COL(SharedTile<shp> &dst, gm_shape &src, TIMG2COLParams params) {
 template <LayoutCvtEnum SourceOrder = NORM, is_tile_data_v shp,
           is_global_data_v gm_shape>
   requires(shp::isRowMajor && !shp::isBoxedLayout)
-void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
-                    TIMG2COLParams params, unsigned PEMask) {
+PTO_SHARED_INLINE void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
+                                      TIMG2COLParams params, unsigned PEMask) {
   static_assert(SourceOrder == NORM || SourceOrder == DN2ND,
                 "TIMG2COL Shared output source order must be NORM (NHWC "
                 "indexing) or DN2ND (NCHW indexing)");
