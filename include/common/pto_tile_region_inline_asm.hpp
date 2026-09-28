@@ -727,7 +727,7 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
                        SubTile::Cols == In::Cols),
                 "TCVT assembly slot requires equal physical Rows/Cols for "
                 "ordinary (RowMajor) sources");
-  static_assert(RMode >= LINX_RNONE && RMode <= LINX_RHB,
+  static_assert(RMode >= 0 && RMode <= 7,
                 "TCVT RMode must be a LinxRMode value");
   // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase;
   // the INIT destination B.IOT allocates and carries the parent capacity.
@@ -819,7 +819,7 @@ pto_region_tcvt_phase(region::TileArrayOutputRef<SubTile> &dst, In &src) {
 // the operation-default encoding). LINX_RDN (RTM floor) is the mode MX E8M0
 // scale quantization needs, so the algorithmic producer that writes a slot can
 // request it directly, e.g. TCVT<LINX_RDN>(destinations[0][col], scale).
-template <int RMode = LINX_RNONE, typename SubTile, is_tile_data_v In>
+template <int RMode = 0, typename SubTile, is_tile_data_v In>
 PTO_REGION_ALWAYS_INLINE void TCVT(region::TileArrayOutputRef<SubTile> dst,
                                    In &src) {
   switch (dst.parent_size_code()) {
@@ -967,30 +967,60 @@ PTO_REGION_ALWAYS_INLINE void TCVT(
 template <is_tile_data_v Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void
 TCVT(Out &dst, region::SubTileView<Parent, SubTile> &src) {
-  static_assert(SubTile::BFractal == BLayout::RowMajor,
-                "inline Tile region path requires RowMajor fragments");
+  constexpr bool source_cube = SubTile::BFractal == BLayout::CubeM16 ||
+                               SubTile::BFractal == BLayout::CubeM32;
+  static_assert(SubTile::BFractal == BLayout::RowMajor || source_cube,
+                "TCVT region source must use RowMajor or CUBE_M16/CUBE_M32");
+  static_assert(source_cube ? (Out::BFractal == SubTile::BFractal)
+                            : (Out::BFractal == BLayout::RowMajor),
+                "TCVT region destination layout is incompatible with source");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
-  static_assert(SubTile::Rows == Out::Rows && SubTile::Cols == Out::Cols,
-                "TCVT region source requires matching physical shape");
+  static_assert(SubTile::ValidRow == Out::ValidRow &&
+                    SubTile::ValidCol == Out::ValidCol,
+                "TCVT CUBE_M16/M32 conversion must preserve the valid shape");
+  static_assert(is_legal_tcvt_datatype_pair(
+                    type_traits<typename SubTile::DType>::TypeCode,
+                    type_traits<typename Out::DType>::TypeCode),
+                "Illegal TCVT datatype pair");
   const uintptr_t region_base_units = src.GetRangeBase();
-  asm volatile(
-      "BSTART.TEPL 27, %D1\n"
-      "B.DATR %D2, RNONE\n"
-      "B.DIM zero, %c4, ->lb0\n"
-      "B.DIM zero, %c5, ->lb1\n"
-      "B.DIM zero, %c6, ->lb2\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"
-      "B.SUBVIEW 0, %8, 0, %c9\n"
-      : [Dst] "=Tr"(dst.data())
-      : "i"(type_traits<typename SubTile::DType>::TypeCode),
-        "i"(type_traits<typename Out::DType>::TypeCode), "Tr"(src.data()),
-        "i"(std::remove_reference_t<decltype(src)>::ValidCol),
-        "i"(std::remove_reference_t<decltype(src)>::ValidRow), "i"(SubTile::Cols),
-        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "r"(region_base_units),
-        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode)
-      : "memory");
+  if constexpr (source_cube) {
+    asm volatile(
+        "BSTART.TEPL 27, %D1\n"
+        "B.DATR %D2, RNONE\n"
+        "B.DIM zero, %c4, ->lb0\n"
+        "B.DIM zero, %c5, ->lb1\n"
+        "B.IOT %3, mask=1111, last, ->%0<%Z6>\n"
+        "B.SUBVIEW 0, %7, 0, %c8\n"
+        : [Dst] "=Tr"(dst.data())
+        : "i"(type_traits<typename SubTile::DType>::TypeCode),
+          "i"(type_traits<typename Out::DType>::TypeCode), "Tr"(src.data()),
+          "i"(std::remove_reference_t<decltype(src)>::ValidCol),
+          "i"(std::remove_reference_t<decltype(src)>::ValidRow),
+          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+          "r"(region_base_units),
+          "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode)
+        : "memory");
+  } else {
+    asm volatile(
+        "BSTART.TEPL 27, %D1\n"
+        "B.DATR %D2, RNONE\n"
+        "B.DIM zero, %c4, ->lb0\n"
+        "B.DIM zero, %c5, ->lb1\n"
+        "B.DIM zero, %c6, ->lb2\n"
+        "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"
+        "B.SUBVIEW 0, %8, 0, %c9\n"
+        : [Dst] "=Tr"(dst.data())
+        : "i"(type_traits<typename SubTile::DType>::TypeCode),
+          "i"(type_traits<typename Out::DType>::TypeCode), "Tr"(src.data()),
+          "i"(std::remove_reference_t<decltype(src)>::ValidCol),
+          "i"(std::remove_reference_t<decltype(src)>::ValidRow),
+          "i"(SubTile::Cols),
+          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+          "r"(region_base_units),
+          "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode)
+        : "memory");
+  }
 }
 
 template <int Opcode, typename Out, typename Parent0, typename SubTile0,
@@ -1132,6 +1162,8 @@ PTO_REGION_BINARY_SOURCE_WRAPPER(TREM, 4)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TAND, 6)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TOR, 7)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TXOR, 8)
+PTO_REGION_BINARY_SOURCE_WRAPPER(TSHL, 9)
+PTO_REGION_BINARY_SOURCE_WRAPPER(TSHR, 10)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TMAX, 11)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TMIN, 12)
 
@@ -1518,6 +1550,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
 
   const uintptr_t prefix_base0_units = src0.GetRangeBase();
   const uintptr_t prefix_base1_units = src1.GetRangeBase();
+  // ReductionPrefixView carries a statically selected CELL. Keep the dynamic
+  // branch in lockstep with the Tile/prefix overloads so that a dynamic prefix
+  // remains well-formed and uses the register B.DIM form.
   if constexpr (SubTile0::ValidRow < 0) {
     asm volatile(
         "BSTART.TEPL %c9, %D1\n"
@@ -1754,6 +1789,8 @@ PTO_REGION_BINARY_DEST_WRAPPER(TREM, 4)
 PTO_REGION_BINARY_DEST_WRAPPER(TAND, 6)
 PTO_REGION_BINARY_DEST_WRAPPER(TOR, 7)
 PTO_REGION_BINARY_DEST_WRAPPER(TXOR, 8)
+PTO_REGION_BINARY_DEST_WRAPPER(TSHL, 9)
+PTO_REGION_BINARY_DEST_WRAPPER(TSHR, 10)
 PTO_REGION_BINARY_DEST_WRAPPER(TMAX, 11)
 PTO_REGION_BINARY_DEST_WRAPPER(TMIN, 12)
 

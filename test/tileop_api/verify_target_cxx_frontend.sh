@@ -43,6 +43,8 @@ fi
 for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
               TileRegionUnarySubviewAssembly.cpp \
               TileRegionTCVTSubviewAssembly.cpp \
+              TileRegionTCVTSubview.cpp \
+              TileRegionShift.cpp \
               Issue241ReductionPrefixBinary.cpp \
               TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
@@ -50,6 +52,34 @@ for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
   "$TC_DIR/clang++" "${FLAGS[@]}" -fsyntax-only \
     "$ROOT/test/tileop_api/src/$source"
 done
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/Issue241ReductionPrefixBinary.cpp" \
+  -o "$OUT/Issue241ReductionPrefixBinary.ll"
+python3 - "$OUT/Issue241ReductionPrefixBinary.ll" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+functions = re.split(r"(?=^define )", text, flags=re.MULTILINE)
+for name in ("prefix_prefix_arithmetic", "prefix_prefix_bitwise"):
+    body = next((part for part in functions if name in part), None)
+    if body is None:
+        raise SystemExit(f"missing Issue #241 fixture {name}")
+    asm = [line for line in body.splitlines()
+           if "asm sideeffect" in line and "BSTART.TEPL" in line]
+    expected = 6 if name == "prefix_prefix_arithmetic" else 4
+    if len(asm) != expected:
+        raise SystemExit(f"{name}: expected {expected} TEPL operations, got {len(asm)}")
+    for line in asm:
+        if line.count("B.SUBVIEW") != 2:
+            raise SystemExit(f"{name}: every operation must have two B.SUBVIEW modifiers")
+        if "B.SUBVIEW 0" not in line or "B.SUBVIEW 1" not in line:
+            raise SystemExit(f"{name}: missing source-specific B.SUBVIEW modifier")
+        if "TCVT" in line or "TMOV" in line:
+            raise SystemExit(f"{name}: unexpected prefix materialization")
+PY
 
 # Issue #172: the role view must let one published Shared handle participate in
 # both operand slots, including the Shared transpose path, without introducing
@@ -154,6 +184,46 @@ for name in ("tor_ass_subview", "tor_ass_explicit_range"):
     if not re.search(r"B\.IOT.*B\.SUBVIEW.*B\.SUBVIEW.*B\.IOT.*B\.ASSEMBLE",
                      body):
         raise SystemExit(f"{name}: invalid source/destination modifier order")
+PY
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TileRegionTCVTSubview.cpp" \
+  -o "$OUT/TileRegionTCVTSubview.ll"
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TileRegionShift.cpp" -o "$OUT/TileRegionShift.ll"
+python3 - "$OUT/TileRegionTCVTSubview.ll" "$OUT/TileRegionShift.ll" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+tcvt = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = next(part for part in re.split(r"(?=^define )", tcvt, flags=re.MULTILINE)
+            if "convert_subview" in part)
+if "BSTART.TEPL 27" not in body or body.count("B.SUBVIEW") != 1:
+    raise SystemExit("convert_subview: missing TCVT opcode or source B.SUBVIEW")
+if "B.ASSEMBLE" in body or "B.DIM zero, $2, ->lb2" in body:
+    raise SystemExit("convert_subview: ordinary CUBE TCVT emitted assembly/LB2")
+
+shift = Path(sys.argv[2]).read_text(encoding="utf-8")
+functions = re.split(r"(?=^define )", shift, flags=re.MULTILINE)
+ordinary = next(part for part in functions if "shift_subview" in part and
+                "assemble_shift_subviews" not in part)
+for opcode in (9, 10):
+    if f"BSTART.TEPL {opcode}" not in ordinary:
+        raise SystemExit(f"shift_subview: missing shift opcode {opcode}")
+if ordinary.count("B.SUBVIEW") != 2 or "B.ASSEMBLE" in ordinary:
+    raise SystemExit("shift_subview: invalid ordinary source modifiers")
+
+assembled = next(part for part in functions if "assemble_shift_subviews" in part)
+for opcode in (9, 10):
+    if f"BSTART.TEPL {opcode}" not in assembled:
+        raise SystemExit(f"assemble_shift_subviews: missing shift opcode {opcode}")
+if assembled.count("B.SUBVIEW") != 8 or assembled.count("B.ASSEMBLE") != 4:
+    raise SystemExit("assemble_shift_subviews: invalid modifier counts")
+for line in (line for line in assembled.splitlines() if "asm sideeffect" in line):
+    if "BSTART.TEPL" in line and not re.search(
+            r"B\.IOT.*B\.SUBVIEW.*B\.SUBVIEW.*B\.IOT.*B\.ASSEMBLE", line):
+        raise SystemExit("assemble_shift_subviews: invalid modifier order")
 PY
 
 echo "Linx target C++ frontend range/GMOV contract: PASS"
