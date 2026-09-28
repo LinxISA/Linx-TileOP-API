@@ -55,6 +55,7 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 | `TRECIP` | `BSTART.SFU TRECIP` | 20 | elementwise-tile-tile |
 | `TSQRT` | `BSTART.SFU TSQRT` | 21 | elementwise-tile-tile |
 | `TRSQRT` | `BSTART.SFU TRSQRT` | 22 | elementwise-tile-tile |
+| `TEXPDIF` | `BSTART.SFU TEXPDIF` | 29 | elementwise-tile-tile |
 | `TDIVS` | `BSTART.SFU TDIVS` | 35 | tile-scalar-and-immediate |
 | `TREMS` | `BSTART.SFU TREMS` | 36 | tile-scalar-and-immediate |
 | `TROWSUM` | `BSTART.SFU TROWSUM` | 64 | reduce-and-expand |

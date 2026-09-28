@@ -18,6 +18,7 @@ class TileOpApiVersionHeaderTest(unittest.TestCase):
         self.assertIn('#define PTO_TILEOP_API_REVISION "source-tree"', header)
         self.assertIn('#define PTO_TILEOP_API_REVISION_IS_EXACT 0', header)
         self.assertIn('#define PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX 1', header)
+        self.assertIn('#define PTO_TILEOP_API_HAS_TEXPDIF 1', header)
         self.assertIn(
             '#include "common/pto_tileop_api_revision.hpp"',
             UMBRELLA_HEADER.read_text(encoding="utf-8"),
@@ -60,6 +61,7 @@ class TileOpApiVersionHeaderTest(unittest.TestCase):
             self.assertIn(f'#define PTO_TILEOP_API_REVISION "{revision}"', installed)
             self.assertIn('#define PTO_TILEOP_API_REVISION_IS_EXACT 1', installed)
             self.assertIn('#define PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX 1', installed)
+            self.assertIn('#define PTO_TILEOP_API_HAS_TEXPDIF 1', installed)
 
 
 if __name__ == "__main__":

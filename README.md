@@ -27,6 +27,7 @@ view, not a replacement for the PTO ASL/NDF semantics.
 - [Layout helpers](docs/tileop-usage/layout-and-rearrangement/layout/TCONCAT.md)
 - [PTO ISA 0.58.7 CUBE layout operations](docs/tileop-usage/layout-and-rearrangement/layout/TPERMUTE.md)
 - [Comparison operations](docs/tileop-usage/elementwise-tile-tile/logical/TCMP.md)
+- [TEXPDIF](docs/tileop-usage/elementwise-tile-tile/transcendental/TEXPDIF.md)
 - [Sorting operations](docs/tileop-usage/irregular-and-complex/sorting/TSORT.md)
 - [Fixed-point matrix wrappers](docs/tileop-usage/options.md)
 

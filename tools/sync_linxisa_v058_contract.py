@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "contracts" / "linxisa-v0.58-engine-ops.json"
-EXPECTED_COUNTS = {"CUBE": 12, "SFU": 56, "TLSU": 10, "VEC": 31}
+EXPECTED_COUNTS = {"CUBE": 12, "SFU": 57, "TLSU": 10, "VEC": 31}
 EXPECTED_COMMIT = "dd52a2e579d8058c0d8e33043e705122b340e73f"
 EXPECTED_TREE = "1cfc7343e714489f95f67592475e8b9f079241ee"
 EXPECTED_CATALOG_SHA256 = "34ecbcfa075166490b622647eb53c13a9c360848d6c7acb2e034d3e47f8c9a8a"
