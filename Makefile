@@ -1,5 +1,5 @@
 LIBNAME = tileop-api
-VERSION = 0.58.6
+VERSION = 0.58.7
 HEADERS = $(wildcard include/*.h) $(wildcard include/*.hpp) include/jcore include/cpu_sim include/aarch64 include/common
 TILEOP_API_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 TILEOP_API_REVISION_IS_EXACT ?= $(shell test -z "$$(git status --porcelain --untracked-files=all 2>/dev/null)" && printf 1 || printf 0)
@@ -40,7 +40,7 @@ install:
 		echo '#define PTO_TILEOP_API_REVISION_HPP'; \
 		echo ''; \
 		echo '#define PTO_TILEOP_API_VERSION "$(VERSION)"'; \
-		echo '#define PTO_TILEOP_API_SPEC_VERSION "0.58.6"'; \
+		echo '#define PTO_TILEOP_API_SPEC_VERSION "0.58.7"'; \
 		echo '#define PTO_TILEOP_API_REVISION "$(TILEOP_API_REVISION)"'; \
 		echo '#define PTO_TILEOP_API_REVISION_IS_EXACT $(TILEOP_API_REVISION_IS_EXACT)'; \
 		echo ''; \

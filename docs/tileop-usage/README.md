@@ -6,16 +6,16 @@
 
 ## 版本与兼容性
 
-本目录当前以 PTO-ISA/pto-spec 的 **0.58.6** 架构规范为对照基线：
+本目录当前以 PTO-ISA/pto-spec 的 **0.58.7** 架构规范为对照基线：
 
-- architecture version：`0.58.6`
-- publication version：`0.58.6.0`
-- stable release commit：`dea0b75e803cffa873982c90f9aa0cd17c6d243b`
-- audit reference（`pto-spec/main`）：`6c41bde8cb418cbcf57e7d2ef4a61163a5378b7d`
-- encoding ABI：`pto-isa-0.58.6-mode-function-v1`
+- architecture version：`0.58.7`
+- publication version：`0.58.7.0`
+- stable release commit：`de57af400cf607f03730aa522a4e9bfb160596de`
+- release tag：`v0.58.7.0`
+- encoding ABI：`pto-isa-0.58.7-mode-function-v1`
 
 PTO `main` 是开发分支；需要可复现构建时应锁定上面的 release commit。本文档描述
-的是架构规范和本仓库 wrapper 的交集，并不表示 wrapper 已实现 0.58.6 的全部操作。
+的是架构规范和本仓库 wrapper 的交集，并不表示 wrapper 已实现 0.58.7 的全部操作。
 每个操作页中的 C++ 签名以本仓库头文件为准，PTO ASL/NDF 是架构合法性的权威来源。
 
 [0.58.3 迁移说明](migration/pto-0583-migration.md)是历史文档，保留用于迁移旧
@@ -31,7 +31,7 @@ kernel；其中的旧版本数量、旧 engine inventory 和旧 encoding identit
 - `PTO_TILEOP_API_REVISION_IS_EXACT`：revision 是否来自干净 checkout；
 - `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX`：local Right B 使用逻辑 `[K,N]` 契约。
 
-当前 wrapper 与 PTO 0.58.6 catalog 的覆盖边界见
+当前 wrapper 与 PTO 0.58.7 catalog 的覆盖边界见
 [统一支持状态表](support-status.md)。该表区分“已实现”“仅部分 layout 支持”“尚无
 wrapper”和“仅历史参考”；PTO catalog 中存在某个操作名，不等于本 C++ wrapper
 已经提供完整重载或完整 layout/属性组合。
@@ -84,7 +84,7 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
   也在该页面说明。
 - 常规逐元素算子从 [TADD](elementwise-tile-tile/arithmetic/TADD.md) 开始；按目录选择
   算术、逻辑、转换、归约、布局和不规则操作。
-- PTO ISA v0.58.6 的 CUBE layout 重排操作从
+- PTO ISA v0.58.7 的 CUBE layout 重排操作从
   [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md) 开始；
   [TSHUF](layout-and-rearrangement/layout/TSHUF.md)、
   [TPACK](layout-and-rearrangement/layout/TPACK.md)、

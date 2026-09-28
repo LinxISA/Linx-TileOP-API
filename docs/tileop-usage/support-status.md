@@ -1,6 +1,6 @@
-# PTO ISA 0.58.6 wrapper 支持状态
+# PTO ISA 0.58.7 wrapper 支持状态
 
-本表以 `contracts/pto-isa-0.58.6-tile-operations.json` 的 117 个
+本表以 `contracts/pto-isa-0.58.7-tile-operations.json` 的 118 个
 `accepted-direct-operation` 为操作清单。它描述 Linx TileOP C++ wrapper 的
 公开实现状态，不替代 PTO-ISA/pto-spec 的 ASL/NDF 合法性、fault、completion、
 rollback、definedness 或 memory-order 语义。
@@ -10,7 +10,7 @@ rollback、definedness 或 memory-order 语义。
 | **已实现** | 当前 `include/` 有可调用 wrapper；本地测试覆盖其至少一个有效路径。 |
 | **仅部分 layout 支持** | wrapper 存在，但只覆盖 catalog 合法 layout/shape/属性组合的子集；其他组合必须以编译期约束拒绝，不能推断为缺陷或自动支持。 |
 | **尚无 wrapper** | PTO catalog 有操作，但本仓库没有公开的 C++ wrapper；不能通过拼接汇编或复用相近 API 冒充支持。 |
-| **仅历史参考** | 名称来自旧版本或已删除清单；保留页面/禁用 stub 只用于迁移，不能生成当前 PTO 0.58.6 指令。 |
+| **仅历史参考** | 名称来自旧版本或已删除清单；保留页面/禁用 stub 只用于迁移，不能生成当前 PTO 0.58.7 指令。 |
 
 ## 当前覆盖
 
@@ -21,13 +21,15 @@ rollback、definedness 或 memory-order 语义。
 | TLSU `MGATHER`/`MSCATTER` 及 atomic/reduction variants | 仅部分 layout 支持 | wrapper 覆盖当前公开 selector；ColumnMajor selector、mask/索引 dtype 和不同 atomic 组合不得由普通 gather/scatter 重载推断。 |
 | CUBE TMATMUL/TGEMV 及 bias/acc/MX variants | 仅部分 layout 支持 | CUBE_M16/CUBE_M32、Shared physical shape、scale layout 和 InternalAcc 由具体 wrapper/操作页限制。 |
 | TEPL layout/rearrangement（`TPERMUTE`、`TSHUF`、`TPACK`、`TUNPACK`、`TGPR2T`） | 仅部分 layout 支持 | 只覆盖已实现的 CUBE/Local 路径和控制字段；未列出的组合保持拒绝。 |
-| catalog 0.58.6 active operation 且尚无对应公开重载 | 尚无 wrapper | 由 catalog alignment check 阻止静默漏项；需要新增 wrapper、测试和操作页后才能改为已实现。 |
+| catalog 0.58.7 active operation `TEXPDIF` | TEXPDIF尚无 wrapper | 该操作由并行任务实现；在 wrapper、测试和操作页合入前，alignment check 要求此处显式记录缺口。 |
+| 0.58.7 `MGATHER`/`MSCATTER` family | 已适配 | 0.58.7 removes the GM row-stride operand and interprets index tiles as explicit byte displacements；wrapper 与 contract test 已改为 base-only `B.IOR`。 |
+| 0.58.7 `TROWEXPAND*`/`TCOLEXPAND*` roles | 已适配 | Source roles 使用 row-broadcast/column-broadcast operation view；wrapper 约束、注释及操作文档已同步。 |
 | `deleted_names`、`rejected_names`，以及 `TTRANS`/`TFILLPAD` 等历史页面 | 仅历史参考 | 不属于 active catalog；页面必须保留明确的 retired 标识。 |
 
 ## 版本边界
 
-- 当前 API/spec 基线：PTO ISA `0.58.6`，publication `0.58.6.0`，ABI
-  `pto-isa-0.58.6-mode-function-v1`。
+- 当前 API/spec 基线：PTO ISA `0.58.7`，publication `0.58.7.0`，ABI
+  `pto-isa-0.58.7-mode-function-v1`。
 - `docs/tileop-usage/migration/pto-0583-migration.md` 是历史迁移材料；其中的
   0.58.3 compiler、ELF identity 和旧 engine projection 不表示当前实现基线。
 - 需要核对精确 fault ordering、completion、rollback、memory ordering 或编码位域时，

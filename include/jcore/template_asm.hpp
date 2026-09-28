@@ -864,6 +864,7 @@ template <typename tile_shape_out, typename tile_shape_offset, typename gm_shape
           TmaPadValue Pad = TmaPadValue::Null>
 inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
                     const tile_shape_offset &offset) {
+  // PTO 0.58.7: offset lanes are explicit byte displacements from base.
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
                 "MGATHER dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
@@ -876,7 +877,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -886,8 +887,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -897,7 +897,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -907,8 +907,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -918,7 +917,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -928,8 +927,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else {
 asm volatile(
@@ -939,7 +937,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -949,14 +947,14 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
 }
 
 template <typename tile_shape_in, typename tile_shape_offset, typename gm_shape>
 inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
                      const tile_shape_offset &offset) {
+  // PTO 0.58.7: offset lanes are explicit byte displacements from base.
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
                 "MSCATTER src logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
@@ -969,7 +967,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
@@ -977,8 +975,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -988,7 +985,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
@@ -996,8 +993,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -1007,7 +1003,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
@@ -1015,8 +1011,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else {
 asm volatile(
@@ -1026,7 +1021,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
@@ -1034,8 +1029,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
 }
 
@@ -1057,7 +1051,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
@@ -1068,8 +1062,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -1079,7 +1072,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
@@ -1090,8 +1083,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -1101,7 +1093,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
@@ -1112,8 +1104,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else {
 asm volatile(
@@ -1123,7 +1114,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
@@ -1134,8 +1125,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
 }
 
@@ -1157,7 +1147,7 @@ asm volatile(
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111\n"
       "B.IOT %[mask], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
@@ -1165,8 +1155,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -1177,7 +1166,7 @@ asm volatile(
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111\n"
       "B.IOT %[mask], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
@@ -1185,8 +1174,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -1197,7 +1185,7 @@ asm volatile(
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111\n"
       "B.IOT %[mask], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
@@ -1205,8 +1193,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else {
 asm volatile(
@@ -1217,7 +1204,7 @@ asm volatile(
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111\n"
       "B.IOT %[mask], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
@@ -1225,8 +1212,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
 }
 
@@ -4011,19 +3997,19 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
   }
 }
 
-// MGATHER_CAS: atomic compare-and-swap at logical element indices (PTO ISA
+// MGATHER_CAS: atomic compare-and-swap at explicit byte displacements (PTO ISA
 // TLSU function 8; canonical BSTART.MGATHER.CAS). Exactly two Local B.IOT
 // bindings: IndexTile+ExpectedTile (TwoSrc_NoDst, no destination, L=0) then
-// ReplacementTile+last ->DstTile (L=1); B.IOR carries the GM base and row
-// stride in elements. Each lane atomically reads the indexed GM element,
+// ReplacementTile+last ->DstTile (L=1); B.IOR carries only the GM base.
+// Each lane atomically reads the byte-displaced GM element,
 // compares with Expected, stores Replacement on match, and publishes the
 // observed old value to the destination. The destination must be an
 // early-clobbered output so the allocator keeps it distinct from replacement.
 template <is_tile_data_v DstTile, is_tile_data_v IndexTile,
           is_tile_data_v ExpectedTile, is_tile_data_v ReplacementTile>
 void MGATHER_CAS(DstTile &observedOld, uint64_t base,
-                 IndexTile &elementIndices, ExpectedTile &expected,
-                 ReplacementTile &replacement, uint32_t rowStride,
+                 IndexTile &byteDisplacements, ExpectedTile &expected,
+                 ReplacementTile &replacement,
                  uint32_t validCol, uint32_t validRow = 1) {
   static_assert(std::is_same_v<typename ExpectedTile::DType,
                                typename ReplacementTile::DType> &&
@@ -4051,8 +4037,6 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
                     ReplacementTile::BFractal == DstTile::BFractal,
                 "MGATHER_CAS index, expected, replacement, and destination "
                 "layouts must match");
-  if (rowStride == 0 || rowStride < validCol)
-    __builtin_trap();
   if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow > 0) {
 asm volatile(
     "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
@@ -4062,11 +4046,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base], %[Stride]], []\n"
+    "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(rowStride),
+      [Base] "r"(base),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [ElemLayout] "i"(local_layout_code_v<IndexTile>),
       [VCOL] "i"(DstTile::ValidCol), [VROW] "i"(DstTile::ValidRow),
@@ -4082,11 +4066,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base], %[Stride]], []\n"
+    "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(rowStride),
+      [Base] "r"(base),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [ElemLayout] "i"(local_layout_code_v<IndexTile>),
       [VCOL] "i"(DstTile::ValidCol), [VROW] "r"(validRow),
@@ -4102,11 +4086,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base], %[Stride]], []\n"
+    "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(rowStride),
+      [Base] "r"(base),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [ElemLayout] "i"(local_layout_code_v<IndexTile>),
       [VCOL] "r"(validCol), [VROW] "i"(DstTile::ValidRow),
@@ -4122,11 +4106,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base], %[Stride]], []\n"
+    "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(rowStride),
+      [Base] "r"(base),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [ElemLayout] "i"(local_layout_code_v<IndexTile>),
       [VCOL] "r"(validCol), [VROW] "r"(validRow),
@@ -4135,17 +4119,17 @@ asm volatile(
     : "memory");  }
 }
 
-// PTO ISA TLSU GM_ATOM_VALUE family (functions 9-18): atomic RMW at logical
-// element indices with observed-old-value publication. Every member shares one
+// PTO ISA TLSU GM_ATOM_VALUE family (functions 9-18): atomic RMW at explicit
+// byte displacements with observed-old-value publication. Every member shares one
 // bundle shape -- a single Local B.IOT binding (IndexTile + one operand tile,
-// last, ->DstTile) and a base-only B.IOR (the index is the full logical linear
-// address, so no row stride is carried). Only the BSTART mnemonic and the legal
+// last, ->DstTile) and a base-only B.IOR (the index is a byte displacement,
+// so no row stride is carried). Only the BSTART mnemonic and the legal
 // transfer DataType differ per member; see pto-spec
 // asl/tile/model/memory/gm-atom-red.asl (GMAtomicOperationDataTypeLegal) for the
 // per-op DataType legality reproduced in each wrapper's static_assert. The
 // destination is early-clobbered so the allocator keeps it distinct from the
 // operand. MGATHER_CAS (function 8) is defined separately above because it
-// carries two B.IOT bindings and a GM row stride.
+// carries two B.IOT bindings.
 //
 // The four constexpr branches select immediate vs. runtime B.DIM encodings for
 // static or DYNAMIC ValidCol/ValidRow, matching MGATHER_CAS.
@@ -15709,14 +15693,14 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
   );  }
 }
 
-// TROWEXPAND: broadcast first element of each row
+// TROWEXPAND: broadcast the row-broadcast source view (PTO 0.58.7)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in::ValidCol == DYNAMIC || tile_shape_in::ValidCol == 1,
-                "TROWEXPAND source must be a one-column broadcast tile");
+                "TROWEXPAND source must be a row-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
                 "TROWEXPAND broadcast source layout must match the "
                 "destination layout");
@@ -16309,14 +16293,14 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
   );  }
 }
 
-// TCOLEXPAND: broadcast first element of each col
+// TCOLEXPAND: broadcast the column-broadcast source view (PTO 0.58.7)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in::ValidRow == DYNAMIC || tile_shape_in::ValidRow == 1,
-                "TCOLEXPAND source must be a one-row broadcast tile");
+                "TCOLEXPAND source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
                 "TCOLEXPAND broadcast source layout must match the "
                 "destination layout");
@@ -16575,10 +16559,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDADD broadcast source must be a one-column tile");
+                "TROWEXPANDADD broadcast source must be a row-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDADD source and broadcast layouts must match the "
@@ -16698,10 +16682,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDSUB broadcast source must be a one-column tile");
+                "TROWEXPANDSUB broadcast source must be a row-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDSUB source and broadcast layouts must match the "
@@ -16821,10 +16805,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDMUL broadcast source must be a one-column tile");
+                "TROWEXPANDMUL broadcast source must be a row-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMUL source and broadcast layouts must match the "
@@ -16948,10 +16932,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDDIV broadcast source must be a one-column tile");
+                "TROWEXPANDDIV broadcast source must be a row-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDDIV source and broadcast layouts must match the "
@@ -17071,10 +17055,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDMAX broadcast source must be a one-column tile");
+                "TROWEXPANDMAX broadcast source must be a row-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMAX source and broadcast layouts must match the "
@@ -17194,10 +17178,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDMIN broadcast source must be a one-column tile");
+                "TROWEXPANDMIN broadcast source must be a row-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMIN source and broadcast layouts must match the "
@@ -17317,10 +17301,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDEXPDIF broadcast source must be a one-column tile");
+                "TROWEXPANDEXPDIF broadcast source must be a row-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDEXPDIF source and broadcast layouts must match the "
@@ -17502,10 +17486,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDADD broadcast source must be a one-row tile");
+                "TCOLEXPANDADD broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDADD source and broadcast layouts must match the "
@@ -17625,10 +17609,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDSUB broadcast source must be a one-row tile");
+                "TCOLEXPANDSUB broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDSUB source and broadcast layouts must match the "
@@ -17748,10 +17732,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDMUL broadcast source must be a one-row tile");
+                "TCOLEXPANDMUL broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDMUL source and broadcast layouts must match the "
@@ -17871,10 +17855,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDDIV broadcast source must be a one-row tile");
+                "TCOLEXPANDDIV broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDDIV source and broadcast layouts must match the "
@@ -17994,10 +17978,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDMAX broadcast source must be a one-row tile");
+                "TCOLEXPANDMAX broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDMAX source and broadcast layouts must match the "
@@ -18117,10 +18101,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDMIN broadcast source must be a one-row tile");
+                "TCOLEXPANDMIN broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDMIN source and broadcast layouts must match the "
@@ -18240,10 +18224,10 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDEXPDIF broadcast source must be a one-row tile");
+                "TCOLEXPANDEXPDIF broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDEXPDIF source and broadcast layouts must match the "
