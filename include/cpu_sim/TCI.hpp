@@ -62,4 +62,37 @@ if constexpr (std::is_same<typename tile_shape::DType, int32_t>::value ||
   }
 }
 
+template <is_tile_data_v tile_shape, typename T, int row_step, int col_step>
+void TCI_2D_Impl(tile_shape &dst, T s) {
+  static_assert(std::is_same<typename tile_shape::DType, T>::value,
+                "TCI_2D destination and start must have the same type");
+  static_assert(row_step >= -1 && row_step <= 1 && col_step >= -1 &&
+                    col_step <= 1,
+                "TCI_2D steps must be -1, 0, or 1");
+  static_assert(tile_shape::IsCubeLayout &&
+                    (tile_shape::BFractal == BLayout::CubeM16 ||
+                     tile_shape::BFractal == BLayout::CubeM32),
+                "TCI_2D requires a CUBE_M16 or CUBE_M32 tile");
+  static_assert(tile_shape::ValidRow > 0 && tile_shape::ValidCol > 0 &&
+                    tile_shape::ValidRow <= tile_shape::Rows &&
+                    tile_shape::ValidCol <= tile_shape::Cols,
+                "TCI_2D requires positive valid dimensions within the tile");
+  static_assert(std::is_same<T, int32_t>::value ||
+                    std::is_same<T, int16_t>::value ||
+                    std::is_same<T, uint32_t>::value ||
+                    std::is_same<T, uint16_t>::value,
+                "TCI_2D supports only S32, S16, U32, and U16");
+  for (size_t r = 0; r < tile_shape::ValidRow; ++r) {
+    for (size_t c = 0; c < tile_shape::ValidCol; ++c) {
+      using U = typename std::make_unsigned<T>::type;
+      const int64_t offset = static_cast<int64_t>(r) * row_step +
+                             static_cast<int64_t>(c) * col_step;
+      const U value = static_cast<U>(s) + static_cast<U>(offset);
+      dst.data()[tile_shape::CubeStorageIndex(static_cast<int>(r),
+                                               static_cast<int>(c))] =
+          static_cast<T>(value);
+    }
+  }
+}
+
 #endif

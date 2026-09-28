@@ -10,6 +10,20 @@
 
 namespace pto {
 
+// Rounding-mode selector used by standalone region inline-assembly helpers.
+// Keep this in the common region header because those helpers are intentionally
+// usable without including the larger jcore/template_asm.hpp header.
+enum LinxRMode {
+  LINX_RNONE = 0,
+  LINX_RNE = 1,
+  LINX_RTZ = 2,
+  LINX_RDN = 3,
+  LINX_RUP = 4,
+  LINX_RNA = 5,
+  LINX_RTO = 6,
+  LINX_RHB = 7,
+};
+
 // B.DATR.Layout codes for Local elementwise operands.
 // 29 selects CUBE_M32, 31 selects CUBE_M16, and 0 keeps the NORM default.
 template <typename Tile>

@@ -33,8 +33,9 @@ kernel；其中的旧版本数量、旧 engine inventory 和旧 encoding identit
 
 当前 wrapper 与 PTO 0.58.7 catalog 的覆盖边界见
 [统一支持状态表](support-status.md)。该表区分“已实现”“仅部分 layout 支持”“尚无
-wrapper”和“仅历史参考”；PTO catalog 中存在某个操作名，不等于本 C++ wrapper
-已经提供完整重载或完整 layout/属性组合。
+wrapper”和“仅历史参考”，并单独记录 CPU simulator/JCORE、LLVM MC、LLVM
+compiler lowering 及 AArch64/SME 的 backend 能力；PTO catalog 中存在某个操作名，
+不等于所有 backend 都已经提供完整支持。
 
 消费方应优先使用 feature 宏检查所需修复，而不是比较 revision 字符串。例如：
 

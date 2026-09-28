@@ -64,8 +64,22 @@ def main() -> int:
     # 0.58.7 changed the gather/scatter index interpretation and the expansion
     # operand roles. Keep these contract deltas visible until every wrapper has
     # been audited; names alone are not semantic coverage.
-    if "TEXPDIF" in names and not re.search(r"TEXPDIF[^\n]*尚无 wrapper", docs_text):
-        failures.append("TEXPDIF is not yet explicitly marked as an unsupported wrapper")
+    #
+    # TEXPDIF is intentionally checked by backend dimension rather than by the
+    # generic "尚无 wrapper" marker.  The TileOP repository has a CPU simulator
+    # implementation and a JCORE inline-asm wrapper, while LLVM compiler
+    # lowering and AArch64/SME support are separate capabilities.  Treating
+    # those capabilities as one boolean incorrectly reported the existing
+    # wrapper as unsupported.
+    if "TEXPDIF" in names:
+        for marker in (
+            "CPU simulator",
+            "JCORE inline-asm",
+            "LLVM compiler lowering",
+            "AArch64/SME",
+        ):
+            if marker not in docs_text:
+                failures.append(f"TEXPDIF support status is missing backend dimension: {marker}")
 
     if failures:
         print("FAIL: PTO 0.58.7 catalog alignment", file=sys.stderr)

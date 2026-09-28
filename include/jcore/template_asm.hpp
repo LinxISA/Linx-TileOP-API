@@ -141,20 +141,6 @@ using namespace pto;
   ".elseif %c[Layout] == 23\nB.DATR ND2N8.normal, Zero\n"                      \
   ".endif\n"
 
-// Rounding-mode selector shared by the scalar cvt helpers and the
-// tile-level TCVT (the ISA B.DATR RMode field is bits[17:15]; the
-// enumeration values match the ISA codes one-to-one).
-enum LinxRMode {
-  LINX_RNONE = 0,
-  LINX_RNE   = 1,
-  LINX_RTZ   = 2,
-  LINX_RDN   = 3,
-  LINX_RUP   = 4,
-  LINX_RNA   = 5,
-  LINX_RTO   = 6,
-  LINX_RHB   = 7,
-};
-
 template <class...>
 inline constexpr bool pto_dependent_false_v = false;
 
@@ -14998,6 +14984,71 @@ asm volatile(
       [Start] "r"(startValue),
       [Direction] "r"(directionValue)
   );  }
+}
+
+// CUBE form of TCI.  The packed Step2D GPR contains signed RowStep in its
+// upper word and signed ColStep in its lower word.  Keep this separate from
+// the legacy RowMajor entry above so its emitted bundle cannot perturb the
+// established one-dimensional ABI.
+template <is_tile_data_v tile_shape, typename T, int row_step, int col_step>
+void TCI_2D(tile_shape &dst, T s) {
+  static_assert(std::is_same<typename tile_shape::DType, T>::value,
+                "TCI_2D destination and start must have the same type");
+  static_assert(row_step >= -1 && row_step <= 1 && col_step >= -1 &&
+                    col_step <= 1,
+                "TCI_2D steps must be -1, 0, or 1");
+  static_assert(tile_shape::Loc == Location::Left && tile_shape::IsCubeLayout &&
+                    (tile_shape::BFractal == BLayout::CubeM16 ||
+                     tile_shape::BFractal == BLayout::CubeM32),
+                "TCI_2D requires a Matrix CUBE_M16 or CUBE_M32 tile");
+  static_assert(tile_shape::ValidRow > 0 && tile_shape::ValidCol > 0 &&
+                    tile_shape::ValidRow <= tile_shape::Rows &&
+                    tile_shape::ValidCol <= tile_shape::Cols,
+                "TCI_2D requires positive valid dimensions within the tile");
+  static_assert(tile_shape::BFractal != BLayout::CubeM16 ||
+                    tile_shape::ValidRow <= 16,
+                "TCI_2D CUBE_M16 requires ValidRow <= 16");
+  static_assert(std::is_same<T, int32_t>::value ||
+                    std::is_same<T, int16_t>::value ||
+                    std::is_same<T, uint32_t>::value ||
+                    std::is_same<T, uint16_t>::value,
+                "TCI_2D supports only S32, S16, U32, and U16");
+  T startValue = s;
+  asm("" : "+r"(startValue));
+  uint64_t stepValue = (static_cast<uint64_t>(static_cast<uint32_t>(row_step)) << 32) |
+                       static_cast<uint32_t>(col_step);
+  asm("" : "+r"(stepValue));
+  asm volatile(
+      "BSTART.TEPL 102, %D[DataType]\n"
+      ".if %c[Layout] == 29\n"
+      "B.DATR CUBE_M32, DTYPE_NONE, Zero\n"
+      ".else\n"
+      "B.DATR CUBE_M16, DTYPE_NONE, Zero\n"
+      ".endif\n"
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM zero, %c[ValidRow], ->lb1\n"
+      "B.DIM zero, %c[PhysicalCol], ->lb2\n"
+      "B.IOR [%[Start],%[Steps]],[]\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      : [Dst] "=Tr"(dst.data())
+      : [DataType] "i"(type_traits<T>::TypeCode),
+        [Layout] "i"(tile_shape::BFractal == BLayout::CubeM32 ? 29 : 31),
+        [ValidCol] "i"(tile_shape::ValidCol),
+        [ValidRow] "i"(tile_shape::ValidRow),
+        [PhysicalCol] "i"(tile_shape::Cols),
+        [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+        [Start] "r"(startValue), [Steps] "r"(stepValue)
+      : "memory");
+}
+
+template <is_tile_data_v tile_shape, typename T>
+void TCI_ROW(tile_shape &dst, T s) {
+  TCI_2D<tile_shape, T, 1, 0>(dst, s);
+}
+
+template <is_tile_data_v tile_shape, typename T>
+void TCI_COL(tile_shape &dst, T s) {
+  TCI_2D<tile_shape, T, 0, 1>(dst, s);
 }
 
 // TTRI: triangular mask generation
