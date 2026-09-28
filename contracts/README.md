@@ -1,7 +1,7 @@
 # LinxISA contract projections
 
-`pto-isa-0.58.6-tile-operations.json` is the checked-in machine-readable snapshot
-of the PTO ISA 0.58.6 active Tile catalog. It records all 117 accepted direct
+`pto-isa-0.58.7-tile-operations.json` is the checked-in machine-readable snapshot
+of the PTO ISA 0.58.7 active Tile catalog. It records all 118 accepted direct
 operations plus the catalog's deleted and rejected inventories. Its source of
 truth is `PTO-ISA/pto-spec/spec/catalog/tile-operations.json`; refresh it only
 from the pinned PTO release and review the resulting diff.

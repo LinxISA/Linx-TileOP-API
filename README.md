@@ -1,8 +1,8 @@
 # Linx TileOP API
 
-Header-only C++ TileOP bindings for the LinxISA / PTO ISA 0.58.6 architectural contract.
-The checked-in catalog and documentation are generated against the PTO ISA 0.58.6
-baseline (`0.58.6.0`, ABI `pto-isa-0.58.6-mode-function-v1`).
+Header-only C++ TileOP bindings for the LinxISA / PTO ISA 0.58.7 architectural contract.
+The checked-in catalog and documentation are generated against the PTO ISA 0.58.7
+baseline (`0.58.7.0`, ABI `pto-isa-0.58.7-mode-function-v1`).
 
 Installed headers expose their provenance through
 `<common/pto_tileop_api_revision.hpp>`. `PTO_TILEOP_API_VERSION` and
@@ -12,7 +12,7 @@ Installed headers expose their provenance through
 allow consumers to reject toolchains that predate a required fix.
 
 The normative operation inventory comes from the checked-in PTO catalog at
-[`contracts/pto-isa-0.58.6-tile-operations.json`](contracts/pto-isa-0.58.6-tile-operations.json).
+[`contracts/pto-isa-0.58.7-tile-operations.json`](contracts/pto-isa-0.58.7-tile-operations.json).
 The public bindings retain the unique compiled `BSTART.TEPL` carrier for VEC/SFU
 source compatibility and emit the named TLSU/CUBE operation forms accepted by
 the current Linx compiler. The generated engine index is a wrapper compatibility
@@ -25,8 +25,9 @@ view, not a replacement for the PTO ASL/NDF semantics.
 - [CUBE operations](docs/tileop-usage/cube/matrix-matrix/TMATMUL.md)
 - [Tile and Shared-register constraints](docs/tileop-usage/concepts/tile-constraints.md)
 - [Layout helpers](docs/tileop-usage/layout-and-rearrangement/layout/TCONCAT.md)
-- [PTO ISA 0.58.6 CUBE layout operations](docs/tileop-usage/layout-and-rearrangement/layout/TPERMUTE.md)
+- [PTO ISA 0.58.7 CUBE layout operations](docs/tileop-usage/layout-and-rearrangement/layout/TPERMUTE.md)
 - [Comparison operations](docs/tileop-usage/elementwise-tile-tile/logical/TCMP.md)
+- [TEXPDIF](docs/tileop-usage/elementwise-tile-tile/transcendental/TEXPDIF.md)
 - [Sorting operations](docs/tileop-usage/irregular-and-complex/sorting/TSORT.md)
 - [Fixed-point matrix wrappers](docs/tileop-usage/options.md)
 
@@ -36,7 +37,7 @@ view, not a replacement for the PTO ASL/NDF semantics.
 make check
 ```
 
-Target compilation requires a Linx LLVM build supporting the PTO ISA 0.58.6
+Target compilation requires a Linx LLVM build supporting the PTO ISA 0.58.7
 encoding ABI. The old PTO ISA 0.58.3 Linx LLVM requirement belongs only to the
 historical migration fixtures under `test/tileop_api` and
 `docs/tileop-usage/migration/pto-0583-migration.md`; it is not the current API

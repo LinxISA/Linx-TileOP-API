@@ -30,7 +30,7 @@ def render() -> str:
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
     deleted_names = set(contract.get("deleted_tile_names", []))
     lines = [
-        "# LinxISA / PTO ISA v0.58.6 wrapper engine compatibility view",
+        "# LinxISA / PTO ISA v0.58.7 wrapper engine compatibility view",
         "",
         "架构定义的引擎类别只有 **VEC**, **TLSU**, **CUBE**, and **SFU**。",
         "VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。",

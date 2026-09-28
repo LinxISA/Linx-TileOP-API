@@ -60,7 +60,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertEqual(self.contract["profile"], "v0.58")
         self.assertEqual(
             self.contract["semantic_engine_counts"],
-            {"CUBE": 12, "SFU": 56, "TLSU": 10, "VEC": 31},
+            {"CUBE": 12, "SFU": 57, "TLSU": 10, "VEC": 31},
         )
         src = self.contract.get("source", {})
         self.assertEqual(src.get("release"), "0.58.3")
@@ -92,10 +92,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         for operation in ("TDIV", "TREM", "TEXP", "TLOG"):
             self.assertEqual(engines[operation], "SFU")
         self.assertEqual(
-            sum(row["engine"] == "VEC" for row in self.contract["tepl_ops"]), 31
+            sum(op["engine"] == "SFU" for op in self.contract["tepl_ops"]), 57
         )
         self.assertEqual(
-            sum(row["engine"] == "SFU" for row in self.contract["tepl_ops"]), 56
+            sum(row["engine"] == "SFU" for row in self.contract["tepl_ops"]), 57
         )
 
     # 12 CUBE + 6 TGEMV functions are in the catalog; our surface should

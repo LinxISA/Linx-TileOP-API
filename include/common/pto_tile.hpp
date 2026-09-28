@@ -2253,6 +2253,47 @@ private:
   SourceTile &SourceValue;
 };
 
+// PTO 0.58.7 TEXPDIF legality. A reinterpret view exposes the operation dtype
+// while retaining its Source::DType as the physical backing carrier.
+template <typename Source, typename Destination>
+constexpr bool texpdif_type_pair_legal_v =
+    (std::is_same_v<Source, __half> &&
+     (std::is_same_v<Destination, __half> || std::is_same_v<Destination, __fp32>)) ||
+    (std::is_same_v<Source, __bf16> &&
+     (std::is_same_v<Destination, __bf16> || std::is_same_v<Destination, __fp32>)) ||
+    (std::is_same_v<Source, __fp32> && std::is_same_v<Destination, __fp32>);
+
+template <typename TileT> struct texpdif_backing_dtype { using type = typename TileT::DType; };
+template <typename NewDType, typename SourceTile>
+struct texpdif_backing_dtype<ReinterpretedTileView<NewDType, SourceTile>> {
+  using type = typename SourceTile::DType;
+};
+template <typename TileT>
+using texpdif_backing_dtype_t = typename texpdif_backing_dtype<TileT>::type;
+
+template <typename D, typename A, typename B>
+constexpr void validate_texpdif_operands() {
+  static_assert(D::Loc != Location::Shared && A::Loc != Location::Shared && B::Loc != Location::Shared,
+                "TEXPDIF requires Local operands; Shared tiles are illegal");
+  static_assert(A::BFractal == B::BFractal && D::BFractal == A::BFractal,
+                "TEXPDIF source and destination layouts must match");
+  static_assert(A::BFractal == BLayout::RowMajor || A::BFractal == BLayout::CubeM16 ||
+                    A::BFractal == BLayout::CubeM32,
+                "TEXPDIF supports RowMajor, CUBE_M16, and CUBE_M32 only");
+  static_assert(A::Rows == B::Rows && A::Cols == B::Cols && D::Rows == A::Rows &&
+                    D::Cols == A::Cols && A::ValidRow == B::ValidRow &&
+                    A::ValidCol == B::ValidCol && D::ValidRow == A::ValidRow &&
+                    D::ValidCol == A::ValidCol,
+                "TEXPDIF source and destination logical shapes must match");
+  static_assert(std::is_same_v<typename A::DType, typename B::DType>,
+                "TEXPDIF sources must select the same operation dtype");
+  static_assert(texpdif_type_pair_legal_v<typename A::DType, typename D::DType>,
+                "TEXPDIF supports only FP16/BF16/FP32 source pairs and FP32 widening");
+  static_assert(type_traits<texpdif_backing_dtype_t<A>>::bits == type_traits<typename A::DType>::bits &&
+                    type_traits<texpdif_backing_dtype_t<B>>::bits == type_traits<typename B::DType>::bits,
+                "TEXPDIF source backing carriers must be non-packed and equal-width");
+}
+
 // A ReinterpretedTileView is a Local tile-shaped operand (not Shared).
 template <typename NewDType, typename SourceTile>
 struct is_tile<ReinterpretedTileView<NewDType, SourceTile>> : std::true_type {

@@ -46,6 +46,7 @@ ROLE_VIEW_CASES="same_role local rvalue layout"
 SUBVIEW_LEGALITY_CASES="subview_rowmajor tpartview_rowmajor tpartview_shared"
 GMOV_CASES="fp64 s64 u64 dtype shape valid_shape layout capacity location shared cube_n8"
 TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape assemble_valid_shape"
+TEXPDIF_CASES="type narrow n8 mixed_layout shape"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -154,6 +155,11 @@ for c in $TCVT_CASES; do
   else
     echo "PASS (rejected): tcvt_$c"; PASS=$((PASS+1))
   fi
+done
+for c in $TEXPDIF_CASES; do
+  define=SHOULD_FAIL_TEXPDIF_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "texpdif_$c" "$define" TExpdifNegatives.cpp \
+    'TEXPDIF supports|TEXPDIF source and destination|logical shapes'
 done
 for c in $ROLE_VIEW_CASES; do
   define=SHOULD_FAIL_$(echo "$c" | tr '[:lower:]' '[:upper:]')
