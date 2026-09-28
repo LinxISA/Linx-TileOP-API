@@ -43,6 +43,7 @@ fi
 for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
               TileRegionUnarySubviewAssembly.cpp \
               TileRegionTCVTSubviewAssembly.cpp \
+              Issue241ReductionPrefixBinary.cpp \
               TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
               SharedTransposeNonSquare.cpp; do
