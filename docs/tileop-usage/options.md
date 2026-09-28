@@ -319,9 +319,9 @@ Row row_in;
 TMATMUL(d, a, b, fixp::keep_acc().row_max(row_in, row_out)); // RowMaxInit=1
 ```
 
-RowMax 输出必须使用当前 API 支持的物理 one-column carrier：物理 shape 的列数必须为 1，
+RowMax 输出必须使用当前 API 支持的物理 row-broadcast carrier：物理 shape 的列数必须为 1，
 并且 valid shape 必须为 `M x 1`。不能通过扩大物理 `M x N` shape、再用 `ValidCol=1`
-来替代 one-column carrier。Local auxiliary Tile 的物理 active size 仍必须处于当前实现
+来替代 row-broadcast carrier。Local auxiliary Tile 的物理 active size 仍必须处于当前实现
 允许的 `128 B..256 KiB` 范围内，但具体操作还可能有更严格的限制。
 
 GroupN 必须是 `8, 16, 32, 48, 64, 80, 96, 112, 128` 之一，对应 `GroupNCode=1..9`；

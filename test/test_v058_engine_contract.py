@@ -937,10 +937,13 @@ int main() { return sizeof(Bad); }
 
     # --- new-operation bundle fixtures ---
 
-    def test_mgather_cas_signature_separates_row_stride(self) -> None:
-        self.assertIn("uint32_t rowStride", self.header)
-        self.assertIn('[Stride] "r"(rowStride)', self.header)
-        self.assertNotIn('[Stride] "r"(validCol)', self.header)
+    def test_mgather_cas_uses_pto0587_byte_displacements(self) -> None:
+        body = self.header[self.header.index("void MGATHER_CAS"):]
+        self.assertIn("IndexTile &byteDisplacements", body)
+        self.assertNotIn("uint32_t rowStride", body)
+        self.assertNotIn('[Stride] "r"(rowStride)', body)
+        self.assertIn('"B.IOR [%[Base]], []\\n"', body)
+        self.assertNotIn('[Stride] "r"(validCol)', body)
 
     def test_tsort_bundle_has_two_destinations(self) -> None:
         # TSORT/TMRGSORT are retired (PTO-ISA 0.58.5 deleted_names): they
@@ -952,10 +955,13 @@ int main() { return sizeof(Bad); }
 
     def test_mgather_cas_bundle_is_two_b_iot_with_base_ior(self) -> None:
         # MGATHER_CAS: IndexTile+ExpectedTile (TwoSrc_NoDst) then
-        # ReplacementTile+last -> Dst; B.IOR carries base and element stride.
-        self.assertRegex(self.header, r"B\.IOT %\[Idx\], %\[Exp\], mask=1111\\n")
-        self.assertRegex(self.header, r"B\.IOT %\[Rep\], mask=1111, last, ->%\[Dst\]")
-        self.assertRegex(self.header, r"B\.IOR \[%\[Base\], %\[Stride\]\]")
+        # ReplacementTile+last -> Dst; byte-displacement indices make B.IOR
+        # base-only in PTO-ISA 0.58.7.
+        body = self.header[self.header.index("void MGATHER_CAS"):]
+        self.assertRegex(body, r"B\.IOT %\[Idx\], %\[Exp\], mask=1111\\n")
+        self.assertRegex(body, r"B\.IOT %\[Rep\], mask=1111, last, ->%\[Dst\]")
+        self.assertRegex(body, r"B\.IOR \[%\[Base\]\], \[\]")
+        self.assertNotIn("%[Stride]", body)
 
     def test_timg2col_bundle_has_gm_and_parameter_iors(self) -> None:
         self.assertIn('"BSTART.TIMG2COL %D[DataType]', self.header)

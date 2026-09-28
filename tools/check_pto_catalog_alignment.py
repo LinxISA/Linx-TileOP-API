@@ -39,8 +39,12 @@ def main() -> int:
     include_text = text([p for p in INCLUDE.rglob("*") if p.is_file()])
     docs_text = text([p for p in DOCS.rglob("*.md") if p.is_file()])
     for name in names:
-        if not re.search(rf"\b{re.escape(name)}\b", include_text):
-            failures.append(f"active catalog operation has no wrapper reference: {name}")
+        if not re.search(rf"\b{re.escape(name)}\b", include_text) and not re.search(
+            rf"`{re.escape(name)}`[^\n]{{0,180}}尚无 wrapper", docs_text
+        ):
+            failures.append(
+                f"active catalog operation has neither wrapper nor explicit unsupported marker: {name}"
+            )
     for name in catalog.get("deleted_names", []):
         active = re.search(rf"\b{re.escape(name)}\s*\(", include_text)
         retirement = re.search(
@@ -56,6 +60,12 @@ def main() -> int:
     status_marker = "尚无 wrapper"
     if status_marker not in docs_text:
         failures.append("documentation has no unified wrapper support-status marker")
+
+    # 0.58.7 changed the gather/scatter index interpretation and the expansion
+    # operand roles. Keep these contract deltas visible until every wrapper has
+    # been audited; names alone are not semantic coverage.
+    if "TEXPDIF" in names and not re.search(r"TEXPDIF[^\n]*尚无 wrapper", docs_text):
+        failures.append("TEXPDIF is not yet explicitly marked as an unsupported wrapper")
 
     if failures:
         print("FAIL: PTO 0.58.7 catalog alignment", file=sys.stderr)

@@ -11,6 +11,7 @@
 - architecture version：`0.58.7`
 - publication version：`0.58.7.0`
 - stable release commit：`de57af400cf607f03730aa522a4e9bfb160596de`
+- release tag：`v0.58.7.0`
 - encoding ABI：`pto-isa-0.58.7-mode-function-v1`
 
 PTO `main` 是开发分支；需要可复现构建时应锁定上面的 release commit。本文档描述
@@ -83,7 +84,7 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
   也在该页面说明。
 - 常规逐元素算子从 [TADD](elementwise-tile-tile/arithmetic/TADD.md) 开始；按目录选择
   算术、逻辑、转换、归约、布局和不规则操作。
-- PTO ISA v0.58.6 的 CUBE layout 重排操作从
+- PTO ISA v0.58.7 的 CUBE layout 重排操作从
   [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md) 开始；
   [TSHUF](layout-and-rearrangement/layout/TSHUF.md)、
   [TPACK](layout-and-rearrangement/layout/TPACK.md)、

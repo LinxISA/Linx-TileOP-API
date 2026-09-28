@@ -1,6 +1,6 @@
 # TROWEXPANDMIN
 
-`TROWEXPANDMIN` 将每个有效行的元素与该行的单列广播值取最小值。
+`TROWEXPANDMIN` 将每个有效行的元素与该行的行广播值取最小值。
 
 ## C++ 接口
 

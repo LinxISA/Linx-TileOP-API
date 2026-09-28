@@ -1,6 +1,6 @@
 # TROWEXPANDMUL
 
-`TROWEXPANDMUL` 将每个有效行的元素乘以该行的单列广播值。
+`TROWEXPANDMUL` 将每个有效行的元素乘以该行的行广播值。
 
 ## C++ 接口
 

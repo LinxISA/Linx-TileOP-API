@@ -22,7 +22,9 @@ rollback、definedness 或 memory-order 语义。
 | TLSU `MGATHER`/`MSCATTER` 及 atomic/reduction variants | 仅部分 layout 支持 | wrapper 覆盖当前公开 selector；ColumnMajor selector、mask/索引 dtype 和不同 atomic 组合不得由普通 gather/scatter 重载推断。 |
 | CUBE TMATMUL/TGEMV 及 bias/acc/MX variants | 仅部分 layout 支持 | CUBE_M16/CUBE_M32、Shared physical shape、scale layout 和 InternalAcc 由具体 wrapper/操作页限制。 |
 | TEPL layout/rearrangement（`TPERMUTE`、`TSHUF`、`TPACK`、`TUNPACK`、`TGPR2T`） | 仅部分 layout 支持 | 只覆盖已实现的 CUBE/Local 路径和控制字段；未列出的组合保持拒绝。 |
-| catalog 0.58.7 active operation 且尚无对应公开重载 | 尚无 wrapper | 由 catalog alignment check 阻止静默漏项；需要新增 wrapper、测试和操作页后才能改为已实现。 |
+| `TEXPDIF` | 已实现（JCORE/CPU simulator） | PTO 0.58.7 selector 29；AArch64/SME 明确不支持。 |
+| 0.58.7 `MGATHER`/`MSCATTER` family | 已适配 | 0.58.7 removes the GM row-stride operand and interprets index tiles as explicit byte displacements；wrapper 与 contract test 已改为 base-only `B.IOR`。 |
+| 0.58.7 `TROWEXPAND*`/`TCOLEXPAND*` roles | 已适配 | Source roles 使用 row-broadcast/column-broadcast operation view；wrapper 约束、注释及操作文档已同步。 |
 | `deleted_names`、`rejected_names`，以及 `TTRANS`/`TFILLPAD` 等历史页面 | 仅历史参考 | 不属于 active catalog；页面必须保留明确的 retired 标识。 |
 
 ## 版本边界

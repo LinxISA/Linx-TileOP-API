@@ -1,6 +1,6 @@
 # TROWEXPANDDIV
 
-`TROWEXPANDDIV` 将每个有效行的元素除以该行的单列广播值。
+`TROWEXPANDDIV` 将每个有效行的元素除以该行的行广播值。
 
 ## C++ 接口
 

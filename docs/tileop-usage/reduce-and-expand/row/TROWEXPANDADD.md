@@ -1,6 +1,6 @@
 # TROWEXPANDADD
 
-`TROWEXPANDADD` 将每个有效行的元素加上该行的单列广播值。
+`TROWEXPANDADD` 将每个有效行的元素加上该行的行广播值。
 
 ## C++ 接口
 
