@@ -24,7 +24,7 @@ if [[ "$PLAT" == "linx" ]]; then
 fi
 
 ACTIVE_FIXTURES=(
-  DynamicShape DynamicTlsuStride CubeCellTransport VecCubeLoadStore CubeTCvt SharedTranspose SharedRoleView
+  DynamicShape DynamicTlsuStride CubeCellTransport VecCubeLoadStore CubeTCvt SharedTranspose SharedRoleView TCI
   SharedTransposeNonSquare MatrixIntegerDtypes MXScaleVariants HiF4X2MatmulMX SharedMatmul
   TMatmulAccFullOptions TMatmulAccCScale TMatmulAllOptions TGEMVAllOptions TGEMVOperandOrder
   PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas MGatherAtomics MScatterAtomics
@@ -36,8 +36,8 @@ ACTIVE_FIXTURES=(
 )
 
 # Pre-v0.58 wrapper designs remain available to cpu_sim only and are not part
-# of Linx target reachability: MatMacc, MatMul_e4m3, MatMul, test_MatMacc,
-# test_MatMul, TCI, TCmp, TCopy, TReshape, TExpandCol, TExpandRow,
+# MatMacc, MatMul_e4m3, MatMul, test_MatMacc,
+# test_MatMul, TCmp, TCopy, TReshape, TExpandCol, TExpandRow,
 # TExpandScalar, TPad, TRowMaxExpand, and TRowSumExpand.
 
 run_objects() {

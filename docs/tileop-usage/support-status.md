@@ -17,12 +17,11 @@ rollback、definedness 或 memory-order 语义。
 | PTO catalog 范围 | 状态 | 说明 |
 | --- | --- | --- |
 | TEPL elementwise、scalar、reduce/expand、irregular | 已实现 | 逐操作页面和 `jcore/template_asm.hpp` 为 wrapper 权威；dtype、valid region、padding 和 selector 仍受 ASL 约束。 |
-| `TEXPDIF` | 已实现（JCORE/CPU simulator） | PTO 0.58.7 selector 29；AArch64/SME 明确不支持。 |
+| `TEXPDIF` | CPU simulator、JCORE inline-asm 已实现；LLVM MC catalog 已实现；LLVM compiler lowering 尚未完成；AArch64/SME 不支持 | PTO 0.58.7 selector 29。已有 wrapper 不等于 LLVM compiler 已具备从 IR/builtin 到 TEXPDIF 的端到端 lowering。 |
 | TLSU `TLOAD`/`TSTORE`/`TMOV`/`TPREFETCH`/`GMOV` | 已实现 | 传输、peer move 和 prefetch 有独立 C++ 入口；layout conversion 仅对页面列出的组合开放。 |
 | TLSU `MGATHER`/`MSCATTER` 及 atomic/reduction variants | 仅部分 layout 支持 | wrapper 覆盖当前公开 selector；ColumnMajor selector、mask/索引 dtype 和不同 atomic 组合不得由普通 gather/scatter 重载推断。 |
 | CUBE TMATMUL/TGEMV 及 bias/acc/MX variants | 仅部分 layout 支持 | CUBE_M16/CUBE_M32、Shared physical shape、scale layout 和 InternalAcc 由具体 wrapper/操作页限制。 |
 | TEPL layout/rearrangement（`TPERMUTE`、`TSHUF`、`TPACK`、`TUNPACK`、`TGPR2T`） | 仅部分 layout 支持 | 只覆盖已实现的 CUBE/Local 路径和控制字段；未列出的组合保持拒绝。 |
-| `TEXPDIF` | 已实现（JCORE/CPU simulator） | PTO 0.58.7 selector 29；AArch64/SME 明确不支持。 |
 | 0.58.7 `MGATHER`/`MSCATTER` family | 已适配 | 0.58.7 removes the GM row-stride operand and interprets index tiles as explicit byte displacements；wrapper 与 contract test 已改为 base-only `B.IOR`。 |
 | 0.58.7 `TROWEXPAND*`/`TCOLEXPAND*` roles | 已适配 | Source roles 使用 row-broadcast/column-broadcast operation view；wrapper 约束、注释及操作文档已同步。 |
 | `deleted_names`、`rejected_names`，以及 `TTRANS`/`TFILLPAD` 等历史页面 | 仅历史参考 | 不属于 active catalog；页面必须保留明确的 retired 标识。 |
@@ -31,6 +30,11 @@ rollback、definedness 或 memory-order 语义。
 
 - 当前 API/spec 基线：PTO ISA `0.58.7`，publication `0.58.7.0`，ABI
   `pto-isa-0.58.7-mode-function-v1`。
+- backend 能力必须分别判断：CPU simulator/JCORE wrapper、LLVM MC
+  assembler/parser、LLVM compiler lowering 以及 AArch64/SME 并不是同一个状态。
+- `TEXPDIF` 当前已有 CPU simulator 实现、JCORE inline-asm wrapper 和 LLVM
+  MC catalog 条目；LLVM compiler lowering 尚未完成，因此当前不能宣称 LLVM
+  端到端支持。
 - `docs/tileop-usage/migration/pto-0583-migration.md` 是历史迁移材料；其中的
   0.58.3 compiler、ELF identity 和旧 engine projection 不表示当前实现基线。
 - 需要核对精确 fault ordering、completion、rollback、memory ordering 或编码位域时，

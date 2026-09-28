@@ -38,5 +38,8 @@ binding；不会生成 `B.IOR`、`B.IOS` 或额外 binding。RowMajor 同类型�
 ## Backend 状态
 
 CPU simulator 实现普通数值路径并保留 source-before-publication 的 alias 行为。
-JCORE emits the direct selector. AArch64/SME 当前明确诊断为 unsupported；不会
-静默降级为两个独立操作。
+JCORE inline-asm wrapper emits the direct selector，LLVM LinxV5 MC
+catalog/parser 也已登记该 selector。当前尚未实现从 LLVM IR 或 builtin
+到 `TEXPDIF` 的 compiler lowering，因此不能把 MC catalog 支持误称为 LLVM
+编译器端到端支持。AArch64/SME 当前明确诊断为 unsupported；不会静默降级
+为两个独立操作。

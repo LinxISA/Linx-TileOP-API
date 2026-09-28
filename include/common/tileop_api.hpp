@@ -9,6 +9,24 @@ void TCI(tile_shape &dst, T s) {
   TCI_Impl<tile_shape, T, descending>(dst, s);
 }
 
+// Two-dimensional CUBE sequence generation.  The step values are part of the
+// type so that the hardware form can be validated before emitting a bundle.
+// The original TCI entry point above intentionally remains RowMajor-only.
+template <is_tile_data_v tile_shape, typename T, int row_step, int col_step>
+void TCI_2D(tile_shape &dst, T s) {
+  TCI_2D_Impl<tile_shape, T, row_step, col_step>(dst, s);
+}
+
+template <is_tile_data_v tile_shape, typename T>
+void TCI_ROW(tile_shape &dst, T s) {
+  TCI_2D<tile_shape, T, 1, 0>(dst, s);
+}
+
+template <is_tile_data_v tile_shape, typename T>
+void TCI_COL(tile_shape &dst, T s) {
+  TCI_2D<tile_shape, T, 0, 1>(dst, s);
+}
+
 template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 void TEXPDIF(D &dst, A &src0, B &src1) {
   validate_texpdif_operands<D, A, B>();
