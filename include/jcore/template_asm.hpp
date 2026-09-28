@@ -11887,6 +11887,46 @@ void TEXP(tile_shape &dst, tile_shape &src) {
 }
 
 // TLOG: dst = log(src)
+// TEXPDIF: dst = exp(src0 - src1), PTO ISA 0.58.7 selector 0x01D.
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TEXPDIF(D &dst, A &src0, B &src1) {
+  validate_texpdif_operands<D, A, B>();
+  static_assert(D::ValidCol > 0 && D::ValidRow > 0,
+                "TEXPDIF requires statically known positive valid dimensions");
+  asm volatile(
+      "BSTART.TEPL 29, %D[SrcType]\n"
+      ".if %c[Layout] == 29\n"
+      ".if %c[DstType] == %c[SrcType]\n"
+      "B.DATR CUBE_M32, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M32, %D[DstType], Null\n"
+      ".endif\n"
+      ".elseif %c[Layout] == 31\n"
+      ".if %c[DstType] == %c[SrcType]\n"
+      "B.DATR CUBE_M16, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M16, %D[DstType], Null\n"
+      ".endif\n"
+      ".elseif %c[DstType] != %c[SrcType]\n"
+      "B.DATR NORM, %D[DstType], Null\n"
+      ".endif\n"
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM zero, %c[ValidRow], ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      ""
+      : [Dst] "=Tr"(dst.data())
+      : [SrcType] "i"(type_traits<typename A::DType>::TypeCode),
+        [DstType] "i"(type_traits<typename D::DType>::TypeCode),
+        [ValidCol] "i"(A::ValidCol), [ValidRow] "i"(A::ValidRow),
+        [Cols] "i"(A::Cols), [Src0] "Tr"(src0.data()),
+        [Src1] "Tr"(src1.data()),
+        [Size] "i"(tile_type_traits<typename D::TileDType>::TilesizeCode),
+        [Layout] "i"(local_layout_code_v<A>)
+      : "memory");
+}
+
+// TLOG: dst = log(src)
 template <is_tile_data_v tile_shape>
 void TLOG(tile_shape &dst, tile_shape &src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {

@@ -1,4 +1,4 @@
-# LinxISA / PTO ISA v0.58.6 wrapper engine compatibility view
+# LinxISA / PTO ISA v0.58.7 wrapper engine compatibility view
 
 架构定义的引擎类别只有 **VEC**, **TLSU**, **CUBE**, and **SFU**。
 VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。
@@ -55,6 +55,7 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 | `TRECIP` | `BSTART.SFU TRECIP` | 20 | elementwise-tile-tile |
 | `TSQRT` | `BSTART.SFU TSQRT` | 21 | elementwise-tile-tile |
 | `TRSQRT` | `BSTART.SFU TRSQRT` | 22 | elementwise-tile-tile |
+| `TEXPDIF` | `BSTART.SFU TEXPDIF` | 29 | elementwise-tile-tile |
 | `TDIVS` | `BSTART.SFU TDIVS` | 35 | tile-scalar-and-immediate |
 | `TREMS` | `BSTART.SFU TREMS` | 36 | tile-scalar-and-immediate |
 | `TROWSUM` | `BSTART.SFU TROWSUM` | 64 | reduce-and-expand |

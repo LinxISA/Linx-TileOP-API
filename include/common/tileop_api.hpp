@@ -8,6 +8,12 @@ template <is_tile_data_v tile_shape, typename T, int descending = 0>
 void TCI(tile_shape &dst, T s) {
   TCI_Impl<tile_shape, T, descending>(dst, s);
 }
+
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TEXPDIF(D &dst, A &src0, B &src1) {
+  validate_texpdif_operands<D, A, B>();
+  TEXPDIF_Impl(dst, src0, src1);
+}
 #ifdef __cpu_sim__
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
 void TLOAD(tile_shape &dst, gm_shape &src) {
