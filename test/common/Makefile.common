@@ -55,10 +55,14 @@ CC_O += --sysroot=$(LINX_SYSROOT) -nostdinc++ \
         -isystem $(LINX_SYSROOT)/usr/include/c++/v1
 CC_LINK += --sysroot=$(LINX_SYSROOT)
 endif
-# COMM_SRC_FILE += $(ROOT)/test/common/_start.s
-# COMM_SRC_DIR = $(shell dirname $(COMM_SRC_FILE))
-# COMM_OBJ += $(patsubst %.s, %.o, $(subst $(COMM_SRC_DIR), $(OBJ_DIR), $(COMM_SRC_FILE)))
-# CC_LINK += -nostartfiles $(ROOT)/test/common/_start.s
+# Linx fixtures use the repository startup so the resulting ELF has the
+# expected BSTART.STD entry sequence.  Keep the normal C++ runtime link: only
+# the platform CRT startup files are replaced, while libc++, libc++abi,
+# libunwind, libc, and compiler-rt remain selected by clang++.
+COMM_SRC_FILE += $(ROOT)/test/common/_start.s
+COMM_SRC_DIR = $(shell dirname $(COMM_SRC_FILE))
+COMM_OBJ += $(patsubst %.s, %.o, $(subst $(COMM_SRC_DIR), $(OBJ_DIR), $(COMM_SRC_FILE)))
+CC_LINK += -nostartfiles
 endif
 
 ifeq ($(PY_LIB), on)
