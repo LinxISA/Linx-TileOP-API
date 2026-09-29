@@ -48,10 +48,51 @@ for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
               Issue241ReductionPrefixBinary.cpp \
               TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
-              SharedTransposeNonSquare.cpp TCI.cpp; do
+              SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp; do
   "$TC_DIR/clang++" "${FLAGS[@]}" -fsyntax-only \
     "$ROOT/test/tileop_api/src/$source"
 done
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TRowExpandMul.cpp" -o "$OUT/TRowExpandMul.ll"
+python3 - "$OUT/TRowExpandMul.ll" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+functions = re.split(r"(?=^define )", text, flags=re.MULTILINE)
+for name in ("test_row_vector_src1", "test_col_vector_src1"):
+    body = next((part for part in functions
+                 if part.startswith("define ") and name in part
+                 and "BSTART.TEPL" in part), None)
+    if body is None:
+        raise SystemExit(f"missing TROWEXPAND fixture {name}")
+    # LLVM prints each inline-assembly bundle as one string literal, often on
+    # one physical line.  Count TEPL bundles directly; TLOAD is TLSU and must
+    # never be used as a subtraction-based proxy for the operation count.
+    bundles = re.findall(r"BSTART\.TEPL\s+([0-9]+)", body)
+    if len(bundles) != 8:
+        raise SystemExit(f"{name}: expected 8 TEPL operations, got {len(bundles)}")
+    expected = {"test_row_vector_src1": {"68", "69", "70", "71", "72", "73", "74", "75"},
+                "test_col_vector_src1": {"84", "85", "86", "87", "88", "89", "90", "91"}}[name]
+    if set(bundles) != expected:
+        raise SystemExit(f"{name}: unexpected TEPL operation codes {bundles}")
+    operations = [operation for operation in re.split(r"(?=BSTART\.TEPL)", body)
+                  if "BSTART.TEPL" in operation]
+    if len(operations) != 8:
+        raise SystemExit(f"{name}: failed to split all TEPL bundles")
+    for operation in operations:
+        if "BSTART.TEPL" not in operation:
+            continue
+        if "B.DATR" not in operation:
+            raise SystemExit(f"{name}: every TEPL operation needs B.DATR")
+        # Region/SubView inline-asm carries B.SUBVIEW, while the direct jcore
+        # path binds the source tile directly.  Validate ordering when present
+        # without imposing the Region representation on both implementations.
+        if "B.SUBVIEW" in operation and operation.index("B.SUBVIEW") > operation.index("B.DATR"):
+            raise SystemExit(f"{name}: B.DATR must follow B.SUBVIEW")
+PY
 
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/Issue241ReductionPrefixBinary.cpp" \

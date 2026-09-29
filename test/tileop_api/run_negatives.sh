@@ -53,7 +53,10 @@ PASS=0; FAIL=0
 # A negative suite is meaningless when every compile is rejected before the
 # intended static_assert. Prove the matching compiler can consume one positive
 # TileOP translation unit before counting any negative result.
-for source in TStoreShared.cpp PostProcessNegatives.cpp TStoreSharedNegatives.cpp CubeTCvt.cpp TCvtCubeNegatives.cpp GMov.cpp SharedRange.cpp TileArrayCube.cpp RangeSubview.cpp; do
+# SharedRange.cpp intentionally contains the retired TLOAD_ASS/RowMajor
+# Assemble example; it is not a valid positive preflight for the current API.
+# Keep the actual range legality checks below independent of that fixture.
+for source in TStoreShared.cpp PostProcessNegatives.cpp TStoreSharedNegatives.cpp CubeTCvt.cpp TCvtCubeNegatives.cpp GMov.cpp TileArrayCube.cpp RangeSubview.cpp; do
   stem=${source%.cpp}
   if ! "$CXX" "${FLAGS[@]}" "src/$source" -o "$OUT/$stem.o" \
       >"$OUT/$stem.stdout" 2>"$OUT/$stem.stderr"; then
