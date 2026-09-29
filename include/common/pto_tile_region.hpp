@@ -106,6 +106,7 @@ public:
   static constexpr int ValidRow = SubTile::ValidRow;
   static constexpr int ValidCol = SubTile::ValidCol;
   static constexpr BLayout BFractal = SubTile::BFractal;
+  static constexpr int CubeCellCols = SubTile::CubeCellCols;
   static constexpr SLayout SFractal = SubTile::SFractal;
   static constexpr int SFractalSize = SubTile::SFractalSize;
   static constexpr bool isRowMajor = SubTile::isRowMajor;
@@ -181,6 +182,7 @@ public:
   static constexpr int ValidCol = SubTile::ValidCol;
   static constexpr BLayout BFractal = SubTile::BFractal;
   static constexpr SLayout SFractal = SubTile::SFractal;
+  static constexpr int CubeCellCols = SubTile::CubeCellCols;
   static constexpr bool IsCubeLayout = SubTile::IsCubeLayout;
   static constexpr int LogicalTileBytes = SubTile::LogicalTileBytes;
   static constexpr int TilesizeCode = SubTile::TilesizeCode;

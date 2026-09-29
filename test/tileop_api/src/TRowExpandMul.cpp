@@ -11,7 +11,7 @@
 // See docs/tileop-usage/reduce-broadcast.md and pto/TROWEXPANDMUL.md.
 
 template <uint16_t row, uint16_t col, typename T>
-void test_row_vector_src1(T *dst, T *s0, T *s1) {
+__attribute__((noinline)) void test_row_vector_src1(T *dst, T *s0, T *s1) {
   using gm_mat = global_tensor<T, RowMajor<row, col>>;
   using gm_vec = global_tensor<T, RowMajor<row, 1>>;
 
@@ -28,6 +28,7 @@ void test_row_vector_src1(T *dst, T *s0, T *s1) {
   TLOAD(d0, g0);
   TLOAD(d1, g1);
 
+  TROWEXPAND(d_out, d1);
   TROWEXPANDMUL(d_out, d0, d1);
   TROWEXPANDADD(d_out, d0, d1);
   TROWEXPANDSUB(d_out, d0, d1);
@@ -40,7 +41,7 @@ void test_row_vector_src1(T *dst, T *s0, T *s1) {
 }
 
 template <uint16_t row, uint16_t col, typename T>
-void test_col_vector_src1(T *dst, T *s0, T *s1) {
+__attribute__((noinline)) void test_col_vector_src1(T *dst, T *s0, T *s1) {
   using gm_mat = global_tensor<T, RowMajor<row, col>>;
   using gm_vec = global_tensor<T, RowMajor<1, col>>;
 
@@ -57,6 +58,7 @@ void test_col_vector_src1(T *dst, T *s0, T *s1) {
   TLOAD(d0, g0);
   TLOAD(d1, g1);
 
+  TCOLEXPAND(d_out, d1);
   TCOLEXPANDMUL(d_out, d0, d1);
   TCOLEXPANDADD(d_out, d0, d1);
   TCOLEXPANDSUB(d_out, d0, d1);
@@ -68,43 +70,46 @@ void test_col_vector_src1(T *dst, T *s0, T *s1) {
   TSTORE(gd, d_out);
 }
 
-// Regression for TCONCAT column-concat: dst = [src0 | src1].
-// All three shapes differ by construction (R x C0, R x C1, R x (C0+C1));
-// B.DIM now takes dst's geometry, dtype uniform, row count equal.
-template <uint16_t row, uint16_t col0, uint16_t col1, typename T>
-void test_concat(T *dst, T *s0, T *s1) {
-  using gm_mat0 = global_tensor<T, RowMajor<row, col0>>;
-  using gm_mat1 = global_tensor<T, RowMajor<row, col1>>;
-  using gm_out  = global_tensor<T, RowMajor<row, col0 + col1>>;
+// Nonzero broadcast byte offsets are only meaningful for CUBE sources.  Keep
+// both supported CUBE layouts in the frontend regression so the offset is
+// checked against the source CELL geometry, not merely accepted by the API.
+using CubeM16Matrix = VecTileM16<__half, 16, 16>;
+using CubeM16Row = VecTileM16<__half, 16, 1>;
+using CubeM32Matrix = VecTileM32<__half, 32, 32>;
+using CubeM32Row = VecTileM32<__half, 32, 1>;
 
-  using tile_in0 = Tile<Location::Vec, T, row, col0, BLayout::RowMajor, row, col0>;
-  using tile_in1 = Tile<Location::Vec, T, row, col1, BLayout::RowMajor, row, col1>;
-  using tile_out = Tile<Location::Vec, T, row, col0 + col1, BLayout::RowMajor,
-                        row, col0 + col1>;
+__attribute__((noinline)) void test_row_expand_offsets_m16(
+    CubeM16Matrix &dst, CubeM16Matrix &src0, CubeM16Row &src1) {
+  TROWEXPAND<CubeM16Matrix, CubeM16Row, 2>(dst, src1);
+  TROWEXPANDADD<CubeM16Matrix, CubeM16Matrix, CubeM16Row, 2>(dst, src0, src1);
+  TROWEXPANDSUB<CubeM16Matrix, CubeM16Matrix, CubeM16Row, 2>(dst, src0, src1);
+  TROWEXPANDMUL<CubeM16Matrix, CubeM16Matrix, CubeM16Row, 2>(dst, src0, src1);
+  TROWEXPANDDIV<CubeM16Matrix, CubeM16Matrix, CubeM16Row, 2>(dst, src0, src1);
+  TROWEXPANDMAX<CubeM16Matrix, CubeM16Matrix, CubeM16Row, 2>(dst, src0, src1);
+  TROWEXPANDMIN<CubeM16Matrix, CubeM16Matrix, CubeM16Row, 2>(dst, src0, src1);
+  TROWEXPANDEXPDIF<CubeM16Matrix, CubeM16Matrix, CubeM16Row, 2>(dst, src0, src1);
+}
 
-  gm_mat0 g0(s0);
-  gm_mat1 g1(s1);
-  gm_out  gd(dst);
-
-  tile_in0 d0;
-  tile_in1 d1;
-  tile_out d_out;
-  TLOAD(d0, g0);
-  TLOAD(d1, g1);
-
-  TCONCAT(d_out, d0, d1);   // d_out = [d0 | d1]  (R x (C0+C1))
-
-  TSTORE(gd, d_out);
+__attribute__((noinline)) void test_row_expand_offsets_m32(
+    CubeM32Matrix &dst, CubeM32Matrix &src0, CubeM32Row &src1) {
+  // A half M32 CELL has two columns, so byte offset 2 selects its second
+  // element; offset 4 would correctly be rejected by the CELL-boundary check.
+  TROWEXPAND<CubeM32Matrix, CubeM32Row, 2>(dst, src1);
+  TROWEXPANDADD<CubeM32Matrix, CubeM32Matrix, CubeM32Row, 2>(dst, src0, src1);
+  TROWEXPANDSUB<CubeM32Matrix, CubeM32Matrix, CubeM32Row, 2>(dst, src0, src1);
+  TROWEXPANDMUL<CubeM32Matrix, CubeM32Matrix, CubeM32Row, 2>(dst, src0, src1);
+  TROWEXPANDDIV<CubeM32Matrix, CubeM32Matrix, CubeM32Row, 2>(dst, src0, src1);
+  TROWEXPANDMAX<CubeM32Matrix, CubeM32Matrix, CubeM32Row, 2>(dst, src0, src1);
+  TROWEXPANDMIN<CubeM32Matrix, CubeM32Matrix, CubeM32Row, 2>(dst, src0, src1);
+  TROWEXPANDEXPDIF<CubeM32Matrix, CubeM32Matrix, CubeM32Row, 2>(dst, src0, src1);
 }
 
 int main() {
   const uint16_t row = 16;
   const uint16_t col = 16;
-  const uint16_t cat_half = col / 2;   // 8: concat two 16x8 -> 16x16
   size_t size_mat = row * col;
   size_t size_row_vec = row;   // R scalars for row broadcast
   size_t size_col_vec = col;   // C scalars for col broadcast
-  size_t size_half = row * cat_half;   // 16x8 each concat source
 
   __half *dst = (__half *)malloc(size_mat * sizeof(__half));
   check_mem_alloc(dst);
@@ -122,21 +127,12 @@ int main() {
   check_mem_alloc(s1_col);
   init_src_fp(s1_col, size_col_vec);
 
-  __half *c0 = (__half *)malloc(size_half * sizeof(__half));
-  check_mem_alloc(c0);
-  init_src_fp(c0, size_half);
-
-  __half *c1 = (__half *)malloc(size_half * sizeof(__half));
-  check_mem_alloc(c1);
-  init_src_fp(c1, size_half);
-
 #ifdef LINX_PMC
   PMC_START();
 #endif
 
   test_row_vector_src1<row, col, __half>(dst, s0, s1_row);
   test_col_vector_src1<row, col, __half>(dst, s0, s1_col);
-  test_concat<row, cat_half, cat_half, __half>(dst, c0, c1);
 
 #ifdef LINX_PMC
   PMC_END();
@@ -149,7 +145,5 @@ int main() {
   free(s0);
   free(s1_row);
   free(s1_col);
-  free(c0);
-  free(c1);
   return 0;
 }

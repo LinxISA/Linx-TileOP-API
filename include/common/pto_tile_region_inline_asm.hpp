@@ -1168,10 +1168,24 @@ PTO_REGION_BINARY_SOURCE_WRAPPER(TMAX, 11)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TMIN, 12)
 
 template <int Opcode, typename Out, typename Parent0, typename SubTile0,
-          typename Parent1, typename SubTile1>
+          typename Parent1, typename SubTile1, int BroadcastByteOffset = 0>
 PTO_REGION_ALWAYS_INLINE void pto_region_expand(
     Out &dst, region::SubTileView<Parent0, SubTile0> &src0,
     region::SubTileView<Parent1, SubTile1> &src1) {
+  static_assert(BroadcastByteOffset >= 0 && BroadcastByteOffset <= 7,
+                "TROWEXPAND broadcast byte offset must fit B.DATR.RMode");
+  static_assert(BroadcastByteOffset == 0 || Out::IsCubeLayout,
+                "TROWEXPAND broadcast offset is not valid for RowMajor");
+  static_assert(BroadcastByteOffset == 0 ||
+                    ((type_traits<typename SubTile1::DType>::bits % 8) == 0 &&
+                     BroadcastByteOffset %
+                         (type_traits<typename SubTile1::DType>::bits / 8) == 0),
+                "TROWEXPAND broadcast byte offset must align to element bytes");
+  static_assert(BroadcastByteOffset == 0 ||
+                    BroadcastByteOffset /
+                            (type_traits<typename SubTile1::DType>::bits / 8) <
+                        SubTile1::CubeCellCols,
+                "TROWEXPAND broadcast byte offset exceeds CELL columns");
   static_assert(SubTile0::SFractal == SLayout::NoneBox &&
                     SubTile1::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
@@ -1197,20 +1211,48 @@ PTO_REGION_ALWAYS_INLINE void pto_region_expand(
       "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
       "B.SUBVIEW 0, %8, 0, %c11\n"
       "B.SUBVIEW 1, %9, 0, %c11\n"
+      ".if %c12 == 29\n"
+      ".if %c13 == 0\n"
+      "B.DATR CUBE_M32, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c13\n"
+      ".endif\n"
+      ".elseif %c12 == 31\n"
+      ".if %c13 == 0\n"
+      "B.DATR CUBE_M16, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c13\n"
+      ".endif\n"
+      ".endif\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile0::DType>::TypeCode),
         "Tr"(src0.data()), "Tr"(src1.data()), "i"(Out::ValidCol),
         "i"(Out::ValidRow), "i"(Out::Cols),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         "r"(range_base0_units), "r"(range_base1_units), "i"(Opcode),
-        "i"(tile_type_traits<typename SubTile0::TileDType>::TilesizeCode)
+        "i"(tile_type_traits<typename SubTile0::TileDType>::TilesizeCode),
+        "i"(local_layout_code_v<Out>), "i"(BroadcastByteOffset)
       : "memory");
 }
 
 template <int Opcode, typename Out, typename Parent, typename SubTile,
-          typename Tile>
+          typename Tile, int BroadcastByteOffset = 0>
 PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
     Out &dst, region::SubTileView<Parent, SubTile> &src0, Tile &src1) {
+  static_assert(BroadcastByteOffset >= 0 && BroadcastByteOffset <= 7,
+                "TROWEXPAND broadcast byte offset must fit B.DATR.RMode");
+  static_assert(BroadcastByteOffset == 0 || Out::IsCubeLayout,
+                "TROWEXPAND broadcast offset is not valid for RowMajor");
+  static_assert(BroadcastByteOffset == 0 ||
+                    ((type_traits<typename SubTile::DType>::bits % 8) == 0 &&
+                     BroadcastByteOffset %
+                         (type_traits<typename SubTile::DType>::bits / 8) == 0),
+                "TROWEXPAND broadcast byte offset must align to element bytes");
+  static_assert(BroadcastByteOffset == 0 ||
+                    BroadcastByteOffset /
+                            (type_traits<typename SubTile::DType>::bits / 8) <
+                        SubTile::CubeCellCols,
+                "TROWEXPAND broadcast byte offset exceeds CELL columns");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
   static_assert(std::is_same_v<typename SubTile::DType, typename Tile::DType>,
@@ -1231,6 +1273,19 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
       "B.DIM zero, %c5, ->lb2\n"
       "B.IOT %2, %6, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 0, %7, 0, %c8\n"
+      ".if %c11 == 29\n"
+      ".if %c12 == 0\n"
+      "B.DATR CUBE_M32, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c12\n"
+      ".endif\n"
+      ".elseif %c11 == 31\n"
+      ".if %c12 == 0\n"
+      "B.DATR CUBE_M16, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c12\n"
+      ".endif\n"
+      ".endif\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
         "Tr"(src0.data()), "i"(Out::ValidCol), "i"(Out::ValidRow),
@@ -1238,14 +1293,28 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
         "r"(range_base0_units),
         "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "i"(Opcode)
+        "i"(Opcode), "i"(local_layout_code_v<Out>), "i"(BroadcastByteOffset)
       : "memory");
 }
 
 template <int Opcode, typename Out, typename Tile, typename Parent,
-          typename SubTile>
+          typename SubTile, int BroadcastByteOffset = 0>
 PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
     Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {
+  static_assert(BroadcastByteOffset >= 0 && BroadcastByteOffset <= 7,
+                "TROWEXPAND broadcast byte offset must fit B.DATR.RMode");
+  static_assert(BroadcastByteOffset == 0 || Out::IsCubeLayout,
+                "TROWEXPAND broadcast offset is not valid for RowMajor");
+  static_assert(BroadcastByteOffset == 0 ||
+                    ((type_traits<typename SubTile::DType>::bits % 8) == 0 &&
+                     BroadcastByteOffset %
+                         (type_traits<typename SubTile::DType>::bits / 8) == 0),
+                "TROWEXPAND broadcast byte offset must align to element bytes");
+  static_assert(BroadcastByteOffset == 0 ||
+                    BroadcastByteOffset /
+                            (type_traits<typename SubTile::DType>::bits / 8) <
+                        SubTile::CubeCellCols,
+                "TROWEXPAND broadcast byte offset exceeds CELL columns");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
   static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
@@ -1266,13 +1335,26 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
       "B.DIM zero, %c5, ->lb2\n"
       "B.IOT %6, %2, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 1, %7, 0, %c8\n"
+      ".if %c11 == 29\n"
+      ".if %c12 == 0\n"
+      "B.DATR CUBE_M32, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c12\n"
+      ".endif\n"
+      ".elseif %c11 == 31\n"
+      ".if %c12 == 0\n"
+      "B.DATR CUBE_M16, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c12\n"
+      ".endif\n"
+      ".endif\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),
         "i"(Out::ValidCol), "i"(Out::ValidRow), "i"(Out::Cols),
         "Tr"(src0.data()), "r"(range_base1_units),
         "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "i"(Opcode)
+        "i"(Opcode), "i"(local_layout_code_v<Out>), "i"(BroadcastByteOffset)
       : "memory");
 }
 
@@ -1347,25 +1429,28 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
 
 #define PTO_REGION_EXPAND_SOURCE_WRAPPER(Name, Opcode)                       \
   template <is_tile_data_v Out, typename Parent0, typename SubTile0,          \
-            typename Parent1, typename SubTile1>                              \
+            typename Parent1, typename SubTile1, int BroadcastByteOffset = 0> \
   PTO_REGION_ALWAYS_INLINE void Name(                                       \
       Out &dst, region::SubTileView<Parent0, SubTile0> &src0,                \
       region::SubTileView<Parent1, SubTile1> &src1) {                         \
-    pto_region_expand<Opcode>(dst, src0, src1);                              \
+    pto_region_expand<Opcode, Out, Parent0, SubTile0, Parent1, SubTile1,       \
+                      BroadcastByteOffset>(dst, src0, src1);                 \
   }
 
 #define PTO_REGION_ROW_EXPAND_MIXED_WRAPPER(Name, Opcode)                    \
   template <is_tile_data_v Out, typename Parent, typename SubTile,            \
-            typename Tile>                                                    \
+            typename Tile, int BroadcastByteOffset = 0>                       \
   PTO_REGION_ALWAYS_INLINE void Name(                                       \
       Out &dst, region::SubTileView<Parent, SubTile> &src0, Tile &src1) {     \
-    pto_region_row_expand<Opcode>(dst, src0, src1);                          \
+    pto_region_row_expand<Opcode, Out, Parent, SubTile, Tile,                 \
+                          BroadcastByteOffset>(dst, src0, src1);              \
   }                                                                          \
   template <is_tile_data_v Out, typename Tile, typename Parent,               \
-            typename SubTile>                                                 \
+            typename SubTile, int BroadcastByteOffset = 0>                    \
   PTO_REGION_ALWAYS_INLINE void Name(                                       \
       Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {     \
-    pto_region_row_expand<Opcode>(dst, src0, src1);                          \
+    pto_region_row_expand<Opcode, Out, Tile, Parent, SubTile,                 \
+                          BroadcastByteOffset>(dst, src0, src1);              \
   }
 
 #define PTO_REGION_COL_EXPAND_MIXED_WRAPPER(Name, Opcode)                    \
