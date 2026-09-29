@@ -3,6 +3,9 @@
 
 #include "common/tileop_api_impl.hpp"
 
+// The Linx backend exports TCI and its CUBE 2D variants directly from
+// jcore/template_asm.hpp.  Keep the portable forwarding wrappers out of that
+// configuration to avoid duplicate definitions.
 #ifndef __linx
 template <is_tile_data_v tile_shape, typename T, int descending = 0>
 void TCI(tile_shape &dst, T s) {

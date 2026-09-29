@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # Compile every active Linx fixture without assuming that each translation
-# unit is an executable.
+# unit is an executable.  The optional link-smoke mode links the hosted TCI
+# fixture with the repository startup and the complete clang++ runtime.
 
 MODE=${1:-all}
 PLAT=${PLAT:-linx}
@@ -61,8 +62,21 @@ run_objects() {
   test "$failed" -eq 0
 }
 
+run_link_smoke() {
+  "$MAKE_CMD" --no-print-directory --silent clean
+  "$MAKE_CMD" --no-print-directory TESTCASE=TCI all
+  local elf="$(cd "$(dirname "$0")/../.." && pwd)/output/tileop_api/elf/tileop_api_TCI_${PLAT}.elf"
+  test -s "$elf"
+  "$COMPILER_DIR/llvm-readobj" --file-headers --symbols "$elf" >"${elf}.readobj"
+  grep -Eq 'Entry|Name: _start' "${elf}.readobj"
+  "$COMPILER_DIR/llvm-objdump" -dr "$elf" >"${elf}.diss"
+  grep -q 'BSTART.STD' "${elf}.diss"
+  echo "PASS link-smoke: $elf"
+}
+
 case "$MODE" in
   objects) run_objects ;;
+  link-smoke) run_link_smoke ;;
   all) run_objects ;;
-  *) echo "usage: $0 [objects|all]" >&2; exit 2 ;;
+  *) echo "usage: $0 [objects|link-smoke|all]" >&2; exit 2 ;;
 esac
