@@ -17,10 +17,11 @@ pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
                 "inline Tile region path requires unboxed fragments");
   const uintptr_t region_base_units = src.GetRangeBase();
   {
-    static_assert(SubTile::IsCubeLayout,
-                  "B.SUBVIEW source fragment must use a CUBE layout");
+    static_assert(SubTile::IsCubeLayout || Opcode == 64,
+                  "B.SUBVIEW source layout is not legal for this region op");
     asm volatile(
         "BSTART.TEPL %c8, %D1\n"
+        PTO_REGION_ELEMENTWISE_LAYOUT_ASM
         "B.DIM zero, %c3, ->lb0\n"
         "B.DIM zero, %c4, ->lb1\n"
         "B.DIM zero, %c5, ->lb2\n"
@@ -30,10 +31,11 @@ pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
         : "i"(type_traits<typename SubTile::DType>::TypeCode),
           "Tr"(src.data()), "i"(std::remove_reference_t<decltype(src)>::ValidCol),
           "i"(std::remove_reference_t<decltype(src)>::ValidRow),
-          "i"(SubTile::Cols),
+          "i"(SubTile::PhysicalCol),
           "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
           "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-          "i"(Opcode), "r"(region_base_units)
+          "i"(Opcode), "r"(region_base_units),
+          [ElemLayout] "i"(local_layout_code_v<SubTile>)
         : "memory");
   }
 }
@@ -83,6 +85,14 @@ PTO_REGION_ALWAYS_INLINE void TROWMAX(
 template <is_tile_data_v Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void TROWSUM(
     Out &dst, region::SubTileView<Parent, SubTile> &src) {
+  // TROWSUM derives all three B.DIM operands from the final source view.  In
+  // particular, ValidRow is not a lower bound for LB1 and the parent capacity
+  // (or an individual assembly writer extent) is never a source dimension.
+  static_assert(SubTile::ValidRow > 0 && SubTile::ValidRow <= SubTile::Rows &&
+                    SubTile::ValidCol > 0 && SubTile::ValidCol <= SubTile::Cols,
+                "TROWSUM source valid shape must fit the source view");
+  static_assert(Out::ValidRow == SubTile::ValidRow && Out::ValidCol == 1,
+                "TROWSUM destination must be one column with source row count");
   pto_region_unary<64>(dst, src);
 }
 
