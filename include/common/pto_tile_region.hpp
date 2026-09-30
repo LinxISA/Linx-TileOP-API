@@ -101,6 +101,10 @@ public:
   static constexpr Location Loc = Parent::Loc;
   static constexpr int Rows = SubTile::Rows;
   static constexpr int Cols = SubTile::Cols;
+  // B.DIM's third operand is the physical source column extent.  Keep this
+  // explicitly on the view rather than deriving it from Parent: a view is a
+  // bounded source carrier and its geometry is the SubTile geometry.
+  static constexpr int PhysicalCol = SubTile::Cols;
   static constexpr int RowStride = SubTile::RowStride;
   static constexpr int ColStride = SubTile::ColStride;
   static constexpr int ValidRow = SubTile::ValidRow;
