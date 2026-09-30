@@ -126,6 +126,15 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("LogicalTileBytes", tile_header)
         self.assertIn("TilesizeCode", tile_header)
 
+    def test_packed_shared_capacity_uses_isa_element_bits(self) -> None:
+        tile_header = PTO_TILE.read_text(encoding="utf-8")
+        self.assertIn("tile_element_bits_v", tile_header)
+        self.assertIn("Rows * Cols * tile_element_bits_v<DType>", tile_header)
+        contract = (ROOT / "test" / "pto0583_contract.cpp").read_text(
+            encoding="utf-8")
+        self.assertIn("SharedE2M1X2::LogicalTileBytes == 8192", contract)
+        self.assertIn("SharedFP8::LogicalTileBytes == 16384", contract)
+
     # --- block carriers: TEPL / TLSU / CUBE (current LLVM spelling) ---
 
     def test_jcore_uses_current_block_carriers(self) -> None:

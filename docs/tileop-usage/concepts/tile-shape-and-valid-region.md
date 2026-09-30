@@ -3,6 +3,12 @@
 物理 Tile shape、valid region 和 SizeCode 是不同概念。valid rows/columns 不得超过物理
 rows/columns，SizeCode 表示容量而不是重新定义逻辑矩阵维度。
 
+对于 packed `*X2` 数据类型，C++ carrier 通常仍占 8 bit，但 PTO ISA 的逻辑元素宽度
+是 4 bit。TileOP 的容量和 SizeCode 按 ISA 逻辑位宽计算，而不是按 C++ carrier
+大小计算。例如 `SharedMatrixLeft<__fp4_e2m1x2, 128, 128>` 使用 8 KiB（`S0<8KB>`），
+而同形状的 FP8 Shared Tile 使用 16 KiB。这样生成的物理行数才能与 ISA 的
+`DerivedTileRows` 一致。
+
 ## Vector 的 CUBE layout
 
 Vector location 的 Tile 可以使用 CUBE cell layout。`VecTileM16<T, R, C>` 和
