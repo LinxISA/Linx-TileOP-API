@@ -286,9 +286,21 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             # TROWSUM additionally carries a session-opening INIT branch
             # (issue #145), so its plain form has five asm blocks.
             expected_blocks = 5 if op == "TROWSUM" else 4
-            self.assertEqual(body.count("PTO_ELEMENTWISE_LAYOUT_ASM"),
-                             expected_blocks, op)
+            layout_macro = ("PTO_ROW_EXPAND_LAYOUT_ASM"
+                            if op.startswith("TROWEXPAND")
+                            else "PTO_ELEMENTWISE_LAYOUT_ASM")
+            self.assertEqual(body.count(layout_macro), expected_blocks, op)
             self.assertIn('[ElemLayout] "i"(local_layout_code_v<', body, op)
+        # The row-expansion helper now also carries BroadcastByteOffset.
+        # Keep the original exact M32/M16 selector coverage after that split.
+        row_layout = re.search(
+            r"#define PTO_ROW_EXPAND_LAYOUT_ASM(.*?)#define PTO_ROW_EXPAND_OFFSET_CHECK",
+            self.header, re.S).group(1)
+        self.assertIn("[ElemLayout] == 29", row_layout)
+        self.assertIn("[ElemLayout] == 31", row_layout)
+        self.assertIn("B.DATR CUBE_M32, Null", row_layout)
+        self.assertIn("B.DATR CUBE_M16, Null", row_layout)
+        self.assertIn("%c[BroadcastByteOffset]", row_layout)
         # Reductions read the source geometry through B.DIM and normally
         # require the destination layout to match, so the selector comes from
         # the source. TROWSUM deliberately has no physical destination-layout
