@@ -20,6 +20,7 @@ check:
 	python3 test/test_v058_engine_contract.py
 	python3 test/test_pto0585_layout_interfaces.py
 	python3 test/test_version_header.py
+	python3 test/test_element_tile_api.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
 		-fsyntax-only -Iinclude test/ptoas_linx_type_compat.cpp
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
@@ -46,6 +47,7 @@ install:
 		echo ''; \
 		echo '#define PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX 1'; \
 		echo '#define PTO_TILEOP_API_HAS_TEXPDIF 1'; \
+		echo '#define PTO_TILEOP_API_HAS_ELEMENT_TILE 1'; \
 		echo ''; \
 		echo '#endif'; \
 	} > $(INSTALL_DIR)/common/pto_tileop_api_revision.hpp

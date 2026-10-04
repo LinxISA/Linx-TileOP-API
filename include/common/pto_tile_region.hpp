@@ -3,6 +3,7 @@
 
 #include "common/pto_tile.hpp"
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -217,10 +218,63 @@ public:
   static constexpr int rank = 2;
   static constexpr int rows = Rows;
   static constexpr int cols = Cols;
+  static constexpr bool is_element_partition =
+      is_element_tile_v<Parent> && is_element_tile_v<SubTile> &&
+      Parent::Numel == 128 && SubTile::Numel == 32 && Rows == 1 && Cols == 4;
 
   explicit BorrowedTileArray(Parent &parent) : parent_(&parent) {}
 
+  BorrowedTileArray(Parent &parent, std::size_t valid_elements)
+    requires(is_element_partition)
+      : parent_(&parent), valid_elements_(valid_elements) {
+    if (valid_elements > static_cast<std::size_t>(Parent::Numel))
+      __builtin_trap();
+  }
+
   Parent &parent() const { return *parent_; }
+
+  std::size_t size() const
+    requires(is_element_partition)
+  {
+    return static_cast<std::size_t>(Rows * Cols);
+  }
+
+  SubTileView<Parent, SubTile> part(std::size_t flat_index) const
+    requires(is_element_partition)
+  {
+    if (flat_index >= size())
+      __builtin_trap();
+    return SubTileView<Parent, SubTile>(
+        *parent_, static_cast<int>(flat_index / Cols),
+        static_cast<int>(flat_index % Cols), Cols);
+  }
+
+  std::size_t valid_size(std::size_t part_index) const
+    requires(is_element_partition)
+  {
+    if (part_index >= size())
+      __builtin_trap();
+    if (part_index >= valid_elements_)
+      return 0;
+    const std::size_t remaining = valid_elements_ - part_index;
+    const std::size_t part_elements =
+        (remaining + static_cast<std::size_t>(Cols) - 1) /
+        static_cast<std::size_t>(Cols);
+    return part_elements < static_cast<std::size_t>(SubTile::Numel)
+               ? part_elements
+               : static_cast<std::size_t>(SubTile::Numel);
+  }
+
+  template <typename T>
+    requires(is_element_partition &&
+             std::is_same_v<T, typename Parent::DType>)
+  auto logical_region(T *block_base, std::size_t part_index) const
+      -> global_tensor<T, RowMajor<Parent::Rows, Parent::Cols>> {
+    if (part_index >= size())
+      __builtin_trap();
+    return global_tensor<T, RowMajor<Parent::Rows, Parent::Cols>>(
+        block_base + part_index);
+  }
 
   class Row {
   public:
@@ -243,6 +297,7 @@ public:
 
 private:
   Parent *parent_;
+  std::size_t valid_elements_ = static_cast<std::size_t>(Parent::Numel);
 };
 
 
@@ -454,6 +509,25 @@ template <typename SubTile, int Rows, int Cols, typename Parent>
 auto TPARTVIEW(Parent &parent)
     -> region::BorrowedTileArray<Parent, SubTile, Rows, Cols> {
   return region::BorrowedTileArray<Parent, SubTile, Rows, Cols>(parent);
+}
+
+template <int Elements, typename Parent>
+  requires(is_element_tile_v<Parent>)
+auto TPARTVIEW(Parent &parent, std::size_t valid_elements) {
+  static_assert(Elements == 32,
+                "element TPARTVIEW currently supports 32-element parts");
+  static_assert(Parent::Numel == 128,
+                "element TPARTVIEW requires an ElementTile<U32, 128> parent");
+  using SubTile = ElementTile<typename Parent::DType, 32>;
+  return region::BorrowedTileArray<Parent, SubTile, 1, 4>(parent,
+                                                          valid_elements);
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 32)
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
 }
 
 

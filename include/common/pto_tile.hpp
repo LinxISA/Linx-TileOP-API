@@ -4,6 +4,7 @@
 #include "common/layout.hpp"
 #include <common/type.hpp>
 #include <cstdint>
+#include <type_traits>
 
 namespace pto {
 
@@ -1226,6 +1227,29 @@ template <typename Element_, const int Rows_, const int Cols_,
 using VecTileM32 =
   Tile<Location::Vec, Element_, Rows_, Cols_, BLayout::CubeM32,
        RowValid_, ColValid_>;
+
+// Logical element tiles keep the current CUBE_M32 carrier private to the API.
+// The initial profile intentionally covers only one 32-element part and its
+// four-part 128-element parent, both with U32 elements.
+namespace detail {
+template <typename Element_, int Elements_>
+struct element_tile_profile {
+  static_assert(type_traits<Element_>::TypeCode == __type_uint32,
+                "ElementTile currently supports only U32 elements");
+  static_assert(Elements_ == 32 || Elements_ == 128,
+                "ElementTile currently supports 32 or 128 elements");
+  using type = VecTileM32<Element_, 32, Elements_ / 32>;
+};
+} // namespace detail
+
+template <typename Element_, int Elements_>
+using ElementTile =
+    typename detail::element_tile_profile<Element_, Elements_>::type;
+
+template <typename T>
+inline constexpr bool is_element_tile_v =
+    std::is_same_v<std::remove_cvref_t<T>, ElementTile<uint32_t, 32>> ||
+    std::is_same_v<std::remove_cvref_t<T>, ElementTile<uint32_t, 128>>;
 
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>

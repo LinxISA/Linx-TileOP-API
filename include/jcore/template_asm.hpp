@@ -1,6 +1,8 @@
 #ifndef TEMPLATE_ASM_HPP
 #define TEMPLATE_ASM_HPP
 
+#include <cassert>
+
 #include "common/pto_tile.hpp"
 #include "common/pto_tile_region.hpp"
 
@@ -3810,6 +3812,37 @@ template <is_global_data_v gm_shape, is_tile_data_v cube_shape>
            !is_assemble_v<cube_shape>)
 void TSTORE(gm_shape &dst, const cube_shape &src) {
   TSTORE_CUBE(dst, src);
+}
+
+// Logical element transport conveniences. They delegate to the existing
+// layout-dispatched TLOAD/TSTORE; no instruction or scalar math implementation
+// is duplicated here. Pointer ranges are expressed in logical elements.
+template <is_tile_data_v TileType>
+  requires(pto::is_element_tile_v<TileType> && TileType::Rows * TileType::Cols == 128)
+void TLOAD(TileType &dst, const uint32_t *input, std::size_t valid_elements) {
+  if (valid_elements > 128)
+    __builtin_trap();
+  alignas(128) uint32_t tail[128];
+  const uint32_t *source = input;
+  if (valid_elements != 128) {
+    for (std::size_t element = 0; element < 128; ++element)
+      tail[element] = element < valid_elements ? input[element] : 0u;
+    source = tail;
+  }
+  pto::global_tensor<uint32_t, pto::RowMajor<32, 4>> memory(source);
+  TLOAD(dst, memory);
+}
+
+template <is_tile_data_v TileType, typename Parent, typename SubTile,
+          int Rows, int Cols>
+  requires(pto::is_element_tile_v<TileType> && TileType::Rows * TileType::Cols == 32 &&
+           pto::is_element_tile_v<Parent> && Parent::Rows * Parent::Cols == 128 &&
+           Rows == 1 && Cols == 4)
+void TSTORE(uint32_t *block_base, const TileType &src,
+            const pto::region::BorrowedTileArray<Parent, SubTile, Rows, Cols> &parts,
+            std::size_t part) {
+  auto memory = parts.logical_region(block_base, part);
+  TSTORE(memory, src);
 }
 
 // TSTORE: Shared Tile -> GM (PTO ISA 0.58.3 TLSU Function 1 Shared form).

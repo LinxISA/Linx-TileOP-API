@@ -46,6 +46,32 @@ static_assert(PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX,
               "requires the local Right B [K,N] contract fix");
 ```
 
+## 逻辑元素 Tile 接口
+
+`ElementTile<T, Elements>` 是正式 API 的逻辑元素入口。应用指定元素类型与容量，
+当前 jcore profile 在 API 内选择已有的 Local VEC 存储，kernel 无需写物理 layout。
+首版仅接受 U32 与 32/128 个元素；不表示任意 dtype、容量或 backend 都已实现。
+
+- `TPARTVIEW<32>(parent, valid_elements)` 复用 `BorrowedTileArray`，提供 `size()`、
+  `part(index)` 和 `valid_size(index)`；view 借用 parent，不能超过 parent 的生命周期。
+- `TPARTELEMENT(part_tile)` 仅接受 32-element profile，并返回同一 carrier 的元素引用。
+  128-element parent、其他 CUBE shape 和 b64 不得用它直接索引。
+- `TLOAD(parent, input, valid_elements)` 复用现有统一 transport；最后一个不完整 block
+  先复制有效输入到暂存区域，因此输入不需要额外 padding。有效数必须在 0..128。
+- `TSTORE(output_block, tile, parts, part_index)` 复用已有 `TSTORE`，由 API 根据 view
+  投影写回原逻辑位置，保证 `output[element]` 对应 `input[element]`。
+
+这些接口定义在既有 `pto_tile.hpp`、`pto_tile_region.hpp` 和 `jcore/template_asm.hpp`
+中。它们没有新 ISA 编码，不复制 TADDS/TSHRS/TANDS，也不引入另一套 Tile 实现。
+消费方使用 `PTO_TILEOP_API_HAS_ELEMENT_TILE` 检查已安装版本。
+
+完整、实际编译并运行的 Tile/element-wise kernel 及逐例 gfrun/gfsim 检查见
+[SuperNPUBench PR #202](https://github.com/PTO-ISA/SuperNPUBench/pull/202)。
+`#pragma linx elementwise` 的条件/atomic lowering 需要匹配的 Linx compiler，当前
+可执行模型的 atomic profile 是 U32 32-element MGATHER.ADD；这不是任意 C++ 循环的
+自动并行承诺。API metadata/拒绝边界由 `test/test_element_tile_api.py` 检查，执行语义
+由 benchmark 的独立 golden 和两模型结果检查。
+
 ## 快速开始
 
 下面的例子展示普通 Local VEC Tile 的最小数据流：从 Global Memory 载入，执行
