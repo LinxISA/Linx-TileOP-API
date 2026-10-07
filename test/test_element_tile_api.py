@@ -2,6 +2,7 @@
 """Executable public ElementTile/partition contracts, using the existing shim."""
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -139,6 +140,24 @@ void transport(const uint32_t* input, uint32_t* output, unsigned valid) {
                 '-I',str(ROOT/'include'),'-c',str(source),
                 '-o',str(Path(directory)/'native.o')],text=True,capture_output=True)
             self.assertEqual(result.returncode,0,result.stderr)
+            # O0 must still inline the logical accessor and its native storage
+            # getter, so required region analysis can see the actual carrier.
+            ir = Path(directory) / 'native.o0.ll'
+            unoptimized = subprocess.run([
+                compiler, '-std=c++20', '-O0',
+                '--target=linx64v5-unknown-linux-musl', '-D__linx', '-mlxbc',
+                '-fenable-matrix', '-mllvm', '-enable-all-vector-as-tilereg=true',
+                '-resource-dir='+resource, '--sysroot='+sysroot,
+                '-I', str(ROOT/'include'), '-S', '-emit-llvm', str(source),
+                '-o', str(ir),
+            ], text=True, capture_output=True)
+            self.assertEqual(unoptimized.returncode, 0, unoptimized.stderr)
+            ir_text = ir.read_text()
+            accessor_call = re.search(
+                r'^.*\bcall\b[^\n]*@(?:[^\s(]*TPARTELEMENT|'
+                r'_ZNK?3pto4Tile[^\s(]*4data)[^\n]*$', ir_text, re.M)
+            self.assertIsNone(accessor_call,
+                              accessor_call.group(0) if accessor_call else '')
 
     def test_release_rejects_bad_ranges(self):
         for operation in (

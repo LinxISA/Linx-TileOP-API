@@ -527,7 +527,7 @@ template <typename TileType>
   requires(is_element_tile_v<TileType> &&
            std::remove_cvref_t<TileType>::Numel == 32)
 #if defined(__clang__) && defined(__linx)
-__attribute__((annotate("pto.element.view:v1;dtype=u32;rows=32;cols=1;layout=cube_m32")))
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u32;rows=32;cols=1;layout=cube_m32")))
 #endif
 decltype(auto) TPARTELEMENT(TileType &tile) {
   return tile.data();

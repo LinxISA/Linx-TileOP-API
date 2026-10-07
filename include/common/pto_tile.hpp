@@ -1152,8 +1152,12 @@ public:
 #endif
 
 #ifdef __linx
-  TileRegisterType &data() { return data_.Register; }
-  const TileRegisterType &data() const { return data_.Register; }
+  __attribute__((always_inline)) TileRegisterType &data() {
+    return data_.Register;
+  }
+  __attribute__((always_inline)) const TileRegisterType &data() const {
+    return data_.Register;
+  }
 #else
   TileDType &data() { return data_; }
   const TileDType &data() const { return data_; }
