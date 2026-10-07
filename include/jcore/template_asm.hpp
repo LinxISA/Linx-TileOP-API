@@ -3819,17 +3819,19 @@ void TSTORE(gm_shape &dst, const cube_shape &src) {
 // is duplicated here. Pointer ranges are expressed in logical elements.
 template <is_tile_data_v TileType>
   requires(pto::is_element_tile_v<TileType> && TileType::Rows * TileType::Cols == 128)
-void TLOAD(TileType &dst, const uint32_t *input, std::size_t valid_elements) {
+void TLOAD(TileType &dst, const typename TileType::DType *input,
+           std::size_t valid_elements) {
   if (valid_elements > 128)
     __builtin_trap();
-  alignas(128) uint32_t tail[128];
-  const uint32_t *source = input;
+  using Element = typename TileType::DType;
+  alignas(128) Element tail[128];
+  const Element *source = input;
   if (valid_elements != 128) {
     for (std::size_t element = 0; element < 128; ++element)
-      tail[element] = element < valid_elements ? input[element] : 0u;
+      tail[element] = element < valid_elements ? input[element] : Element{};
     source = tail;
   }
-  pto::global_tensor<uint32_t, pto::RowMajor<32, 4>> memory(source);
+  pto::global_tensor<Element, pto::RowMajor<32, 4>> memory(source);
   TLOAD(dst, memory);
 }
 
@@ -3837,8 +3839,11 @@ template <is_tile_data_v TileType, typename Parent, typename SubTile,
           int Rows, int Cols>
   requires(pto::is_element_tile_v<TileType> && TileType::Rows * TileType::Cols == 32 &&
            pto::is_element_tile_v<Parent> && Parent::Rows * Parent::Cols == 128 &&
+           pto::is_element_tile_v<SubTile> &&
+           std::is_same_v<typename TileType::DType, typename Parent::DType> &&
+           std::is_same_v<typename TileType::DType, typename SubTile::DType> &&
            Rows == 1 && Cols == 4)
-void TSTORE(uint32_t *block_base, const TileType &src,
+void TSTORE(typename TileType::DType *block_base, const TileType &src,
             const pto::region::BorrowedTileArray<Parent, SubTile, Rows, Cols> &parts,
             std::size_t part) {
   auto memory = parts.logical_region(block_base, part);

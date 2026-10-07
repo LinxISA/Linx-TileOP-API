@@ -326,7 +326,9 @@ public:
                 "Tile assembly parent capacity needs a PTO SizeCode");
 
 #ifdef __linx
-  using ParentCarrier = linx_tile_carrier<ParentBytes>;
+  using ParentCarrier =
+      linx_tile_carrier<ParentBytes,
+                        typename SubTile::TileDType::ScalarType>;
   using ParentRegisterType = typename ParentCarrier::RegisterType;
 #else
   using ParentCarrier =
@@ -419,7 +421,9 @@ public:
     constexpr std::size_t ParentBytes =
         static_cast<std::size_t>(128) << (ParentSizeCode - 1);
 #ifdef __linx
-    using Carrier = linx_tile_carrier<ParentBytes>;
+    using Carrier =
+        linx_tile_carrier<ParentBytes,
+                          typename SubTile::TileDType::ScalarType>;
     return reinterpret_cast<Carrier *>(array_)->Register;
 #else
     using Carrier = typename SubTile::DType[
@@ -517,7 +521,7 @@ auto TPARTVIEW(Parent &parent, std::size_t valid_elements) {
   static_assert(Elements == 32,
                 "element TPARTVIEW currently supports 32-element parts");
   static_assert(Parent::Numel == 128,
-                "element TPARTVIEW requires an ElementTile<U32, 128> parent");
+                "element TPARTVIEW requires a 128-element ElementTile parent");
   using SubTile = ElementTile<typename Parent::DType, 32>;
   return region::BorrowedTileArray<Parent, SubTile, 1, 4>(parent,
                                                           valid_elements);
@@ -525,9 +529,35 @@ auto TPARTVIEW(Parent &parent, std::size_t valid_elements) {
 
 template <typename TileType>
   requires(is_element_tile_v<TileType> &&
-           std::remove_cvref_t<TileType>::Numel == 32)
+           std::remove_cvref_t<TileType>::Numel == 32 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          uint32_t>)
 #if defined(__clang__) && defined(__linx)
 __attribute__((always_inline, annotate("pto.element.view:v1;dtype=u32;rows=32;cols=1;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 32 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          int32_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=s32;rows=32;cols=1;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 32 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          float>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=f32;rows=32;cols=1;layout=cube_m32")))
 #endif
 decltype(auto) TPARTELEMENT(TileType &tile) {
   return tile.data();
