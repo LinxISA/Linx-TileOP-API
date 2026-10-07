@@ -48,6 +48,7 @@ install:
 		echo '#define PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX 1'; \
 		echo '#define PTO_TILEOP_API_HAS_TEXPDIF 1'; \
 		echo '#define PTO_TILEOP_API_HAS_ELEMENT_TILE 1'; \
+		echo '#define PTO_TILEOP_API_HAS_ELEMENT_VIEW_METADATA 1'; \
 		echo ''; \
 		echo '#endif'; \
 	} > $(INSTALL_DIR)/common/pto_tileop_api_revision.hpp

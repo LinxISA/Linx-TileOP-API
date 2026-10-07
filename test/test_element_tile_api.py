@@ -49,6 +49,11 @@ static_assert(!HasElements<ElementTile<uint32_t,128>>);
 static_assert(!HasElements<CubeTileM32<uint32_t,32,1>>);
 static_assert(!HasElements<CubeTileN8<unsigned long,2,8>>);
 int main() {
+  ElementTile<uint32_t,32> element_tile;
+  auto& element_view=TPARTELEMENT(element_tile);
+  auto& original_carrier=element_tile.data();
+  static_assert(std::is_same_v<decltype(element_view),decltype(original_carrier)>);
+  assert(&element_view==&original_carrier);
   ElementTile<uint32_t,128> parent;
   uint32_t output[128]{};
   for (unsigned valid=0; valid<=128; ++valid) {
@@ -72,6 +77,36 @@ int main() {
   (void)old_view;
 }
 ''', run=True)
+
+    def test_element_view_compiler_metadata(self):
+        marker = 'pto.element.view:v1;dtype=u32;rows=32;cols=1;layout=cube_m32'
+        header = (ROOT / 'include/common/pto_tile_region.hpp').read_text()
+        self.assertIn('#if defined(__clang__) && defined(__linx)', header)
+        self.assertIn(f'annotate("{marker}")', header)
+
+        compiler = shutil.which('clang++')
+        if compiler is None:
+            self.skipTest('clang++ is required for the AnnotateAttr AST check')
+        with tempfile.TemporaryDirectory(prefix='element-view-metadata-') as directory:
+            source = Path(directory) / 'metadata.cpp'
+            source.write_text(r'''
+#include <common/pto_tile.hpp>
+#include <common/pto_tile_region.hpp>
+void instantiate(pto::ElementTile<uint32_t,32>& tile) {
+  auto& elements=pto::TPARTELEMENT(tile);
+  (void)elements;
+}
+''')
+            result = subprocess.run([
+                compiler, '-std=c++20', '-D__linx',
+                '-include', str(ROOT / 'test/linx_host_type_shim.hpp'),
+                '-I', str(ROOT / 'include'), '-Xclang', '-ast-dump',
+                '-fsyntax-only', str(source),
+            ], text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('TPARTELEMENT', result.stdout)
+            self.assertIn(f'AnnotateAttr', result.stdout)
+            self.assertIn(f'"{marker}"', result.stdout)
 
     def test_native_pointer_transport_surface(self):
         compiler = os.environ.get('LINX_CXX')
