@@ -67,9 +67,9 @@ static_assert(PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX,
 
 完整、实际编译并运行的 Tile/element-wise kernel 及逐例 gfrun/gfsim 检查见
 [SuperNPUBench PR #202](https://github.com/PTO-ISA/SuperNPUBench/pull/202)。
-`#pragma linx elementwise` 的条件/atomic lowering 需要匹配的 Linx compiler，当前
-可执行模型的 atomic profile 是 U32 32-element MGATHER.ADD；这不是任意 C++ 循环的
-自动并行承诺。API metadata/拒绝边界由 `test/test_element_tile_api.py` 检查，执行语义
+`#pragma pto element for` 的条件/atomic lowering 需要匹配的 Linx compiler，当前
+可执行模型的 atomic profile 是 U32 32-element MGATHER.ADD。纯表达式正在扩展为
+有类型的 Tile SSA；这不能用于宣称任意 C++ 循环都已支持自动并行。API metadata/拒绝边界由 `test/test_element_tile_api.py` 检查，执行语义
 由 benchmark 的独立 golden 和两模型结果检查。
 
 ## 快速开始
