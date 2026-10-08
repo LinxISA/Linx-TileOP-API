@@ -4,6 +4,7 @@
 #include "common/layout.hpp"
 #include <common/type.hpp>
 #include <cstdint>
+#include <type_traits>
 
 namespace pto {
 
@@ -921,7 +922,8 @@ template <Location Loc_, typename Element_, const int Rows_, const int Cols_,
           const SLayout SFractal_ = SLayout::NoneBox,
           const int SFractalSize_ = 512,
           const PadValue PadVal_ = PadValue::Null,
-          const CompactMode Compact_ = CompactMode::Null>
+          const CompactMode Compact_ = CompactMode::Null,
+          const bool ElementProfile_ = false>
 struct Tile {
 public:
   using DType = Element_;
@@ -1076,6 +1078,18 @@ public:
   static constexpr int SFractalSize = SFractalSize_;
   static constexpr PadValue PadVal = PadVal_;
   static constexpr CompactMode Compact = Compact_;
+  static constexpr bool IsElementProfile = ElementProfile_;
+  static_assert(
+      !IsElementProfile ||
+          (Loc_ == Location::Vec && BFractal_ == BLayout::CubeM32 &&
+           Rows == 32 && (Cols == 1 || Cols == 4) && ValidRow == Rows &&
+           ValidCol == Cols && SFractal_ == SLayout::NoneBox &&
+           SFractalSize_ == 512 && PadVal_ == PadValue::Null &&
+           Compact_ == CompactMode::Null &&
+           (std::is_same_v<DType, uint32_t> ||
+            std::is_same_v<DType, int32_t> ||
+            std::is_same_v<DType, float>)),
+      "element Tile profiles require full U32/S32/F32 CUBE_M32 32x1 or 32x4 storage");
   static constexpr int LogicalTileBytes = StorageBytes;
   static constexpr int TilesizeCode =
       LogicalTileBytes == 128  ? __tilesize_128B :
@@ -1144,15 +1158,21 @@ public:
                 "SFractalSize_ illegal");
 
 #ifdef __linx
-  using TileDType = linx_tile_carrier<LogicalTileBytes>;
+  using TileCarrierScalar =
+      std::conditional_t<IsElementProfile, DType, uint32_t>;
+  using TileDType = linx_tile_carrier<LogicalTileBytes, TileCarrierScalar>;
   using TileRegisterType = typename TileDType::RegisterType;
 #else
   using TileDType = DType[StorageBytes * 8 / type_traits<DType>::bits];
 #endif
 
 #ifdef __linx
-  TileRegisterType &data() { return data_.Register; }
-  const TileRegisterType &data() const { return data_.Register; }
+  __attribute__((always_inline)) TileRegisterType &data() {
+    return data_.Register;
+  }
+  __attribute__((always_inline)) const TileRegisterType &data() const {
+    return data_.Register;
+  }
 #else
   TileDType &data() { return data_; }
   const TileDType &data() const { return data_; }
@@ -1226,6 +1246,37 @@ template <typename Element_, const int Rows_, const int Cols_,
 using VecTileM32 =
   Tile<Location::Vec, Element_, Rows_, Cols_, BLayout::CubeM32,
        RowValid_, ColValid_>;
+
+// Logical element tiles keep the current CUBE_M32 carrier private to the API.
+// The initial typed profile covers one 32-element part and its four-part
+// 128-element parent for U32, S32, and F32.
+namespace detail {
+template <typename Element_, int Elements_>
+struct element_tile_profile {
+  static_assert(std::is_same_v<Element_, uint32_t> ||
+                    std::is_same_v<Element_, int32_t> ||
+                    std::is_same_v<Element_, float>,
+                "ElementTile currently supports only U32, S32, or F32 elements");
+  static_assert(Elements_ == 32 || Elements_ == 128,
+                "ElementTile currently supports 32 or 128 elements");
+  using type = Tile<Location::Vec, Element_, 32, Elements_ / 32,
+                    BLayout::CubeM32, 32, Elements_ / 32,
+                    SLayout::NoneBox, 512, PadValue::Null,
+                    CompactMode::Null, true>;
+};
+} // namespace detail
+
+template <typename Element_, int Elements_>
+using ElementTile =
+    typename detail::element_tile_profile<Element_, Elements_>::type;
+
+template <typename T>
+inline constexpr bool is_element_tile_v = [] {
+  using TileType = std::remove_cvref_t<T>;
+  if constexpr (requires { TileType::IsElementProfile; })
+    return TileType::IsElementProfile;
+  return false;
+}();
 
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
@@ -1498,9 +1549,11 @@ struct is_global<global_tensor<Element_, Layout_>> : std::true_type {};
 
 template <Location Loc_, typename Element_, const int Rows_, const int Cols_,
           const BLayout BFractal_, const int RowValid_, const int ColValid_,
-          const SLayout SFractal_, const int SFractalSize_, const PadValue PadVal_>
+          const SLayout SFractal_, const int SFractalSize_, const PadValue PadVal_,
+          const CompactMode Compact_, const bool ElementProfile_>
 struct is_tile<Tile<Loc_, Element_, Rows_, Cols_, BFractal_, RowValid_,
-                    ColValid_, SFractal_, SFractalSize_, PadVal_>> : std::true_type {
+                    ColValid_, SFractal_, SFractalSize_, PadVal_, Compact_,
+                    ElementProfile_>> : std::true_type {
   static constexpr SLayout layout_enum = SFractal_;
 };
 
