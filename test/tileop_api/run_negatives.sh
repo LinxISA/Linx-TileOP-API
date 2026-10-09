@@ -194,5 +194,15 @@ for c in $UNPACK_CASES; do
   esac
   expect_rejected "unpack_$c" "$define" PackUnpackNegatives.cpp "$pattern"
 done
+# Issue #251: the relaxed row-expand broadcast-source check accepts a packed
+# CUBE CELL carrier (ValidCol <= CubeCellCols) but must still reject a RowMajor
+# multi-column source, a CUBE carrier wider than one CELL, and an offset that
+# selects outside the CELL.
+ROWEXPAND_CASES="rowmajor_multi cube_exceeds offset_cell"
+for c in $ROWEXPAND_CASES; do
+  define=SHOULD_FAIL_ROWEXPAND_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "rowexpand_$c" "$define" RowExpandNegatives.cpp \
+    'one-column carrier or a packed CUBE CELL carrier|broadcast byte offset exceeds CELL columns'
+done
 echo "== $PASS passed, $FAIL failed =="
 test "$FAIL" -eq 0

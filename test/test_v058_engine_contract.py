@@ -331,6 +331,37 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             self.assertIn("PTO_ZERO_PAD_LAYOUT_ASM", body, op)
             self.assertIn('[ElemLayout] "i"(local_layout_code_v<D>)', body, op)
 
+    def test_row_expand_source_accepts_packed_cube_cell_carrier(self) -> None:
+        # Issue #251 / PTO-ISA #207: the row-expand broadcast source may be a
+        # one-column carrier *or* a packed CUBE CELL carrier holding up to
+        # CubeCellCols logical columns (BF16/FP16 x2 in a CUBE_M32 cell).  The
+        # old "ValidCol == 1" gate must be gone, replaced by a shared predicate
+        # that bounds ValidCol by CubeCellCols for CUBE layouts.
+        macro = re.search(
+            r"#define PTO_ROW_EXPAND_SOURCE_IS_BROADCAST\(Source\)(.*?)\n\n",
+            self.header, re.S)
+        self.assertIsNotNone(macro, "row-expand source predicate macro missing")
+        body = macro.group(1)
+        self.assertIn("Source::ValidCol == DYNAMIC", body)
+        self.assertIn("Source::ValidCol == 1", body)
+        self.assertIn("Source::IsCubeLayout", body)
+        self.assertIn("Source::ValidCol <= Source::CubeCellCols", body)
+        # The stale one-column-only diagnostic must not survive anywhere.
+        self.assertNotIn("must be a row-broadcast tile", self.header)
+        # Every TROWEXPAND* op routes its broadcast source through the predicate
+        # instead of asserting ValidCol == 1 inline.
+        row_expand_ops = (
+            "TROWEXPAND", "TROWEXPANDADD", "TROWEXPANDSUB", "TROWEXPANDMUL",
+            "TROWEXPANDDIV", "TROWEXPANDMAX", "TROWEXPANDMIN",
+            "TROWEXPANDEXPDIF",
+        )
+        for op in row_expand_ops:
+            match = re.search(r'^void ' + op + r'\(.*?\n}\n', self.header,
+                              re.S | re.M)
+            self.assertIsNotNone(match, op)
+            self.assertIn("PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(",
+                          match.group(0), op)
+
     def test_zero_pad_layout_selector_spells_zero(self) -> None:
         # The must-zero family (GMOV plus CELL rearrangement) keeps PadValue
         # zero while the pad-value family spells Null; both match the padding

@@ -104,6 +104,35 @@ __attribute__((noinline)) void test_row_expand_offsets_m32(
   TROWEXPANDEXPDIF<CubeM32Matrix, CubeM32Matrix, CubeM32Row, 2>(dst, src0, src1);
 }
 
+// Issue #251 / PTO-ISA #207: a fused BF16/FP16 x2 carrier has two *valid*
+// logical columns (ValidCol == 2 == CubeCellCols), so both slots hold real
+// data.  BroadcastByteOffset selects the slot: offset 0 -> slot 0, offset 2 ->
+// slot 1.  The row-expand source check must accept the packed carrier (not only
+// the one-column ValidCol == 1 form) so AlgoC can consume GroupMaxOut directly.
+using CubeM32Pair = VecTileM32<__half, 32, 2>;
+
+__attribute__((noinline)) void test_row_expand_pair_carrier_m32(
+    CubeM32Matrix &dst, CubeM32Matrix &src0, CubeM32Pair &pair) {
+  // slot 0
+  TROWEXPAND<CubeM32Matrix, CubeM32Pair, 0>(dst, pair);
+  TROWEXPANDADD<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 0>(dst, src0, pair);
+  TROWEXPANDSUB<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 0>(dst, src0, pair);
+  TROWEXPANDMUL<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 0>(dst, src0, pair);
+  TROWEXPANDDIV<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 0>(dst, src0, pair);
+  TROWEXPANDMAX<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 0>(dst, src0, pair);
+  TROWEXPANDMIN<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 0>(dst, src0, pair);
+  TROWEXPANDEXPDIF<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 0>(dst, src0, pair);
+  // slot 1 (byte offset 2)
+  TROWEXPAND<CubeM32Matrix, CubeM32Pair, 2>(dst, pair);
+  TROWEXPANDADD<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 2>(dst, src0, pair);
+  TROWEXPANDSUB<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 2>(dst, src0, pair);
+  TROWEXPANDMUL<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 2>(dst, src0, pair);
+  TROWEXPANDDIV<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 2>(dst, src0, pair);
+  TROWEXPANDMAX<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 2>(dst, src0, pair);
+  TROWEXPANDMIN<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 2>(dst, src0, pair);
+  TROWEXPANDEXPDIF<CubeM32Matrix, CubeM32Matrix, CubeM32Pair, 2>(dst, src0, pair);
+}
+
 int main() {
   const uint16_t row = 16;
   const uint16_t col = 16;
