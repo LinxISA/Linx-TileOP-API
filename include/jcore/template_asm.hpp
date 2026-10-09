@@ -92,6 +92,18 @@ using namespace pto;
                         Source::CubeCellCols,                                     \
                 "TROWEXPAND broadcast byte offset exceeds CELL columns");
 
+// A row-broadcast source is one logical column (RowMajor or CUBE), or a packed
+// CUBE CELL carrier holding up to CubeCellCols logical columns (BF16/FP16 x2 in
+// a CUBE_M32 cell, PTO-ISA #207, issue #251).  BroadcastByteOffset selects the
+// logical column within the CELL and is bounded separately against CubeCellCols
+// by PTO_ROW_EXPAND_OFFSET_CHECK, so the valid-column count is decoupled from
+// the offset: ValidCol==1 with a nonzero offset (physical slot select) stays
+// valid, and ValidCol<=CubeCellCols admits the fused multi-slot carrier.
+#define PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(Source)                             \
+  (Source::ValidCol == DYNAMIC || Source::ValidCol == 1 ||                     \
+   (Source::IsCubeLayout && Source::ValidCol >= 1 &&                           \
+    Source::ValidCol <= Source::CubeCellCols))
+
 // TCVT for a CUBE_M16/M32 source preserves the Tile descriptors' CUBE layout,
 // while B.DATR.Layout remains NORM and is therefore omitted. B.DATR carries
 // only the destination dtype and rounding mode: TileOperandsLegal_TCVT requires
@@ -15864,8 +15876,9 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in);
   // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in::ValidCol == DYNAMIC || tile_shape_in::ValidCol == 1,
-                "TROWEXPAND source must be a row-broadcast tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in),
+                "TROWEXPAND source must be a one-column carrier or a packed "
+                "CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
                 "TROWEXPAND broadcast source layout must match the "
                 "destination layout");
@@ -16732,8 +16745,9 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
   // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDADD broadcast source must be a row-broadcast tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDADD broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDADD source and broadcast layouts must match the "
@@ -16861,8 +16875,9 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
   // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDSUB broadcast source must be a row-broadcast tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDSUB broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDSUB source and broadcast layouts must match the "
@@ -16990,8 +17005,9 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
   // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDMUL broadcast source must be a row-broadcast tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDMUL broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMUL source and broadcast layouts must match the "
@@ -17123,8 +17139,9 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
   // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDDIV broadcast source must be a row-broadcast tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDDIV broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDDIV source and broadcast layouts must match the "
@@ -17252,8 +17269,9 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
   // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDMAX broadcast source must be a row-broadcast tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDMAX broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMAX source and broadcast layouts must match the "
@@ -17381,8 +17399,9 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
   // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDMIN broadcast source must be a row-broadcast tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDMIN broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMIN source and broadcast layouts must match the "
@@ -17510,8 +17529,9 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
   // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDEXPDIF broadcast source must be a row-broadcast tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDEXPDIF broadcast source must be a one-column carrier "
+                "or a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDEXPDIF source and broadcast layouts must match the "

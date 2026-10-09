@@ -1177,6 +1177,16 @@ PTO_REGION_BINARY_SOURCE_WRAPPER(TSHR, 10)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TMAX, 11)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TMIN, 12)
 
+// A row-broadcast source is one logical column (RowMajor or CUBE), or a packed
+// CUBE CELL carrier holding up to CubeCellCols logical columns (BF16/FP16 x2 in
+// a CUBE_M32 cell, PTO-ISA #207, issue #251).  BroadcastByteOffset selects the
+// logical column within the CELL and is bounded separately against CubeCellCols
+// above, so the valid-column count is decoupled from the offset.
+#define PTO_REGION_ROW_EXPAND_SRC_BCAST(Src)                                   \
+  (Src::ValidCol == DYNAMIC || Src::ValidCol == 1 ||                           \
+   (Src::IsCubeLayout && Src::ValidCol >= 1 &&                                 \
+    Src::ValidCol <= Src::CubeCellCols))
+
 template <int Opcode, typename Out, typename Parent0, typename SubTile0,
           typename Parent1, typename SubTile1, int BroadcastByteOffset = 0>
 PTO_REGION_ALWAYS_INLINE void pto_region_expand(
@@ -1199,9 +1209,12 @@ PTO_REGION_ALWAYS_INLINE void pto_region_expand(
   static_assert(SubTile0::SFractal == SLayout::NoneBox &&
                     SubTile1::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
-  static_assert(SubTile0::ValidCol == SubTile1::ValidCol &&
-                    SubTile1::ValidCol == 1,
-                "row expansion requires a one-column broadcast source");
+  static_assert(PTO_REGION_ROW_EXPAND_SRC_BCAST(SubTile0) &&
+                    PTO_REGION_ROW_EXPAND_SRC_BCAST(SubTile1),
+                "row expansion requires one-column or packed CUBE CELL "
+                "broadcast sources (ValidCol <= CubeCellCols)");
+  static_assert(SubTile0::ValidCol == SubTile1::ValidCol,
+                "row expansion broadcast sources must share their column count");
   static_assert(SubTile0::ValidRow == SubTile1::ValidRow,
                 "row expansion broadcast rows must match the matrix");
   static_assert(std::is_same_v<typename SubTile0::DType,
@@ -1269,8 +1282,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
                 "expansion sources require matching element types");
   static_assert(std::is_same_v<typename SubTile::DType, typename Out::DType>,
                 "expansion source and destination dtypes must match");
-  static_assert(Tile::ValidCol == 1,
-                "row expansion requires a one-column broadcast source");
+  static_assert(PTO_REGION_ROW_EXPAND_SRC_BCAST(Tile),
+                "row expansion requires a one-column or packed CUBE CELL "
+                "broadcast source (ValidCol <= CubeCellCols)");
   static_assert(SubTile::ValidRow == Tile::ValidRow,
                 "row expansion broadcast rows must match the matrix");
   static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
@@ -1331,8 +1345,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
                 "expansion sources require matching element types");
   static_assert(std::is_same_v<typename Tile::DType, typename Out::DType>,
                 "expansion source and destination dtypes must match");
-  static_assert(SubTile::ValidCol == 1,
-                "row expansion requires a one-column broadcast source");
+  static_assert(PTO_REGION_ROW_EXPAND_SRC_BCAST(SubTile),
+                "row expansion requires a one-column or packed CUBE CELL "
+                "broadcast source (ValidCol <= CubeCellCols)");
   static_assert(Tile::ValidRow == SubTile::ValidRow,
                 "row expansion broadcast rows must match the matrix");
   static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
@@ -1436,6 +1451,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
         "i"(Opcode)
       : "memory");
 }
+
+#undef PTO_REGION_ROW_EXPAND_SRC_BCAST
 
 #define PTO_REGION_EXPAND_SOURCE_WRAPPER(Name, Opcode)                       \
   template <is_tile_data_v Out, typename Parent0, typename SubTile0,          \
