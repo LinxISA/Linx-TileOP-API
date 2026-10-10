@@ -204,5 +204,18 @@ for c in $ROWEXPAND_CASES; do
   expect_rejected "rowexpand_$c" "$define" RowExpandNegatives.cpp \
     'one-column carrier or a packed CUBE CELL carrier|broadcast byte offset exceeds CELL columns'
 done
+# Issue #253: the dual-SubTileView overload applies the carrier checks to src1
+# only, and requires the matrix fragment src0 to match the destination columns.
+ROWEXPAND_VIEW_CASES="cube_exceeds offset_cell matrix_cols"
+for c in $ROWEXPAND_VIEW_CASES; do
+  define=SHOULD_FAIL_ROWEXPAND_VIEW_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  case "$c" in
+    cube_exceeds) pattern='one-column or packed CUBE CELL broadcast source' ;;
+    offset_cell) pattern='broadcast byte offset exceeds CELL columns' ;;
+    matrix_cols) pattern='matrix source cols must match the destination' ;;
+  esac
+  expect_rejected "rowexpand_view_$c" "$define" \
+    RowExpandDualSubviewNegatives.cpp "$pattern"
+done
 echo "== $PASS passed, $FAIL failed =="
 test "$FAIL" -eq 0
