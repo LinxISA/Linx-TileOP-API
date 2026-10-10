@@ -3830,31 +3830,54 @@ void TSTORE(gm_shape &dst, const cube_shape &src) {
 // layout-dispatched TLOAD/TSTORE; no instruction or scalar math implementation
 // is duplicated here. Pointer ranges are expressed in logical elements.
 template <is_tile_data_v TileType>
-  requires(pto::is_element_tile_v<TileType> && TileType::Rows * TileType::Cols == 128)
+  requires(pto::is_element_tile_v<TileType> &&
+           (TileType::Numel == 128 || TileType::Numel == 512))
 void TLOAD(TileType &dst, const typename TileType::DType *input,
            std::size_t valid_elements) {
-  if (valid_elements > 128)
+  constexpr std::size_t ParentNumel =
+      static_cast<std::size_t>(TileType::Numel);
+  constexpr int ParentCols = TileType::Numel / 32;
+  if (valid_elements > ParentNumel)
     __builtin_trap();
   using Element = typename TileType::DType;
-  alignas(128) Element tail[128];
+  alignas(128) Element tail[ParentNumel];
   const Element *source = input;
-  if (valid_elements != 128) {
-    for (std::size_t element = 0; element < 128; ++element)
+  if (valid_elements != ParentNumel) {
+    for (std::size_t element = 0; element < ParentNumel; ++element)
       tail[element] = element < valid_elements ? input[element] : Element{};
     source = tail;
   }
-  pto::global_tensor<Element, pto::RowMajor<32, 4>> memory(source);
+  pto::global_tensor<Element, pto::RowMajor<32, ParentCols>> memory(source);
   TLOAD(dst, memory);
+}
+
+template <is_tile_data_v TileType>
+  requires(pto::is_element_tile_v<TileType> &&
+           (TileType::Numel == 128 || TileType::Numel == 512))
+void TSTORE(typename TileType::DType *output, const TileType &src,
+            std::size_t valid_elements) {
+  constexpr std::size_t ParentNumel =
+      static_cast<std::size_t>(TileType::Numel);
+  constexpr int ParentCols = TileType::Numel / 32;
+  // Whole-parent stores are exact snapshots, so partial stores trap. The
+  // per-part overload below writes one complete 32-element part and requires
+  // an appropriately allocated parent extent.
+  if (valid_elements != ParentNumel)
+    __builtin_trap();
+  using Element = typename TileType::DType;
+  pto::global_tensor<Element, pto::RowMajor<32, ParentCols>> memory(output);
+  TSTORE(memory, src);
 }
 
 template <is_tile_data_v TileType, typename Parent, typename SubTile,
           int Rows, int Cols>
-  requires(pto::is_element_tile_v<TileType> && TileType::Rows * TileType::Cols == 32 &&
-           pto::is_element_tile_v<Parent> && Parent::Rows * Parent::Cols == 128 &&
+  requires(pto::is_element_tile_v<TileType> && TileType::Numel == 32 &&
+           pto::is_element_tile_v<Parent> &&
+           (Parent::Numel == 128 || Parent::Numel == 512) &&
            pto::is_element_tile_v<SubTile> &&
            std::is_same_v<typename TileType::DType, typename Parent::DType> &&
            std::is_same_v<typename TileType::DType, typename SubTile::DType> &&
-           Rows == 1 && Cols == 4)
+           Rows == 1 && Cols == Parent::Numel / SubTile::Numel)
 void TSTORE(typename TileType::DType *block_base, const TileType &src,
             const pto::region::BorrowedTileArray<Parent, SubTile, Rows, Cols> &parts,
             std::size_t part) {

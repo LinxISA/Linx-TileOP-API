@@ -218,9 +218,11 @@ public:
   static constexpr int rank = 2;
   static constexpr int rows = Rows;
   static constexpr int cols = Cols;
+  static constexpr int PartCount = Parent::Numel / SubTile::Numel;
   static constexpr bool is_element_partition =
       is_element_tile_v<Parent> && is_element_tile_v<SubTile> &&
-      Parent::Numel == 128 && SubTile::Numel == 32 && Rows == 1 && Cols == 4;
+      (Parent::Numel == 128 || Parent::Numel == 512) &&
+      SubTile::Numel == 32 && Rows == 1 && Cols == PartCount;
 
   explicit BorrowedTileArray(Parent &parent) : parent_(&parent) {}
 
@@ -263,6 +265,20 @@ public:
     return part_elements < static_cast<std::size_t>(SubTile::Numel)
                ? part_elements
                : static_cast<std::size_t>(SubTile::Numel);
+  }
+
+  constexpr uint32_t logical_index(std::size_t part_index,
+                                   uint32_t element_index) const
+    requires(is_element_partition)
+  {
+    if (part_index >= static_cast<std::size_t>(PartCount) ||
+        element_index >= static_cast<uint32_t>(SubTile::Numel))
+      __builtin_trap();
+    const uint32_t index = static_cast<uint32_t>(part_index) +
+                           static_cast<uint32_t>(PartCount) * element_index;
+    if (static_cast<std::size_t>(index) >= valid_elements_)
+      __builtin_trap();
+    return index;
   }
 
   template <typename T>
@@ -520,11 +536,13 @@ template <int Elements, typename Parent>
 auto TPARTVIEW(Parent &parent, std::size_t valid_elements) {
   static_assert(Elements == 32,
                 "element TPARTVIEW currently supports 32-element parts");
-  static_assert(Parent::Numel == 128,
-                "element TPARTVIEW requires a 128-element ElementTile parent");
+  static_assert(Parent::Numel == 128 || Parent::Numel == 512,
+                "element TPARTVIEW requires a 128- or 512-element "
+                "ElementTile parent");
   using SubTile = ElementTile<typename Parent::DType, 32>;
-  return region::BorrowedTileArray<Parent, SubTile, 1, 4>(parent,
-                                                          valid_elements);
+  constexpr int PartCount = Parent::Numel / Elements;
+  return region::BorrowedTileArray<Parent, SubTile, 1, PartCount>(
+      parent, valid_elements);
 }
 
 template <typename TileType>

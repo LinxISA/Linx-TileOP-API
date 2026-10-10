@@ -42,9 +42,15 @@ class ElementTileAPITest(unittest.TestCase):
 #include <cassert>
 #include <bit>
 #include <limits>
+#include <common/pto_tileop_api_revision.hpp>
+#ifndef PTO_TILEOP_API_HAS_512_INTEGER_ELEMENT_TILE
+#error "512-element integer ElementTile feature gate is required"
+#endif
 using namespace pto;
 static_assert(ElementTile<uint32_t,32>::Numel == 32);
 static_assert(ElementTile<uint32_t,128>::Numel == 128);
+static_assert(ElementTile<uint32_t,512>::Numel == 512);
+static_assert(ElementTile<int32_t,512>::Numel == 512);
 static_assert(is_element_tile_v<ElementTile<uint32_t,32>>);
 static_assert(is_element_tile_v<ElementTile<int32_t,32>>);
 static_assert(is_element_tile_v<ElementTile<float,32>>);
@@ -76,6 +82,12 @@ static_assert(std::is_same_v<
 static_assert(std::is_same_v<
     typename TileArray<ElementTile<int32_t,32>,1,4>::ParentCarrier,
     typename ElementTile<int32_t,128>::TileDType>);
+static_assert(std::is_same_v<
+    typename TileArray<ElementTile<uint32_t,32>,1,16>::ParentCarrier,
+    typename ElementTile<uint32_t,512>::TileDType>);
+static_assert(std::is_same_v<
+    typename TileArray<ElementTile<int32_t,32>,1,16>::ParentCarrier,
+    typename ElementTile<int32_t,512>::TileDType>);
 template<class T> concept HasElements = requires(T& tile) { TPARTELEMENT(tile); };
 static_assert(HasElements<ElementTile<uint32_t,32>>);
 static_assert(HasElements<ElementTile<int32_t,32>>);
@@ -107,6 +119,8 @@ void check_partition() {
       unsigned expected=0;
       for(unsigned element=part;element<valid;element+=4) ++expected;
       assert(parts.valid_size(part)==expected);
+      for(unsigned element=0;element<expected;++element)
+        assert(parts.logical_index(part,element)==part+4*element);
       sum+=parts.valid_size(part);
       auto memory=parts.logical_region(output,part);
       assert(memory.data()==output+part);
@@ -126,6 +140,42 @@ void check_partition() {
                                ElementTile<T,128>>);
 }
 
+template<class T>
+void check_wide_integer_partition() {
+  static_assert(std::is_same_v<T,uint32_t> || std::is_same_v<T,int32_t>);
+  ElementTile<T,512> parent;
+  T output[512]{};
+  using PartsType=decltype(TPARTVIEW<32>(parent,512));
+  static_assert(std::is_same_v<
+      decltype(std::declval<const PartsType&>().logical_index(
+          std::size_t{},uint32_t{})),uint32_t>);
+  constexpr unsigned tails[] = {0,1,31,32,127,128,511,512};
+  for (unsigned valid : tails) {
+    auto parts=TPARTVIEW<32>(parent,valid);
+    assert(parts.size()==16);
+    unsigned sum=0;
+    for(unsigned part=0;part<parts.size();++part) {
+      unsigned expected=0;
+      for(unsigned element=part;element<valid;element+=16) ++expected;
+      assert(parts.valid_size(part)==expected);
+      for(unsigned element=0;element<expected;++element)
+        assert(parts.logical_index(part,element)==part+16*element);
+      sum+=parts.valid_size(part);
+      auto memory=parts.logical_region(output,part);
+      assert(memory.data()==output+part);
+      assert(memory.GetStrideBytes(3)==16*sizeof(T));
+    }
+    assert(sum==valid);
+  }
+
+  TileArray<ElementTile<T,32>,1,16> assembled_parts;
+  auto assembled_parent=
+      TASSEMBLY<ElementTile<T,512>>(std::move(assembled_parts));
+  static_assert(std::is_same_v<decltype(assembled_parent),
+                               ElementTile<T,512>>);
+  static_assert(sizeof(typename ElementTile<T,512>::TileDType)==2048);
+}
+
 static_assert(std::is_same_v<
     decltype(std::declval<OrdinaryFloatTile&>().data()),
     typename linx_tile_carrier<128>::RegisterType&>);
@@ -134,6 +184,8 @@ int main() {
   check_partition<uint32_t>();
   check_partition<int32_t>();
   check_partition<float>();
+  check_wide_integer_partition<uint32_t>();
+  check_wide_integer_partition<int32_t>();
 
   ElementTile<uint32_t,32> unsigned_tile;
   auto& unsigned_elements=TPARTELEMENT(unsigned_tile);
@@ -218,6 +270,30 @@ void transport(const T* input, T* output, unsigned valid, T zero) {
 template void transport<uint32_t>(const uint32_t*,uint32_t*,unsigned,uint32_t);
 template void transport<int32_t>(const int32_t*,int32_t*,unsigned,int32_t);
 template void transport<float>(const float*,float*,unsigned,float);
+
+template<class T>
+void transport_wide(const T* input, T* output) {
+  ElementTile<T,512> parent;
+  TLOAD(parent,input,512);
+  auto parts=TPARTVIEW<32>(parent,512);
+  TileArray<ElementTile<T,32>,1,16> results;
+#define ADD_PART(I)                                                          \
+  do {                                                                       \
+    auto part=parts.part(I);                                                 \
+    ElementTile<T,32> gathered;                                             \
+    TCVT(gathered,part);                                                     \
+    TCVT(results[0][I],gathered);                                            \
+  } while (false)
+  ADD_PART(0); ADD_PART(1); ADD_PART(2); ADD_PART(3);
+  ADD_PART(4); ADD_PART(5); ADD_PART(6); ADD_PART(7);
+  ADD_PART(8); ADD_PART(9); ADD_PART(10); ADD_PART(11);
+  ADD_PART(12); ADD_PART(13); ADD_PART(14); ADD_PART(15);
+#undef ADD_PART
+  auto assembled=TASSEMBLY<ElementTile<T,512>>(std::move(results));
+  TSTORE(output,assembled,512);
+}
+template void transport_wide<uint32_t>(const uint32_t*,uint32_t*);
+template void transport_wide<int32_t>(const int32_t*,int32_t*);
 """
         with tempfile.TemporaryDirectory(prefix='native-element-tile-') as directory:
             source=Path(directory)/'native.cpp'
@@ -294,6 +370,18 @@ template void typed_view<float>(ElementTile<float,32>&);
                 self.compile('int main() { pto::ElementTile<uint32_t,128> parent; '
                     'uint32_t output[128]{}; '+operation+' return 0; }',
                     run=True, release=True, runtime_reject=True)
+        for operation in (
+            'auto parts=pto::TPARTVIEW<32>(parent,513); (void)parts;',
+            'auto parts=pto::TPARTVIEW<32>(parent,512); (void)parts.part(16);',
+            'auto parts=pto::TPARTVIEW<32>(parent,512); (void)parts.valid_size(16);',
+            'auto parts=pto::TPARTVIEW<32>(parent,512); (void)parts.logical_index(16,0);',
+            'auto parts=pto::TPARTVIEW<32>(parent,512); (void)parts.logical_index(0,32);',
+            'auto parts=pto::TPARTVIEW<32>(parent,1); (void)parts.logical_index(1,0);',
+            'auto parts=pto::TPARTVIEW<32>(parent,512); (void)parts.logical_region(output,16);'):
+            with self.subTest(operation=operation):
+                self.compile('int main() { pto::ElementTile<uint32_t,512> parent; '
+                    'uint32_t output[512]{}; '+operation+' return 0; }',
+                    run=True, release=True, runtime_reject=True)
 
     def test_reject_unsupported_dtype(self):
         self.compile('pto::ElementTile<unsigned long,32> unsupported;\n', accepts=False)
@@ -301,6 +389,8 @@ template void typed_view<float>(ElementTile<float,32>&);
 
     def test_reject_unsupported_capacity(self):
         self.compile('pto::ElementTile<uint32_t,64> unsupported;\n', accepts=False)
+        self.compile('pto::ElementTile<uint32_t,256> unsupported;\n', accepts=False)
+        self.compile('pto::ElementTile<float,512> unsupported;\n', accepts=False)
 
     def test_reject_wrong_part_size(self):
         self.compile('void bad(pto::ElementTile<uint32_t,128>& tile) { auto parts=pto::TPARTVIEW<64>(tile,128); }\n', accepts=False)

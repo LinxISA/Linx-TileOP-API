@@ -50,6 +50,7 @@ install:
 		echo '#define PTO_TILEOP_API_HAS_ELEMENT_TILE 1'; \
 		echo '#define PTO_TILEOP_API_HAS_ELEMENT_VIEW_METADATA 1'; \
 		echo '#define PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS 1'; \
+		echo '#define PTO_TILEOP_API_HAS_512_INTEGER_ELEMENT_TILE 1'; \
 		echo ''; \
 		echo '#endif'; \
 	} > $(INSTALL_DIR)/common/pto_tileop_api_revision.hpp
