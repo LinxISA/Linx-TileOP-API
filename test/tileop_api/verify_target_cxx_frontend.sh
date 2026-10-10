@@ -43,12 +43,84 @@ fi
 for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
               TileRegionUnarySubviewAssembly.cpp \
               TileRegionTCVTSubviewAssembly.cpp \
+              TileRegionTCVTSubview.cpp \
+              TileRegionShift.cpp \
+              Issue241ReductionPrefixBinary.cpp \
               TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
-              SharedTransposeNonSquare.cpp; do
+              SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp; do
   "$TC_DIR/clang++" "${FLAGS[@]}" -fsyntax-only \
     "$ROOT/test/tileop_api/src/$source"
 done
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TRowExpandMul.cpp" -o "$OUT/TRowExpandMul.ll"
+python3 - "$OUT/TRowExpandMul.ll" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+functions = re.split(r"(?=^define )", text, flags=re.MULTILINE)
+for name in ("test_row_vector_src1", "test_col_vector_src1"):
+    body = next((part for part in functions
+                 if part.startswith("define ") and name in part
+                 and "BSTART.TEPL" in part), None)
+    if body is None:
+        raise SystemExit(f"missing TROWEXPAND fixture {name}")
+    # LLVM prints each inline-assembly bundle as one string literal, often on
+    # one physical line.  Count TEPL bundles directly; TLOAD is TLSU and must
+    # never be used as a subtraction-based proxy for the operation count.
+    bundles = re.findall(r"BSTART\.TEPL\s+([0-9]+)", body)
+    if len(bundles) != 8:
+        raise SystemExit(f"{name}: expected 8 TEPL operations, got {len(bundles)}")
+    expected = {"test_row_vector_src1": {"68", "69", "70", "71", "72", "73", "74", "75"},
+                "test_col_vector_src1": {"84", "85", "86", "87", "88", "89", "90", "91"}}[name]
+    if set(bundles) != expected:
+        raise SystemExit(f"{name}: unexpected TEPL operation codes {bundles}")
+    operations = [operation for operation in re.split(r"(?=BSTART\.TEPL)", body)
+                  if "BSTART.TEPL" in operation]
+    if len(operations) != 8:
+        raise SystemExit(f"{name}: failed to split all TEPL bundles")
+    for operation in operations:
+        if "BSTART.TEPL" not in operation:
+            continue
+        if "B.DATR" not in operation:
+            raise SystemExit(f"{name}: every TEPL operation needs B.DATR")
+        # Region/SubView inline-asm carries B.SUBVIEW, while the direct jcore
+        # path binds the source tile directly.  Validate ordering when present
+        # without imposing the Region representation on both implementations.
+        if "B.SUBVIEW" in operation and operation.index("B.SUBVIEW") > operation.index("B.DATR"):
+            raise SystemExit(f"{name}: B.DATR must follow B.SUBVIEW")
+PY
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/Issue241ReductionPrefixBinary.cpp" \
+  -o "$OUT/Issue241ReductionPrefixBinary.ll"
+python3 - "$OUT/Issue241ReductionPrefixBinary.ll" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+functions = re.split(r"(?=^define )", text, flags=re.MULTILINE)
+for name in ("prefix_prefix_arithmetic", "prefix_prefix_bitwise"):
+    body = next((part for part in functions if name in part), None)
+    if body is None:
+        raise SystemExit(f"missing Issue #241 fixture {name}")
+    asm = [line for line in body.splitlines()
+           if "asm sideeffect" in line and "BSTART.TEPL" in line]
+    expected = 6 if name == "prefix_prefix_arithmetic" else 4
+    if len(asm) != expected:
+        raise SystemExit(f"{name}: expected {expected} TEPL operations, got {len(asm)}")
+    for line in asm:
+        if line.count("B.SUBVIEW") != 2:
+            raise SystemExit(f"{name}: every operation must have two B.SUBVIEW modifiers")
+        if "B.SUBVIEW 0" not in line or "B.SUBVIEW 1" not in line:
+            raise SystemExit(f"{name}: missing source-specific B.SUBVIEW modifier")
+        if "TCVT" in line or "TMOV" in line:
+            raise SystemExit(f"{name}: unexpected prefix materialization")
+PY
 
 # Issue #172: the role view must let one published Shared handle participate in
 # both operand slots, including the Shared transpose path, without introducing
@@ -78,26 +150,6 @@ done
   "$ROOT/test/tileop_api/src/SharedTLoad.cpp" -o "$OUT/SharedTLoad.ll"
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/RangeSubview.cpp" -o "$OUT/RangeSubview.ll"
-
-"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
-  "$ROOT/test/tileop_api/src/RangeAssemble.cpp" -o "$OUT/RangeAssemble.ll"
-python3 - "$OUT/RangeAssemble.ll" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-text = Path(sys.argv[1]).read_text(encoding="utf-8")
-body = next((part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
-             if "assemble_tadd_subviews" in part), None)
-if body is None:
-    raise SystemExit("missing TADD_ASS subview fixture")
-if body.count("B.SUBVIEW") != 2:
-    raise SystemExit("assemble_tadd_subviews: expected two source B.SUBVIEW modifiers")
-if body.count("B.ASSEMBLE") != 1:
-    raise SystemExit("assemble_tadd_subviews: expected one destination B.ASSEMBLE modifier")
-if not re.search(r"B\\.IOT.*B\\.SUBVIEW.*B\\.SUBVIEW.*B\\.IOT.*B\\.ASSEMBLE", body):
-    raise SystemExit("assemble_tadd_subviews: invalid source/destination modifier order")
-PY
 grep -q '<256 x i32> asm sideeffect' "$OUT/SharedTLoad.ll"
 grep -q 'i64 asm sideeffect.*=@2Sr' "$OUT/SharedTLoad.ll"
 grep -q '<256 x i32> asm sideeffect.*@2Sr' "$OUT/SharedTLoad.ll"
@@ -153,6 +205,46 @@ for name in ("tor_ass_subview", "tor_ass_explicit_range"):
     if not re.search(r"B\.IOT.*B\.SUBVIEW.*B\.SUBVIEW.*B\.IOT.*B\.ASSEMBLE",
                      body):
         raise SystemExit(f"{name}: invalid source/destination modifier order")
+PY
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TileRegionTCVTSubview.cpp" \
+  -o "$OUT/TileRegionTCVTSubview.ll"
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TileRegionShift.cpp" -o "$OUT/TileRegionShift.ll"
+python3 - "$OUT/TileRegionTCVTSubview.ll" "$OUT/TileRegionShift.ll" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+tcvt = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = next(part for part in re.split(r"(?=^define )", tcvt, flags=re.MULTILINE)
+            if "convert_subview" in part)
+if "BSTART.TEPL 27" not in body or body.count("B.SUBVIEW") != 1:
+    raise SystemExit("convert_subview: missing TCVT opcode or source B.SUBVIEW")
+if "B.ASSEMBLE" in body or "B.DIM zero, $2, ->lb2" in body:
+    raise SystemExit("convert_subview: ordinary CUBE TCVT emitted assembly/LB2")
+
+shift = Path(sys.argv[2]).read_text(encoding="utf-8")
+functions = re.split(r"(?=^define )", shift, flags=re.MULTILINE)
+ordinary = next(part for part in functions if "shift_subview" in part and
+                "assemble_shift_subviews" not in part)
+for opcode in (9, 10):
+    if f"BSTART.TEPL {opcode}" not in ordinary:
+        raise SystemExit(f"shift_subview: missing shift opcode {opcode}")
+if ordinary.count("B.SUBVIEW") != 2 or "B.ASSEMBLE" in ordinary:
+    raise SystemExit("shift_subview: invalid ordinary source modifiers")
+
+assembled = next(part for part in functions if "assemble_shift_subviews" in part)
+for opcode in (9, 10):
+    if f"BSTART.TEPL {opcode}" not in assembled:
+        raise SystemExit(f"assemble_shift_subviews: missing shift opcode {opcode}")
+if assembled.count("B.SUBVIEW") != 8 or assembled.count("B.ASSEMBLE") != 4:
+    raise SystemExit("assemble_shift_subviews: invalid modifier counts")
+for line in (line for line in assembled.splitlines() if "asm sideeffect" in line):
+    if "BSTART.TEPL" in line and not re.search(
+            r"B\.IOT.*B\.SUBVIEW.*B\.SUBVIEW.*B\.IOT.*B\.ASSEMBLE", line):
+        raise SystemExit("assemble_shift_subviews: invalid modifier order")
 PY
 
 echo "Linx target C++ frontend range/GMOV contract: PASS"

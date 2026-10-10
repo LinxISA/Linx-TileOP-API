@@ -6,6 +6,9 @@
 using namespace pto;
 
 using D = CubeAccumulatorM32<float, 32, 32>;
+using DBf16 = CubeAccumulatorM32<__bf16, 32, 32>;
+using RBf16 = Tile<Location::Vec, __bf16, 32, 32, BLayout::RowMajor, 32, 1>;
+using RFloat = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
 using Ds8 = CubeAccumulatorM32<int8_t, 32, 32>;
 using A = CubeTileM32<float, 32, 64>;
 using B = CubeTileN8<float, 64, 32>;
@@ -66,6 +69,12 @@ using Hif4ScaleWrongShapeA = Tile<Location::Scaling, uint32_t, 16, 2,
                                    BLayout::RowMajor, 16, 2>;
 
 void fail_cases(D &d, Ds8 &d8, A &a, B &b, R &r, G &g) {
+#if defined(SHOULD_FAIL_effective_d_aux_dtype)
+  // PTO #346: auxiliary reductions must use the effective final D dtype.
+  DBf16 db16;
+  RFloat rfloat;
+  TMATMUL(db16, a, b, fixp::bf16().row_max(rfloat, rfloat));
+#endif
 #if defined(SHOULD_FAIL_dtype)
   // QF322S8Pre requires an S8 destination, not FP32.
   TMATMUL(d, a, b, fixp::s8(0x7));

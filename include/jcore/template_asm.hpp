@@ -1,6 +1,8 @@
 #ifndef TEMPLATE_ASM_HPP
 #define TEMPLATE_ASM_HPP
 
+#include <cassert>
+
 #include "common/pto_tile.hpp"
 #include "common/pto_tile_region.hpp"
 
@@ -55,6 +57,52 @@ using namespace pto;
   ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32, Null\n"                          \
   ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Null\n"                      \
   ".endif\n"
+
+// TROWEXPAND* uses B.DATR.RMode as a compact byte-offset selector.  RMode is
+// encoded in three bits by the LinxV5 instruction, so the direct API emits the
+// ordinary two-field form for zero and the explicit alias for nonzero values.
+#define PTO_ROW_EXPAND_LAYOUT_ASM                                               \
+  ".if %c[ElemLayout] == 29\n"                                               \
+  ".if %c[BroadcastByteOffset] == 0\n"                                      \
+  "B.DATR CUBE_M32, Null\n"                                                   \
+  ".else\n"                                                                    \
+  "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c[BroadcastByteOffset]\n"          \
+  ".endif\n"                                                                  \
+  ".elseif %c[ElemLayout] == 31\n"                                           \
+  ".if %c[BroadcastByteOffset] == 0\n"                                      \
+  "B.DATR CUBE_M16, Null\n"                                                   \
+  ".else\n"                                                                    \
+  "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c[BroadcastByteOffset]\n"          \
+  ".endif\n"                                                                  \
+  ".endif\n"
+
+#define PTO_ROW_EXPAND_OFFSET_CHECK(Tile, Source)                               \
+  static_assert((BroadcastByteOffset) >= 0 && (BroadcastByteOffset) <= 7,        \
+                "TROWEXPAND broadcast byte offset must fit B.DATR.RMode");      \
+  static_assert((BroadcastByteOffset) == 0 || Tile::IsCubeLayout,                \
+                "TROWEXPAND broadcast offset is not valid for RowMajor");       \
+  static_assert((BroadcastByteOffset) == 0 ||                                    \
+                    ((type_traits<typename Source::DType>::bits % 8) == 0 &&    \
+                     (BroadcastByteOffset) %                                      \
+                         (type_traits<typename Source::DType>::bits / 8) == 0),   \
+                "TROWEXPAND broadcast byte offset must align to element bytes"); \
+  static_assert((BroadcastByteOffset) == 0 ||                                    \
+                    (BroadcastByteOffset) /                                      \
+                        (type_traits<typename Source::DType>::bits / 8) <         \
+                        Source::CubeCellCols,                                     \
+                "TROWEXPAND broadcast byte offset exceeds CELL columns");
+
+// A row-broadcast source is one logical column (RowMajor or CUBE), or a packed
+// CUBE CELL carrier holding up to CubeCellCols logical columns (BF16/FP16 x2 in
+// a CUBE_M32 cell, PTO-ISA #207, issue #251).  BroadcastByteOffset selects the
+// logical column within the CELL and is bounded separately against CubeCellCols
+// by PTO_ROW_EXPAND_OFFSET_CHECK, so the valid-column count is decoupled from
+// the offset: ValidCol==1 with a nonzero offset (physical slot select) stays
+// valid, and ValidCol<=CubeCellCols admits the fused multi-slot carrier.
+#define PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(Source)                             \
+  (Source::ValidCol == DYNAMIC || Source::ValidCol == 1 ||                     \
+   (Source::IsCubeLayout && Source::ValidCol >= 1 &&                           \
+    Source::ValidCol <= Source::CubeCellCols))
 
 // TCVT for a CUBE_M16/M32 source preserves the Tile descriptors' CUBE layout,
 // while B.DATR.Layout remains NORM and is therefore omitted. B.DATR carries
@@ -140,20 +188,6 @@ using namespace pto;
   ".elseif %c[Layout] == 22\nB.DATR ND2M16.normal, Zero\n"                     \
   ".elseif %c[Layout] == 23\nB.DATR ND2N8.normal, Zero\n"                      \
   ".endif\n"
-
-// Rounding-mode selector shared by the scalar cvt helpers and the
-// tile-level TCVT (the ISA B.DATR RMode field is bits[17:15]; the
-// enumeration values match the ISA codes one-to-one).
-enum LinxRMode {
-  LINX_RNONE = 0,
-  LINX_RNE   = 1,
-  LINX_RTZ   = 2,
-  LINX_RDN   = 3,
-  LINX_RUP   = 4,
-  LINX_RNA   = 5,
-  LINX_RTO   = 6,
-  LINX_RHB   = 7,
-};
 
 template <class...>
 inline constexpr bool pto_dependent_false_v = false;
@@ -864,6 +898,7 @@ template <typename tile_shape_out, typename tile_shape_offset, typename gm_shape
           TmaPadValue Pad = TmaPadValue::Null>
 inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
                     const tile_shape_offset &offset) {
+  // PTO 0.58.7: offset lanes are explicit byte displacements from base.
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
                 "MGATHER dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
@@ -876,7 +911,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -886,8 +921,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -897,7 +931,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -907,8 +941,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -918,7 +951,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -928,8 +961,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else {
 asm volatile(
@@ -939,7 +971,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -949,14 +981,14 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
 }
 
 template <typename tile_shape_in, typename tile_shape_offset, typename gm_shape>
 inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
                      const tile_shape_offset &offset) {
+  // PTO 0.58.7: offset lanes are explicit byte displacements from base.
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
                 "MSCATTER src logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
@@ -969,7 +1001,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
@@ -977,8 +1009,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -988,7 +1019,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
@@ -996,8 +1027,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -1007,7 +1037,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
@@ -1015,8 +1045,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else {
 asm volatile(
@@ -1026,7 +1055,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()),
@@ -1034,8 +1063,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
 }
 
@@ -1057,7 +1085,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
@@ -1068,8 +1096,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -1079,7 +1106,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
@@ -1090,8 +1117,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -1101,7 +1127,7 @@ asm volatile(
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
@@ -1112,8 +1138,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else {
 asm volatile(
@@ -1123,7 +1148,7 @@ asm volatile(
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
         [mask] "Tr"(mask.data()),
@@ -1134,8 +1159,7 @@ asm volatile(
             tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(src.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
 }
 
@@ -1157,7 +1181,7 @@ asm volatile(
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111\n"
       "B.IOT %[mask], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
@@ -1165,8 +1189,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
@@ -1177,7 +1200,7 @@ asm volatile(
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111\n"
       "B.IOT %[mask], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
@@ -1185,8 +1208,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "i"(tile_shape_offset::ValidCol),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
@@ -1197,7 +1219,7 @@ asm volatile(
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111\n"
       "B.IOT %[mask], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
@@ -1205,8 +1227,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "i"(tile_shape_offset::ValidRow),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
   else {
 asm volatile(
@@ -1217,7 +1238,7 @@ asm volatile(
       "B.DIM zero, %c[Col], ->LB2\n"
       "B.IOT %[src], %[off], mask=1111\n"
       "B.IOT %[mask], mask=1111, last\n"
-      "B.IOR [%[base], %[GmStride]], []\n"
+      "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
@@ -1225,8 +1246,7 @@ asm volatile(
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
         [ValidCol] "r"(offset.GetValidCol()),
         [ValidRow] "r"(offset.GetValidRow()),
-        [Col] "i"(tile_shape_offset::Cols),
-        [GmStride] "r"(dst.GetStride(3))
+        [Col] "i"(tile_shape_offset::Cols)
       : "memory");  }
 }
 
@@ -2989,6 +3009,53 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src,
       : "memory");
 }
 
+// Slot form for Shared-producing weight loads.  The destination is an
+// architectural Shared register selected by the type, so no C++ handle is
+// materialized and no Shared copy/spill can be introduced by the ABI.
+template <WeightLayoutEnum WeightLayout, unsigned Slot, int PEMask = 1,
+          is_tile_data_v shp, is_global_data_v gm_shape>
+PTO_SHARED_INLINE void TLOAD_SLOT(const gm_shape &src,
+                                  WeightTLOADParams params) {
+  static_assert(Slot < 64, "TLOAD_SLOT requires S0..S63");
+  using shp_dtype = typename shp::TileDType;
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0 &&
+                    (PEMask & (PEMask - 1)) == 0,
+                "TLOAD_SLOT requires one PE");
+  static_assert(WeightLayout == OHWI2NK || WeightLayout == OIHW2NK,
+                "weight TLOAD layout must be OHWI2NK or OIHW2NK");
+  static_assert(shp::isRowMajor && !shp::isBoxedLayout && !shp::IsCubeLayout,
+                "TLOAD_SLOT destination must be a row-major Shared tile");
+  static_assert(tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
+                "TLOAD_SLOT destination size must be 128 B..256 KiB");
+  uint64_t shape_word = params.shape_word;
+  uint64_t start_word = params.start_word;
+  asm("" : "+r"(shape_word));
+  asm("" : "+r"(start_word));
+  asm volatile(
+      "BSTART.TLSU TLOAD, %D[SrcType]\n"
+      ".if %c[WeightLayout] == 10\nB.DATR OHWI2NK, DTYPE_NONE, Zero\n"
+      ".elseif %c[WeightLayout] == 11\nB.DATR OIHW2NK, DTYPE_NONE, Zero\n"
+      ".endif\n"
+      "B.DIM %[ValidK], 0, ->lb0\n"
+      "B.DIM %[ValidN], 0, ->lb1\n"
+      "B.DIM zero, %c[TotalK], ->lb2\n"
+      ".if %c[PEMask] == 1\nB.IOS mask=0001, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".elseif %c[PEMask] == 2\nB.IOS mask=0010, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".elseif %c[PEMask] == 4\nB.IOS mask=0100, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".else\nB.IOS mask=1000, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".endif\n"
+      "B.IOR [%[Base],%[Shape],%[Start]], []\n"
+      :
+      : [Base] "r"(src.data()), [Shape] "r"(shape_word),
+        [Start] "r"(start_word), [PEMask] "i"(PEMask),
+        [Slot] "i"(Slot), [WeightLayout] "i"(static_cast<int>(WeightLayout)),
+        [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+        [TileSize] "i"(tile_type_traits<shp_dtype>::TilesizeCode),
+        [ValidK] "r"(shp::ValidCol), [ValidN] "r"(shp::ValidRow),
+        [TotalK] "i"(shp::Cols)
+      : "memory");
+}
+
 // TLOAD_ASS: GM -> an already-associated Shared Tile. Both operands are
 // inputs: B.IOS consumes the existing Shared handle as a source and does not
 // allocate a destination or carry a TileSize destination modifier.
@@ -3759,6 +3826,42 @@ void TSTORE(gm_shape &dst, const cube_shape &src) {
   TSTORE_CUBE(dst, src);
 }
 
+// Logical element transport conveniences. They delegate to the existing
+// layout-dispatched TLOAD/TSTORE; no instruction or scalar math implementation
+// is duplicated here. Pointer ranges are expressed in logical elements.
+template <is_tile_data_v TileType>
+  requires(pto::is_element_tile_v<TileType> && TileType::Rows * TileType::Cols == 128)
+void TLOAD(TileType &dst, const typename TileType::DType *input,
+           std::size_t valid_elements) {
+  if (valid_elements > 128)
+    __builtin_trap();
+  using Element = typename TileType::DType;
+  alignas(128) Element tail[128];
+  const Element *source = input;
+  if (valid_elements != 128) {
+    for (std::size_t element = 0; element < 128; ++element)
+      tail[element] = element < valid_elements ? input[element] : Element{};
+    source = tail;
+  }
+  pto::global_tensor<Element, pto::RowMajor<32, 4>> memory(source);
+  TLOAD(dst, memory);
+}
+
+template <is_tile_data_v TileType, typename Parent, typename SubTile,
+          int Rows, int Cols>
+  requires(pto::is_element_tile_v<TileType> && TileType::Rows * TileType::Cols == 32 &&
+           pto::is_element_tile_v<Parent> && Parent::Rows * Parent::Cols == 128 &&
+           pto::is_element_tile_v<SubTile> &&
+           std::is_same_v<typename TileType::DType, typename Parent::DType> &&
+           std::is_same_v<typename TileType::DType, typename SubTile::DType> &&
+           Rows == 1 && Cols == 4)
+void TSTORE(typename TileType::DType *block_base, const TileType &src,
+            const pto::region::BorrowedTileArray<Parent, SubTile, Rows, Cols> &parts,
+            std::size_t part) {
+  auto memory = parts.logical_region(block_base, part);
+  TSTORE(memory, src);
+}
+
 // TSTORE: Shared Tile -> GM (PTO ISA 0.58.3 TLSU Function 1 Shared form).
 // Exactly one source B.IOS (PE_MASK=1111), no B.IOT, at most one B.IOR
 // (GM base + logical row stride). Symmetric to Shared TLOAD.
@@ -3964,19 +4067,19 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
   }
 }
 
-// MGATHER_CAS: atomic compare-and-swap at logical element indices (PTO ISA
+// MGATHER_CAS: atomic compare-and-swap at explicit byte displacements (PTO ISA
 // TLSU function 8; canonical BSTART.MGATHER.CAS). Exactly two Local B.IOT
 // bindings: IndexTile+ExpectedTile (TwoSrc_NoDst, no destination, L=0) then
-// ReplacementTile+last ->DstTile (L=1); B.IOR carries the GM base and row
-// stride in elements. Each lane atomically reads the indexed GM element,
+// ReplacementTile+last ->DstTile (L=1); B.IOR carries only the GM base.
+// Each lane atomically reads the byte-displaced GM element,
 // compares with Expected, stores Replacement on match, and publishes the
 // observed old value to the destination. The destination must be an
 // early-clobbered output so the allocator keeps it distinct from replacement.
 template <is_tile_data_v DstTile, is_tile_data_v IndexTile,
           is_tile_data_v ExpectedTile, is_tile_data_v ReplacementTile>
 void MGATHER_CAS(DstTile &observedOld, uint64_t base,
-                 IndexTile &elementIndices, ExpectedTile &expected,
-                 ReplacementTile &replacement, uint32_t rowStride,
+                 IndexTile &byteDisplacements, ExpectedTile &expected,
+                 ReplacementTile &replacement,
                  uint32_t validCol, uint32_t validRow = 1) {
   static_assert(std::is_same_v<typename ExpectedTile::DType,
                                typename ReplacementTile::DType> &&
@@ -4004,8 +4107,6 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
                     ReplacementTile::BFractal == DstTile::BFractal,
                 "MGATHER_CAS index, expected, replacement, and destination "
                 "layouts must match");
-  if (rowStride == 0 || rowStride < validCol)
-    __builtin_trap();
   if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow > 0) {
 asm volatile(
     "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
@@ -4015,11 +4116,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base], %[Stride]], []\n"
+    "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(rowStride),
+      [Base] "r"(base),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [ElemLayout] "i"(local_layout_code_v<IndexTile>),
       [VCOL] "i"(DstTile::ValidCol), [VROW] "i"(DstTile::ValidRow),
@@ -4035,11 +4136,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base], %[Stride]], []\n"
+    "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(rowStride),
+      [Base] "r"(base),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [ElemLayout] "i"(local_layout_code_v<IndexTile>),
       [VCOL] "i"(DstTile::ValidCol), [VROW] "r"(validRow),
@@ -4055,11 +4156,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base], %[Stride]], []\n"
+    "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(rowStride),
+      [Base] "r"(base),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [ElemLayout] "i"(local_layout_code_v<IndexTile>),
       [VCOL] "r"(validCol), [VROW] "i"(DstTile::ValidRow),
@@ -4075,11 +4176,11 @@ asm volatile(
     "B.DIM zero, %c[Col], ->lb2\n"
     "B.IOT %[Idx], %[Exp], mask=1111\n"
     "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-    "B.IOR [%[Base], %[Stride]], []\n"
+    "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
-    : [Idx] "Tr"(elementIndices.data()), [Exp] "Tr"(expected.data()),
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
       [Rep] "Tr"(replacement.data()),
-      [Base] "r"(base), [Stride] "r"(rowStride),
+      [Base] "r"(base),
       [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
       [ElemLayout] "i"(local_layout_code_v<IndexTile>),
       [VCOL] "r"(validCol), [VROW] "r"(validRow),
@@ -4088,17 +4189,17 @@ asm volatile(
     : "memory");  }
 }
 
-// PTO ISA TLSU GM_ATOM_VALUE family (functions 9-18): atomic RMW at logical
-// element indices with observed-old-value publication. Every member shares one
+// PTO ISA TLSU GM_ATOM_VALUE family (functions 9-18): atomic RMW at explicit
+// byte displacements with observed-old-value publication. Every member shares one
 // bundle shape -- a single Local B.IOT binding (IndexTile + one operand tile,
-// last, ->DstTile) and a base-only B.IOR (the index is the full logical linear
-// address, so no row stride is carried). Only the BSTART mnemonic and the legal
+// last, ->DstTile) and a base-only B.IOR (the index is a byte displacement,
+// so no row stride is carried). Only the BSTART mnemonic and the legal
 // transfer DataType differ per member; see pto-spec
 // asl/tile/model/memory/gm-atom-red.asl (GMAtomicOperationDataTypeLegal) for the
 // per-op DataType legality reproduced in each wrapper's static_assert. The
 // destination is early-clobbered so the allocator keeps it distinct from the
 // operand. MGATHER_CAS (function 8) is defined separately above because it
-// carries two B.IOT bindings and a GM row stride.
+// carries two B.IOT bindings.
 //
 // The four constexpr branches select immediate vs. runtime B.DIM encodings for
 // static or DYNAMIC ValidCol/ValidRow, matching MGATHER_CAS.
@@ -5048,8 +5149,9 @@ constexpr void validate_matrix_scale_contract() {
   }
 }
 
-template <FixpAttr Attr, int SrcMask, int OutMask, typename A, typename B,
-          typename Dst, typename RowIn, typename QuantTile, typename ReluTile,
+template <FixpAttr Attr, int SrcMask, int OutMask, typename Dst,
+          typename A, typename B,
+          typename RowIn, typename QuantTile, typename ReluTile,
           typename RowOut, typename GroupOut, bool MX = false,
           bool IsAccForm = true>
 constexpr void validate_matrix_postprocess_contract() {
@@ -5070,6 +5172,7 @@ constexpr void validate_matrix_postprocess_contract() {
       ? __type_fp32
       : matrix_accumulator_type_code(
             type_traits<typename A::DType>::TypeCode);
+  constexpr int DCode = type_traits<typename Dst::DType>::TypeCode;
   constexpr int M = is_shared_tile_v<A> && Attr.TransA
       ? A::ValidCol : A::ValidRow;
   // Shared B declares its physical stored shape (pto-spec #257): [N, K]
@@ -5085,8 +5188,10 @@ constexpr void validate_matrix_postprocess_contract() {
   static_assert(Dst::IsCubeLayout && is_cube_m_layout_v<Dst>,
                 "Matrix post-process requires a CUBE_M16/CUBE_M32 destination");
   if constexpr ((OutMask & 1) != 0) {
-    static_assert(type_traits<typename RowOut::DType>::TypeCode == AccCode,
-                  "RowMaxOut dtype must match the derived accumulator type");
+    static_assert(matrix_final_d_reduction_type_legal(DCode),
+                  "RowMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowOut::DType>::TypeCode == DCode,
+                  "RowMaxOut dtype must match final D dtype");
     static_assert(RowOut::ValidRow == PPRows && RowOut::ValidCol == 1,
                   "RowMaxOut valid shape must be per-PE M rows x 1 "
                   "(group_M block for cooperative, effective M otherwise)");
@@ -5095,8 +5200,10 @@ constexpr void validate_matrix_postprocess_contract() {
                   "RowMaxOut must use the primary destination CUBE layout");
   }
   if constexpr ((SrcMask & 1) != 0) {
-    static_assert(type_traits<typename RowIn::DType>::TypeCode == AccCode,
-                  "RowMaxIn dtype must match the derived accumulator type");
+    static_assert(matrix_final_d_reduction_type_legal(DCode),
+                  "RowMaxIn requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowIn::DType>::TypeCode == DCode,
+                  "RowMaxIn dtype must match final D dtype");
     static_assert(RowIn::ValidRow == M && RowIn::ValidCol == 1,
                   "RowMaxIn valid shape must be M x 1");
     static_assert(RowIn::BFractal == Dst::BFractal &&
@@ -5105,8 +5212,10 @@ constexpr void validate_matrix_postprocess_contract() {
   }
   if constexpr ((OutMask & 2) != 0) {
     constexpr int GroupN = fixp::group_n_from_code(Attr.GroupNCode);
-    static_assert(type_traits<typename GroupOut::DType>::TypeCode == AccCode,
-                  "GroupMaxOut dtype must match the derived accumulator type");
+    static_assert(matrix_final_d_reduction_type_legal(DCode),
+                  "GroupMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename GroupOut::DType>::TypeCode == DCode,
+                  "GroupMaxOut dtype must match final D dtype");
     static_assert(GroupOut::ValidRow == PPRows &&
                       GroupOut::ValidCol == (N + GroupN - 1) / GroupN,
                   "GroupMaxOut valid shape must be per-PE M rows x "
@@ -5240,6 +5349,45 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
           PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
         : "memory");
   }
+}
+
+template <is_tile_data_v Dst, unsigned SlotA, typename A, unsigned SlotB,
+          typename B, FixpAttr Attr = FixpAttr{}>
+  requires(is_shared_tile_slot_v<A> && is_shared_tile_slot_v<B>)
+PTO_SHARED_INLINE void matmul_slot_impl(Dst &dst) {
+  static_assert(is_basic_fixp_attr(Attr),
+                "TMATMUL_SLOT supports only basic FPATR attributes");
+  static_assert(type_traits<typename A::DType>::TypeCode == __type_fp32 &&
+                    type_traits<typename B::DType>::TypeCode == __type_fp32,
+                "TMATMUL_SLOT currently supports FP32 Shared slots");
+  static_assert(A::Slot == SlotA && B::Slot == SlotB,
+                "TMATMUL_SLOT slot metadata mismatch");
+  constexpr size_t M = A::ValidRow;
+  constexpr size_t K = A::ValidCol;
+  constexpr size_t N = matrix_b_effective_n<B, Attr.TransB>;
+  validate_matrix_contract<Attr, Dst, A, B>();
+  validate_cube_ctrl_contract<Attr, false>();
+  constexpr int DataTypeA = type_traits<typename A::DType>::TypeCode;
+  constexpr int DataTypeB = type_traits<typename B::DType>::TypeCode;
+  constexpr int TileSize =
+      tile_type_traits<typename Dst::TileDType>::TilesizeCode;
+  asm volatile(
+      "BSTART.CUBE TMATMUL, FP32\n"
+      "B.DATR FP32, byte0, Zero, RNONE, NOSAT\n"
+      PTO_FIXP_ATTR
+      "B.DIM zero, %c[M], ->lb0\n"
+      "B.DIM zero, %c[N], ->lb1\n"
+      "B.DIM zero, %c[K], ->lb2\n"
+      "B.IOS S%c[SharedA], mask=1111\n"
+      "B.IOS S%c[SharedB], mask=1111\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [SharedA] "i"(SlotA), [SharedB] "i"(SlotB),
+        [M] "i"(M), [N] "i"(N), [K] "i"(K),
+        [CCTRL] "i"(static_cast<uint8_t>(Attr.CubeCtrl)),
+        [DataTypeA] "i"(DataTypeA), [DataTypeB] "i"(DataTypeB),
+        [TileSize] "i"(TileSize), PTO_FIXP_ATTR_INPUTS
+      : "memory");
 }
 
 #define PTO_DEFINE_MATMUL_3SRC_HELPER(Name, Opcode)                            \
@@ -6831,7 +6979,7 @@ PTO_SHARED_INLINE void emit_fixp(
     ReluTile &relu_tile, RowOut &row_out, GroupOut &group_out,
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_EMIT_LOCAL);
@@ -6866,7 +7014,7 @@ PTO_SHARED_INLINE void emit_matmul_acc_fixp(
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_accumulator_contract<Attr, Dst, C_, A, B>();
   validate_cscale_contract<Attr, C_, CScale>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_ACC_EMIT_LOCAL);
@@ -6890,7 +7038,7 @@ PTO_SHARED_INLINE void emit_matmul_bias_fixp(
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_matrix_contract<Attr, Dst, A, B>();
   validate_matrix_bias_contract<Attr, Dst, BiasT, A, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     PTO_FIXP_DISPATCH(PTO_FIXP_BIAS_EMIT_LOCAL);
@@ -6920,7 +7068,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
   validate_matrix_contract<Attr, Dst, A, B, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_LOCAL); }
@@ -6958,7 +7106,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
   validate_cscale_contract<Attr, C_, CScale>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, true>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_LOCAL); }
@@ -6994,7 +7142,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
   validate_matrix_bias_contract<Attr, Dst, BiasT, A, B, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleA, A, ScaleB, B>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, A, B, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, A, B,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_LOCAL); }
@@ -7080,7 +7228,7 @@ PTO_SHARED_INLINE void emit_gemv_fixp(
     RowOut &row_out, GroupOut &group_out,
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GV_EMIT_LOCAL);
 }
@@ -7099,7 +7247,7 @@ PTO_SHARED_INLINE void emit_gemv_bias_fixp(
   uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_bias_contract<Attr, Dst, BiasT, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, false>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVB_EMIT_LOCAL);
 }
@@ -7118,7 +7266,7 @@ PTO_SHARED_INLINE void emit_gemv_acc_fixp(
     uint64_t quant_gpr, uint64_t lrelu_gpr, size_t M, size_t N, size_t K) {
   validate_gemv_contract<Attr, Dst, Vec, Mtx>();
   validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, false, true>();
   PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVA_EMIT_LOCAL);
 }
@@ -7143,7 +7291,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_fixp(
   validate_gemv_contract<Attr, Dst, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_PLAIN); }
@@ -7171,7 +7319,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
   validate_matrix_bias_contract<Attr, Dst, BiasT, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, false>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_BIAS); }
@@ -7199,7 +7347,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
   validate_matrix_accumulator_contract<Attr, Dst, C, Vec, Mtx, true>();
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB,
       ScaleVec, Vec, ScaleMtx, Mtx>();
-  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Vec, Mtx, Dst,
+  validate_matrix_postprocess_contract<Attr, SrcMask, OutMask, Dst, Vec, Mtx,
       RowIn, QuantTile, ReluTile, RowOut, GroupOut, true, true>();
   if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_ACC); }
@@ -7455,6 +7603,14 @@ PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_acc, "TMATMULMX.ACC", true)
 #undef PTO_MATMUL_HEADER
 
 } // namespace pto_matmul_detail
+
+template <is_tile_data_v Dst, unsigned SlotA, typename A, unsigned SlotB,
+          typename B, FixpAttr Attr = FixpAttr{}>
+  requires(is_shared_tile_slot_v<A> && is_shared_tile_slot_v<B>)
+PTO_SHARED_INLINE void TMATMUL_SLOT(Dst &dst) {
+  pto_matmul_detail::matmul_slot_impl<Dst, SlotA, A, SlotB, B, Attr>(dst);
+}
+
 namespace pto_matmul_groupm_detail {
 
 // Explicit-groupM overloads exist only for the cooperative Local-A/Shared-B
@@ -8064,9 +8220,12 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
                   "(group_M block for cooperative, effective M otherwise)");
     static_assert(RowOut::ValidCol == -1 || RowOut::ValidCol == 1,
                   "TMATMUL RowMaxOut must have ValidCol=1");
-    static_assert(matrix_accumulator_type_legal<tile_shape_a, tile_shape_b,
-                                                RowOut>(),
-                  "TMATMUL RowMaxOut dtype must match FP32/S32/U32 AccType");
+    static_assert(matrix_final_d_reduction_type_legal(
+                      type_traits<typename tile_shape_d::DType>::TypeCode),
+                  "TMATMUL RowMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowOut::DType>::TypeCode ==
+                      type_traits<typename tile_shape_d::DType>::TypeCode,
+                  "TMATMUL RowMaxOut dtype must match final D dtype");
     static_assert(
         tile_type_traits<typename RowOut::TileDType>::IsValidActiveSize,
         "TMATMUL RowMaxOut physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
@@ -8084,6 +8243,12 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     static_assert(std::is_same_v<typename RowIn::DType,
                                  typename RowOut::DType>,
                   "TMATMUL RowMaxIn/RowMaxOut dtypes must match");
+    static_assert(matrix_final_d_reduction_type_legal(
+                      type_traits<typename tile_shape_d::DType>::TypeCode),
+                  "TMATMUL RowMaxIn requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename RowIn::DType>::TypeCode ==
+                      type_traits<typename tile_shape_d::DType>::TypeCode,
+                  "TMATMUL RowMaxIn dtype must match final D dtype");
     static_assert(
         tile_type_traits<typename RowIn::TileDType>::IsValidActiveSize,
         "TMATMUL RowMaxIn physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
@@ -8099,9 +8264,12 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
     static_assert(GroupOut::ValidCol == -1 || ExpectedCols == -1 ||
                       GroupOut::ValidCol == ExpectedCols,
                   "TMATMUL GroupMaxOut must have ValidCol=ceil(N/GroupN)");
-    static_assert(matrix_accumulator_type_legal<tile_shape_a, tile_shape_b,
-                                                GroupOut>(),
-                  "TMATMUL GroupMaxOut dtype must match FP32/S32/U32 AccType");
+    static_assert(matrix_final_d_reduction_type_legal(
+                      type_traits<typename tile_shape_d::DType>::TypeCode),
+                  "TMATMUL GroupMaxOut requires final D dtype FP32, FP16, or BF16");
+    static_assert(type_traits<typename GroupOut::DType>::TypeCode ==
+                      type_traits<typename tile_shape_d::DType>::TypeCode,
+                  "TMATMUL GroupMaxOut dtype must match final D dtype");
     static_assert(
         tile_type_traits<typename GroupOut::TileDType>::IsValidActiveSize,
         "TMATMUL GroupMaxOut physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
@@ -11773,6 +11941,46 @@ void TEXP(tile_shape &dst, tile_shape &src) {
 }
 
 // TLOG: dst = log(src)
+// TEXPDIF: dst = exp(src0 - src1), PTO ISA 0.58.7 selector 0x01D.
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TEXPDIF(D &dst, A &src0, B &src1) {
+  validate_texpdif_operands<D, A, B>();
+  static_assert(D::ValidCol > 0 && D::ValidRow > 0,
+                "TEXPDIF requires statically known positive valid dimensions");
+  asm volatile(
+      "BSTART.TEPL 29, %D[SrcType]\n"
+      ".if %c[Layout] == 29\n"
+      ".if %c[DstType] == %c[SrcType]\n"
+      "B.DATR CUBE_M32, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M32, %D[DstType], Null\n"
+      ".endif\n"
+      ".elseif %c[Layout] == 31\n"
+      ".if %c[DstType] == %c[SrcType]\n"
+      "B.DATR CUBE_M16, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M16, %D[DstType], Null\n"
+      ".endif\n"
+      ".elseif %c[DstType] != %c[SrcType]\n"
+      "B.DATR NORM, %D[DstType], Null\n"
+      ".endif\n"
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM zero, %c[ValidRow], ->lb1\n"
+      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      ""
+      : [Dst] "=Tr"(dst.data())
+      : [SrcType] "i"(type_traits<typename A::DType>::TypeCode),
+        [DstType] "i"(type_traits<typename D::DType>::TypeCode),
+        [ValidCol] "i"(A::ValidCol), [ValidRow] "i"(A::ValidRow),
+        [Cols] "i"(A::Cols), [Src0] "Tr"(src0.data()),
+        [Src1] "Tr"(src1.data()),
+        [Size] "i"(tile_type_traits<typename D::TileDType>::TilesizeCode),
+        [Layout] "i"(local_layout_code_v<A>)
+      : "memory");
+}
+
+// TLOG: dst = log(src)
 template <is_tile_data_v tile_shape>
 void TLOG(tile_shape &dst, tile_shape &src) {
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -14456,7 +14664,7 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src, TIMG2COLParams params) {
   static_assert(tile_shape_out::ValidRow != 0 &&
                     tile_shape_out::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(is_timg2col_type_code(
+  static_assert(range::is_timg2col_type_code(
                     type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
   if (!is_timg2col_params_base_legal(params)) {
@@ -14579,7 +14787,7 @@ void TIMG2COL(tile_shape_out &dst, gm_shape &src,
               size_t groupRows) {
   static_assert(tile_shape_out::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(is_timg2col_type_code(
+  static_assert(range::is_timg2col_type_code(
                     type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
   const TIMG2COLParams params{param0, param1, param2};
@@ -14643,7 +14851,7 @@ void TIMG2COL(SharedTile<shp> &dst, gm_shape &src, TIMG2COLParams params) {
   static_assert(shp::ValidRow != 0 &&
                     shp::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(is_timg2col_type_code(
+  static_assert(range::is_timg2col_type_code(
                     type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
   if (!is_timg2col_params_base_legal(params)) {
@@ -14688,15 +14896,15 @@ void TIMG2COL(SharedTile<shp> &dst, gm_shape &src, TIMG2COLParams params) {
 template <LayoutCvtEnum SourceOrder = NORM, is_tile_data_v shp,
           is_global_data_v gm_shape>
   requires(shp::isRowMajor && !shp::isBoxedLayout)
-void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
-                    TIMG2COLParams params, unsigned PEMask) {
+PTO_SHARED_INLINE void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
+                                      TIMG2COLParams params, unsigned PEMask) {
   static_assert(SourceOrder == NORM || SourceOrder == DN2ND,
                 "TIMG2COL Shared output source order must be NORM (NHWC "
                 "indexing) or DN2ND (NCHW indexing)");
   static_assert(shp::ValidRow != 0 &&
                     shp::ValidCol != 0,
                 "TIMG2COL valid dimensions must be nonzero");
-  static_assert(is_timg2col_type_code(
+  static_assert(range::is_timg2col_type_code(
                     type_traits<typename gm_shape::DType>::TypeCode),
                 "TIMG2COL DataType is not supported by the ASL contract");
   if (!is_timg2col_params_base_legal(params)) {
@@ -14738,6 +14946,57 @@ void TIMG2COL_SPART(SharedTile<shp> &dst, gm_shape &src,
         [ValidRow] "i"(shp::ValidRow),
         [TotalCol] "i"(shp::Cols),
         [Param0] "r"(param0), [Param1] "r"(param1), [Param2] "r"(param2),
+        [TileSize] "i"(tile_type_traits<typename shp::TileDType>::TilesizeCode),
+        [IsMask1] "i"(PEMask == 1), [IsMask2] "i"(PEMask == 2),
+        [IsMask4] "i"(PEMask == 4)
+      : "memory");
+}
+
+template <LayoutCvtEnum SourceOrder = NORM, unsigned Slot, int PEMask,
+          is_tile_data_v shp, is_global_data_v gm_shape>
+  requires(shp::isRowMajor && !shp::isBoxedLayout)
+void TIMG2COL_SPART_SLOT(gm_shape &src, TIMG2COLParams params) {
+  static_assert(Slot < 64, "TIMG2COL_SPART_SLOT requires S0..S63");
+  static_assert(SourceOrder == NORM || SourceOrder == DN2ND,
+                "TIMG2COL Shared output source order must be NORM or DN2ND");
+  static_assert(shp::ValidRow != 0 && shp::ValidCol != 0,
+                "TIMG2COL valid dimensions must be nonzero");
+  static_assert(range::is_timg2col_type_code(
+                    type_traits<typename gm_shape::DType>::TypeCode),
+                "TIMG2COL DataType is not supported by the ASL contract");
+  if (!is_timg2col_params_base_legal(params) ||
+      !range::is_timg2col_single_pe_mask(PEMask)) {
+    __builtin_trap();
+  }
+  static_assert(tile_type_traits<typename shp::TileDType>::
+                    IsValidSharedActiveSize,
+                "TIMG2COL Shared destination size must be 128 B..256 KB");
+  uint64_t param0 = params.param0;
+  uint64_t param1 = params.param1;
+  uint64_t param2 = params.param2;
+  asm("" : "+r"(param0));
+  asm("" : "+r"(param1));
+  asm("" : "+r"(param2));
+  asm volatile(
+      "BSTART.TIMG2COL %D[DataType]\n"
+      "B.DATR %c[Layout], DTYPE_NONE, Zero\n"
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM zero, %c[ValidRow], ->lb1\n"
+      "B.DIM zero, %c[TotalCol], ->lb2\n"
+      "B.IOR [%[GMBase], zero, zero], []\n"
+      "B.IOR [%[Param0], %[Param1], %[Param2]], []\n"
+      ".if %c[IsMask1]\nB.IOS mask=0001, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".elseif %c[IsMask2]\nB.IOS mask=0010, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".elseif %c[IsMask4]\nB.IOS mask=0100, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".else\nB.IOS mask=1000, ->S%c[Slot]<%Z[TileSize]>\n"
+      ".endif\n"
+      :
+      : [GMBase] "r"(src.data()),
+        [DataType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
+        [Layout] "i"(timg2col_shared_layout_code(SourceOrder)),
+        [ValidCol] "i"(shp::ValidCol), [ValidRow] "i"(shp::ValidRow),
+        [TotalCol] "i"(shp::Cols), [Param0] "r"(param0),
+        [Param1] "r"(param1), [Param2] "r"(param2), [Slot] "i"(Slot),
         [TileSize] "i"(tile_type_traits<typename shp::TileDType>::TilesizeCode),
         [IsMask1] "i"(PEMask == 1), [IsMask2] "i"(PEMask == 2),
         [IsMask4] "i"(PEMask == 4)
@@ -14809,6 +15068,71 @@ asm volatile(
       [Start] "r"(startValue),
       [Direction] "r"(directionValue)
   );  }
+}
+
+// CUBE form of TCI.  The packed Step2D GPR contains signed RowStep in its
+// upper word and signed ColStep in its lower word.  Keep this separate from
+// the legacy RowMajor entry above so its emitted bundle cannot perturb the
+// established one-dimensional ABI.
+template <is_tile_data_v tile_shape, typename T, int row_step, int col_step>
+void TCI_2D(tile_shape &dst, T s) {
+  static_assert(std::is_same<typename tile_shape::DType, T>::value,
+                "TCI_2D destination and start must have the same type");
+  static_assert(row_step >= -1 && row_step <= 1 && col_step >= -1 &&
+                    col_step <= 1,
+                "TCI_2D steps must be -1, 0, or 1");
+  static_assert(tile_shape::Loc == Location::Left && tile_shape::IsCubeLayout &&
+                    (tile_shape::BFractal == BLayout::CubeM16 ||
+                     tile_shape::BFractal == BLayout::CubeM32),
+                "TCI_2D requires a Matrix CUBE_M16 or CUBE_M32 tile");
+  static_assert(tile_shape::ValidRow > 0 && tile_shape::ValidCol > 0 &&
+                    tile_shape::ValidRow <= tile_shape::Rows &&
+                    tile_shape::ValidCol <= tile_shape::Cols,
+                "TCI_2D requires positive valid dimensions within the tile");
+  static_assert(tile_shape::BFractal != BLayout::CubeM16 ||
+                    tile_shape::ValidRow <= 16,
+                "TCI_2D CUBE_M16 requires ValidRow <= 16");
+  static_assert(std::is_same<T, int32_t>::value ||
+                    std::is_same<T, int16_t>::value ||
+                    std::is_same<T, uint32_t>::value ||
+                    std::is_same<T, uint16_t>::value,
+                "TCI_2D supports only S32, S16, U32, and U16");
+  T startValue = s;
+  asm("" : "+r"(startValue));
+  uint64_t stepValue = (static_cast<uint64_t>(static_cast<uint32_t>(row_step)) << 32) |
+                       static_cast<uint32_t>(col_step);
+  asm("" : "+r"(stepValue));
+  asm volatile(
+      "BSTART.TEPL 102, %D[DataType]\n"
+      ".if %c[Layout] == 29\n"
+      "B.DATR CUBE_M32, DTYPE_NONE, Zero\n"
+      ".else\n"
+      "B.DATR CUBE_M16, DTYPE_NONE, Zero\n"
+      ".endif\n"
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM zero, %c[ValidRow], ->lb1\n"
+      "B.DIM zero, %c[PhysicalCol], ->lb2\n"
+      "B.IOR [%[Start],%[Steps]],[]\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      : [Dst] "=Tr"(dst.data())
+      : [DataType] "i"(type_traits<T>::TypeCode),
+        [Layout] "i"(tile_shape::BFractal == BLayout::CubeM32 ? 29 : 31),
+        [ValidCol] "i"(tile_shape::ValidCol),
+        [ValidRow] "i"(tile_shape::ValidRow),
+        [PhysicalCol] "i"(tile_shape::Cols),
+        [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
+        [Start] "r"(startValue), [Steps] "r"(stepValue)
+      : "memory");
+}
+
+template <is_tile_data_v tile_shape, typename T>
+void TCI_ROW(tile_shape &dst, T s) {
+  TCI_2D<tile_shape, T, 1, 0>(dst, s);
+}
+
+template <is_tile_data_v tile_shape, typename T>
+void TCI_COL(tile_shape &dst, T s) {
+  TCI_2D<tile_shape, T, 0, 1>(dst, s);
 }
 
 // TTRI: triangular mask generation
@@ -15544,21 +15868,24 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
   );  }
 }
 
-// TROWEXPAND: broadcast first element of each row
-template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+// TROWEXPAND: broadcast the row-broadcast source view (PTO 0.58.7)
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in,
+          int BroadcastByteOffset = 0>
 void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in);
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in::ValidCol == DYNAMIC || tile_shape_in::ValidCol == 1,
-                "TROWEXPAND source must be a one-column broadcast tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in),
+                "TROWEXPAND source must be a one-column carrier or a packed "
+                "CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
                 "TROWEXPAND broadcast source layout must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 68, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -15571,11 +15898,12 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
   asm volatile(
     "BSTART.TEPL 68, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -15588,11 +15916,12 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 68, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -15605,11 +15934,12 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
   asm volatile(
     "BSTART.TEPL 68, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
@@ -15622,6 +15952,7 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
       "i"(tile_shape_out::Cols),
       "Tr"(src.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  }
 }
@@ -16144,14 +16475,14 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
   );  }
 }
 
-// TCOLEXPAND: broadcast first element of each col
+// TCOLEXPAND: broadcast the column-broadcast source view (PTO 0.58.7)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in::ValidRow == DYNAMIC || tile_shape_in::ValidRow == 1,
-                "TCOLEXPAND source must be a one-row broadcast tile");
+                "TCOLEXPAND source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
                 "TCOLEXPAND broadcast source layout must match the "
                 "destination layout");
@@ -16406,113 +16737,128 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
 // src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
 // (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
-          is_tile_data_v tile_shape_in1>
+          is_tile_data_v tile_shape_in1,
+          int BroadcastByteOffset = 0>
 void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDADD broadcast source must be a one-column tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDADD broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDADD source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDADD: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDADD: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDADD: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDADD: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 69, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDADD: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDADD: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDADD: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDADD: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 69, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDADD: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDADD: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDADD: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDADD: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 69, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDADD: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDADD: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDADD: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDADD: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 69, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  }
 }
@@ -16521,113 +16867,128 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 // src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
 // (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
-          is_tile_data_v tile_shape_in1>
+          is_tile_data_v tile_shape_in1,
+          int BroadcastByteOffset = 0>
 void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDSUB broadcast source must be a one-column tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDSUB broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDSUB source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDSUB: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDSUB: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDSUB: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDSUB: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 70, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDSUB: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDSUB: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDSUB: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDSUB: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 70, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDSUB: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDSUB: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDSUB: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDSUB: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 70, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDSUB: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDSUB: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDSUB: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDSUB: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 70, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  }
 }
@@ -16636,117 +16997,132 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 // src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
 // (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
-          is_tile_data_v tile_shape_in1>
+          is_tile_data_v tile_shape_in1,
+          int BroadcastByteOffset = 0>
 void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDMUL broadcast source must be a one-column tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDMUL broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMUL source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMUL: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMUL: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMUL: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMUL: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 71, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMUL: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMUL: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMUL: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMUL: src0/dst carriers require equal non-packed width");
   const size_t valid_row = src0.GetValidRow();
   asm volatile(
     "BSTART.TEPL 71, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[valid_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [valid_row] "r"(src0.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMUL: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMUL: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMUL: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMUL: src0/dst carriers require equal non-packed width");
   const size_t valid_col = src0.GetValidCol();
   asm volatile(
     "BSTART.TEPL 71, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[valid_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [valid_col] "r"(src0.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMUL: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMUL: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMUL: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMUL: src0/dst carriers require equal non-packed width");
   const size_t valid_col = src0.GetValidCol();
   const size_t valid_row = src0.GetValidRow();
   asm volatile(
     "BSTART.TEPL 71, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[valid_col], 0, ->lb0\n"
     "B.DIM %[valid_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [valid_col] "r"(valid_col),
       [valid_row] "r"(valid_row),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  }
 }
@@ -16755,113 +17131,128 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 // src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
 // (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
-          is_tile_data_v tile_shape_in1>
+          is_tile_data_v tile_shape_in1,
+          int BroadcastByteOffset = 0>
 void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDDIV broadcast source must be a one-column tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDDIV broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDDIV source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDDIV: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDDIV: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDDIV: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDDIV: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 72, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDDIV: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDDIV: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDDIV: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDDIV: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 72, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDDIV: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDDIV: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDDIV: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDDIV: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 72, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDDIV: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDDIV: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDDIV: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDDIV: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 72, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  }
 }
@@ -16870,113 +17261,128 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 // src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
 // (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
-          is_tile_data_v tile_shape_in1>
+          is_tile_data_v tile_shape_in1,
+          int BroadcastByteOffset = 0>
 void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDMAX broadcast source must be a one-column tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDMAX broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMAX source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMAX: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMAX: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMAX: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMAX: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 73, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMAX: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMAX: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMAX: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMAX: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 73, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMAX: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMAX: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMAX: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMAX: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 73, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMAX: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMAX: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMAX: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMAX: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 73, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  }
 }
@@ -16985,113 +17391,128 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 // src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
 // (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
-          is_tile_data_v tile_shape_in1>
+          is_tile_data_v tile_shape_in1,
+          int BroadcastByteOffset = 0>
 void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDMIN broadcast source must be a one-column tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDMIN broadcast source must be a one-column carrier or "
+                "a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMIN source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMIN: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMIN: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMIN: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMIN: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 74, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMIN: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMIN: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMIN: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMIN: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 74, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMIN: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMIN: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMIN: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMIN: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 74, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDMIN: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDMIN: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDMIN: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDMIN: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 74, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  }
 }
@@ -17100,113 +17521,128 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 // src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
 // (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
-          is_tile_data_v tile_shape_in1>
+          is_tile_data_v tile_shape_in1,
+          int BroadcastByteOffset = 0>
 void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): row expansion broadcasts a one-column source; the
+  PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
+  // PTO 0.58.7 ASL view: row expansion consumes a row-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
-  static_assert(tile_shape_in1::ValidCol == DYNAMIC || tile_shape_in1::ValidCol == 1,
-                "TROWEXPANDEXPDIF broadcast source must be a one-column tile");
+  static_assert(PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(tile_shape_in1),
+                "TROWEXPANDEXPDIF broadcast source must be a one-column carrier "
+                "or a packed CUBE CELL carrier (ValidCol <= CubeCellCols)");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDEXPDIF source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDEXPDIF: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDEXPDIF: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDEXPDIF: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDEXPDIF: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 75, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDEXPDIF: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDEXPDIF: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDEXPDIF: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDEXPDIF: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 75, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDEXPDIF: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDEXPDIF: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDEXPDIF: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDEXPDIF: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 75, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TROWEXPANDEXPDIF: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TROWEXPANDEXPDIF: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TROWEXPANDEXPDIF: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TROWEXPANDEXPDIF: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 75, %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
       "Tr"(src0.data()),
       "Tr"(src1.data()),
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  }
 }
@@ -17218,11 +17654,12 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
 // The destination B.DIM provides the geometry (ASL expansion contract); the
 // source one-column valid shape is only the broadcast extent.
 template <int Opcode, is_tile_data_v tile_shape_out, is_tile_data_v matrix,
-          typename View>
+          typename View, int BroadcastByteOffset = 0>
   requires(pto_prefix_view<std::remove_const_t<View>> &&
            std::is_same_v<typename tile_shape_out::DType,
                           typename View::DType>)
 void pto_prefix_row_expand(tile_shape_out &dst, matrix &src0, View &src1) {
+  PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, View);
   static_assert(std::is_same_v<typename matrix::DType,
                                typename View::DType>,
                 "row-expansion prefix source dtype must match the matrix");
@@ -17233,7 +17670,7 @@ void pto_prefix_row_expand(tile_shape_out &dst, matrix &src0, View &src1) {
   const uintptr_t prefix_base_units = src1.GetRangeBase();
   asm volatile(
     "BSTART.TEPL %c[Opcode], %D1\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_ROW_EXPAND_LAYOUT_ASM
     "B.DIM zero, %c[DstValidCol], ->lb0\n"
     "B.DIM zero, %c[DstValidRow], ->lb1\n"
     "B.DIM zero, %c[DstCols], ->lb2\n"
@@ -17250,17 +17687,20 @@ void pto_prefix_row_expand(tile_shape_out &dst, matrix &src0, View &src1) {
       [DstValidCol] "i"(tile_shape_out::ValidCol),
       [DstValidRow] "i"(tile_shape_out::ValidRow),
       [DstCols] "i"(tile_shape_out::Cols),
+      [BroadcastByteOffset] "i"(BroadcastByteOffset),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );
 }
 
 #define PTO_PREFIX_ROW_EXPAND_WRAPPER(Name, Opcode)                           \
-  template <is_tile_data_v tile_shape_out, is_tile_data_v matrix, typename View> \
+  template <is_tile_data_v tile_shape_out, is_tile_data_v matrix, typename View, \
+            int BroadcastByteOffset = 0>                                      \
     requires(pto_prefix_view<std::remove_const_t<View>> &&                     \
              std::is_same_v<typename tile_shape_out::DType,                    \
                             typename View::DType>)                             \
   void Name(tile_shape_out &dst, matrix &src0, View &src1) {                   \
-    pto_prefix_row_expand<Opcode>(dst, src0, src1);                            \
+    pto_prefix_row_expand<Opcode, tile_shape_out, matrix, View,                \
+                          BroadcastByteOffset>(dst, src0, src1);               \
   }
 
 PTO_PREFIX_ROW_EXPAND_WRAPPER(TROWEXPANDADD, 69)
@@ -17281,21 +17721,23 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDADD broadcast source must be a one-row tile");
+                "TCOLEXPANDADD broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDADD source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDADD: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDADD: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDADD: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDADD: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 85, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17305,7 +17747,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17314,12 +17756,14 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDADD: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDADD: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDADD: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDADD: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 85, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17329,7 +17773,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17338,12 +17782,14 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDADD: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDADD: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDADD: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDADD: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 85, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17353,7 +17799,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17362,12 +17808,14 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDADD: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDADD: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDADD: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDADD: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 85, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17377,7 +17825,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17396,21 +17844,23 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDSUB broadcast source must be a one-row tile");
+                "TCOLEXPANDSUB broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDSUB source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDSUB: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDSUB: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDSUB: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDSUB: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 86, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17420,7 +17870,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17429,12 +17879,14 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDSUB: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDSUB: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDSUB: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDSUB: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 86, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17444,7 +17896,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17453,12 +17905,14 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDSUB: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDSUB: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDSUB: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDSUB: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 86, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17468,7 +17922,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17477,12 +17931,14 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDSUB: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDSUB: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDSUB: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDSUB: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 86, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17492,7 +17948,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17511,21 +17967,23 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDMUL broadcast source must be a one-row tile");
+                "TCOLEXPANDMUL broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDMUL source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMUL: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMUL: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMUL: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMUL: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 87, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17535,7 +17993,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17544,12 +18002,14 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMUL: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMUL: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMUL: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMUL: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 87, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17559,7 +18019,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17568,12 +18028,14 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMUL: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMUL: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMUL: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMUL: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 87, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17583,7 +18045,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17592,12 +18054,14 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMUL: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMUL: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMUL: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMUL: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 87, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17607,7 +18071,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17626,21 +18090,23 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDDIV broadcast source must be a one-row tile");
+                "TCOLEXPANDDIV broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDDIV source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDDIV: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDDIV: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDDIV: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDDIV: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 88, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17650,7 +18116,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17659,12 +18125,14 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDDIV: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDDIV: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDDIV: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDDIV: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 88, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17674,7 +18142,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17683,12 +18151,14 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDDIV: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDDIV: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDDIV: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDDIV: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 88, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17698,7 +18168,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17707,12 +18177,14 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDDIV: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDDIV: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDDIV: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDDIV: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 88, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17722,7 +18194,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17741,21 +18213,23 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDMAX broadcast source must be a one-row tile");
+                "TCOLEXPANDMAX broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDMAX source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMAX: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMAX: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMAX: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMAX: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 89, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17765,7 +18239,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17774,12 +18248,14 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMAX: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMAX: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMAX: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMAX: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 89, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17789,7 +18265,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17798,12 +18274,14 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMAX: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMAX: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMAX: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMAX: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 89, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17813,7 +18291,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17822,12 +18300,14 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMAX: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMAX: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMAX: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMAX: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 89, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17837,7 +18317,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17856,21 +18336,23 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDMIN broadcast source must be a one-row tile");
+                "TCOLEXPANDMIN broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDMIN source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMIN: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMIN: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMIN: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMIN: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 90, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17880,7 +18362,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17889,12 +18371,14 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMIN: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMIN: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMIN: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMIN: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 90, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17904,7 +18388,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17913,12 +18397,14 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMIN: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMIN: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMIN: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMIN: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 90, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17928,7 +18414,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -17937,12 +18423,14 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDMIN: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDMIN: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDMIN: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDMIN: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 90, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17952,7 +18440,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -17971,21 +18459,23 @@ template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
 void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
-  // ASL (expansion): column expansion broadcasts a one-row source; the
+  // PTO 0.58.7 ASL view: column expansion consumes a column-broadcast source;
   // destination geometry comes from the destination B.DIM, not the source.
   static_assert(tile_shape_in1::ValidRow == DYNAMIC || tile_shape_in1::ValidRow == 1,
-                "TCOLEXPANDEXPDIF broadcast source must be a one-row tile");
+                "TCOLEXPANDEXPDIF broadcast source must be a column-broadcast tile");
   static_assert(tile_shape_out::BFractal == tile_shape_in0::BFractal &&
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TCOLEXPANDEXPDIF source and broadcast layouts must match the "
                 "destination layout");
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDEXPDIF: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDEXPDIF: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDEXPDIF: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDEXPDIF: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 91, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -17995,7 +18485,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -18004,12 +18494,14 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow < 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDEXPDIF: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDEXPDIF: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDEXPDIF: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDEXPDIF: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 91, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -18019,7 +18511,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       "i"(tile_shape_out::ValidCol),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -18028,12 +18520,14 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else if constexpr (tile_shape_out::ValidCol < 0 && tile_shape_out::ValidRow > 0) {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDEXPDIF: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDEXPDIF: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDEXPDIF: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDEXPDIF: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 91, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -18043,7 +18537,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       "i"(tile_shape_out::ValidRow),
       "i"(tile_shape_out::Cols),
@@ -18052,12 +18546,14 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
       "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
   );  } else {
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_in1::DType>::value,
-                "TCOLEXPANDEXPDIF: src0/src1 dtype must match");
-  static_assert(std::is_same<typename tile_shape_in0::DType,
-                             typename tile_shape_out::DType>::value,
-                "TCOLEXPANDEXPDIF: src0/dst dtype must match");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_in1::DType>::TypeCode,
+      type_traits<typename tile_shape_out::DType>::TypeCode),
+                "TCOLEXPANDEXPDIF: src0/src1 carriers require equal non-packed width");
+  static_assert(tile_carrier_width_compatible(
+      type_traits<typename tile_shape_out::DType>::TypeCode,
+      type_traits<typename tile_shape_in0::DType>::TypeCode),
+                "TCOLEXPANDEXPDIF: src0/dst carriers require equal non-packed width");
   asm volatile(
     "BSTART.TEPL 91, %D1\n"
     PTO_ELEMENTWISE_LAYOUT_ASM
@@ -18067,7 +18563,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
-    : "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
+    : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
       [dst____dimcol] "r"(dst.GetValidCol()),
       [dst____dimrow] "r"(dst.GetValidRow()),
       "i"(tile_shape_out::Cols),
@@ -18162,37 +18658,139 @@ void TSHUF(D &dst, S &src, C &controls, uint64_t control) {
 }
 
 // PTO-ISA layout-and-rearrangement control words: bits [63:32] must be zero
-// and only the low two control bytes carry the pack/unpack fields.
-constexpr bool tpack_control_legal_v(uint64_t control) {
+// and only the low two control bytes carry the pack/unpack fields.  The
+// carrier width is part of the instruction's BSTART type, while source
+// widths are taken from the source descriptors.
+constexpr unsigned tpack_source_bytes(unsigned bits) {
+  return bits / 8;
+}
+
+constexpr bool tpack_control_legal_v(uint64_t control, unsigned left_width,
+                                     unsigned right_width,
+                                     unsigned destination_width) {
   if (control >> 32)
     return false;
   const unsigned left_bytes = control & 0xff;
   const unsigned right_bytes = (control >> 8) & 0xff;
-  return left_bytes >= 1 && left_bytes <= 3 && right_bytes >= 1 &&
-         right_bytes <= 3 && left_bytes + right_bytes <= 4;
+  return left_bytes >= 1 && left_bytes <= left_width &&
+         right_bytes >= 1 && right_bytes <= right_width &&
+         left_bytes + right_bytes <= destination_width;
 }
 
-constexpr bool tunpack_control_legal_v(uint64_t control) {
+constexpr bool tunpack_control_legal_v(uint64_t control,
+                                       unsigned destination_width) {
   if (control >> 32)
     return false;
   const unsigned offset = control & 0xff;
   const unsigned count = (control >> 8) & 0xff;
-  return offset <= 3 && count >= 1 && count <= 4 && offset + count <= 4;
+  return offset <= 3 && count >= 1 && count <= destination_width &&
+         offset + count <= 4;
+}
+
+template <typename T>
+constexpr bool tpack_source_type_legal_v =
+    (type_traits<T>::TypeCode == __type_uint8 ||
+     type_traits<T>::TypeCode == __type_uint16 ||
+     type_traits<T>::TypeCode == __type_uint32);
+
+template <typename T>
+constexpr bool tpack_destination_type_legal_v =
+    type_traits<T>::TypeCode == __type_uint8 ||
+    type_traits<T>::TypeCode == __type_uint16 ||
+    type_traits<T>::TypeCode == __type_uint32;
+
+template <typename T>
+constexpr bool tunpack_destination_type_legal_v =
+    type_traits<T>::TypeCode == __type_uint8 ||
+    type_traits<T>::TypeCode == __type_uint16 ||
+    type_traits<T>::TypeCode == __type_uint32;
+
+template <typename T>
+constexpr bool tpack_type_is_local_numeric_v =
+    tpack_source_type_legal_v<T>;
+
+template <typename T>
+constexpr unsigned tpack_type_bytes_v = tpack_source_bytes(type_traits<T>::bits);
+
+template <typename T>
+constexpr unsigned tpack_raw_words_per_row_v =
+    T::ValidCol * tpack_type_bytes_v<typename T::DType> / 4;
+
+template <typename T>
+constexpr bool tpack_source_row_is_word_aligned_v =
+    (T::ValidCol * tpack_type_bytes_v<typename T::DType>) % 4 == 0;
+
+template <typename T, typename D>
+constexpr unsigned tpack_destination_cols_v =
+    tpack_raw_words_per_row_v<T> * (4 / tpack_type_bytes_v<typename D::DType>);
+
+template <typename T>
+constexpr bool tpack_cube_layout_v =
+    T::BFractal == BLayout::CubeM16 || T::BFractal == BLayout::CubeM32;
+
+template <typename T>
+constexpr bool tpack_valid_shape_v = T::ValidRow > 0 && T::ValidCol > 0;
+
+template <typename T>
+constexpr bool tpack_is_local_v = T::Loc != Location::Shared;
+
+template <typename T>
+constexpr bool tpack_source_descriptor_legal_v =
+    tpack_type_is_local_numeric_v<typename T::DType> && tpack_cube_layout_v<T> &&
+    tpack_valid_shape_v<T> && tpack_is_local_v<T>;
+
+template <typename T>
+constexpr bool tpack_operation_descriptor_legal_v =
+    tpack_destination_type_legal_v<typename T::DType> && tpack_cube_layout_v<T> &&
+    tpack_valid_shape_v<T> && tpack_is_local_v<T>;
+
+template <typename T>
+constexpr bool tunpack_operation_descriptor_legal_v =
+    tunpack_destination_type_legal_v<typename T::DType> && tpack_cube_layout_v<T> &&
+    tpack_valid_shape_v<T> && tpack_is_local_v<T>;
+
+template <typename T>
+constexpr bool tunpack_source_descriptor_legal_v =
+    tpack_source_descriptor_legal_v<T>;
+
+template <typename T>
+constexpr unsigned tunpack_groups_per_row_v =
+    (T::ValidCol * tpack_type_bytes_v<typename T::DType> + 3) / 4;
+
+template <typename T, typename D>
+constexpr unsigned tunpack_destination_cols_v =
+    tunpack_groups_per_row_v<T> * (4 / tpack_type_bytes_v<typename D::DType>);
+
+template <typename T>
+constexpr bool tunpack_source_row_is_b32_aligned_v =
+    true;
+
+constexpr bool tpack_control_legal_v(uint64_t control) {
+  return tpack_control_legal_v(control, 4, 4, 4);
+}
+
+constexpr bool tunpack_control_legal_v(uint64_t control) {
+  return tunpack_control_legal_v(control, 4);
 }
 
 template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
-  static_assert(type_traits<typename D::DType>::TypeCode == __type_uint32 &&
-                    type_traits<typename A::DType>::TypeCode == __type_uint32 &&
-                    type_traits<typename B::DType>::TypeCode == __type_uint32,
-                "TPACK requires U32 tiles");
+  static_assert(tpack_operation_descriptor_legal_v<D>,
+                "TPACK destination must be Local U8/U16/U32 CUBE_M16/M32");
+  static_assert(tpack_source_descriptor_legal_v<A> &&
+                    tpack_source_descriptor_legal_v<B>,
+                "TPACK sources must be Local 8/16/32-bit numeric CUBE tiles");
   static_assert(D::BFractal == A::BFractal && D::BFractal == B::BFractal &&
-                    (D::BFractal == BLayout::CubeM16 ||
-                     D::BFractal == BLayout::CubeM32),
-                "TPACK requires matching CUBE_M16 or CUBE_M32 layouts");
-  static_assert(D::ValidRow > 0 && D::ValidCol > 0,
-                "TPACK currently requires a static valid shape");
-  if (!tpack_control_legal_v(control))
+                    D::ValidRow == A::ValidRow && D::ValidRow == B::ValidRow &&
+                    tpack_source_row_is_word_aligned_v<A> &&
+                    tpack_source_row_is_word_aligned_v<B> &&
+                    tpack_raw_words_per_row_v<A> == tpack_raw_words_per_row_v<B> &&
+                    D::ValidCol == tpack_destination_cols_v<A, D>,
+                "TPACK requires matching layout/rows and raw-word shape");
+  if (!tpack_control_legal_v(
+          control, tpack_type_bytes_v<typename A::DType>,
+          tpack_type_bytes_v<typename B::DType>,
+          4))
     __builtin_trap();
   uint64_t controlValue = control;
   asm("" : "+r"(controlValue));
@@ -18206,7 +18804,8 @@ void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
       "B.IOR [%[Control]],[]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
-        [Control] "r"(controlValue), [Type] "i"(__type_uint32),
+        [Control] "r"(controlValue),
+        [Type] "i"(type_traits<typename D::DType>::TypeCode),
         [Cols] "i"(D::ValidCol), [Rows] "i"(D::ValidRow),
         [FullCols] "i"(D::Cols), [Size] "i"(D::TilesizeCode),
         [ElemLayout] "i"(local_layout_code_v<D>));
@@ -18214,16 +18813,17 @@ void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
 
 template <is_tile_data_v D, is_tile_data_v S>
 void TUNPACK(D &dst, S &src, uint64_t control) {
-  static_assert(type_traits<typename D::DType>::TypeCode == __type_uint32 &&
-                    type_traits<typename S::DType>::TypeCode == __type_uint32,
-                "TUNPACK requires U32 tiles");
+  static_assert(tunpack_operation_descriptor_legal_v<D>,
+                "TUNPACK destination must be Local U8/U16/U32 CUBE_M16/M32");
+  static_assert(tunpack_source_descriptor_legal_v<S>,
+                "TUNPACK source must be a Local 8/16/32-bit numeric CUBE tile");
   static_assert(D::BFractal == S::BFractal &&
-                    (D::BFractal == BLayout::CubeM16 ||
-                     D::BFractal == BLayout::CubeM32),
-                "TUNPACK requires matching CUBE_M16 or CUBE_M32 layouts");
-  static_assert(D::ValidRow > 0 && D::ValidCol > 0,
-                "TUNPACK currently requires a static valid shape");
-  if (!tunpack_control_legal_v(control))
+                    D::ValidRow == S::ValidRow &&
+                    tunpack_source_row_is_b32_aligned_v<S> &&
+                    D::ValidCol == tunpack_destination_cols_v<S, D>,
+                "TUNPACK requires matching layout/rows and B32-group shape");
+  if (!tunpack_control_legal_v(
+          control, 4))
     __builtin_trap();
   uint64_t controlValue = control;
   asm("" : "+r"(controlValue));
@@ -18237,7 +18837,8 @@ void TUNPACK(D &dst, S &src, uint64_t control) {
       "B.IOR [%[Control]],[]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src] "Tr"(src.data()), [Control] "r"(controlValue),
-        [Type] "i"(__type_uint32), [Cols] "i"(D::ValidCol),
+        [Type] "i"(type_traits<typename D::DType>::TypeCode),
+        [Cols] "i"(D::ValidCol),
         [Rows] "i"(D::ValidRow), [FullCols] "i"(D::Cols),
         [Size] "i"(D::TilesizeCode),
         [ElemLayout] "i"(local_layout_code_v<D>));

@@ -1,5 +1,5 @@
 LIBNAME = tileop-api
-VERSION = 0.58.3
+VERSION = 0.58.7
 HEADERS = $(wildcard include/*.h) $(wildcard include/*.hpp) include/jcore include/cpu_sim include/aarch64 include/common
 TILEOP_API_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 TILEOP_API_REVISION_IS_EXACT ?= $(shell test -z "$$(git status --porcelain --untracked-files=all 2>/dev/null)" && printf 1 || printf 0)
@@ -16,9 +16,11 @@ check:
 	python3 tools/check_issue_49_docs.py
 	python3 tools/check_tileop_usage_examples.py
 	python3 tools/check_no_legacy_tileop_api.py
+	python3 tools/check_pto_catalog_alignment.py
 	python3 test/test_v058_engine_contract.py
 	python3 test/test_pto0585_layout_interfaces.py
 	python3 test/test_version_header.py
+	python3 test/test_element_tile_api.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
 		-fsyntax-only -Iinclude test/ptoas_linx_type_compat.cpp
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
@@ -39,11 +41,15 @@ install:
 		echo '#define PTO_TILEOP_API_REVISION_HPP'; \
 		echo ''; \
 		echo '#define PTO_TILEOP_API_VERSION "$(VERSION)"'; \
-		echo '#define PTO_TILEOP_API_SPEC_VERSION "0.58.6"'; \
+		echo '#define PTO_TILEOP_API_SPEC_VERSION "0.58.7"'; \
 		echo '#define PTO_TILEOP_API_REVISION "$(TILEOP_API_REVISION)"'; \
 		echo '#define PTO_TILEOP_API_REVISION_IS_EXACT $(TILEOP_API_REVISION_IS_EXACT)'; \
 		echo ''; \
 		echo '#define PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX 1'; \
+		echo '#define PTO_TILEOP_API_HAS_TEXPDIF 1'; \
+		echo '#define PTO_TILEOP_API_HAS_ELEMENT_TILE 1'; \
+		echo '#define PTO_TILEOP_API_HAS_ELEMENT_VIEW_METADATA 1'; \
+		echo '#define PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS 1'; \
 		echo ''; \
 		echo '#endif'; \
 	} > $(INSTALL_DIR)/common/pto_tileop_api_revision.hpp

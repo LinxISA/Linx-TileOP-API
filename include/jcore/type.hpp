@@ -171,23 +171,27 @@ public:
 
 #ifdef __linx
 // Linx inline-asm Tile operands use one whole-register carrier regardless of
-// their logical element type or encoded SizeCode.  Keep LogicalBytes in the
-// wrapper type so tile_type_traits continues to project the architectural
-// SizeCode while data() exposes the canonical v1024i32-compatible payload.
-template <int LogicalBytes>
+// their encoded SizeCode. Keep LogicalBytes in the wrapper type so
+// tile_type_traits continues to project the architectural SizeCode. Scalar is
+// uint32_t by default to preserve the established Tile ABI; the formal typed
+// ElementTile profiles select their own 32-bit scalar carrier.
+template <int LogicalBytes, typename Scalar = uint32_t>
 struct linx_tile_carrier {
   // The on-object placeholder must cover the full logical tile capacity so
   // that stores/loads of the Tile object (including stack spills) transfer
   // the whole tile. The size is the logical capacity in 32-bit elements
   // (128 B -> 32 .. 256 KB -> 65536); 1024 elements only covers 4 KB and
   // silently truncated larger tiles (toolchain-build #14).
-  static constexpr unsigned kElements = LogicalBytes / 4;
-  using RegisterType = uint32_t tile_size(kElements);
+  static_assert(LogicalBytes % sizeof(Scalar) == 0,
+                "tile carrier capacity must contain a whole number of elements");
+  static constexpr unsigned kElements = LogicalBytes / sizeof(Scalar);
+  using ScalarType = Scalar;
+  using RegisterType = Scalar tile_size(kElements);
   RegisterType Register;
 };
 
-template <int LogicalBytes>
-struct tile_type_traits<linx_tile_carrier<LogicalBytes>> {
+template <int LogicalBytes, typename Scalar>
+struct tile_type_traits<linx_tile_carrier<LogicalBytes, Scalar>> {
 private:
   static constexpr int mapBytesToEnum(int Bytes) {
     return

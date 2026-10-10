@@ -60,7 +60,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertEqual(self.contract["profile"], "v0.58")
         self.assertEqual(
             self.contract["semantic_engine_counts"],
-            {"CUBE": 12, "SFU": 56, "TLSU": 10, "VEC": 31},
+            {"CUBE": 12, "SFU": 57, "TLSU": 10, "VEC": 31},
         )
         src = self.contract.get("source", {})
         self.assertEqual(src.get("release"), "0.58.3")
@@ -92,10 +92,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         for operation in ("TDIV", "TREM", "TEXP", "TLOG"):
             self.assertEqual(engines[operation], "SFU")
         self.assertEqual(
-            sum(row["engine"] == "VEC" for row in self.contract["tepl_ops"]), 31
+            sum(op["engine"] == "SFU" for op in self.contract["tepl_ops"]), 57
         )
         self.assertEqual(
-            sum(row["engine"] == "SFU" for row in self.contract["tepl_ops"]), 56
+            sum(row["engine"] == "SFU" for row in self.contract["tepl_ops"]), 57
         )
 
     # 12 CUBE + 6 TGEMV functions are in the catalog; our surface should
@@ -295,9 +295,21 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             # TROWSUM additionally carries a session-opening INIT branch
             # (issue #145), so its plain form has five asm blocks.
             expected_blocks = 5 if op == "TROWSUM" else 4
-            self.assertEqual(body.count("PTO_ELEMENTWISE_LAYOUT_ASM"),
-                             expected_blocks, op)
+            layout_macro = ("PTO_ROW_EXPAND_LAYOUT_ASM"
+                            if op.startswith("TROWEXPAND")
+                            else "PTO_ELEMENTWISE_LAYOUT_ASM")
+            self.assertEqual(body.count(layout_macro), expected_blocks, op)
             self.assertIn('[ElemLayout] "i"(local_layout_code_v<', body, op)
+        # The row-expansion helper now also carries BroadcastByteOffset.
+        # Keep the original exact M32/M16 selector coverage after that split.
+        row_layout = re.search(
+            r"#define PTO_ROW_EXPAND_LAYOUT_ASM(.*?)#define PTO_ROW_EXPAND_OFFSET_CHECK",
+            self.header, re.S).group(1)
+        self.assertIn("[ElemLayout] == 29", row_layout)
+        self.assertIn("[ElemLayout] == 31", row_layout)
+        self.assertIn("B.DATR CUBE_M32, Null", row_layout)
+        self.assertIn("B.DATR CUBE_M16, Null", row_layout)
+        self.assertIn("%c[BroadcastByteOffset]", row_layout)
         # Reductions read the source geometry through B.DIM and normally
         # require the destination layout to match, so the selector comes from
         # the source. TROWSUM deliberately has no physical destination-layout
@@ -327,6 +339,37 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             self.assertIn(f'"BSTART.TEPL {opcode}, %D[Type]\\n"', body, op)
             self.assertIn("PTO_ZERO_PAD_LAYOUT_ASM", body, op)
             self.assertIn('[ElemLayout] "i"(local_layout_code_v<D>)', body, op)
+
+    def test_row_expand_source_accepts_packed_cube_cell_carrier(self) -> None:
+        # Issue #251 / PTO-ISA #207: the row-expand broadcast source may be a
+        # one-column carrier *or* a packed CUBE CELL carrier holding up to
+        # CubeCellCols logical columns (BF16/FP16 x2 in a CUBE_M32 cell).  The
+        # old "ValidCol == 1" gate must be gone, replaced by a shared predicate
+        # that bounds ValidCol by CubeCellCols for CUBE layouts.
+        macro = re.search(
+            r"#define PTO_ROW_EXPAND_SOURCE_IS_BROADCAST\(Source\)(.*?)\n\n",
+            self.header, re.S)
+        self.assertIsNotNone(macro, "row-expand source predicate macro missing")
+        body = macro.group(1)
+        self.assertIn("Source::ValidCol == DYNAMIC", body)
+        self.assertIn("Source::ValidCol == 1", body)
+        self.assertIn("Source::IsCubeLayout", body)
+        self.assertIn("Source::ValidCol <= Source::CubeCellCols", body)
+        # The stale one-column-only diagnostic must not survive anywhere.
+        self.assertNotIn("must be a row-broadcast tile", self.header)
+        # Every TROWEXPAND* op routes its broadcast source through the predicate
+        # instead of asserting ValidCol == 1 inline.
+        row_expand_ops = (
+            "TROWEXPAND", "TROWEXPANDADD", "TROWEXPANDSUB", "TROWEXPANDMUL",
+            "TROWEXPANDDIV", "TROWEXPANDMAX", "TROWEXPANDMIN",
+            "TROWEXPANDEXPDIF",
+        )
+        for op in row_expand_ops:
+            match = re.search(r'^void ' + op + r'\(.*?\n}\n', self.header,
+                              re.S | re.M)
+            self.assertIsNotNone(match, op)
+            self.assertIn("PTO_ROW_EXPAND_SOURCE_IS_BROADCAST(",
+                          match.group(0), op)
 
     def test_zero_pad_layout_selector_spells_zero(self) -> None:
         # The must-zero family (GMOV plus CELL rearrangement) keeps PadValue
@@ -946,10 +989,13 @@ int main() { return sizeof(Bad); }
 
     # --- new-operation bundle fixtures ---
 
-    def test_mgather_cas_signature_separates_row_stride(self) -> None:
-        self.assertIn("uint32_t rowStride", self.header)
-        self.assertIn('[Stride] "r"(rowStride)', self.header)
-        self.assertNotIn('[Stride] "r"(validCol)', self.header)
+    def test_mgather_cas_uses_pto0587_byte_displacements(self) -> None:
+        body = self.header[self.header.index("void MGATHER_CAS"):]
+        self.assertIn("IndexTile &byteDisplacements", body)
+        self.assertNotIn("uint32_t rowStride", body)
+        self.assertNotIn('[Stride] "r"(rowStride)', body)
+        self.assertIn('"B.IOR [%[Base]], []\\n"', body)
+        self.assertNotIn('[Stride] "r"(validCol)', body)
 
     def test_tsort_bundle_has_two_destinations(self) -> None:
         # TSORT/TMRGSORT are retired (PTO-ISA 0.58.5 deleted_names): they
@@ -961,10 +1007,13 @@ int main() { return sizeof(Bad); }
 
     def test_mgather_cas_bundle_is_two_b_iot_with_base_ior(self) -> None:
         # MGATHER_CAS: IndexTile+ExpectedTile (TwoSrc_NoDst) then
-        # ReplacementTile+last -> Dst; B.IOR carries base and element stride.
-        self.assertRegex(self.header, r"B\.IOT %\[Idx\], %\[Exp\], mask=1111\\n")
-        self.assertRegex(self.header, r"B\.IOT %\[Rep\], mask=1111, last, ->%\[Dst\]")
-        self.assertRegex(self.header, r"B\.IOR \[%\[Base\], %\[Stride\]\]")
+        # ReplacementTile+last -> Dst; byte-displacement indices make B.IOR
+        # base-only in PTO-ISA 0.58.7.
+        body = self.header[self.header.index("void MGATHER_CAS"):]
+        self.assertRegex(body, r"B\.IOT %\[Idx\], %\[Exp\], mask=1111\\n")
+        self.assertRegex(body, r"B\.IOT %\[Rep\], mask=1111, last, ->%\[Dst\]")
+        self.assertRegex(body, r"B\.IOR \[%\[Base\]\], \[\]")
+        self.assertNotIn("%[Stride]", body)
 
     def test_timg2col_bundle_has_gm_and_parameter_iors(self) -> None:
         self.assertIn('"BSTART.TIMG2COL %D[DataType]', self.header)

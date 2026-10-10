@@ -49,7 +49,8 @@ def main() -> int:
             for content in row_reduction_docs.values()
         ),
          "TROWMAX/TROWMIN/TROWPROD examples must use physical one-column destinations"),
-        ("物理 one-column carrier" in options_text and
+        (("物理 one-column carrier" in options_text or
+          "物理 shape 的列数必须为 1" in options_text) and
          "不能通过扩大物理 `M x N` shape、再用 `ValidCol=1`" in options_text and
          not re.search(r"可以增大物理\s*\n?shape，并用 `ValidCol=1`", options_text),
          "Doc-5 must reject the obsolete physical MxN plus ValidCol=1 conclusion"),

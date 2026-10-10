@@ -1,6 +1,7 @@
 # TCI
 
 `TCI` 从绑定的起始值构造一行指定类型的序列，并按逻辑列递增或递减。
+`TCI_2D` 为 `CUBE_M16/CUBE_M32` 生成二维序列。
 
 ## C++ 接口
 
@@ -9,6 +10,15 @@
 ```cpp
 template <is_tile_data_v tile_shape, typename T, int descending = 0>
 void TCI(tile_shape &dst, T s);
+
+template <is_tile_data_v tile_shape, typename T, int row_step, int col_step>
+void TCI_2D(tile_shape &dst, T s);
+
+// 常用别名：TCI_ROW == (1, 0)，TCI_COL == (0, 1)
+template <is_tile_data_v tile_shape, typename T>
+void TCI_ROW(tile_shape &dst, T s);
+template <is_tile_data_v tile_shape, typename T>
+void TCI_COL(tile_shape &dst, T s);
 ```
 
 ### 支持的数据类型
@@ -43,6 +53,11 @@ void TCI(tile_shape &dst, T s);
 - `ValidCol` 必须非零，物理列数 `Col` 必须至少为 `ValidCol`；输出容量必须足以容纳声明的形状。
 - 若显式提供方向控制，方向值只能为 `0`（递增）或 `1`（递减）；起始值按所选元素宽度解释，高位按规范忽略。未提供时默认起始值为 0 且递增。
 - 该接口没有额外的固定字节容量上限；实际可用规模仍受 Tile 的物理容量和 shape 合法性约束。
+
+`TCI_2D` 仅接受 Matrix-location 的 `CUBE_M16/CUBE_M32`，支持 S32、S16、U32、U16。
+`row_step` 和 `col_step` 必须是编译期常量 `-1/0/1`；逻辑元素 `(r,c)` 的值为
+`start + r * row_step + c * col_step`，并按 CUBE CELL 物理映射写入。M16 的
+`ValidRow` 不得超过 16，M32 的 `ValidRow` 必须为正数。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
@@ -82,13 +97,26 @@ void TCI(tile_shape &dst, T s);
 开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
 
 ```asm
-BSTART.SFU TCI, S32|S16|U32|U16
+BSTART.TEPL TCI, S32|S16|U32|U16
 B.DATR      all-zero (optional)
 B.DIM       rValidCol, 0, ->LB0
 B.DIM       rValidRow, 0, ->LB1  ; (optional, default 1; when present must equal 1)
 B.DIM       rCol, 0, ->LB2  ; (optional, default ValidCol)
 B.IOR       Start, Direction (optional; omission selects 0 and ascending)
 B.IOT       mask=PE_MASK, last, ->DstTile<TSize>
+BSTOP
+```
+
+二维 CUBE bundle 使用：
+
+```asm
+BSTART.SFU TCI, S32|S16|U32|U16
+B.DATR      CUBE_M16|CUBE_M32, DTYPE_NONE, Zero
+B.DIM       rValidCol, 0, ->LB0
+B.DIM       rValidRow, 0, ->LB1
+B.DIM       rPhysicalCol, 0, ->LB2
+B.IOR       [StartGPR, Step2DGPR], []
+B.IOT       mask=1111, last, ->DstTile<TSize>
 BSTOP
 ```
 

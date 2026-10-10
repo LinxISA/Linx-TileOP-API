@@ -10,6 +10,7 @@ using namespace pto;
 using D = CubeAccumulatorM32<float, 32, 32>;
 using Ds8 = CubeAccumulatorM32<int8_t, 32, 32>;
 using Df16 = CubeAccumulatorM32<__half, 32, 32>;
+using Db16 = CubeAccumulatorM32<__bf16, 32, 32>;
 using A = CubeTileM32<float, 32, 64>;
 using B = CubeTileN8<float, 64, 32>;
 using MXA = CubeTileM32<__fp8_e4m3, 32, 64>;
@@ -21,9 +22,12 @@ using MXSB = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
 // quant/PReLU param: 1xN logical, physical 2x32 (>= 128 B)
 using P = Tile<Location::Vec, uint64_t, 2, 32, BLayout::RowMajor, 1, 32>;
 // RowMaxOut (Mx1) / GroupMaxOut (Mx2 for GroupN=16, N=32)
-using R = CubeAccumulatorM32<float, 32, 32, 32, 1>;
-using G = CubeAccumulatorM32<float, 32, 32, 32, 2>;
-using Bias = CubeBias<float, 32>;
+using R = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 1>;
+using G = Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, 32, 2>;
+using Rh16 = Tile<Location::Vec, __half, 32, 32, BLayout::RowMajor, 32, 1>;
+using Rb16 = Tile<Location::Vec, __bf16, 32, 32, BLayout::RowMajor, 32, 1>;
+using Gb16 = Tile<Location::Vec, __bf16, 32, 32, BLayout::RowMajor, 32, 2>;
+using Bias = CubeBias<float, 32, 32>;
 
 // TGEMV shapes: d 1xN, vec 1xK, mtx KxN
 using GV_D = CubeAccumulatorM16<float, 1, 32>;
@@ -45,9 +49,10 @@ static constexpr uint64_t s8_desc =
     (static_cast<uint64_t>(0x1) << 37);   // s8 offset = 1
 
 // --- TMATMUL family ---
-void tmatmul_combos(D &d, Ds8 &d8, Df16 &df16, D &c, Bias &bias, A &a, B &b,
+void tmatmul_combos(D &d, Ds8 &d8, Df16 &df16, Db16 &db16, D &c, Bias &bias, A &a, B &b,
                     MXA &mxa, MXB &mxb, MXSA &mxsa, MXSB &mxsb, P &q, P &p,
-                    R &rout, R &rin, G &gout) {
+                    R &rout, R &rin, Rh16 &rh16in, Rh16 &rh16, G &gout,
+                    Rb16 &rb16, Gb16 &gb16) {
   // scalar quant (s8) + LReLU
   TMATMUL(d8, a, b, fixp::s8(s8_desc).lrelu(0x12345));
   // vector quant (s8) + PReLU
@@ -55,11 +60,13 @@ void tmatmul_combos(D &d, Ds8 &d8, Df16 &df16, D &c, Bias &bias, A &a, B &b,
   // fresh RowMax + GroupMax + MaxAbs (all max outputs)
   TMATMUL(d, a, b,
           fixp::keep_acc().row_max(rout).group_max<16>(gout).max_abs());
+  // PTO #346: reductions follow final D, so BF16 D uses BF16 auxiliary cells.
+  TMATMUL(db16, a, b, fixp::bf16().row_max(rb16).group_max<16>(gb16));
   // relu + RowMaxInit
-  TMATMUL(df16, a, b, fixp::f16().relu().row_max(rin, rout));
-  // full: scalar quant + LReLU + RowMaxInit + GroupMax + MaxAbs
-  TMATMUL(d8, a, b, fixp::s8(s8_desc).lrelu(0x123).row_max(rin, rout)
-                        .group_max<16>(gout).max_abs());
+  TMATMUL(df16, a, b, fixp::f16().relu().row_max(rh16in, rh16));
+  // Integer final D cannot carry RowMax/GroupMax under PTO #346; keep the
+  // scalar-quant + LReLU coverage separate from floating-point reductions.
+  TMATMUL(d8, a, b, fixp::s8(s8_desc).lrelu(0x123));
 
   TMATMUL_ACC(d, c, a, b, fixp::keep_acc().row_max(rin, rout));
   TMATMUL_BIAS(df16, a, b, bias, fixp::f16().relu());
@@ -90,6 +97,7 @@ void use(void *) {}
 
 int main() {
   static D d, c;
+  static Db16 db16;
   static Bias bias;
   static Ds8 d8;
   static Df16 df16;
@@ -101,7 +109,11 @@ int main() {
   static MXSB mxsb;
   static P q, p;
   static R rout, rin;
+  static Rh16 rh16in;
+  static Rh16 rh16;
   static G gout;
+  static Rb16 rb16;
+  static Gb16 gb16;
   static GV_D gd, gc;
   static GV_Ds8 gd8;
   static GV_Df16 gdf16;
@@ -113,8 +125,8 @@ int main() {
   static GV_MXSB gmxsb;
   static GV_R gr_out, gr_in;
   static GV_G gg_out;
-  tmatmul_combos(d, d8, df16, c, bias, a, b, mxa, mxb, mxsa, mxsb,
-                 q, p, rout, rin, gout);
+  tmatmul_combos(d, d8, df16, db16, c, bias, a, b, mxa, mxb, mxsa, mxsb,
+                 q, p, rout, rin, rh16in, rh16, gout, rb16, gb16);
   tgemv_combos(gd, gd8, gdf16, gc, bias, gv, gm, gmxa, gmxb, gmxsa, gmxsb,
                q, p, gr_out, gr_in, gg_out);
   use(&d);

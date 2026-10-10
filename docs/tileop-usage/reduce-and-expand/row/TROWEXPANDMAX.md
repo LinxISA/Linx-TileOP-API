@@ -1,6 +1,6 @@
 # TROWEXPANDMAX
 
-`TROWEXPANDMAX` 将每个有效行的元素与该行的单列广播值取最大值。
+`TROWEXPANDMAX` 将每个有效行的元素与该行的行广播值取最大值。
 
 ## C++ 接口
 

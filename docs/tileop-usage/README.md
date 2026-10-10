@@ -6,16 +6,16 @@
 
 ## 版本与兼容性
 
-本目录当前以 PTO-ISA/pto-spec 的 **0.58.6** 架构规范为对照基线：
+本目录当前以 PTO-ISA/pto-spec 的 **0.58.7** 架构规范为对照基线：
 
-- architecture version：`0.58.6`
-- publication version：`0.58.6.0`
-- stable release commit：`dea0b75e803cffa873982c90f9aa0cd17c6d243b`
-- audit reference（`pto-spec/main`）：`6c41bde8cb418cbcf57e7d2ef4a61163a5378b7d`
-- encoding ABI：`pto-isa-0.58.6-mode-function-v1`
+- architecture version：`0.58.7`
+- publication version：`0.58.7.0`
+- stable release commit：`de57af400cf607f03730aa522a4e9bfb160596de`
+- release tag：`v0.58.7.0`
+- encoding ABI：`pto-isa-0.58.7-mode-function-v1`
 
 PTO `main` 是开发分支；需要可复现构建时应锁定上面的 release commit。本文档描述
-的是架构规范和本仓库 wrapper 的交集，并不表示 wrapper 已实现 0.58.6 的全部操作。
+的是架构规范和本仓库 wrapper 的交集，并不表示 wrapper 已实现 0.58.7 的全部操作。
 每个操作页中的 C++ 签名以本仓库头文件为准，PTO ASL/NDF 是架构合法性的权威来源。
 
 [0.58.3 迁移说明](migration/pto-0583-migration.md)是历史文档，保留用于迁移旧
@@ -31,6 +31,12 @@ kernel；其中的旧版本数量、旧 engine inventory 和旧 encoding identit
 - `PTO_TILEOP_API_REVISION_IS_EXACT`：revision 是否来自干净 checkout；
 - `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX`：local Right B 使用逻辑 `[K,N]` 契约。
 
+当前 wrapper 与 PTO 0.58.7 catalog 的覆盖边界见
+[统一支持状态表](support-status.md)。该表区分“已实现”“仅部分 layout 支持”“尚无
+wrapper”和“仅历史参考”，并单独记录 CPU simulator/JCORE、LLVM MC、LLVM
+compiler lowering 及 AArch64/SME 的 backend 能力；PTO catalog 中存在某个操作名，
+不等于所有 backend 都已经提供完整支持。
+
 消费方应优先使用 feature 宏检查所需修复，而不是比较 revision 字符串。例如：
 
 ```cpp
@@ -39,6 +45,45 @@ kernel；其中的旧版本数量、旧 engine inventory 和旧 encoding identit
 static_assert(PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX,
               "requires the local Right B [K,N] contract fix");
 ```
+
+## 逻辑元素 Tile 接口
+
+`ElementTile<T, Elements>` 是正式 API 的逻辑元素入口。应用指定元素类型与容量，
+当前 jcore profile 在 API 内选择已有的 Local VEC 存储，kernel 无需写物理 layout。
+首版接受 U32、S32、F32 与 32/128 个元素；不表示任意 dtype、容量或 backend 都已实现。
+
+- `TPARTVIEW<32>(parent, valid_elements)` 复用 `BorrowedTileArray`，提供 `size()`、
+  `part(index)` 和 `valid_size(index)`；view 借用 parent，不能超过 parent 的生命周期。
+- `TPARTELEMENT(part_tile)` 仅接受 32-element profile，并返回同一 carrier 的强类型元素引用。
+  128-element parent、其他 CUBE shape 和 b64 不得用它直接索引。
+  U32、S32、F32 分别携带 `dtype=u32`、`dtype=s32`、`dtype=f32`，不会把 signed
+  或浮点元素伪装成 U32。正式接口携带元素 view 的类型、shape 和布局合同；普通 indexed gather 的前端
+  必须检查该合同，不能把同大小的原始 vector 自动当作此 view。已安装版本用
+  `PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查强类型 view 能力。
+- `TLOAD(parent, input, valid_elements)` 和对应的 pointer `TSTORE` 要求 pointer dtype
+  与 `ElementTile` 完全一致，并复用现有统一 transport；最后一个不完整 block
+  先复制有效输入到暂存区域，因此输入不需要额外 padding。有效数必须在 0..128。
+- `TSTORE(output_block, tile, parts, part_index)` 复用已有 `TSTORE`，由 API 根据 view
+  投影写回原逻辑位置，保证 `output[element]` 对应 `input[element]`。每次调用写完整
+  32-element part；四个 part 合起来覆盖完整的 128-element padded block。`valid_size`
+  提供 kernel 内 element 条件的边界，不会缩短 TSTORE；tail 中由补零输入计算出的值
+  也会写到 padded output，调用方应只消费原始有效范围或显式处理这些位置。
+
+这些接口定义在既有 `pto_tile.hpp`、`pto_tile_region.hpp` 和 `jcore/template_asm.hpp`
+中。它们没有新 ISA 编码，不复制 TADDS/TSHRS/TANDS，也不引入另一套 Tile 实现。
+消费方使用 `PTO_TILEOP_API_HAS_ELEMENT_TILE` 检查逻辑 Tile 接口，并使用
+`PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查 U32/S32/F32 typed view。
+为使 `ElementTile` 与同 shape 的原始 `VecTileM32` 在类型系统中可区分，现有 `Tile`
+模板追加了默认 profile 参数；默认 Tile 的存储、大小、对齐和 data carrier 不变，
+但跨二进制边界传递 C++ Tile 类型的使用方需要随本版本重新编译。
+
+完整、实际编译并运行的 Tile/element-wise kernel 及逐例 gfrun/gfsim 检查见
+[SuperNPUBench PR #202](https://github.com/PTO-ISA/SuperNPUBench/pull/202)。
+`#pragma pto element for` 的条件/atomic lowering 需要匹配的 Linx compiler，当前
+可执行模型的 atomic profile 是 U32 32-element MGATHER.ADD。纯 U32 表达式支持
+十种二元运算以及一元负号/补码，局部变量进入 Tile SSA；这不能用于宣称任意 C++
+循环都已支持自动并行。API metadata/拒绝边界由 `test/test_element_tile_api.py` 检查，执行语义
+由 benchmark 的独立 golden 和两模型结果检查。
 
 ## 快速开始
 
@@ -79,9 +124,12 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
   也在该页面说明。
 - 常规逐元素算子从 [TADD](elementwise-tile-tile/arithmetic/TADD.md) 开始；按目录选择
   算术、逻辑、转换、归约、布局和不规则操作。
-- PTO ISA v0.58.6 的 CUBE layout 重排操作从
-  [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md) 开始；pack/unpack、shuffle
-  和 GPR predicate plane 转换页面位于同一目录。
+- PTO ISA v0.58.7 的 CUBE layout 重排操作从
+  [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md) 开始；
+  [TSHUF](layout-and-rearrangement/layout/TSHUF.md)、
+  [TPACK](layout-and-rearrangement/layout/TPACK.md)、
+  [TUNPACK](layout-and-rearrangement/layout/TUNPACK.md) 和
+  [TGPR2T](layout-and-rearrangement/layout/TGPR2T.md) 页面位于同一目录。
 - 矩阵/向量计算使用 [CUBE TMATMUL](cube/matrix-matrix/TMATMUL.md) 或相应 GEMV 页面。
 - 需要启用矩阵后处理属性时，先阅读 [`fixp::Options` 指南](options.md)。
 - 需要绑定 Tile range 或分区/组装时，阅读

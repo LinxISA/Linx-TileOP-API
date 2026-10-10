@@ -1,6 +1,6 @@
 # TROWEXPAND
 
-`TROWEXPAND` 将单列广播值逐位复制到每个有效行。
+`TROWEXPAND` 将行广播值逐位复制到每个有效行。
 
 ## C++ 接口
 

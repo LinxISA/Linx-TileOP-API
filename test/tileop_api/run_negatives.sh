@@ -39,19 +39,24 @@ if ! "$CXX" "${FLAGS[@]}" -H -fsyntax-only src/RangeSubview.cpp \
   sed -n '1,30p' "$TRACE" >&2
   exit 2
 fi
-CASES="dtype maxabs_no_max rowmax_shape groupmax_shape lone_shared_a local_transpose old_rowmajor aux_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b hif4_ordinary_matmul hif4_missing_scale_a hif4_missing_scale_b hif4_scale_dtype hif4_scale_shape bad_transpose_d group_shape group_k group_n group_dynamic"
+CASES="dtype maxabs_no_max rowmax_shape groupmax_shape effective_d_aux_dtype lone_shared_a local_transpose old_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b hif4_ordinary_matmul hif4_missing_scale_a hif4_missing_scale_b hif4_scale_dtype hif4_scale_shape bad_transpose_d group_shape group_k group_n group_dynamic"
 TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_large"
 RANGE_CASES="subview_dest assemble_source subview_length tadd_ass_init tadd_middle"
 ROLE_VIEW_CASES="same_role local rvalue layout"
 SUBVIEW_LEGALITY_CASES="subview_rowmajor tpartview_rowmajor tpartview_shared"
 GMOV_CASES="fp64 s64 u64 dtype shape valid_shape layout capacity location shared cube_n8"
 TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape assemble_valid_shape"
+TEXPDIF_CASES="type narrow n8 mixed_layout shape"
+TCI2D_CASES="layout location dtype shape steps m16_rows"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
 # intended static_assert. Prove the matching compiler can consume one positive
 # TileOP translation unit before counting any negative result.
-for source in TStoreShared.cpp PostProcessNegatives.cpp TStoreSharedNegatives.cpp CubeTCvt.cpp TCvtCubeNegatives.cpp GMov.cpp SharedRange.cpp TileArrayCube.cpp RangeSubview.cpp; do
+# SharedRange.cpp intentionally contains the retired TLOAD_ASS/RowMajor
+# Assemble example; it is not a valid positive preflight for the current API.
+# Keep the actual range legality checks below independent of that fixture.
+for source in TStoreShared.cpp PostProcessNegatives.cpp TStoreSharedNegatives.cpp CubeTCvt.cpp TCvtCubeNegatives.cpp GMov.cpp TileArrayCube.cpp RangeSubview.cpp; do
   stem=${source%.cpp}
   if ! "$CXX" "${FLAGS[@]}" "src/$source" -o "$OUT/$stem.o" \
       >"$OUT/$stem.stdout" 2>"$OUT/$stem.stderr"; then
@@ -155,22 +160,49 @@ for c in $TCVT_CASES; do
     echo "PASS (rejected): tcvt_$c"; PASS=$((PASS+1))
   fi
 done
+for c in $TEXPDIF_CASES; do
+  define=SHOULD_FAIL_TEXPDIF_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "texpdif_$c" "$define" TExpdifNegatives.cpp \
+    'TEXPDIF supports|TEXPDIF source and destination|logical shapes'
+done
+for c in $TCI2D_CASES; do
+  define=SHOULD_FAIL_TCI2D_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "tci2d_$c" "$define" TCINegatives.cpp \
+    'TCI_2D|Matrix CUBE|CUBE_M16|same type|steps must'
+done
 for c in $ROLE_VIEW_CASES; do
   define=SHOULD_FAIL_$(echo "$c" | tr '[:lower:]' '[:upper:]')
   expect_rejected "role_view_$c" "$define" SharedRoleViewNegatives.cpp \
     'SharedTileRoleView|reinterpret_shared_tile|Shared matrix layout|must change'
 done
-PACK_CASES="left_zero left_too_wide sum_too_wide high_bits right_zero"
-UNPACK_CASES="offset_too_large count_zero count_too_large sum_too_wide high_bits"
+PACK_CASES="left_zero left_too_wide sum_too_wide high_bits right_zero dest_u8 source_width"
+UNPACK_CASES="offset_too_large count_zero count_too_large sum_too_wide high_bits incomplete_group"
 for c in $PACK_CASES; do
   define=SHOULD_FAIL_PACK_$(echo "$c" | tr '[:lower:]' '[:upper:]')
-  expect_rejected "pack_$c" "$define" PackUnpackNegatives.cpp \
-    'TPACK control|builtin_trap'
+  case "$c" in
+    dest_u8) pattern='TPACK destination' ;;
+    source_width) pattern='TPACK control' ;;
+    *) pattern='TPACK control|builtin_trap' ;;
+  esac
+  expect_rejected "pack_$c" "$define" PackUnpackNegatives.cpp "$pattern"
 done
 for c in $UNPACK_CASES; do
   define=SHOULD_FAIL_UNPACK_$(echo "$c" | tr '[:lower:]' '[:upper:]')
-  expect_rejected "unpack_$c" "$define" PackUnpackNegatives.cpp \
-    'TUNPACK control|builtin_trap'
+  case "$c" in
+    incomplete_group) pattern='TUNPACK requires matching' ;;
+    *) pattern='TUNPACK control|builtin_trap' ;;
+  esac
+  expect_rejected "unpack_$c" "$define" PackUnpackNegatives.cpp "$pattern"
+done
+# Issue #251: the relaxed row-expand broadcast-source check accepts a packed
+# CUBE CELL carrier (ValidCol <= CubeCellCols) but must still reject a RowMajor
+# multi-column source, a CUBE carrier wider than one CELL, and an offset that
+# selects outside the CELL.
+ROWEXPAND_CASES="rowmajor_multi cube_exceeds offset_cell"
+for c in $ROWEXPAND_CASES; do
+  define=SHOULD_FAIL_ROWEXPAND_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "rowexpand_$c" "$define" RowExpandNegatives.cpp \
+    'one-column carrier or a packed CUBE CELL carrier|broadcast byte offset exceeds CELL columns'
 done
 echo "== $PASS passed, $FAIL failed =="
 test "$FAIL" -eq 0

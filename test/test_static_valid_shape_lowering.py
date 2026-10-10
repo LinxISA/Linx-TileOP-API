@@ -1,11 +1,34 @@
 import subprocess
 import unittest
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = (ROOT / "include/jcore/template_asm.hpp").read_text(encoding="utf-8")
 FIXTURE = (ROOT / "test/tileop_api/src/ValidShapeImmediate.cpp").read_text(encoding="utf-8")
-LLVM_MC = Path("/home/zhuwei/linx-llvm/build/bin/llvm-mc")
+
+
+def find_llvm_mc() -> Path:
+    """Find llvm-mc from the local checkout/build, not a developer path."""
+    override = os.environ.get("LLVM_MC")
+    candidates = []
+    if override:
+        candidates.append(Path(override))
+    # ROOT is .../src/Linx-TileOP-API.  The normal in-tree build locations
+    # are checked first so the test uses the toolchain built for this checkout.
+    workspace = ROOT.parents[2]
+    candidates.extend((
+        workspace / "output/linx_blockisa_llvm_musl/bin/llvm-mc",
+        workspace / "build/build-llvm-musl/bin/llvm-mc",
+        ROOT / "../../../../linx-llvm/build/bin/llvm-mc",
+    ))
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate.resolve()
+    return candidates[0]
+
+
+LLVM_MC = find_llvm_mc()
 
 class TestStaticValidShapeLowering(unittest.TestCase):
     def test_shared_tload_uses_zero_in_dim_first_operand(self) -> None:

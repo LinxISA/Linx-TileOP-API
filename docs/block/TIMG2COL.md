@@ -152,6 +152,9 @@ BSTOP
   分段写入时请改用单-issuer 变体或自行编码。
 - 单-issuer 变体 `TIMG2COL_SPART` 接受恰含一个 PE 位的掩码，一条
   `B.IOS` 直接发布完整 parent，无 `B.ASSEMBLE`。
+- `TIMG2COL_SPART` 为强制内联接口。`SharedTile` 是架构 Shared 寄存器句柄，
+  不得通过普通 C++ 函数 ABI 传递；调用保持内联后，句柄直接绑定 Shared
+  寄存器，不会生成 Shared 与 GPR 之间的 copy 或伪 spill。
 
 `B.DATR.Layout=29` 和 `31` 是 direct Local `CUBE_M32`/`CUBE_M16` layout
 selector；它们不能与 Shared `NORM`/`DN2ND` 的 source-order conversion selector

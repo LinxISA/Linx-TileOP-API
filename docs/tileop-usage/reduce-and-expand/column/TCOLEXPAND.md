@@ -1,6 +1,6 @@
 # TCOLEXPAND
 
-`TCOLEXPAND` 将单行广播源逐位复制到每个有效目标行。
+`TCOLEXPAND` 将列广播源逐位复制到每个有效目标行。
 
 ## C++ 接口
 

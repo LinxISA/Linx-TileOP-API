@@ -1,6 +1,6 @@
 # MGATHER_CAS
 
-`MGATHER_CAS` 是由 TLSU 执行的选择器编码 Tile 操作：它使用 index、expected 和 replacement Tile 对 GM 中的每个元素执行比较交换，并记录观察到的旧值；其当前指令 contract 规定了确切的 bundle 形式和发布边界。
+`MGATHER_CAS` 是由 TLSU 执行的选择器编码 Tile 操作：它使用 index、expected 和 replacement Tile 对 GM 中的每个元素执行比较交换，并记录观察到的旧值。index 已是相对于 GM base 的完整逻辑线性元素位移；其当前指令 contract 规定了确切的 bundle 形式和发布边界。
 
 ## C++ 接口
 
@@ -18,7 +18,6 @@ void MGATHER_CAS(
     IndexTile &elementIndices,
     ExpectedTile &expected,
     ReplacementTile &replacement,
-    uint32_t rowStride,
     uint32_t validCol,
     uint32_t validRow = 1);
 ```
@@ -41,7 +40,6 @@ void MGATHER_CAS(
 | `elementIndices` | 逻辑线性元素下标索引 Tile。 |
 | `expected` | 比较交换操作的期望值 Tile。 |
 | `replacement` | 比较成功时写入 GM 的替换值 Tile。 |
-| `rowStride` | 每个 PE 的 GM 行跨度，单位为元素；必须非零且不小于 `validCol`。 |
 | `validCol` | 有效区域的列数，仅用于 LB0/LB2。 |
 | `validRow` | 有效区域的行数，省略时使用接口/规范默认值。 |
 
@@ -82,7 +80,8 @@ void MGATHER_CAS(
 
 - 省略 `B.DATR` 时，padding 值使用 `Null`，布局使用 `NORM`。
 - `LB0` 给出 `ValidCol`，必须存在且非零；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
-- `B.IOR` 是必需描述符；`RegSrc0` 是 GM 基地址，`RegSrc1` 是以元素计的 GM 行跨度；未使用的选择器和字段必须编码为零。
+- `B.IOR` 是必需描述符；`RegSrc0` 是 GM 基地址；index 已经是完整的逻辑线性下标，
+  不携带行跨度，未使用的选择器和字段必须编码为零。
 
 `fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
 
@@ -106,7 +105,7 @@ B.DIM       rValidRow, 0, ->LB1  ; (optional)
 B.DIM       rCol, 0, ->LB2  ; (optional)
 B.IOT       IndexTile, ExpectedTile, mask=PE_MASK
 B.IOT       ReplacementTile, mask=PE_MASK, last, ->DstTile<TSize>
-B.IOR       BaseGPR, StrideGPR, zero, ->zero
+B.IOR       BaseGPR, zero, zero, ->zero
 BSTOP
 ```
 
@@ -123,7 +122,7 @@ void compare_exchange(Transfer &observed_old, ElementIndices &element_indices,
                       Transfer &expected, Transfer &replacement) {
   // 每个 index 是相对于 base 的逻辑线性元素下标；返回值是交换前读到的值。
   MGATHER_CAS(observed_old, 0x1000ull, element_indices, expected, replacement,
-              512, 256, 2);
+              256, 2);
 }
 ```
 

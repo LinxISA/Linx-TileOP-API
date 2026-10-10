@@ -17,10 +17,11 @@ pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
                 "inline Tile region path requires unboxed fragments");
   const uintptr_t region_base_units = src.GetRangeBase();
   {
-    static_assert(SubTile::IsCubeLayout,
-                  "B.SUBVIEW source fragment must use a CUBE layout");
+    static_assert(SubTile::IsCubeLayout || Opcode == 64,
+                  "B.SUBVIEW source layout is not legal for this region op");
     asm volatile(
         "BSTART.TEPL %c8, %D1\n"
+        PTO_REGION_ELEMENTWISE_LAYOUT_ASM
         "B.DIM zero, %c3, ->lb0\n"
         "B.DIM zero, %c4, ->lb1\n"
         "B.DIM zero, %c5, ->lb2\n"
@@ -30,10 +31,11 @@ pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
         : "i"(type_traits<typename SubTile::DType>::TypeCode),
           "Tr"(src.data()), "i"(std::remove_reference_t<decltype(src)>::ValidCol),
           "i"(std::remove_reference_t<decltype(src)>::ValidRow),
-          "i"(SubTile::Cols),
+          "i"(SubTile::PhysicalCol),
           "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
           "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
-          "i"(Opcode), "r"(region_base_units)
+          "i"(Opcode), "r"(region_base_units),
+          [ElemLayout] "i"(local_layout_code_v<SubTile>)
         : "memory");
   }
 }
@@ -83,6 +85,14 @@ PTO_REGION_ALWAYS_INLINE void TROWMAX(
 template <is_tile_data_v Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void TROWSUM(
     Out &dst, region::SubTileView<Parent, SubTile> &src) {
+  // TROWSUM derives all three B.DIM operands from the final source view.  In
+  // particular, ValidRow is not a lower bound for LB1 and the parent capacity
+  // (or an individual assembly writer extent) is never a source dimension.
+  static_assert(SubTile::ValidRow > 0 && SubTile::ValidRow <= SubTile::Rows &&
+                    SubTile::ValidCol > 0 && SubTile::ValidCol <= SubTile::Cols,
+                "TROWSUM source valid shape must fit the source view");
+  static_assert(Out::ValidRow == SubTile::ValidRow && Out::ValidCol == 1,
+                "TROWSUM destination must be one column with source row count");
   pto_region_unary<64>(dst, src);
 }
 
@@ -727,7 +737,7 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
                        SubTile::Cols == In::Cols),
                 "TCVT assembly slot requires equal physical Rows/Cols for "
                 "ordinary (RowMajor) sources");
-  static_assert(RMode >= LINX_RNONE && RMode <= LINX_RHB,
+  static_assert(RMode >= 0 && RMode <= 7,
                 "TCVT RMode must be a LinxRMode value");
   // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase;
   // the INIT destination B.IOT allocates and carries the parent capacity.
@@ -819,7 +829,7 @@ pto_region_tcvt_phase(region::TileArrayOutputRef<SubTile> &dst, In &src) {
 // the operation-default encoding). LINX_RDN (RTM floor) is the mode MX E8M0
 // scale quantization needs, so the algorithmic producer that writes a slot can
 // request it directly, e.g. TCVT<LINX_RDN>(destinations[0][col], scale).
-template <int RMode = LINX_RNONE, typename SubTile, is_tile_data_v In>
+template <int RMode = 0, typename SubTile, is_tile_data_v In>
 PTO_REGION_ALWAYS_INLINE void TCVT(region::TileArrayOutputRef<SubTile> dst,
                                    In &src) {
   switch (dst.parent_size_code()) {
@@ -967,30 +977,60 @@ PTO_REGION_ALWAYS_INLINE void TCVT(
 template <is_tile_data_v Out, typename Parent, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void
 TCVT(Out &dst, region::SubTileView<Parent, SubTile> &src) {
-  static_assert(SubTile::BFractal == BLayout::RowMajor,
-                "inline Tile region path requires RowMajor fragments");
+  constexpr bool source_cube = SubTile::BFractal == BLayout::CubeM16 ||
+                               SubTile::BFractal == BLayout::CubeM32;
+  static_assert(SubTile::BFractal == BLayout::RowMajor || source_cube,
+                "TCVT region source must use RowMajor or CUBE_M16/CUBE_M32");
+  static_assert(source_cube ? (Out::BFractal == SubTile::BFractal)
+                            : (Out::BFractal == BLayout::RowMajor),
+                "TCVT region destination layout is incompatible with source");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
-  static_assert(SubTile::Rows == Out::Rows && SubTile::Cols == Out::Cols,
-                "TCVT region source requires matching physical shape");
+  static_assert(SubTile::ValidRow == Out::ValidRow &&
+                    SubTile::ValidCol == Out::ValidCol,
+                "TCVT CUBE_M16/M32 conversion must preserve the valid shape");
+  static_assert(is_legal_tcvt_datatype_pair(
+                    type_traits<typename SubTile::DType>::TypeCode,
+                    type_traits<typename Out::DType>::TypeCode),
+                "Illegal TCVT datatype pair");
   const uintptr_t region_base_units = src.GetRangeBase();
-  asm volatile(
-      "BSTART.TEPL 27, %D1\n"
-      "B.DATR %D2, RNONE\n"
-      "B.DIM zero, %c4, ->lb0\n"
-      "B.DIM zero, %c5, ->lb1\n"
-      "B.DIM zero, %c6, ->lb2\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"
-      "B.SUBVIEW 0, %8, 0, %c9\n"
-      : [Dst] "=Tr"(dst.data())
-      : "i"(type_traits<typename SubTile::DType>::TypeCode),
-        "i"(type_traits<typename Out::DType>::TypeCode), "Tr"(src.data()),
-        "i"(std::remove_reference_t<decltype(src)>::ValidCol),
-        "i"(std::remove_reference_t<decltype(src)>::ValidRow), "i"(SubTile::Cols),
-        "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "r"(region_base_units),
-        "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode)
-      : "memory");
+  if constexpr (source_cube) {
+    asm volatile(
+        "BSTART.TEPL 27, %D1\n"
+        "B.DATR %D2, RNONE\n"
+        "B.DIM zero, %c4, ->lb0\n"
+        "B.DIM zero, %c5, ->lb1\n"
+        "B.IOT %3, mask=1111, last, ->%0<%Z6>\n"
+        "B.SUBVIEW 0, %7, 0, %c8\n"
+        : [Dst] "=Tr"(dst.data())
+        : "i"(type_traits<typename SubTile::DType>::TypeCode),
+          "i"(type_traits<typename Out::DType>::TypeCode), "Tr"(src.data()),
+          "i"(std::remove_reference_t<decltype(src)>::ValidCol),
+          "i"(std::remove_reference_t<decltype(src)>::ValidRow),
+          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+          "r"(region_base_units),
+          "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode)
+        : "memory");
+  } else {
+    asm volatile(
+        "BSTART.TEPL 27, %D1\n"
+        "B.DATR %D2, RNONE\n"
+        "B.DIM zero, %c4, ->lb0\n"
+        "B.DIM zero, %c5, ->lb1\n"
+        "B.DIM zero, %c6, ->lb2\n"
+        "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"
+        "B.SUBVIEW 0, %8, 0, %c9\n"
+        : [Dst] "=Tr"(dst.data())
+        : "i"(type_traits<typename SubTile::DType>::TypeCode),
+          "i"(type_traits<typename Out::DType>::TypeCode), "Tr"(src.data()),
+          "i"(std::remove_reference_t<decltype(src)>::ValidCol),
+          "i"(std::remove_reference_t<decltype(src)>::ValidRow),
+          "i"(SubTile::Cols),
+          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+          "r"(region_base_units),
+          "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode)
+        : "memory");
+  }
 }
 
 template <int Opcode, typename Out, typename Parent0, typename SubTile0,
@@ -1132,20 +1172,49 @@ PTO_REGION_BINARY_SOURCE_WRAPPER(TREM, 4)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TAND, 6)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TOR, 7)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TXOR, 8)
+PTO_REGION_BINARY_SOURCE_WRAPPER(TSHL, 9)
+PTO_REGION_BINARY_SOURCE_WRAPPER(TSHR, 10)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TMAX, 11)
 PTO_REGION_BINARY_SOURCE_WRAPPER(TMIN, 12)
 
+// A row-broadcast source is one logical column (RowMajor or CUBE), or a packed
+// CUBE CELL carrier holding up to CubeCellCols logical columns (BF16/FP16 x2 in
+// a CUBE_M32 cell, PTO-ISA #207, issue #251).  BroadcastByteOffset selects the
+// logical column within the CELL and is bounded separately against CubeCellCols
+// above, so the valid-column count is decoupled from the offset.
+#define PTO_REGION_ROW_EXPAND_SRC_BCAST(Src)                                   \
+  (Src::ValidCol == DYNAMIC || Src::ValidCol == 1 ||                           \
+   (Src::IsCubeLayout && Src::ValidCol >= 1 &&                                 \
+    Src::ValidCol <= Src::CubeCellCols))
+
 template <int Opcode, typename Out, typename Parent0, typename SubTile0,
-          typename Parent1, typename SubTile1>
+          typename Parent1, typename SubTile1, int BroadcastByteOffset = 0>
 PTO_REGION_ALWAYS_INLINE void pto_region_expand(
     Out &dst, region::SubTileView<Parent0, SubTile0> &src0,
     region::SubTileView<Parent1, SubTile1> &src1) {
+  static_assert(BroadcastByteOffset >= 0 && BroadcastByteOffset <= 7,
+                "TROWEXPAND broadcast byte offset must fit B.DATR.RMode");
+  static_assert(BroadcastByteOffset == 0 || Out::IsCubeLayout,
+                "TROWEXPAND broadcast offset is not valid for RowMajor");
+  static_assert(BroadcastByteOffset == 0 ||
+                    ((type_traits<typename SubTile1::DType>::bits % 8) == 0 &&
+                     BroadcastByteOffset %
+                         (type_traits<typename SubTile1::DType>::bits / 8) == 0),
+                "TROWEXPAND broadcast byte offset must align to element bytes");
+  static_assert(BroadcastByteOffset == 0 ||
+                    BroadcastByteOffset /
+                            (type_traits<typename SubTile1::DType>::bits / 8) <
+                        SubTile1::CubeCellCols,
+                "TROWEXPAND broadcast byte offset exceeds CELL columns");
   static_assert(SubTile0::SFractal == SLayout::NoneBox &&
                     SubTile1::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
-  static_assert(SubTile0::ValidCol == SubTile1::ValidCol &&
-                    SubTile1::ValidCol == 1,
-                "row expansion requires a one-column broadcast source");
+  static_assert(PTO_REGION_ROW_EXPAND_SRC_BCAST(SubTile0) &&
+                    PTO_REGION_ROW_EXPAND_SRC_BCAST(SubTile1),
+                "row expansion requires one-column or packed CUBE CELL "
+                "broadcast sources (ValidCol <= CubeCellCols)");
+  static_assert(SubTile0::ValidCol == SubTile1::ValidCol,
+                "row expansion broadcast sources must share their column count");
   static_assert(SubTile0::ValidRow == SubTile1::ValidRow,
                 "row expansion broadcast rows must match the matrix");
   static_assert(std::is_same_v<typename SubTile0::DType,
@@ -1165,28 +1234,57 @@ PTO_REGION_ALWAYS_INLINE void pto_region_expand(
       "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
       "B.SUBVIEW 0, %8, 0, %c11\n"
       "B.SUBVIEW 1, %9, 0, %c11\n"
+      ".if %c12 == 29\n"
+      ".if %c13 == 0\n"
+      "B.DATR CUBE_M32, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c13\n"
+      ".endif\n"
+      ".elseif %c12 == 31\n"
+      ".if %c13 == 0\n"
+      "B.DATR CUBE_M16, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c13\n"
+      ".endif\n"
+      ".endif\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile0::DType>::TypeCode),
         "Tr"(src0.data()), "Tr"(src1.data()), "i"(Out::ValidCol),
         "i"(Out::ValidRow), "i"(Out::Cols),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         "r"(range_base0_units), "r"(range_base1_units), "i"(Opcode),
-        "i"(tile_type_traits<typename SubTile0::TileDType>::TilesizeCode)
+        "i"(tile_type_traits<typename SubTile0::TileDType>::TilesizeCode),
+        "i"(local_layout_code_v<Out>), "i"(BroadcastByteOffset)
       : "memory");
 }
 
 template <int Opcode, typename Out, typename Parent, typename SubTile,
-          typename Tile>
+          typename Tile, int BroadcastByteOffset = 0>
 PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
     Out &dst, region::SubTileView<Parent, SubTile> &src0, Tile &src1) {
+  static_assert(BroadcastByteOffset >= 0 && BroadcastByteOffset <= 7,
+                "TROWEXPAND broadcast byte offset must fit B.DATR.RMode");
+  static_assert(BroadcastByteOffset == 0 || Out::IsCubeLayout,
+                "TROWEXPAND broadcast offset is not valid for RowMajor");
+  static_assert(BroadcastByteOffset == 0 ||
+                    ((type_traits<typename SubTile::DType>::bits % 8) == 0 &&
+                     BroadcastByteOffset %
+                         (type_traits<typename SubTile::DType>::bits / 8) == 0),
+                "TROWEXPAND broadcast byte offset must align to element bytes");
+  static_assert(BroadcastByteOffset == 0 ||
+                    BroadcastByteOffset /
+                            (type_traits<typename SubTile::DType>::bits / 8) <
+                        SubTile::CubeCellCols,
+                "TROWEXPAND broadcast byte offset exceeds CELL columns");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
   static_assert(std::is_same_v<typename SubTile::DType, typename Tile::DType>,
                 "expansion sources require matching element types");
   static_assert(std::is_same_v<typename SubTile::DType, typename Out::DType>,
                 "expansion source and destination dtypes must match");
-  static_assert(Tile::ValidCol == 1,
-                "row expansion requires a one-column broadcast source");
+  static_assert(PTO_REGION_ROW_EXPAND_SRC_BCAST(Tile),
+                "row expansion requires a one-column or packed CUBE CELL "
+                "broadcast source (ValidCol <= CubeCellCols)");
   static_assert(SubTile::ValidRow == Tile::ValidRow,
                 "row expansion broadcast rows must match the matrix");
   static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
@@ -1199,6 +1297,19 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
       "B.DIM zero, %c5, ->lb2\n"
       "B.IOT %2, %6, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 0, %7, 0, %c8\n"
+      ".if %c11 == 29\n"
+      ".if %c12 == 0\n"
+      "B.DATR CUBE_M32, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c12\n"
+      ".endif\n"
+      ".elseif %c11 == 31\n"
+      ".if %c12 == 0\n"
+      "B.DATR CUBE_M16, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c12\n"
+      ".endif\n"
+      ".endif\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
         "Tr"(src0.data()), "i"(Out::ValidCol), "i"(Out::ValidRow),
@@ -1206,22 +1317,37 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
         "r"(range_base0_units),
         "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "i"(Opcode)
+        "i"(Opcode), "i"(local_layout_code_v<Out>), "i"(BroadcastByteOffset)
       : "memory");
 }
 
 template <int Opcode, typename Out, typename Tile, typename Parent,
-          typename SubTile>
+          typename SubTile, int BroadcastByteOffset = 0>
 PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
     Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {
+  static_assert(BroadcastByteOffset >= 0 && BroadcastByteOffset <= 7,
+                "TROWEXPAND broadcast byte offset must fit B.DATR.RMode");
+  static_assert(BroadcastByteOffset == 0 || Out::IsCubeLayout,
+                "TROWEXPAND broadcast offset is not valid for RowMajor");
+  static_assert(BroadcastByteOffset == 0 ||
+                    ((type_traits<typename SubTile::DType>::bits % 8) == 0 &&
+                     BroadcastByteOffset %
+                         (type_traits<typename SubTile::DType>::bits / 8) == 0),
+                "TROWEXPAND broadcast byte offset must align to element bytes");
+  static_assert(BroadcastByteOffset == 0 ||
+                    BroadcastByteOffset /
+                            (type_traits<typename SubTile::DType>::bits / 8) <
+                        SubTile::CubeCellCols,
+                "TROWEXPAND broadcast byte offset exceeds CELL columns");
   static_assert(SubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
   static_assert(std::is_same_v<typename Tile::DType, typename SubTile::DType>,
                 "expansion sources require matching element types");
   static_assert(std::is_same_v<typename Tile::DType, typename Out::DType>,
                 "expansion source and destination dtypes must match");
-  static_assert(SubTile::ValidCol == 1,
-                "row expansion requires a one-column broadcast source");
+  static_assert(PTO_REGION_ROW_EXPAND_SRC_BCAST(SubTile),
+                "row expansion requires a one-column or packed CUBE CELL "
+                "broadcast source (ValidCol <= CubeCellCols)");
   static_assert(Tile::ValidRow == SubTile::ValidRow,
                 "row expansion broadcast rows must match the matrix");
   static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
@@ -1234,13 +1360,26 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
       "B.DIM zero, %c5, ->lb2\n"
       "B.IOT %6, %2, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 1, %7, 0, %c8\n"
+      ".if %c11 == 29\n"
+      ".if %c12 == 0\n"
+      "B.DATR CUBE_M32, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c12\n"
+      ".endif\n"
+      ".elseif %c11 == 31\n"
+      ".if %c12 == 0\n"
+      "B.DATR CUBE_M16, Null\n"
+      ".else\n"
+      "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c12\n"
+      ".endif\n"
+      ".endif\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),
         "i"(Out::ValidCol), "i"(Out::ValidRow), "i"(Out::Cols),
         "Tr"(src0.data()), "r"(range_base1_units),
         "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "i"(Opcode)
+        "i"(Opcode), "i"(local_layout_code_v<Out>), "i"(BroadcastByteOffset)
       : "memory");
 }
 
@@ -1313,27 +1452,32 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
       : "memory");
 }
 
+#undef PTO_REGION_ROW_EXPAND_SRC_BCAST
+
 #define PTO_REGION_EXPAND_SOURCE_WRAPPER(Name, Opcode)                       \
   template <is_tile_data_v Out, typename Parent0, typename SubTile0,          \
-            typename Parent1, typename SubTile1>                              \
+            typename Parent1, typename SubTile1, int BroadcastByteOffset = 0> \
   PTO_REGION_ALWAYS_INLINE void Name(                                       \
       Out &dst, region::SubTileView<Parent0, SubTile0> &src0,                \
       region::SubTileView<Parent1, SubTile1> &src1) {                         \
-    pto_region_expand<Opcode>(dst, src0, src1);                              \
+    pto_region_expand<Opcode, Out, Parent0, SubTile0, Parent1, SubTile1,       \
+                      BroadcastByteOffset>(dst, src0, src1);                 \
   }
 
 #define PTO_REGION_ROW_EXPAND_MIXED_WRAPPER(Name, Opcode)                    \
   template <is_tile_data_v Out, typename Parent, typename SubTile,            \
-            typename Tile>                                                    \
+            typename Tile, int BroadcastByteOffset = 0>                       \
   PTO_REGION_ALWAYS_INLINE void Name(                                       \
       Out &dst, region::SubTileView<Parent, SubTile> &src0, Tile &src1) {     \
-    pto_region_row_expand<Opcode>(dst, src0, src1);                          \
+    pto_region_row_expand<Opcode, Out, Parent, SubTile, Tile,                 \
+                          BroadcastByteOffset>(dst, src0, src1);              \
   }                                                                          \
   template <is_tile_data_v Out, typename Tile, typename Parent,               \
-            typename SubTile>                                                 \
+            typename SubTile, int BroadcastByteOffset = 0>                    \
   PTO_REGION_ALWAYS_INLINE void Name(                                       \
       Out &dst, Tile &src0, region::SubTileView<Parent, SubTile> &src1) {     \
-    pto_region_row_expand<Opcode>(dst, src0, src1);                          \
+    pto_region_row_expand<Opcode, Out, Tile, Parent, SubTile,                 \
+                          BroadcastByteOffset>(dst, src0, src1);              \
   }
 
 #define PTO_REGION_COL_EXPAND_MIXED_WRAPPER(Name, Opcode)                    \
@@ -1496,17 +1640,94 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
   }
 }
 
+template <int Opcode, typename Out, typename Parent0, typename SubTile0,
+          typename Parent1, typename SubTile1>
+PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
+    Out &dst,
+    region::ReductionPrefixView<Parent0, SubTile0> &src0,
+    region::ReductionPrefixView<Parent1, SubTile1> &src1) {
+  static_assert(SubTile0::IsCubeLayout && SubTile1::IsCubeLayout,
+                "reduction prefix sources require CUBE layouts");
+  static_assert(SubTile0::Rows == SubTile1::Rows &&
+                    SubTile0::Cols == SubTile1::Cols,
+                "reduction prefix sources require matching physical shapes");
+  static_assert(SubTile0::ValidRow == SubTile1::ValidRow &&
+                    SubTile0::ValidCol == SubTile1::ValidCol,
+                "reduction prefix sources require matching valid shapes");
+  static_assert(std::is_same_v<typename SubTile0::DType,
+                               typename SubTile1::DType>,
+                "reduction prefix sources require matching element types");
+  static_assert(SubTile0::BFractal == SubTile1::BFractal,
+                "reduction prefix sources require matching CUBE layouts");
+
+  const uintptr_t prefix_base0_units = src0.GetRangeBase();
+  const uintptr_t prefix_base1_units = src1.GetRangeBase();
+  // ReductionPrefixView carries a statically selected CELL. Keep the dynamic
+  // branch in lockstep with the Tile/prefix overloads so that a dynamic prefix
+  // remains well-formed and uses the register B.DIM form.
+  if constexpr (SubTile0::ValidRow < 0) {
+    asm volatile(
+        "BSTART.TEPL %c9, %D1\n"
+        PTO_REGION_ELEMENTWISE_LAYOUT_ASM
+        "B.DIM zero, %c4, ->lb0\n"
+        "B.DIM %[DynValidRow], 0, ->lb1\n"
+        "B.DIM zero, %c5, ->lb2\n"
+        "B.IOT %2, %3, mask=1111, last, ->%0<%Z6>\n"
+        "B.SUBVIEW 0, %7, 0, %c10\n"
+        "B.SUBVIEW 1, %8, 0, %c10\n"
+        : [Dst] "=Tr"(dst.data())
+        : "i"(type_traits<typename SubTile0::DType>::TypeCode),
+          "Tr"(src0.data()), "Tr"(src1.data()),
+          "i"(SubTile0::ValidCol), "i"(SubTile0::Cols),
+          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+          "r"(prefix_base0_units), "r"(prefix_base1_units), "i"(Opcode),
+          "i"(tile_type_traits<typename SubTile0::TileDType>::TilesizeCode),
+          [ElemLayout] "i"(local_layout_code_v<SubTile0>),
+          [DynValidRow] "r"(src0.GetValidRow())
+        : "memory");
+  } else {
+    asm volatile(
+        "BSTART.TEPL %c10, %D1\n"
+        PTO_REGION_ELEMENTWISE_LAYOUT_ASM
+        "B.DIM zero, %c4, ->lb0\n"
+        "B.DIM zero, %c5, ->lb1\n"
+        "B.DIM zero, %c6, ->lb2\n"
+        "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
+        "B.SUBVIEW 0, %8, 0, %c11\n"
+        "B.SUBVIEW 1, %9, 0, %c11\n"
+        : [Dst] "=Tr"(dst.data())
+        : "i"(type_traits<typename SubTile0::DType>::TypeCode),
+          "Tr"(src0.data()), "Tr"(src1.data()),
+          "i"(SubTile0::ValidCol), "i"(SubTile0::ValidRow),
+          "i"(SubTile0::Cols),
+          "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+          "r"(prefix_base0_units), "r"(prefix_base1_units), "i"(Opcode),
+          "i"(tile_type_traits<typename SubTile0::TileDType>::TilesizeCode),
+          [ElemLayout] "i"(local_layout_code_v<SubTile0>)
+        : "memory");
+  }
+}
+
 #define PTO_REGION_BINARY_PREFIX_WRAPPER(Name, Opcode)                         \
-  template <is_tile_data_v Out, typename Tile, typename Parent, typename SubTile> \
+  template <is_tile_data_v Out, is_tile_data_v Tile, typename Parent, typename SubTile> \
   PTO_REGION_ALWAYS_INLINE void Name(                                        \
       Out &dst, Tile &src0,                                                   \
       region::ReductionPrefixView<Parent, SubTile> &src1) {                    \
     pto_region_binary_reduction_prefix<Opcode>(dst, src0, src1);              \
   }                                                                            \
-  template <is_tile_data_v Out, typename Parent, typename SubTile, typename Tile> \
+  template <is_tile_data_v Out, typename Parent, typename SubTile,             \
+            is_tile_data_v Tile>                                               \
   PTO_REGION_ALWAYS_INLINE void Name(                                        \
       Out &dst, region::ReductionPrefixView<Parent, SubTile> &src0,           \
       Tile &src1) {                                                           \
+    pto_region_binary_reduction_prefix<Opcode>(dst, src0, src1);              \
+  }                                                                            \
+  template <is_tile_data_v Out, typename Parent0, typename SubTile0,           \
+            typename Parent1, typename SubTile1>                               \
+  PTO_REGION_ALWAYS_INLINE void Name(                                        \
+      Out &dst,                                                               \
+      region::ReductionPrefixView<Parent0, SubTile0> &src0,                   \
+      region::ReductionPrefixView<Parent1, SubTile1> &src1) {                 \
     pto_region_binary_reduction_prefix<Opcode>(dst, src0, src1);              \
   }
 
@@ -1680,6 +1901,8 @@ PTO_REGION_BINARY_DEST_WRAPPER(TREM, 4)
 PTO_REGION_BINARY_DEST_WRAPPER(TAND, 6)
 PTO_REGION_BINARY_DEST_WRAPPER(TOR, 7)
 PTO_REGION_BINARY_DEST_WRAPPER(TXOR, 8)
+PTO_REGION_BINARY_DEST_WRAPPER(TSHL, 9)
+PTO_REGION_BINARY_DEST_WRAPPER(TSHR, 10)
 PTO_REGION_BINARY_DEST_WRAPPER(TMAX, 11)
 PTO_REGION_BINARY_DEST_WRAPPER(TMIN, 12)
 

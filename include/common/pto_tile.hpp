@@ -4,6 +4,7 @@
 #include "common/layout.hpp"
 #include <common/type.hpp>
 #include <cstdint>
+#include <type_traits>
 
 namespace pto {
 
@@ -500,6 +501,14 @@ constexpr int matrix_accumulator_type_code(int InputTypeCode) {
   }
 }
 
+// PTO #346: RowMax/GroupMax reduce the final post-processed D value.  Their
+// reduction carrier is therefore limited to the effective floating D types;
+// accumulator integer types and low-precision encoded types are not legal
+// reduction destinations.
+constexpr bool matrix_final_d_reduction_type_legal(int TypeCode) {
+  return TypeCode == __type_fp32 || TypeCode == __type_fp16 ||
+         TypeCode == __type_bf16;
+}
 constexpr bool matrix_mode_uses_s32_accumulator(FixpPreQuantMode Mode) {
   switch (Mode) {
   case FixpPreQuantMode::VREQS8Pre:
@@ -923,7 +932,8 @@ template <Location Loc_, typename Element_, const int Rows_, const int Cols_,
           const SLayout SFractal_ = SLayout::NoneBox,
           const int SFractalSize_ = 512,
           const PadValue PadVal_ = PadValue::Null,
-          const CompactMode Compact_ = CompactMode::Null>
+          const CompactMode Compact_ = CompactMode::Null,
+          const bool ElementProfile_ = false>
 struct Tile {
 public:
   using DType = Element_;
@@ -1073,6 +1083,18 @@ public:
   static constexpr int SFractalSize = SFractalSize_;
   static constexpr PadValue PadVal = PadVal_;
   static constexpr CompactMode Compact = Compact_;
+  static constexpr bool IsElementProfile = ElementProfile_;
+  static_assert(
+      !IsElementProfile ||
+          (Loc_ == Location::Vec && BFractal_ == BLayout::CubeM32 &&
+           Rows == 32 && (Cols == 1 || Cols == 4) && ValidRow == Rows &&
+           ValidCol == Cols && SFractal_ == SLayout::NoneBox &&
+           SFractalSize_ == 512 && PadVal_ == PadValue::Null &&
+           Compact_ == CompactMode::Null &&
+           (std::is_same_v<DType, uint32_t> ||
+            std::is_same_v<DType, int32_t> ||
+            std::is_same_v<DType, float>)),
+      "element Tile profiles require full U32/S32/F32 CUBE_M32 32x1 or 32x4 storage");
   static constexpr int LogicalTileBytes = StorageBytes;
   static constexpr int TilesizeCode =
       LogicalTileBytes == 128  ? __tilesize_128B :
@@ -1141,15 +1163,21 @@ public:
                 "SFractalSize_ illegal");
 
 #ifdef __linx
-  using TileDType = linx_tile_carrier<LogicalTileBytes>;
+  using TileCarrierScalar =
+      std::conditional_t<IsElementProfile, DType, uint32_t>;
+  using TileDType = linx_tile_carrier<LogicalTileBytes, TileCarrierScalar>;
   using TileRegisterType = typename TileDType::RegisterType;
 #else
   using TileDType = DType[StorageBytes * 8 / type_traits<DType>::bits];
 #endif
 
 #ifdef __linx
-  TileRegisterType &data() { return data_.Register; }
-  const TileRegisterType &data() const { return data_.Register; }
+  __attribute__((always_inline)) TileRegisterType &data() {
+    return data_.Register;
+  }
+  __attribute__((always_inline)) const TileRegisterType &data() const {
+    return data_.Register;
+  }
 #else
   TileDType &data() { return data_; }
   const TileDType &data() const { return data_; }
@@ -1223,6 +1251,37 @@ template <typename Element_, const int Rows_, const int Cols_,
 using VecTileM32 =
   Tile<Location::Vec, Element_, Rows_, Cols_, BLayout::CubeM32,
        RowValid_, ColValid_>;
+
+// Logical element tiles keep the current CUBE_M32 carrier private to the API.
+// The initial typed profile covers one 32-element part and its four-part
+// 128-element parent for U32, S32, and F32.
+namespace detail {
+template <typename Element_, int Elements_>
+struct element_tile_profile {
+  static_assert(std::is_same_v<Element_, uint32_t> ||
+                    std::is_same_v<Element_, int32_t> ||
+                    std::is_same_v<Element_, float>,
+                "ElementTile currently supports only U32, S32, or F32 elements");
+  static_assert(Elements_ == 32 || Elements_ == 128,
+                "ElementTile currently supports 32 or 128 elements");
+  using type = Tile<Location::Vec, Element_, 32, Elements_ / 32,
+                    BLayout::CubeM32, 32, Elements_ / 32,
+                    SLayout::NoneBox, 512, PadValue::Null,
+                    CompactMode::Null, true>;
+};
+} // namespace detail
+
+template <typename Element_, int Elements_>
+using ElementTile =
+    typename detail::element_tile_profile<Element_, Elements_>::type;
+
+template <typename T>
+inline constexpr bool is_element_tile_v = [] {
+  using TileType = std::remove_cvref_t<T>;
+  if constexpr (requires { TileType::IsElementProfile; })
+    return TileType::IsElementProfile;
+  return false;
+}();
 
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
@@ -1495,9 +1554,11 @@ struct is_global<global_tensor<Element_, Layout_>> : std::true_type {};
 
 template <Location Loc_, typename Element_, const int Rows_, const int Cols_,
           const BLayout BFractal_, const int RowValid_, const int ColValid_,
-          const SLayout SFractal_, const int SFractalSize_, const PadValue PadVal_>
+          const SLayout SFractal_, const int SFractalSize_, const PadValue PadVal_,
+          const CompactMode Compact_, const bool ElementProfile_>
 struct is_tile<Tile<Loc_, Element_, Rows_, Cols_, BFractal_, RowValid_,
-                    ColValid_, SFractal_, SFractalSize_, PadVal_>> : std::true_type {
+                    ColValid_, SFractal_, SFractalSize_, PadVal_, Compact_,
+                    ElementProfile_>> : std::true_type {
   static constexpr SLayout layout_enum = SFractal_;
 };
 
@@ -1611,6 +1672,62 @@ struct is_shared_tile<SharedTile<LocalTile>> : std::true_type {};
 
 template <typename T>
 concept is_shared_tile_v = is_shared_tile<T>::value;
+
+// A Shared slot is an architectural name, not a C++ value.  This carrier is
+// deliberately empty so a Shared producer cannot lower its result through a
+// normal i64 object, stack slot, or C++ ABI.  Operations accepting a slot
+// print S<Slot_> directly in their B.IOS operands.
+template <unsigned Slot_, typename LocalTile>
+class SharedTileSlot {
+  static_assert(Slot_ < 64, "SharedTileSlot must name S0..S63");
+  static_assert(is_tile<LocalTile>::value,
+                "SharedTileSlot<Slot, LocalTile>: LocalTile must be a Tile");
+  static_assert(LocalTile::Loc != Location::Shared,
+                "SharedTileSlot cannot wrap a SharedTile");
+
+public:
+  using LocalTileType = LocalTile;
+  using DType = typename LocalTile::DType;
+  static constexpr unsigned Slot = Slot_;
+  static constexpr Location Loc = Location::Shared;
+  static constexpr Location Role = LocalTile::Loc;
+  static constexpr int Rows = LocalTile::Rows;
+  static constexpr int Cols = LocalTile::Cols;
+  static constexpr int RowStride = LocalTile::RowStride;
+  static constexpr int ColStride = LocalTile::ColStride;
+  static constexpr int ValidRow = LocalTile::ValidRow;
+  static constexpr int ValidCol = LocalTile::ValidCol;
+  static constexpr BLayout BFractal = LocalTile::BFractal;
+  static constexpr SLayout SFractal = LocalTile::SFractal;
+  static constexpr int SFractalSize = LocalTile::SFractalSize;
+  static constexpr PadValue PadVal = LocalTile::PadVal;
+  static constexpr CompactMode Compact = LocalTile::Compact;
+  static constexpr bool IsCubeLayout = LocalTile::IsCubeLayout;
+  using TileDType = typename LocalTile::TileDType;
+  static constexpr int LogicalTileBytes = LocalTile::LogicalTileBytes;
+  static constexpr int TilesizeCode = LocalTile::TilesizeCode;
+  static constexpr bool IsValidActiveSize = LocalTile::IsValidActiveSize;
+  static constexpr bool isRowMajor = LocalTile::isRowMajor;
+  static constexpr bool isBoxedLayout = LocalTile::isBoxedLayout;
+  static constexpr bool isInnerRowMajor = LocalTile::isInnerRowMajor;
+  static constexpr bool isInnerColMajor = LocalTile::isInnerColMajor;
+  static constexpr int InnerRows = LocalTile::InnerRows;
+  static constexpr int InnerCols = LocalTile::InnerCols;
+  static constexpr int InnerNumel = LocalTile::InnerNumel;
+  static constexpr int Numel = LocalTile::Numel;
+  static constexpr int byteSize = LocalTile::byteSize;
+  static constexpr int kBytes = LocalTile::kBytes;
+};
+
+template <typename T> struct is_shared_tile_slot : std::false_type {};
+template <unsigned Slot_, typename LocalTile>
+struct is_shared_tile_slot<SharedTileSlot<Slot_, LocalTile>> : std::true_type {};
+
+template <unsigned Slot_, typename LocalTile>
+struct is_shared_tile<SharedTileSlot<Slot_, LocalTile>> : std::true_type {};
+
+template <typename T>
+concept is_shared_tile_slot_v = is_shared_tile_slot<T>::value;
 
 // Zero-instruction Shared matrix-role view.  A Shared handle carries storage
 // and payload identity; the Left/Right role is metadata consumed by the cube
@@ -2193,6 +2310,47 @@ public:
 private:
   SourceTile &SourceValue;
 };
+
+// PTO 0.58.7 TEXPDIF legality. A reinterpret view exposes the operation dtype
+// while retaining its Source::DType as the physical backing carrier.
+template <typename Source, typename Destination>
+constexpr bool texpdif_type_pair_legal_v =
+    (std::is_same_v<Source, __half> &&
+     (std::is_same_v<Destination, __half> || std::is_same_v<Destination, __fp32>)) ||
+    (std::is_same_v<Source, __bf16> &&
+     (std::is_same_v<Destination, __bf16> || std::is_same_v<Destination, __fp32>)) ||
+    (std::is_same_v<Source, __fp32> && std::is_same_v<Destination, __fp32>);
+
+template <typename TileT> struct texpdif_backing_dtype { using type = typename TileT::DType; };
+template <typename NewDType, typename SourceTile>
+struct texpdif_backing_dtype<ReinterpretedTileView<NewDType, SourceTile>> {
+  using type = typename SourceTile::DType;
+};
+template <typename TileT>
+using texpdif_backing_dtype_t = typename texpdif_backing_dtype<TileT>::type;
+
+template <typename D, typename A, typename B>
+constexpr void validate_texpdif_operands() {
+  static_assert(D::Loc != Location::Shared && A::Loc != Location::Shared && B::Loc != Location::Shared,
+                "TEXPDIF requires Local operands; Shared tiles are illegal");
+  static_assert(A::BFractal == B::BFractal && D::BFractal == A::BFractal,
+                "TEXPDIF source and destination layouts must match");
+  static_assert(A::BFractal == BLayout::RowMajor || A::BFractal == BLayout::CubeM16 ||
+                    A::BFractal == BLayout::CubeM32,
+                "TEXPDIF supports RowMajor, CUBE_M16, and CUBE_M32 only");
+  static_assert(A::Rows == B::Rows && A::Cols == B::Cols && D::Rows == A::Rows &&
+                    D::Cols == A::Cols && A::ValidRow == B::ValidRow &&
+                    A::ValidCol == B::ValidCol && D::ValidRow == A::ValidRow &&
+                    D::ValidCol == A::ValidCol,
+                "TEXPDIF source and destination logical shapes must match");
+  static_assert(std::is_same_v<typename A::DType, typename B::DType>,
+                "TEXPDIF sources must select the same operation dtype");
+  static_assert(texpdif_type_pair_legal_v<typename A::DType, typename D::DType>,
+                "TEXPDIF supports only FP16/BF16/FP32 source pairs and FP32 widening");
+  static_assert(type_traits<texpdif_backing_dtype_t<A>>::bits == type_traits<typename A::DType>::bits &&
+                    type_traits<texpdif_backing_dtype_t<B>>::bits == type_traits<typename B::DType>::bits,
+                "TEXPDIF source backing carriers must be non-packed and equal-width");
+}
 
 // A ReinterpretedTileView is a Local tile-shaped operand (not Shared).
 template <typename NewDType, typename SourceTile>

@@ -1,6 +1,6 @@
 # TROWEXPANDSUB
 
-`TROWEXPANDSUB` 从每个有效行的元素中减去该行的单列广播值。
+`TROWEXPANDSUB` 从每个有效行的元素中减去该行的行广播值。
 
 ## C++ 接口
 

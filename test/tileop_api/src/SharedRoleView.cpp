@@ -10,9 +10,9 @@ void shared_role_view(C &out, LocalA &dS_staged, SharedLeft &source,
   auto as_right = reinterpret_shared_tile<Location::Right>(source);
   // dQ = (dS^T)^T * K: the published K handle is consumed as B.
   TMATMUL(out, dS_staged, as_right);
-  auto as_left = reinterpret_shared_tile<Location::Left>(source);
-  // S^T = K * Q^T: the same published K handle is consumed as A.  Q remains
-  // a separately published Shared-Right operand; no second K load is needed.
+  auto as_left = reinterpret_shared_tile<Location::Left>(q);
+  // S^T = K * Q^T: the separately published Q handle is consumed as A after a
+  // non-owning role view; no second load or Shared publication is needed.
   TMATMUL(out, as_left, q, fixp::keep_acc().transpose_b());
 }
 int main() { return 0; }

@@ -116,7 +116,7 @@
   "schema": "linx-tileop-api.engine-ops-projection.v1",
   "semantic_engine_counts": {
     "CUBE": 12,
-    "SFU": 56,
+    "SFU": 57,
     "TLSU": 10,
     "VEC": 31
   },
@@ -337,6 +337,14 @@
       "logical_selector": 28,
       "mode": 0,
       "name": "TFMA"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "SFU",
+      "function": 29,
+      "logical_selector": 29,
+      "mode": 0,
+      "name": "TEXPDIF"
     },
     {
       "classification": "tile-scalar-and-immediate",

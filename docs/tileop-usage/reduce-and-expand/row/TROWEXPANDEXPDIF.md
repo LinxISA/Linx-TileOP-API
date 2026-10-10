@@ -1,6 +1,6 @@
 # TROWEXPANDEXPDIF
 
-`TROWEXPANDEXPDIF` 计算每个有效行元素与该行单列广播值之差的指数。
+`TROWEXPANDEXPDIF` 计算每个有效行元素与该行行广播值之差的指数。
 
 ## C++ 接口
 

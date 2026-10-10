@@ -37,8 +37,8 @@ TMATMUL(d, a, b, fixp::keep_acc()
 builder 返回新的 options，可以继续链式配置：
 
 ```cpp
-auto options = fixp::s8(descriptor)
-                   .lrelu(fp19_slope)
+auto options = fixp::keep_acc()
+                   .relu()
                    .row_max(row_in, row_out)
                    .group_max<16>(group_out)
                    .max_abs();
@@ -303,8 +303,11 @@ TMULS(scale, amax, 0.25f);
 ```
 
 
-RowMax 在 ReLU、quant 和 convert **之前**基于 FullAcc 计算，输入/输出 dtype 必须是 FP32
-或 S32 AccType，valid shape 必须是 `M x 1`，且输入输出 dtype/valid shape 一致。
+根据 PTO #346，RowMax/GroupMax 在完整后处理流水线之后基于 **final encoded D** 计算。
+`RowMaxIn`、`RowMaxOut` 和 `GroupMaxOut` 的 dtype 都必须与 final D dtype 一致；reduction
+只允许 final D 为 FP32、FP16 或 BF16。S32/U32 以及整数、FP8 等 final-D reduction
+组合必须在编译期拒绝。RowMax 输入/输出的 valid shape 必须是 `M x 1`，且二者 dtype
+与 valid shape 一致。
 
 ```cpp
 using Row = Tile<Location::Vec, __fp32, 32, 8,
@@ -316,9 +319,9 @@ Row row_in;
 TMATMUL(d, a, b, fixp::keep_acc().row_max(row_in, row_out)); // RowMaxInit=1
 ```
 
-RowMax 输出必须使用当前 API 支持的物理 one-column carrier：物理 shape 的列数必须为 1，
+RowMax 输出必须使用当前 API 支持的物理 row-broadcast carrier：物理 shape 的列数必须为 1，
 并且 valid shape 必须为 `M x 1`。不能通过扩大物理 `M x N` shape、再用 `ValidCol=1`
-来替代 one-column carrier。Local auxiliary Tile 的物理 active size 仍必须处于当前实现
+来替代 row-broadcast carrier。Local auxiliary Tile 的物理 active size 仍必须处于当前实现
 允许的 `128 B..256 KiB` 范围内，但具体操作还可能有更严格的限制。
 
 GroupN 必须是 `8, 16, 32, 48, 64, 80, 96, 112, 128` 之一，对应 `GroupNCode=1..9`；
@@ -330,7 +333,8 @@ Group group_out;
 TMATMUL(d, a, b, fixp::keep_acc().group_max<8>(group_out));
 ```
 
-`GroupMaxOut` 的 valid shape 必须为 `M x ceil(N / GroupN)`，dtype 为 FP32/S32 AccType，
+`GroupMaxOut` 的 valid shape 必须为 `M x ceil(N / GroupN)`，dtype 必须与 final D 相同，
+且 final D 只能是 FP32、FP16 或 BF16；
 物理 active-size 同样必须处于当前实现允许的 `128 B..256 KiB` 范围内。例如 `N=32,
 GroupN=8` 时有效列数为 4。
 `.max_abs()` 必须在 RowMax 或 GroupMax 已启用后调用，并同时作用于所有已启用的 max reduction：
@@ -520,3 +524,25 @@ void options_example(D &d, Ds8 &d8, D &c, A &a, B &b,
 exact TileOP-API checkout through `PTO_TILEOP_API_REVISION`; consumers should
 use capability macros such as `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX` for
 compile-time requirements instead of ordering raw Git hashes.
+
+## Shared-slot matrix operands
+
+For a CUBE pipeline whose Shared inputs are produced by separate TLSU or
+TIMG2COL operations, `SharedTileSlot<S, LocalTile>` provides an explicit
+architectural Shared register name. The slot is limited to `S0..S63`; the
+producer and `TMATMUL_SLOT` consumer must name matching slots, and overlapping
+live objects must use different slots. This is a Shared-register lifetime
+interface, not a replacement for matrix `fixp::Options`.
+
+```cpp
+using A = SharedTileSlot<0, SharedMatrixLeft<float, 64, 32>>;
+using B = SharedTileSlot<1, SharedMatrixRight<float, 16, 32>>;
+
+TIMG2COL_SPART_SLOT<DN2ND, 0, 1, A::LocalTileType>(input, image_params);
+TLOAD_SLOT<OIHW2NK, 1, 1, B::LocalTileType>(weights, weight_params);
+TMATMUL_SLOT<output_tile, 0, A, 1, B>(output);
+```
+
+The slot form avoids materializing a Shared handle as an ordinary C++ integer,
+so it must not be copied into a normal object, passed through a non-inlined
+function, or mixed with scalar/tile spill assumptions.
