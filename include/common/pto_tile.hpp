@@ -1087,7 +1087,11 @@ public:
   static_assert(
       !IsElementProfile ||
           (Loc_ == Location::Vec && BFractal_ == BLayout::CubeM32 &&
-           Rows == 32 && (Cols == 1 || Cols == 4) && ValidRow == Rows &&
+           Rows == 32 &&
+           (Cols == 1 || Cols == 4 ||
+            (Cols == 16 && (std::is_same_v<DType, uint32_t> ||
+                            std::is_same_v<DType, int32_t>))) &&
+           ValidRow == Rows &&
            ValidCol == Cols && SFractal_ == SLayout::NoneBox &&
            SFractalSize_ == 512 && PadVal_ == PadValue::Null &&
            Compact_ == CompactMode::Null &&
@@ -1253,8 +1257,9 @@ using VecTileM32 =
        RowValid_, ColValid_>;
 
 // Logical element tiles keep the current CUBE_M32 carrier private to the API.
-// The initial typed profile covers one 32-element part and its four-part
-// 128-element parent for U32, S32, and F32.
+// The typed profile covers one 32-element part and a 128-element parent for
+// U32, S32, and F32. Integer profiles also support a 512-element parent backed
+// by the existing private 32x16 CUBE_M32 carrier.
 namespace detail {
 template <typename Element_, int Elements_>
 struct element_tile_profile {
@@ -1262,8 +1267,13 @@ struct element_tile_profile {
                     std::is_same_v<Element_, int32_t> ||
                     std::is_same_v<Element_, float>,
                 "ElementTile currently supports only U32, S32, or F32 elements");
-  static_assert(Elements_ == 32 || Elements_ == 128,
-                "ElementTile currently supports 32 or 128 elements");
+  static constexpr bool IsInteger =
+      std::is_same_v<Element_, uint32_t> ||
+      std::is_same_v<Element_, int32_t>;
+  static_assert(Elements_ == 32 || Elements_ == 128 ||
+                    (IsInteger && Elements_ == 512),
+                "ElementTile supports 32 or 128 U32/S32/F32 elements, or "
+                "512 U32/S32 elements");
   using type = Tile<Location::Vec, Element_, 32, Elements_ / 32,
                     BLayout::CubeM32, 32, Elements_ / 32,
                     SLayout::NoneBox, 512, PadValue::Null,
