@@ -1209,12 +1209,13 @@ PTO_REGION_ALWAYS_INLINE void pto_region_expand(
   static_assert(SubTile0::SFractal == SLayout::NoneBox &&
                     SubTile1::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
-  static_assert(PTO_REGION_ROW_EXPAND_SRC_BCAST(SubTile0) &&
-                    PTO_REGION_ROW_EXPAND_SRC_BCAST(SubTile1),
-                "row expansion requires one-column or packed CUBE CELL "
-                "broadcast sources (ValidCol <= CubeCellCols)");
-  static_assert(SubTile0::ValidCol == SubTile1::ValidCol,
-                "row expansion broadcast sources must share their column count");
+  // src0 is the matrix fragment; only src1 is a row-broadcast carrier
+  // (issue #253).
+  static_assert(PTO_REGION_ROW_EXPAND_SRC_BCAST(SubTile1),
+                "row expansion requires a one-column or packed CUBE CELL "
+                "broadcast source (ValidCol <= CubeCellCols)");
+  static_assert(SubTile0::ValidCol == Out::ValidCol,
+                "row expansion matrix source cols must match the destination");
   static_assert(SubTile0::ValidRow == SubTile1::ValidRow,
                 "row expansion broadcast rows must match the matrix");
   static_assert(std::is_same_v<typename SubTile0::DType,
@@ -1233,7 +1234,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_expand(
       "B.DIM zero, %c6, ->lb2\n"
       "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
       "B.SUBVIEW 0, %8, 0, %c11\n"
-      "B.SUBVIEW 1, %9, 0, %c11\n"
+      "B.SUBVIEW 1, %9, 0, %c14\n"
       ".if %c12 == 29\n"
       ".if %c13 == 0\n"
       "B.DATR CUBE_M32, Null\n"
@@ -1254,7 +1255,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_expand(
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         "r"(range_base0_units), "r"(range_base1_units), "i"(Opcode),
         "i"(tile_type_traits<typename SubTile0::TileDType>::TilesizeCode),
-        "i"(local_layout_code_v<Out>), "i"(BroadcastByteOffset)
+        "i"(local_layout_code_v<Out>), "i"(BroadcastByteOffset),
+        "i"(tile_type_traits<typename SubTile1::TileDType>::TilesizeCode)
       : "memory");
 }
 
