@@ -31,6 +31,29 @@ extern "C" unsigned __pto_runtime_pe_context_count(void)
 #define PTO_TILEOP_SYNC_CORE_VIOLATION() __builtin_trap()
 #endif
 
+// Keep this header consumable by older Linx compilers used for API-surface
+// checks. Such compilers know THREAD_ID but do not yet declare the SYNC.CORE
+// builtin. A real Linx build may emit the instruction only when the frontend
+// advertises that builtin; otherwise the call fails closed through the same
+// violation path as an invalid launch contract.
+#if defined(__linx) && defined(__clang__)
+#if __has_builtin(__builtin_linx_sync_core)
+#define PTO_TILEOP_COMPILER_HAS_SYNC_CORE 1
+#endif
+#endif
+
+#ifndef PTO_TILEOP_COMPILER_HAS_SYNC_CORE
+#define PTO_TILEOP_COMPILER_HAS_SYNC_CORE 0
+#endif
+
+#ifndef PTO_TILEOP_SYNC_CORE_EMIT
+#if PTO_TILEOP_COMPILER_HAS_SYNC_CORE
+#define PTO_TILEOP_SYNC_CORE_EMIT() __builtin_linx_sync_core()
+#else
+#define PTO_TILEOP_SYNC_CORE_EMIT() PTO_TILEOP_SYNC_CORE_VIOLATION()
+#endif
+#endif
+
 /// Rendezvous PE0..PE3 in the current Core.
 ///
 /// Every PE in the active kernel invocation must reach the same static call
@@ -47,7 +70,7 @@ __attribute__((always_inline)) inline void SYNC_CORE()
     PTO_TILEOP_SYNC_CORE_VIOLATION();
     return;
   }
-  __builtin_linx_sync_core();
+  PTO_TILEOP_SYNC_CORE_EMIT();
 }
 
 #endif

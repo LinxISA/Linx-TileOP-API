@@ -15,12 +15,8 @@ inline unsigned __builtin_linx_get_thread_idx()
   return test_pe_id;
 }
 
-inline void __builtin_linx_sync_core()
-{
-  ++test_sync_calls;
-}
-
 #define PTO_TILEOP_SYNC_CORE_VIOLATION() (++test_violations)
+#define PTO_TILEOP_SYNC_CORE_EMIT() (++test_sync_calls)
 #include <common/pto_pe_runtime.hpp>
 
 static void reset(unsigned contexts, unsigned pe_id)
