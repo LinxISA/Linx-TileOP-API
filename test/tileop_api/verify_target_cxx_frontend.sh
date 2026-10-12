@@ -40,7 +40,8 @@ if ! "$TC_DIR/clang++" "${FLAGS[@]}" -H -fsyntax-only \
   exit 1
 fi
 
-for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
+for source in RangeSubview.cpp GMov.cpp TileRegionUnary.cpp \
+              TileRegionCubeSubview.cpp Issue166RmsNormB128.cpp \
               TileRegionUnarySubviewAssembly.cpp \
               TileRegionTCVTSubviewAssembly.cpp \
               TileRegionTCVTSubview.cpp \
@@ -52,6 +53,51 @@ for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
   "$TC_DIR/clang++" "${FLAGS[@]}" -fsyntax-only \
     "$ROOT/test/tileop_api/src/$source"
 done
+
+for source in TileRegionUnary TileRegionCubeSubview Issue166RmsNormB128; do
+  "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+    "$ROOT/test/tileop_api/src/$source.cpp" -o "$OUT/$source.ll"
+  "$TC_DIR/clang++" "${FLAGS[@]}" -c \
+    "$ROOT/test/tileop_api/src/$source.cpp" -o "$OUT/$source.o"
+done
+python3 - "$OUT/TileRegionUnary.ll" "$OUT/TileRegionCubeSubview.ll" \
+          "$OUT/Issue166RmsNormB128.ll" <<'PY'
+import sys
+from pathlib import Path
+
+
+def region_operations(path):
+    return [line for line in Path(path).read_text(encoding="utf-8").splitlines()
+            if "asm sideeffect" in line and "BSTART.TEPL" in line
+            and "B.SUBVIEW" in line]
+
+
+unary = region_operations(sys.argv[1])
+if len(unary) != 9:
+    raise SystemExit(f"TileRegionUnary: expected 9 region operations, got {len(unary)}")
+for operation in unary:
+    if "i32 16, i32 32, i32 16, i32 5, i32 5" not in operation:
+        raise SystemExit("TileRegionUnary: LB2 does not use the 16-column fragment")
+
+cube = region_operations(sys.argv[2])
+if len(cube) != 1:
+    raise SystemExit(f"TileRegionCubeSubview: expected 1 region operation, got {len(cube)}")
+if "i32 16, i32 32, i32 16, i32 5, i32 5" not in cube[0]:
+    raise SystemExit("TileRegionCubeSubview: LB2 does not use the 16-column fragment")
+if "i32 16, i32 32, i32 64, i32 5, i32 5" in cube[0]:
+    raise SystemExit("TileRegionCubeSubview: LB2 leaked the 64-column parent geometry")
+
+rowsum = [line for line in region_operations(sys.argv[3]) if "i32 64, i64" in line]
+expected = (
+    "i32 8, i32 32, i32 8, i32 4, i32 4, i32 64, i64 0",
+    "i32 8, i32 8, i32 8, i32 2, i32 2, i32 64, i64 0",
+)
+if len(rowsum) != len(expected):
+    raise SystemExit(f"Issue166RmsNormB128: expected 2 TROWSUM regions, got {len(rowsum)}")
+for operands in expected:
+    if not any(operands in operation for operation in rowsum):
+        raise SystemExit(f"Issue166RmsNormB128: missing source geometry {operands}")
+PY
 
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/TRowExpandMul.cpp" -o "$OUT/TRowExpandMul.ll"
