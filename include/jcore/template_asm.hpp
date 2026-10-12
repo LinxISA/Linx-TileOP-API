@@ -487,7 +487,7 @@ inline void TMOV(Tile &dst, const Tile &src) {
   if constexpr (Tile::ValidCol > 0 && Tile::ValidRow > 0) {
 asm volatile(
     "BSTART.TLSU TMOV, %D[DataType]\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_TMOV_LAYOUT_ASM
     "B.DIM zero, %c[ValidCol], ->lb0\n"
     "B.DIM zero, %c[ValidRow], ->lb1\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
@@ -503,7 +503,7 @@ asm volatile(
   else if constexpr (Tile::ValidCol > 0 && Tile::ValidRow < 0) {
 asm volatile(
     "BSTART.TLSU TMOV, %D[DataType]\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_TMOV_LAYOUT_ASM
     "B.DIM zero, %c[ValidCol], ->lb0\n"
     "B.DIM %[ValidRow], 0, ->lb1\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
@@ -519,7 +519,7 @@ asm volatile(
   else if constexpr (Tile::ValidCol < 0 && Tile::ValidRow > 0) {
 asm volatile(
     "BSTART.TLSU TMOV, %D[DataType]\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_TMOV_LAYOUT_ASM
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM zero, %c[ValidRow], ->lb1\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
@@ -535,7 +535,7 @@ asm volatile(
   else {
 asm volatile(
     "BSTART.TLSU TMOV, %D[DataType]\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_TMOV_LAYOUT_ASM
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM %[ValidRow], 0, ->lb1\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
@@ -569,7 +569,7 @@ PTO_SHARED_INLINE void TMOV(Tile &dst,
   const uintptr_t range_base = src.GetRangeBase();
   asm volatile(
       "BSTART.TLSU TMOV, %D[DataType]\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
+    PTO_TMOV_LAYOUT_ASM
       "B.DIM zero, %c[ValidCol], ->lb0\n"
       "B.DIM zero, %c[ValidRow], ->lb1\n"
       "B.DIM zero, %c[PhysicalCol], ->lb2\n"

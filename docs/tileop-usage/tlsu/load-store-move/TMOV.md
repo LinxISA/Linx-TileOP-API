@@ -40,7 +40,8 @@ inline void TMOV(Tile &dst, const Tile &src);
 shape 和 capacity），并且 `src` 必须已初始化。普通 `TMOV` 只支持 Local-to-Local，
 布局限于 `SLayout::NoneBox` 的 RowMajor、CUBE_M16 和 CUBE_M32；N8、boxed、
 ColumnMajor 和 range wrapper 不能调用此同类型重载。CUBE identity copy 显式
-发出对应的 `B.DATR`，RowMajor 保持 NORM 默认；所有分支显式传递物理列数 LB2。
+发出对应的 `B.DATR`，并将保留的 pad union 编为 Zero（0）；它不要求填充
+复制数据中的 padding。RowMajor 保持 NORM 默认；所有分支显式传递物理列数 LB2。
 逻辑元素分片另有 borrowed-part 重载，支持匹配 dtype 的 logical32/logical64 part。
 
 Shared Tile 必须使用 `TMOV_L2S_INSERT` / `TMOV_L2S_PUBLISH` 或

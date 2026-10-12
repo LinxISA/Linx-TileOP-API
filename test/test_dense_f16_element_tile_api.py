@@ -283,7 +283,7 @@ int main() {
             self.assertEqual(len(bodies), 4)
             for body in bodies:
                 self.assertIn("BSTART.TLSU TMOV", body)
-                self.assertIn("B.DATR CUBE_M32, Null", body)
+                self.assertIn("B.DATR CUBE_M32, Zero", body)
                 self.assertIn("B.SUBVIEW", body)
                 self.assertIn("B.DIM zero, ${6:c}, ->lb2", body)
                 self.assertRegex(body, r"i32 2, i32 32, i32 2,")
@@ -294,7 +294,7 @@ int main() {
             self.assertEqual(len(direct), 4)
             for body in direct:
                 self.assertIn("BSTART.TLSU TMOV", body)
-                self.assertIn("B.DATR CUBE_M32, Null", body)
+                self.assertIn("B.DATR CUBE_M32, Zero", body)
                 self.assertIn("B.DIM zero, ${6:c}, ->lb2", body)
                 self.assertRegex(body, r"i32 2, i32 32, i32 2, i32 29\)")
 
@@ -315,7 +315,7 @@ int main() {
             move_blocks = re.findall(r"BSTART\.TLSU\s+TMOV,[\s\S]*?(?=BSTART|$)", dumped.stdout)
             self.assertEqual(len(move_blocks), 8)
             for block in move_blocks:
-                self.assertRegex(block, r"B\.DATR\s+CUBE_M32\.normal, Null")
+                self.assertRegex(block, r"B\.DATR\s+CUBE_M32\.normal, Zero")
                 self.assertRegex(block, r"C\.B\.DIMI\s+2,\s*->lb2")
 
             for invalid in ("N8", "BOXED", "COL_MAJOR"):

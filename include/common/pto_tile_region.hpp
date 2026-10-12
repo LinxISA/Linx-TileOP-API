@@ -45,6 +45,13 @@ inline constexpr int local_layout_code_v =
   ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Null\n"                      \
   ".endif\n"
 
+// TMOV permits only the Layout attribute; its pad union is reserved-zero.
+// Zero here is an encoding requirement, not a request to fill copied padding.
+#define PTO_TMOV_LAYOUT_ASM                                                  \
+  ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32, Zero\n"                       \
+  ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Zero\n"                   \
+  ".endif\n"
+
 namespace region {
 
 template <typename...>
