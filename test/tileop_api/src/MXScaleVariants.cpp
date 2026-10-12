@@ -5,7 +5,7 @@ using namespace pto;
 using D = CubeAccumulatorM16<float, 16, 16>;
 using Bias = CubeBias<float, 16>;
 using SA = Tile<Location::Scaling, __fp8_e8m0, 16, 8,
-                BLayout::RowMajor, 16, 1>;
+                BLayout::CubeM32, 16, 1>;
 using SB = Tile<Location::Scaling, __fp8_e8m0, 8, 16,
                 BLayout::RowMajor, 1, 16>;
 
@@ -38,7 +38,7 @@ using E5B = MB<__fp8_e5m2>;
 using E2B = MB<__fp4_e2m1x2>;
 using E1B = MB<__fp4_e1m2x2>;
 template <typename T> using SharedA = SharedMatrixLeft<T, 16, 32>;
-template <typename T> using SharedB = SharedMatrixRight<T, 32, 16>;
+template <typename T> using SharedB = SharedMatrixRight<T, 16, 32>;
 using SharedSA = SharedMatrixLeft<__fp8_e8m0, 16, 8, 16, 1>;
 // Shared ScaleB is always physical [N, KBlocks] under pto-spec #343.
 using SharedSB = SharedMatrixRight<__fp8_e8m0, 16, 8, 16, 1>;
@@ -50,7 +50,7 @@ __attribute__((noinline)) void carrier_zero_scale(
   GM<float, 16, 16> gm_c(c_input);
   GM<float, 8, 16> gm_bias(bias_input);
   GM<__half, 16, 32> gm_a(a_input);
-  GM<__bf16, 32, 16> gm_b(b_input);
+  GM<__bf16, 16, 32> gm_b(b_input);
   D d, c;
   Bias bias;
   F16A a;
@@ -74,7 +74,7 @@ __attribute__((noinline)) void carrier_scale_a(
   GM<float, 8, 16> gm_bias(bias_input);
   GM<__fp8_e4m3, 16, 32> gm_a(a_input);
   GM<__fp8_e8m0, 16, 8> gm_sa(scale_input);
-  GM<__half, 32, 16> gm_b(b_input);
+  GM<__half, 16, 32> gm_b(b_input);
   D d, c;
   Bias bias;
   E4A a;
@@ -99,7 +99,7 @@ __attribute__((noinline)) void carrier_scale_b(
   GM<float, 16, 16> gm_c(c_input);
   GM<float, 8, 16> gm_bias(bias_input);
   GM<__bf16, 16, 32> gm_a(a_input);
-  GM<__fp8_e5m2, 32, 16> gm_b(b_input);
+  GM<__fp8_e5m2, 16, 32> gm_b(b_input);
   GM<__fp8_e8m0, 8, 16> gm_sb(scale_input);
   D d, c;
   Bias bias;
@@ -123,7 +123,7 @@ __attribute__((noinline)) void carrier_local_m32_scale_a(
   GM<float, 32, 16> gm_d(output);
   GM<__fp8_e4m3, 32, 32> gm_a(a_input);
   GM<__fp8_e8m0, 32, 4> gm_sa(scale_input);
-  GM<__half, 32, 16> gm_b(b_input);
+  GM<__half, 16, 32> gm_b(b_input);
   M32D d; M32A<__fp8_e4m3> a; LocalSA sa; MB<__half> b;
   TLOAD_CUBE(d, gm_d);
   TLOAD_CUBE(a, gm_a);
@@ -142,7 +142,7 @@ __attribute__((noinline)) void carrier_both_scales(
   GM<float, 8, 16> gm_bias(bias_input);
   GM<__fp8_e4m3, 16, 32> gm_a(a_input);
   GM<__fp8_e8m0, 16, 8> gm_sa(scale_a_input);
-  GM<__fp8_e5m2, 32, 16> gm_b(b_input);
+  GM<__fp8_e5m2, 16, 32> gm_b(b_input);
   GM<__fp8_e8m0, 8, 16> gm_sb(scale_b_input);
   D d, c;
   Bias bias;
@@ -172,7 +172,7 @@ __attribute__((noinline)) void carrier_shared_zero_scale(
     float *output, float *c_input, float *bias_input,
     __half *a_input, __bf16 *b_input) {
   SHARED_MX_COMMON_SETUP();
-  GM<__half, 16, 32> gm_a(a_input); GM<__bf16, 32, 16> gm_b(b_input);
+  GM<__half, 16, 32> gm_a(a_input); GM<__bf16, 16, 32> gm_b(b_input);
   auto a = TLOAD<SharedA<__half>>(gm_a);
   auto b = TLOAD<SharedB<__bf16>>(gm_b);
   pto_matmul_detail::NoScaleOperand none; auto opt = fixp::keep_acc();
@@ -186,7 +186,7 @@ __attribute__((noinline)) void carrier_shared_scale_a(
     __fp8_e4m3 *a_input, __fp8_e8m0 *sa_input, __half *b_input) {
   SHARED_MX_COMMON_SETUP();
   GM<__fp8_e4m3, 16, 32> gm_a(a_input); GM<__fp8_e8m0, 16, 8> gm_sa(sa_input);
-  GM<__half, 32, 16> gm_b(b_input);
+  GM<__half, 16, 32> gm_b(b_input);
   auto a = TLOAD<SharedA<__fp8_e4m3>>(gm_a); auto sa = TLOAD<SharedSA>(gm_sa);
   auto b = TLOAD<SharedB<__half>>(gm_b);
   pto_matmul_detail::NoScaleOperand none; auto opt = fixp::keep_acc();
@@ -199,7 +199,7 @@ __attribute__((noinline)) void carrier_shared_scale_b(
     float *output, float *c_input, float *bias_input,
     __bf16 *a_input, __fp8_e5m2 *b_input, __fp8_e8m0 *sb_input) {
   SHARED_MX_COMMON_SETUP();
-  GM<__bf16, 16, 32> gm_a(a_input); GM<__fp8_e5m2, 32, 16> gm_b(b_input);
+  GM<__bf16, 16, 32> gm_a(a_input); GM<__fp8_e5m2, 16, 32> gm_b(b_input);
   GM<__fp8_e8m0, 16, 8> gm_sb(sb_input);
   auto a = TLOAD<SharedA<__bf16>>(gm_a); auto b = TLOAD<SharedB<__fp8_e5m2>>(gm_b);
   auto sb = TLOAD<SharedSB>(gm_sb);
@@ -215,7 +215,7 @@ __attribute__((noinline)) void carrier_shared_both_scales(
     __fp8_e5m2 *b_input, __fp8_e8m0 *sb_input) {
   SHARED_MX_COMMON_SETUP();
   GM<__fp8_e4m3, 16, 32> gm_a(a_input); GM<__fp8_e8m0, 16, 8> gm_sa(sa_input);
-  GM<__fp8_e5m2, 32, 16> gm_b(b_input); GM<__fp8_e8m0, 16, 8> gm_sb(sb_input);
+  GM<__fp8_e5m2, 16, 32> gm_b(b_input); GM<__fp8_e8m0, 16, 8> gm_sb(sb_input);
   auto a = TLOAD<SharedA<__fp8_e4m3>>(gm_a); auto sa = TLOAD<SharedSA>(gm_sa);
   auto b = TLOAD<SharedB<__fp8_e5m2>>(gm_b); auto sb = TLOAD<SharedSB>(gm_sb);
   auto opt = fixp::keep_acc();
@@ -312,7 +312,7 @@ __attribute__((noinline)) void carrier_postprocess_all_sources(
   GM<float, 16, 16> gm_d(output);
   GM<__fp8_e4m3, 16, 32> gm_a(a_input);
   GM<__fp8_e8m0, 16, 8> gm_sa(scale_a_input);
-  GM<__fp8_e5m2, 32, 16> gm_b(b_input);
+  GM<__fp8_e5m2, 16, 32> gm_b(b_input);
   GM<__fp8_e8m0, 8, 16> gm_sb(scale_b_input);
   GM<uint64_t, 2, 16> gm_q(quant_input), gm_p(prelu_input);
   GM<float, 16, 8> gm_ri(row_in_input), gm_ro(row_out_input);

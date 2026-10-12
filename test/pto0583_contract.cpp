@@ -59,6 +59,20 @@ using M16Partial = CubeTileM16<float, 8, 32>;
 using M32 = CubeTileM32<float, 32, 32>;
 using N8 = CubeTileN8<float, 32, 16>;
 using M16S4 = CubeTileM16<__int4x2, 16, 32>;
+
+using SharedE2M1X2 = SharedMatrixLeft<__fp4_e2m1x2, 128, 128>;
+using SharedE1M2X2 = SharedMatrixRight<__fp4_e1m2x2, 128, 128>;
+using SharedHiF4X2 = SharedMatrixLeft<__fp4_hif4x2, 128, 128>;
+using SharedS4X2 = SharedMatrixLeft<__int4x2, 128, 128>;
+using SharedU4X2 = SharedMatrixRight<__uint4x2, 128, 128>;
+using SharedFP8 = SharedMatrixLeft<__fp8_e4m3, 128, 128>;
+
+static_assert(SharedE2M1X2::LogicalTileBytes == 8192);
+static_assert(SharedE1M2X2::LogicalTileBytes == 8192);
+static_assert(SharedHiF4X2::LogicalTileBytes == 8192);
+static_assert(SharedS4X2::LogicalTileBytes == 8192);
+static_assert(SharedU4X2::LogicalTileBytes == 8192);
+static_assert(SharedFP8::LogicalTileBytes == 16384);
 using NarrowRow = Tile<Location::Vec, float, 2, 1,
                         BLayout::RowMajor, 2, 1>;
 using VecM16 = VecTileM16<float, 16, 32>;
