@@ -11,8 +11,8 @@ using A = CubeTileM32<float, 32, 64>;
 using B = CubeTileN8<float, 64, 32>;
 using MXA = CubeTileM32<__fp8_e4m3, 32, 64>;
 using MXB = CubeTileN8<__fp8_e4m3, 64, 32>;
-using SA = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
-                BLayout::RowMajor, 32, 2>;
+using SA = Tile<Location::Scaling, __fp8_e8m0, 32, 8,
+                BLayout::CubeM32, 32, 2>;
 using SB = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
                 BLayout::RowMajor, 2, 32>;
 using R = CubeAccumulatorM32<float, 32, 32, 32, 1>;

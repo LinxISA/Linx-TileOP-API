@@ -10,8 +10,8 @@ using V = CubeTileM16<float, 1, 64>;        // A: 1xK
 using Mtx = CubeTileN8<float, 64, 32>;      // B: KxN
 using MXV = CubeTileM16<__fp8_e4m3, 1, 64>;
 using MXM = CubeTileN8<__fp8_e4m3, 64, 32>;
-using SV = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
-                BLayout::RowMajor, 1, 2>;
+using SV = Tile<Location::Scaling, __fp8_e8m0, 16, 16,
+                BLayout::CubeM32, 1, 2>;
 using SM = Tile<Location::Scaling, __fp8_e8m0, 4, 32,
                 BLayout::RowMajor, 2, 32>;
 using R = CubeAccumulatorM16<float, 16, 32, 1, 1>;

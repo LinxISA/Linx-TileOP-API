@@ -31,7 +31,7 @@ pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
         : "i"(type_traits<typename SubTile::DType>::TypeCode),
           "Tr"(src.data()), "i"(std::remove_reference_t<decltype(src)>::ValidCol),
           "i"(std::remove_reference_t<decltype(src)>::ValidRow),
-          "i"(SubTile::PhysicalCol),
+          "i"(std::remove_reference_t<decltype(src)>::PhysicalCol),
           "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
           "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
           "i"(Opcode), "r"(region_base_units),
