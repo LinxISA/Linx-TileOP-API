@@ -46,6 +46,7 @@ for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
               TileRegionTCVTSubview.cpp \
               TileRegionShift.cpp \
               Issue241ReductionPrefixBinary.cpp \
+              Issue253RowExpandDualSubview.cpp \
               TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
               SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp; do
@@ -120,6 +121,50 @@ for name in ("prefix_prefix_arithmetic", "prefix_prefix_bitwise"):
             raise SystemExit(f"{name}: missing source-specific B.SUBVIEW modifier")
         if "TCVT" in line or "TMOV" in line:
             raise SystemExit(f"{name}: unexpected prefix materialization")
+PY
+
+# Issue #253: a dual-SubTileView row expansion binds a 2KB matrix fragment and
+# a 128B broadcast carrier fragment.  Syntax acceptance is not enough: each
+# B.SUBVIEW must carry the size code of its own fragment.
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/Issue253RowExpandDualSubview.cpp" \
+  -o "$OUT/Issue253RowExpandDualSubview.ll"
+python3 - "$OUT/Issue253RowExpandDualSubview.ll" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+functions = re.split(r"(?=^define )", text, flags=re.MULTILINE)
+for name, offset in (("dual_view_slot0", 0), ("dual_view_slot1", 2)):
+    body = next((part for part in functions if name in part), None)
+    if body is None:
+        raise SystemExit(f"missing Issue #253 fixture {name}")
+    asm = [line for line in body.splitlines()
+           if "asm sideeffect" in line and "BSTART.TEPL" in line]
+    if len(asm) != 7:
+        raise SystemExit(f"{name}: expected 7 TEPL operations, got {len(asm)}")
+    opcodes = set()
+    for line in asm:
+        sizes = {int(select): int(operand) for select, operand in re.findall(
+            r"B\.SUBVIEW ([01]), \$[0-9]+, 0, \$\{([0-9]+):c\}", line)}
+        select = re.search(r"EQ, \$\{([0-9]+):c\}", line)
+        opcode = re.search(r"BSTART\.TEPL \$\{([0-9]+):c\}", line)
+        if set(sizes) != {0, 1} or select is None or opcode is None:
+            raise SystemExit(f"{name}: missing source-specific B.SUBVIEW modifier")
+        # Input operand N of the template is the N-th call argument; the
+        # immediates are the only i32 arguments.
+        args = line.rsplit('"(', 1)[1].split(") #", 1)[0].split(", ")
+        value = lambda operand: int(args[operand - 1].removeprefix("i32 "))
+        if (value(sizes[0]), value(sizes[1])) != (5, 1):
+            raise SystemExit(
+                f"{name}: B.SUBVIEW sizes {value(sizes[0])}/{value(sizes[1])}, "
+                "expected 2KB matrix fragment and 128B broadcast fragment")
+        if value(int(select.group(1))) != offset:
+            raise SystemExit(f"{name}: unexpected broadcast byte offset")
+        opcodes.add(value(int(opcode.group(1))))
+    if opcodes != {69, 70, 71, 72, 73, 74, 75}:
+        raise SystemExit(f"{name}: unexpected TEPL operation codes {opcodes}")
 PY
 
 # Issue #172: the role view must let one published Shared handle participate in
