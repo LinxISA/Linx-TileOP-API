@@ -12,7 +12,11 @@
 #define PTO_LINX_COMPAT_TYPES_PROVIDED 1
 #define PTO_LINX_HOST_CXX 1
 
+#ifndef PTO_TEST_CUSTOM_THREAD_BUILTINS
 inline unsigned __builtin_linx_get_thread_idx() { return 0; }
+inline unsigned pto_test_sync_core_calls = 0;
+inline void __builtin_linx_sync_core() { ++pto_test_sync_core_calls; }
+#endif
 
 // The production Linx compiler provides these scalar types and the tile_size
 // type modifier.  Define layout-compatible host substitutes so a normal C++
