@@ -18,6 +18,12 @@ PTO `main` 是开发分支；需要可复现构建时应锁定上面的 release 
 的是架构规范和本仓库 wrapper 的交集，并不表示 wrapper 已实现 0.58.7 的全部操作。
 每个操作页中的 C++ 签名以本仓库头文件为准，PTO ASL/NDF 是架构合法性的权威来源。
 
+PE 拓扑、`THREAD_ID`、`SYNC_CORE()` 以及启动 context 合同以
+[PTO-ISA/pto-spec commit `3c1657c43d212d0cd8a2c3c017da4ad42bec0112`](https://github.com/PTO-ISA/pto-spec/tree/3c1657c43d212d0cd8a2c3c017da4ad42bec0112)
+为语义参考；相关运行时约束见 [PE runtime 与 Core 同步](concepts/pe-runtime-and-sync.md)。
+该规范快照规定 `THREAD_ID` SSR 地址为 `0x0026`，PE ID 为 `0..3`。版本化 release
+信息和该规范快照可能不同步时，编码与版本兼容性仍需同时核对工具链和目标运行环境。
+
 [0.58.3 迁移说明](migration/pto-0583-migration.md)是历史文档，保留用于迁移旧
 kernel；其中的旧版本数量、旧 engine inventory 和旧 encoding identity 不能当作
 当前规范。不要混用历史 headers、compiler 和规范内容；出现汇编编码、SizeCode
@@ -30,6 +36,8 @@ kernel；其中的旧版本数量、旧 engine inventory 和旧 encoding identit
 - `PTO_TILEOP_API_REVISION`：`make install` 时实际 checkout 的 Git commit；
 - `PTO_TILEOP_API_REVISION_IS_EXACT`：revision 是否来自干净 checkout；
 - `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX`：local Right B 使用逻辑 `[K,N]` 契约。
+- `PTO_TILEOP_API_HAS_SYNC_CORE`：提供 `SYNC_CORE()` 及其 single-context 保护；
+  该宏不代表运行时已经启动四个 PE。
 
 当前 wrapper 与 PTO 0.58.7 catalog 的覆盖边界见
 [统一支持状态表](support-status.md)。该表区分“已实现”“仅部分 layout 支持”“尚无
@@ -119,6 +127,8 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
 ## 阅读路径
 
 - 先了解 [Tile 约束、location、shape 和 bundle](concepts/README.md)。
+- 涉及多 PE 启动、`THREAD_ID` 或 `SYNC_CORE()` 时，先阅读
+  [PE runtime 与 Core 同步](concepts/pe-runtime-and-sync.md)。
 - 需要从 GM 传输数据时，阅读 [TLSU load/store/move](tlsu/load-store-move/TLOAD.md)。
   其中卷积权重 GM 到 Shared NK 的 `OHWI2NK`/`OIHW2NK` 专用 `TLOAD` overload
   也在该页面说明。
