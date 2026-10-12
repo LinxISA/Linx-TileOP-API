@@ -10,6 +10,12 @@
 template <is_tile_data_v tile_shape>
 void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
           unsigned ValidCol = 0, unsigned ValidRow = 0);
+
+template <typename Parent, /* range descriptor */, is_tile_data_v A,
+          is_tile_data_v B>
+void TADD(range::Assemble<Parent, /* range descriptor */> &assembled_dst,
+          A &src0, B &src1, unsigned ValidCol = 0,
+          unsigned ValidRow = 0);
 ```
 
 用户可通过可选的 `ValidCol`/`ValidRow` 参数覆写发射的 `B.DIM` 几何（运行期寄存器形式）。缺省 `0` 表示使用 tile 类型派生的维度，发射保持既有立即数形式。覆写值必须非零且不超过 tile 容量。
@@ -53,7 +59,7 @@ TADD_ASS(last, lhs, rhs);
 
 ## Assembly destination
 
-plain `TADD` 可以把 `range::assemble(parent)` 作为 INIT destination，并发射分配型 `B.IOT` 后的 `B.ASSEMBLE INIT`。MIDDLE/LAST slot 必须使用 `TADD_ASS`；`TADD_ASS(range::assemble(parent), ...)` 会在编译期拒绝。
+plain `TADD` 可以把 `range::assemble(parent)` 作为 INIT destination，并发射分配型 `B.IOT` 后的 `B.ASSEMBLE INIT`。两个 source 必须是普通 Local Tile，并且彼此及 destination parent 的 dtype、location、layout、物理 shape、valid shape、容量和存储描述必须完全一致。MIDDLE/LAST slot 必须使用 `TADD_ASS`；`TADD_ASS(range::assemble(parent), ...)` 会在编译期拒绝。
 
 ```cpp
 auto init = range::assemble(parent);

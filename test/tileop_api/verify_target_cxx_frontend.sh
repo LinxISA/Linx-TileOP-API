@@ -60,8 +60,13 @@ for source in TileRegionUnary TileRegionCubeSubview Issue166RmsNormB128; do
   "$TC_DIR/clang++" "${FLAGS[@]}" -c \
     "$ROOT/test/tileop_api/src/$source.cpp" -o "$OUT/$source.o"
 done
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/RangeAssemble.cpp" -o "$OUT/RangeAssemble.ll"
+"$TC_DIR/clang++" "${FLAGS[@]}" -c \
+  "$ROOT/test/tileop_api/src/RangeAssemble.cpp" -o "$OUT/RangeAssemble.o"
 python3 - "$OUT/TileRegionUnary.ll" "$OUT/TileRegionCubeSubview.ll" \
-          "$OUT/Issue166RmsNormB128.ll" <<'PY'
+          "$OUT/Issue166RmsNormB128.ll" "$OUT/RangeAssemble.ll" <<'PY'
+import re
 import sys
 from pathlib import Path
 
@@ -97,6 +102,27 @@ if len(rowsum) != len(expected):
 for operands in expected:
     if not any(operands in operation for operation in rowsum):
         raise SystemExit(f"Issue166RmsNormB128: missing source geometry {operands}")
+
+range_assemble = Path(sys.argv[4]).read_text(encoding="utf-8")
+body = next((part for part in re.split(r"(?=^define )", range_assemble,
+                                       flags=re.MULTILINE)
+             if "assemble_tadd_session" in part), None)
+if body is None:
+    raise SystemExit("RangeAssemble: missing TADD assembly-session fixture")
+operations = [line for line in body.splitlines()
+              if "asm sideeffect" in line and "BSTART.TEPL" in line]
+if len(operations) != 3:
+    raise SystemExit(f"RangeAssemble: expected 3 TADD operations, got {len(operations)}")
+if "B.IOT $5, $6, mask=1111, last, ->$0" not in operations[0]:
+    raise SystemExit("RangeAssemble: INIT TADD must allocate its destination")
+if "B.ASSEMBLE ${8:c}, ${9:c}" not in operations[0]:
+    raise SystemExit("RangeAssemble: INIT TADD is missing B.ASSEMBLE")
+for operation in operations[1:]:
+    if "B.IOT $4, $5, mask=1111" not in operation or \
+       "B.IOT $7, mask=1111, last" not in operation:
+        raise SystemExit("RangeAssemble: continuation TADD has invalid binders")
+    if "B.ASSEMBLE" not in operation:
+        raise SystemExit("RangeAssemble: continuation TADD is missing B.ASSEMBLE")
 PY
 
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \

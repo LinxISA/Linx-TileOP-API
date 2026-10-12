@@ -9991,6 +9991,13 @@ PTO_SHARED_INLINE void emit_binary_assemble_init(D &dst, A &src0, B &src1) {
                 "TADD sources must have matching dtypes");
   static_assert(std::is_same_v<typename D::DType, typename A::DType>,
                 "TADD destination and sources must have matching dtypes");
+  static_assert(!is_assemble_v<A> && !is_assemble_v<B>,
+                "plain TADD assembly sources must be ordinary Tiles");
+  static_assert(std::is_same_v<A, B>,
+                "plain TADD assembly sources must have matching descriptors");
+  static_assert(std::is_same_v<typename D::ParentTile, A>,
+                "plain TADD assembly destination and sources must have "
+                "matching descriptors");
   static_assert(D::RegSrc == 0 || D::RegSrc == range::AutoRegSrc,
                 "plain TADD with an explicit B.ASSEMBLE RegSrc selector is not supported");
 
@@ -10058,21 +10065,11 @@ PTO_SHARED_INLINE void emit_binary_user(
 }
 
 } // namespace pto_elementwise_user_dims
+
 template <is_tile_data_v tile_shape>
+  requires(!is_assemble_v<tile_shape>)
 void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
           unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
-  if constexpr (is_assemble_v<tile_shape>) {
-    static_assert(tile_shape::INIT,
-                  "plain TADD requires an INIT assemble carrier; use TADD_ASS for MIDDLE/LAST");
-    // UserValidCol/UserValidRow are function parameters, not constant
-    // expressions, so they cannot participate in static_assert.  An
-    // assembled INIT destination uses the carrier geometry for its writer;
-    // reject unsupported runtime overrides before emitting the bundle.
-    if (UserValidCol != 0 || UserValidRow != 0)
-      __builtin_trap();
-    pto_elementwise_user_dims::emit_binary_assemble_init(dst, src0, src1);
-    return;
-  }
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape);
   if constexpr (tile_shape::ValidCol > 0 || tile_shape::ValidRow > 0) {
     if (UserValidCol != 0 || UserValidRow != 0) {
@@ -10156,6 +10153,23 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape>)
   );  }
+}
+
+template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+          unsigned OffsetUnits, unsigned RegSrc, unsigned WriterSizeCode,
+          is_tile_data_v A, is_tile_data_v B>
+  requires(is_local_tile_v<Parent> && !is_assemble_v<A> &&
+           !is_assemble_v<B>)
+void TADD(range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits,
+                          RegSrc, WriterSizeCode> &dst,
+          A &src0, B &src1, unsigned UserValidCol = 0,
+          unsigned UserValidRow = 0) {
+  // UserValidCol/UserValidRow are function parameters, not constant
+  // expressions, so they cannot participate in static_assert. An assembled
+  // INIT destination uses the source descriptor geometry for its writer.
+  if (UserValidCol != 0 || UserValidRow != 0)
+    __builtin_trap();
+  pto_elementwise_user_dims::emit_binary_assemble_init(dst, src0, src1);
 }
 
 // User-overridable valid dims: ValidCol/ValidRow are compile-time template
