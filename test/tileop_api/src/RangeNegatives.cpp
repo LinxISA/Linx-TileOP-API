@@ -27,6 +27,22 @@ void reject_tadd_range(VecTile &a, VecTile &b, VecTile &d) {
 }
 #endif
 
+#if defined(SHOULD_FAIL_TLOAD_ASS_TYPED_INIT)
+void reject_typed_local_init(GM &src) {
+  Tile<Location::Vec, float, 16, 16, BLayout::RowMajor> parent;
+  auto init = range::assemble<1>(parent);
+  TLOAD_ASS(init, src);
+}
+#endif
+
+#if defined(SHOULD_FAIL_TLOAD_ASS_SHARED_TYPED_INIT)
+void reject_typed_shared_init(GM &src) {
+  SharedTile<SharedMatrixLeft<float, 16, 16>> parent;
+  auto init = range::assemble<1>(parent);
+  TLOAD_ASS(init, src);
+}
+#endif
+
 #if defined(SHOULD_FAIL_SUBVIEW_DEST)
 void subview_cannot_be_tload_destination(GM &src, Local &dst) {
   range::Subview<Local, 1> view(dst);

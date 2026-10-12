@@ -2713,10 +2713,10 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
 
 // TLOAD_ASS: GM -> an already-associated Local Tile.  Unlike TLOAD, the Tile
 // register is an input operand and no new destination generation is allocated.
-// An Assemble wrapper is accepted as a view of its existing Local parent; the
-// destination-only B.ASSEMBLE modifier is intentionally not emitted.
+// Assemble wrappers use the overload below so their continuation descriptor
+// cannot be silently dropped by this ordinary associated-load overload.
 template <is_local_tile_v tile_shape, is_global_data_v gm_shape>
-  requires(!tile_shape::IsCubeLayout)
+  requires(!tile_shape::IsCubeLayout && !is_assemble_v<tile_shape>)
 void TLOAD_ASS(tile_shape &dst, const gm_shape &src) {
   static_assert(
       tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
@@ -2739,12 +2739,13 @@ void TLOAD_ASS(tile_shape &dst, const gm_shape &src) {
     : "memory");
 }
 
-template <typename Parent, unsigned WriterSizeCode, bool INIT, bool LAST,
-          unsigned OffsetUnits, unsigned RegSrc, is_global_data_v gm_shape>
+template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+          unsigned OffsetUnits, unsigned RegSrc, unsigned WriterSizeCode,
+          is_global_data_v gm_shape>
   requires(is_local_tile_v<Parent> && !Parent::IsCubeLayout)
 void TLOAD_ASS(
-    range::Assemble<Parent, WriterSizeCode, INIT, LAST, OffsetUnits, RegSrc>
-        &dst,
+    range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc,
+                    WriterSizeCode> &dst,
     const gm_shape &src) {
   static_assert(!INIT,
                 "TLOAD_ASS consumes an already-associated slot: the INIT "
@@ -3118,12 +3119,13 @@ PTO_SHARED_INLINE void TLOAD_ASS(SharedTile<shp> &dst, const gm_shape &src) {
 // it must not turn the source B.IOS into a destination or emit a TileSize
 // modifier.  A destination-only B.ASSEMBLE is emitted so the MIDDLE/LAST
 // session state reaches the model.
-template <typename Parent, unsigned WriterSizeCode, bool INIT, bool LAST,
-          unsigned OffsetUnits, unsigned RegSrc, is_global_data_v gm_shape>
+template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+          unsigned OffsetUnits, unsigned RegSrc, unsigned WriterSizeCode,
+          is_global_data_v gm_shape>
   requires(is_shared_tile_v<Parent>)
 PTO_SHARED_INLINE void TLOAD_ASS(
-    range::Assemble<Parent, WriterSizeCode, INIT, LAST, OffsetUnits, RegSrc>
-        &dst,
+    range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc,
+                    WriterSizeCode> &dst,
     const gm_shape &src) {
   using shp_dtype = typename Parent::TileDType;
   static_assert(!INIT,
@@ -3132,6 +3134,8 @@ PTO_SHARED_INLINE void TLOAD_ASS(
                 "TLOAD producer, not by TLOAD_ASS");
   static_assert(tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
                 "TLOAD_ASS Shared Tile size must be 128 B..256 KB");
+  // Shared valid extents are stored runtime metadata, even for a static
+  // backing shape. Bind them through GPR dimensions, never immediate constraints.
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   // Destination-only B.ASSEMBLE carries the MIDDLE/LAST session state so
@@ -3142,8 +3146,8 @@ PTO_SHARED_INLINE void TLOAD_ASS(
   const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
-    "B.DIM zero, %c[VCOL], ->lb0\n"
-    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     "B.IOS %S[d0], mask=1111\n"
     "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
@@ -3151,7 +3155,7 @@ PTO_SHARED_INLINE void TLOAD_ASS(
     :
     : [d0] "Sr"(dst.handle_ref()), [s0] "r"(src.data()),
       [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
-      [VCOL] "i"(valid_col), [VROW] "i"(valid_row),
+      [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
       [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3)),
       [RegSrc] "r"(range_base),
       [Init] "i"(static_cast<int>(INIT)), [Last] "i"(static_cast<int>(LAST)),

@@ -125,6 +125,43 @@ for operation in operations[1:]:
         raise SystemExit("RangeAssemble: continuation TADD is missing B.ASSEMBLE")
 PY
 
+# Typed factories carry a seventh WriterSizeCode template argument. Verify
+# continuation overload selection and real object code for external parents.
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TileArrayWriterSize.cpp" -o "$OUT/TileArrayWriterSize.ll"
+"$TC_DIR/clang++" "${FLAGS[@]}" -c \
+  "$ROOT/test/tileop_api/src/TileArrayWriterSize.cpp" -o "$OUT/TileArrayWriterSize.o"
+# Shared references still have a separate backend handle-copy gap; verify
+# descriptor lowering in IR without claiming Shared object/runtime closure.
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/SharedTloadAssembly.cpp" -o "$OUT/SharedTloadAssembly.ll"
+python3 - "$OUT/TileArrayWriterSize.ll" "$OUT/SharedTloadAssembly.ll" <<'PY_ASSEMBLE'
+import re
+import sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text()
+body = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+            if part.startswith("define ") and "assemble_writer_size" in part)
+ops = [line for line in body.splitlines() if "asm sideeffect" in line]
+if len(ops) != 4 or any("B.ASSEMBLE" not in op for op in ops):
+    raise SystemExit("TileArrayWriterSize: an INIT/MIDDLE/LAST descriptor was lost")
+for op, offset, last in zip(ops[1:], (4, 8, 12), (0, 0, 1)):
+    if "->" in op.split("B.IOT", 1)[1].split("B.ASSEMBLE", 1)[0]:
+        raise SystemExit("TileArrayWriterSize: continuation allocated a new parent")
+    if f"i32 0, i32 {last}, i32 {offset}, i32 3)" not in op:
+        raise SystemExit("TileArrayWriterSize: incorrect continuation extent or state")
+text = Path(sys.argv[2]).read_text()
+body = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+            if part.startswith("define ") and "assemble_shared_continuations" in part)
+ops = [line for line in body.splitlines() if "asm sideeffect" in line]
+if len(ops) != 2 or any("B.ASSEMBLE" not in op or "B.IOS" not in op for op in ops):
+    raise SystemExit("TileArrayWriterSize: Shared continuation lost its descriptor")
+for op, offset, last in zip(ops, (4, 12), (0, 1)):
+    if "->" in op.split("B.IOS", 1)[1].split("B.ASSEMBLE", 1)[0] or \
+       f"i32 0, i32 {last}, i32 {offset}, i32 3)" not in op:
+        raise SystemExit("TileArrayWriterSize: Shared continuation rebound its parent")
+PY_ASSEMBLE
+
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/TRowExpandMul.cpp" -o "$OUT/TRowExpandMul.ll"
 python3 - "$OUT/TRowExpandMul.ll" <<'PY'
