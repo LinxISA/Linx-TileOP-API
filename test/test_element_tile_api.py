@@ -211,6 +211,10 @@ int main() {
             'pto.element.view:v1;dtype=u32;rows=32;cols=1;layout=cube_m32',
             'pto.element.view:v1;dtype=s32;rows=32;cols=1;layout=cube_m32',
             'pto.element.view:v1;dtype=f32;rows=32;cols=1;layout=cube_m32',
+            'pto.element.view:v1;dtype=u32;rows=32;cols=2;layout=cube_m32',
+            'pto.element.view:v1;dtype=s32;rows=32;cols=2;layout=cube_m32',
+            'pto.element.view:v1;dtype=f16;rows=32;cols=2;layout=cube_m32',
+            'pto.element.view:v1;dtype=u16;rows=32;cols=2;layout=cube_m32',
         ]
         for marker in markers:
             self.assertIn(f'annotate("{marker}")', header)
@@ -445,12 +449,11 @@ template void copy_part<uint32_t>(const uint32_t*,uint32_t*,unsigned);
         self.compile('pto::ElementTile<int16_t,32> unsupported;\n', accepts=False)
 
     def test_reject_unsupported_capacity(self):
-        self.compile('pto::ElementTile<uint32_t,64> unsupported;\n', accepts=False)
         self.compile('pto::ElementTile<uint32_t,256> unsupported;\n', accepts=False)
         self.compile('pto::ElementTile<float,512> unsupported;\n', accepts=False)
 
     def test_reject_wrong_part_size(self):
-        self.compile('void bad(pto::ElementTile<uint32_t,128>& tile) { auto parts=pto::TPARTVIEW<64>(tile,128); }\n', accepts=False)
+        self.compile('void bad(pto::ElementTile<uint32_t,128>& tile) { auto parts=pto::TPARTVIEW<16>(tile,128); }\n', accepts=False)
 
     def test_reject_parent_element_indexing(self):
         self.compile('void bad(pto::ElementTile<uint32_t,128>& tile) { auto& elements=pto::TPARTELEMENT(tile); }\n', accepts=False)

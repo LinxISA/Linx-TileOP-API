@@ -37,7 +37,12 @@ inline void TMOV(Tile &dst, const Tile &src);
 ## 约束
 
 `dst` 和 `src` 必须是同一 Tile 类型（包括 location、dtype、layout、物理
-shape 和 capacity），并且 `src` 必须已初始化。普通 `TMOV` 只支持 Local-to-Local；
+shape 和 capacity），并且 `src` 必须已初始化。普通 `TMOV` 只支持 Local-to-Local，
+布局限于 `SLayout::NoneBox` 的 RowMajor、CUBE_M16 和 CUBE_M32；N8、boxed、
+ColumnMajor 和 range wrapper 不能调用此同类型重载。CUBE identity copy 显式
+发出对应的 `B.DATR`，RowMajor 保持 NORM 默认；所有分支显式传递物理列数 LB2。
+逻辑元素分片另有 borrowed-part 重载，支持匹配 dtype 的 logical32/logical64 part。
+
 Shared Tile 必须使用 `TMOV_L2S_INSERT` / `TMOV_L2S_PUBLISH` 或
 `TMOV_S2L_BROADCAST` / `TMOV_S2L_EXTRACT`，这些接口要求函数内或 inline SSA
 生命周期，不能把 Shared handle 当作普通对象跨非内联函数传递。

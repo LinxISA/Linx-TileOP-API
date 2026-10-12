@@ -50,29 +50,41 @@ static_assert(PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX,
 
 `ElementTile<T, Elements>` 是正式 API 的逻辑元素入口。应用指定元素类型与容量，
 当前 jcore profile 在 API 内选择已有的 Local VEC 存储，kernel 无需写物理 layout。
-首版接受 U32、S32、F32 与 32/128 个元素；不表示任意 dtype、容量或 backend 都已实现。
+U32/S32/F32 保留既有 logical32 profile；F16/U16 提供 64/128/512/2048 个元素的
+dense M32 profile，U32/S32 另提供匹配的 logical64 part。
 
 - `TPARTVIEW<32>(parent, valid_elements)` 复用 `BorrowedTileArray`，提供 `size()`、
   `part(index)` 和 `valid_size(index)`；view 借用 parent，不能超过 parent 的生命周期。
-- `TPARTELEMENT(part_tile)` 仅接受 32-element profile，并返回同一 carrier 的强类型元素引用。
-  128-element parent、其他 CUBE shape 和 b64 不得用它直接索引。
-  U32、S32、F32 分别携带 `dtype=u32`、`dtype=s32`、`dtype=f32`，不会把 signed
+- `TPARTELEMENT(part_tile)` 接受 logical32 或 logical64 part profile，并返回同一
+  carrier 的强类型元素引用。超过 part 容量的 parent、其他 CUBE shape 和 b64 不得直接索引。
+  U32、S32、F32、F16、U16 携带各自 dtype 与精确 shape，不会把 signed
   或浮点元素伪装成 U32。正式接口携带元素 view 的类型、shape 和布局合同；普通 indexed gather 的前端
   必须检查该合同，不能把同大小的原始 vector 自动当作此 view。已安装版本用
   `PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查强类型 view 能力。
+- F16/U16 及匹配的 U32/S32 索引使用 `TPARTVIEW<64>`；每个 part 是完整的 32x2、128-byte CELL。
+  分片内 element 顺序跨两列交错，`logical_index`、`valid_size` 和
+  `store_predicate` 统一实现该映射。`TSTORE(output, tile, parts, part, count)`
+  用 packed GPR predicate 精确写回 0..64 个元素；`count==0` 不构造目标地址。
+  原四参数 `TSTORE` 仍写完整 part。消费方可用
+  `PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE` 检查这组接口。
+  `TileArray` 的单次 assembly 最多包含 16 个 writer；2048 元素的 F16/U16
+  parent 可以加载并借用 32 个 part，但不能用 32 个 writer 打开同一 assembly。
+  该 capability 表示公共类型和 transport 接口可用；logical64 的 pragma lowering
+  和双模型执行需要对应编译器、模型版本另行通过原始用例验收。
 - `TLOAD(parent, input, valid_elements)` 和对应的 pointer `TSTORE` 要求 pointer dtype
   与 `ElementTile` 完全一致，并复用现有统一 transport；最后一个不完整 block
-  先复制有效输入到暂存区域，因此输入不需要额外 padding。有效数必须在 0..128。
+  先复制有效输入到暂存区域，因此输入不需要额外 padding。有效数不能超过 parent 容量。
 - `TSTORE(output_block, tile, parts, part_index)` 复用已有 `TSTORE`，由 API 根据 view
-  投影写回原逻辑位置，保证 `output[element]` 对应 `input[element]`。每次调用写完整
-  32-element part；四个 part 合起来覆盖完整的 128-element padded block。`valid_size`
-  提供 kernel 内 element 条件的边界，不会缩短 TSTORE；tail 中由补零输入计算出的值
-  也会写到 padded output，调用方应只消费原始有效范围或显式处理这些位置。
+  投影写回原逻辑位置，保证 `output[element]` 对应 `input[element]`。logical32 每次调用
+  写完整 32-element part；四个 part 合起来覆盖完整的 128-element padded block。
+  `valid_size` 提供 kernel 内 element 条件的边界，不会缩短该四参数 TSTORE；tail 中由
+  补零输入计算出的值也会写到 padded output，调用方应只消费原始有效范围或显式处理。
 
 这些接口定义在既有 `pto_tile.hpp`、`pto_tile_region.hpp` 和 `jcore/template_asm.hpp`
 中。它们没有新 ISA 编码，不复制 TADDS/TSHRS/TANDS，也不引入另一套 Tile 实现。
 消费方使用 `PTO_TILEOP_API_HAS_ELEMENT_TILE` 检查逻辑 Tile 接口，并使用
-`PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查 U32/S32/F32 typed view。
+`PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查 typed view，并使用
+`PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE` 检查 dense logical64 profile。
 为使 `ElementTile` 与同 shape 的原始 `VecTileM32` 在类型系统中可区分，现有 `Tile`
 模板追加了默认 profile 参数；默认 Tile 的存储、大小、对齐和 data carrier 不变，
 但跨二进制边界传递 C++ Tile 类型的使用方需要随本版本重新编译。

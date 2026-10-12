@@ -219,10 +219,21 @@ public:
   static constexpr int rows = Rows;
   static constexpr int cols = Cols;
   static constexpr int PartCount = Parent::Numel / SubTile::Numel;
-  static constexpr bool is_element_partition =
+  static constexpr bool is_logical32_partition =
       is_element_tile_v<Parent> && is_element_tile_v<SubTile> &&
       (Parent::Numel == 128 || Parent::Numel == 512) &&
       SubTile::Numel == 32 && Rows == 1 && Cols == PartCount;
+  static constexpr bool is_logical64_partition =
+      is_element_tile_v<Parent> && is_element_tile_v<SubTile> &&
+      (std::is_same_v<typename Parent::DType, __half> ||
+       std::is_same_v<typename Parent::DType, uint16_t> ||
+       std::is_same_v<typename Parent::DType, uint32_t> ||
+       std::is_same_v<typename Parent::DType, int32_t>) &&
+      (Parent::Numel == 64 || Parent::Numel == 128 ||
+       Parent::Numel == 512 || Parent::Numel == 2048) &&
+      SubTile::Numel == 64 && Rows == 1 && Cols == PartCount;
+  static constexpr bool is_element_partition =
+      is_logical32_partition || is_logical64_partition;
 
   explicit BorrowedTileArray(Parent &parent) : parent_(&parent) {}
 
@@ -256,15 +267,28 @@ public:
   {
     if (part_index >= size())
       __builtin_trap();
-    if (part_index >= valid_elements_)
-      return 0;
-    const std::size_t remaining = valid_elements_ - part_index;
-    const std::size_t part_elements =
-        (remaining + static_cast<std::size_t>(Cols) - 1) /
-        static_cast<std::size_t>(Cols);
-    return part_elements < static_cast<std::size_t>(SubTile::Numel)
-               ? part_elements
-               : static_cast<std::size_t>(SubTile::Numel);
+    if constexpr (is_logical64_partition) {
+      const std::size_t parent_columns =
+          static_cast<std::size_t>(Parent::Cols);
+      const std::size_t full_rows = valid_elements_ / parent_columns;
+      const std::size_t tail = valid_elements_ % parent_columns;
+      const std::size_t part_column = 2 * part_index;
+      const std::size_t tail_elements =
+          tail <= part_column ? 0 : tail - part_column < 2
+                                      ? tail - part_column
+                                      : 2;
+      return 2 * full_rows + tail_elements;
+    } else {
+      if (part_index >= valid_elements_)
+        return 0;
+      const std::size_t remaining = valid_elements_ - part_index;
+      const std::size_t part_elements =
+          (remaining + static_cast<std::size_t>(Cols) - 1) /
+          static_cast<std::size_t>(Cols);
+      return part_elements < static_cast<std::size_t>(SubTile::Numel)
+                 ? part_elements
+                 : static_cast<std::size_t>(SubTile::Numel);
+    }
   }
 
   constexpr uint32_t logical_index(std::size_t part_index,
@@ -274,8 +298,11 @@ public:
     if (part_index >= static_cast<std::size_t>(PartCount) ||
         element_index >= static_cast<uint32_t>(SubTile::Numel))
       __builtin_trap();
-    const uint32_t index = static_cast<uint32_t>(part_index) +
-                           static_cast<uint32_t>(PartCount) * element_index;
+    const uint32_t index = is_logical64_partition
+        ? (element_index / 2) * static_cast<uint32_t>(Parent::Cols) +
+              2 * static_cast<uint32_t>(part_index) + element_index % 2
+        : static_cast<uint32_t>(part_index) +
+              static_cast<uint32_t>(PartCount) * element_index;
     if (static_cast<std::size_t>(index) >= valid_elements_)
       __builtin_trap();
     return index;
@@ -289,7 +316,20 @@ public:
     if (part_index >= size())
       __builtin_trap();
     return global_tensor<T, RowMajor<Parent::Rows, Parent::Cols>>(
-        block_base + part_index);
+        block_base + (is_logical64_partition ? 2 * part_index : part_index));
+  }
+
+  uint64_t store_predicate(std::size_t count) const
+    requires(is_logical64_partition)
+  {
+    if (count > static_cast<std::size_t>(SubTile::Numel))
+      __builtin_trap();
+    const std::size_t low_count = (count + 1) / 2;
+    const std::size_t high_count = count / 2;
+    const auto low_bits = [](std::size_t bits) -> uint64_t {
+      return bits == 0 ? 0 : (uint64_t{1} << bits) - 1;
+    };
+    return low_bits(low_count) | (low_bits(high_count) << 32);
   }
 
   class Row {
@@ -330,6 +370,10 @@ public:
   static constexpr int cols = Cols;
   static constexpr std::size_t slot_count =
       static_cast<std::size_t>(Rows) * static_cast<std::size_t>(Cols);
+  // One output slot emits one writer in the Local generation. The owning
+  // B.ASSEMBLE contract admits at most 16 writers, including INIT and LAST.
+  static_assert(slot_count <= 16,
+                "TileArray assembly supports at most 16 writers per generation");
   static constexpr std::size_t ParentBytes =
       SubTile::LogicalTileBytes * slot_count;
   static constexpr int ParentSizeCode =
@@ -534,12 +578,23 @@ auto TPARTVIEW(Parent &parent)
 template <int Elements, typename Parent>
   requires(is_element_tile_v<Parent>)
 auto TPARTVIEW(Parent &parent, std::size_t valid_elements) {
-  static_assert(Elements == 32,
-                "element TPARTVIEW currently supports 32-element parts");
-  static_assert(Parent::Numel == 128 || Parent::Numel == 512,
-                "element TPARTVIEW requires a 128- or 512-element "
-                "ElementTile parent");
-  using SubTile = ElementTile<typename Parent::DType, 32>;
+  constexpr bool IsDense16 =
+      std::is_same_v<typename Parent::DType, __half> ||
+      std::is_same_v<typename Parent::DType, uint16_t>;
+  constexpr bool IsInteger32 =
+      std::is_same_v<typename Parent::DType, uint32_t> ||
+      std::is_same_v<typename Parent::DType, int32_t>;
+  static_assert((!IsDense16 && Elements == 32) ||
+                    ((IsDense16 || IsInteger32) && Elements == 64),
+                "element TPARTVIEW part size must match its dtype profile");
+  static_assert(
+      (!IsDense16 && (Parent::Numel == 128 || Parent::Numel == 512 ||
+                     (IsInteger32 && Elements == 64 && Parent::Numel == 64))) ||
+          (IsDense16 &&
+           (Parent::Numel == 64 || Parent::Numel == 128 ||
+            Parent::Numel == 512 || Parent::Numel == 2048)),
+      "element TPARTVIEW parent is not a supported element profile");
+  using SubTile = ElementTile<typename Parent::DType, Elements>;
   constexpr int PartCount = Parent::Numel / Elements;
   return region::BorrowedTileArray<Parent, SubTile, 1, PartCount>(
       parent, valid_elements);
@@ -552,6 +607,54 @@ template <typename TileType>
                           uint32_t>)
 #if defined(__clang__) && defined(__linx)
 __attribute__((always_inline, annotate("pto.element.view:v1;dtype=u32;rows=32;cols=1;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 64 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          uint32_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u32;rows=32;cols=2;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 64 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          int32_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=s32;rows=32;cols=2;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 64 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          __half>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=f16;rows=32;cols=2;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 64 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          uint16_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u16;rows=32;cols=2;layout=cube_m32")))
 #endif
 decltype(auto) TPARTELEMENT(TileType &tile) {
   return tile.data();
