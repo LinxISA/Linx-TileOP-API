@@ -326,6 +326,59 @@ int main() {
                 self.assertNotEqual(rejected.returncode, 0, invalid)
                 self.assertIn("no matching function for call to 'TMOV'", rejected.stderr)
 
+    def test_native_raw_assembly(self):
+        compiler = os.environ.get("LINX_CXX")
+        resource = os.environ.get("LINX_RESOURCE_DIR")
+        sysroot = os.environ.get("LINX_SYSROOT")
+        if not (compiler and resource and sysroot):
+            self.skipTest("set LINX_CXX/LINX_RESOURCE_DIR/LINX_SYSROOT")
+        source = ROOT / "test/tileop_api/src/ElementRawAssembly.cpp"
+        with tempfile.TemporaryDirectory(prefix="native-raw-assembly-") as directory:
+            common = [
+                compiler, "-std=c++20", "--target=linx64v5-unknown-linux-musl",
+                "-D__linx", "-mlxbc", "-fenable-matrix", "-O2",
+                "-mllvm", "-enable-all-vector-as-tilereg=true",
+                "-resource-dir=" + resource, "--sysroot=" + sysroot,
+                "-I", str(ROOT / "include"),
+            ]
+            ir = Path(directory) / "assembly.ll"
+            built = subprocess.run(common + ["-S", "-emit-llvm", str(source),
+                                            "-o", str(ir)],
+                                   text=True, capture_output=True)
+            self.assertEqual(built.returncode, 0, built.stderr)
+            bodies = [body.split("\n}", 1)[0] for body in
+                      re.split(r"(?=^define )", ir.read_text(), flags=re.MULTILINE)
+                      if body.startswith("define ") and "copy_element_snapshotI" in body]
+            self.assertEqual(len(bodies), 4)
+            for body in bodies:
+                self.assertNotIn("TCVT", body)
+                self.assertIn("B.ASSEMBLE", body)
+                self.assertIn("B.DATR CUBE_M32, Zero", body)
+                # Only INIT writes the parent. Continuations carry its exact
+                # identity as an input, avoiding a newly allocated generation.
+                calls = [line for line in body.splitlines()
+                         if "asm sideeffect" in line and "B.ASSEMBLE" in line]
+                self.assertTrue(any(re.search(r'"=[^"]*Tr,', line) for line in calls))
+                self.assertTrue(any('call void asm' in line and re.search(r'"[^="]*Tr,', line)
+                                    for line in calls))
+            obj = Path(directory) / "assembly.o"
+            built = subprocess.run(common + ["-c", str(source), "-o", str(obj)],
+                                   text=True, capture_output=True)
+            self.assertEqual(built.returncode, 0, built.stderr)
+            dumped = subprocess.run(
+                [str(Path(compiler).parent / "llvm-objdump"), "-d",
+                 "--disassembler-options=no-tile-macros", str(obj)],
+                text=True, capture_output=True)
+            self.assertEqual(dumped.returncode, 0, dumped.stderr)
+            self.assertNotIn("TCVT", dumped.stdout)
+            writers = re.findall(r"BSTART\.TLSU\s+TMOV,[\s\S]*?(?=BSTART|$)",
+                                 dumped.stdout)
+            writers = [block for block in writers if "B.ASSEMBLE" in block]
+            self.assertGreaterEqual(len(writers), 12)
+            for block in writers:
+                self.assertRegex(block, r"B\.DATR\s+CUBE_M32\.normal, Zero")
+
+
 
 
 if __name__ == "__main__":
