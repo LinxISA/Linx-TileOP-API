@@ -530,6 +530,38 @@ asm volatile(
       [ValidCol] "r"(src.GetValidCol()), [ValidRow] "r"(src.GetValidRow()));  }
 }
 
+// Materialize an exact logical element partition without numeric conversion. The
+// SubTileView's fragment type is the destination type, so shape, layout and
+// dtype agree while B.SUBVIEW selects its range in the persistent parent.
+template <is_local_tile_v Tile, typename Parent>
+  requires(is_element_tile_v<Tile> && is_element_tile_v<Parent> &&
+           Tile::Numel == 32 && Tile::ValidRow > 0 && Tile::ValidCol > 0 &&
+           std::is_same_v<typename Parent::DType, typename Tile::DType> &&
+           Parent::Loc == Tile::Loc && Parent::BFractal == Tile::BFractal &&
+           Parent::SFractal == Tile::SFractal)
+PTO_SHARED_INLINE void TMOV(Tile &dst,
+                           region::SubTileView<Parent, Tile> &src) {
+  static_assert(Tile::IsValidActiveSize,
+                "TMOV partition must have an assigned Tile size");
+  static_assert(Tile::TilesizeCode <= 10,
+                "Local B.SUBVIEW size must fit SizeCode 1..10");
+  const uintptr_t range_base = src.GetRangeBase();
+  asm volatile(
+      "BSTART.TLSU TMOV, %D[DataType]\n"
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM zero, %c[ValidRow], ->lb1\n"
+      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      "B.SUBVIEW 0, %[RangeBase], 0, %c[SubviewSize]\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [Src] "Tr"(src.data()),
+        [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
+        [TileSize] "i"(
+            tile_type_traits<typename Tile::TileDType>::TilesizeCode),
+        [ValidCol] "i"(Tile::ValidCol), [ValidRow] "i"(Tile::ValidRow),
+        [RangeBase] "r"(range_base),
+        [SubviewSize] "i"(Tile::TilesizeCode));
+}
+
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void THISTOGRAM(tile_shape_out &dst, tile_shape_in &src, tile_shape_in &Idx, int ByteId) {
   static_assert(pto_dependent_false_v<decltype(dst), decltype(src)>,

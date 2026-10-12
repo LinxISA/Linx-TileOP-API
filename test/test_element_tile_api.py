@@ -264,7 +264,10 @@ void transport(const T* input, T* output, unsigned valid, T zero) {
   auto parts=TPARTVIEW<32>(parent,valid);
   auto view=parts.part(0);
   ElementTile<T,32> values;
-  TADDS(values,view,zero);
+  if constexpr (std::is_same_v<T,float>)
+    TMOV(values,view);
+  else
+    TADDS(values,view,zero);
   TSTORE(output,values,parts,0);
 }
 template void transport<uint32_t>(const uint32_t*,uint32_t*,unsigned,uint32_t);
@@ -359,6 +362,60 @@ template void typed_view<float>(ElementTile<float,32>&);
             self.assertIsNone(
                 view_accessor_call,
                 view_accessor_call.group(0) if view_accessor_call else '')
+
+    def test_native_subview_tmov_contract(self):
+        compiler = os.environ.get('LINX_CXX')
+        resource = os.environ.get('LINX_RESOURCE_DIR')
+        sysroot = os.environ.get('LINX_SYSROOT')
+        if not (compiler and resource and sysroot):
+            self.skipTest('set LINX_CXX/LINX_RESOURCE_DIR/LINX_SYSROOT for native TMOV')
+        code = r'''
+#include <common/pto_tileop.hpp>
+using namespace pto;
+template<class D, class S>
+concept CanMove = requires(D& dst, S& src) { TMOV(dst,src); };
+using FloatPart = region::SubTileView<ElementTile<float,128>,ElementTile<float,32>>;
+using WrongBacking = region::SubTileView<ElementTile<uint32_t,128>,ElementTile<float,32>>;
+using N8Part = region::SubTileView<CubeTileN8<float,8,16>,CubeTileN8<float,4,8>>;
+static_assert(CanMove<ElementTile<float,32>,FloatPart>);
+static_assert(CanMove<ElementTile<float,128>,ElementTile<float,128>>);
+static_assert(!CanMove<ElementTile<int32_t,32>,FloatPart>);
+static_assert(!CanMove<ElementTile<uint32_t,32>,FloatPart>);
+static_assert(!CanMove<ElementTile<float,128>,FloatPart>);
+static_assert(!CanMove<ElementTile<float,32>,WrongBacking>);
+static_assert(!CanMove<CubeTileN8<float,4,8>,N8Part>);
+
+template<class T> void copy_part(const T* input, T* output, unsigned part) {
+  ElementTile<T,128> parent;
+  TLOAD(parent,input,128);
+  auto parts=TPARTVIEW<32>(parent,128);
+  auto source=parts.part(part);
+  ElementTile<T,32> copied;
+  TMOV(copied,source);
+  TSTORE(output,copied,parts,part);
+}
+template void copy_part<float>(const float*,float*,unsigned);
+template void copy_part<int32_t>(const int32_t*,int32_t*,unsigned);
+template void copy_part<uint32_t>(const uint32_t*,uint32_t*,unsigned);
+'''
+        with tempfile.TemporaryDirectory(prefix='native-subview-tmov-') as directory:
+            source = Path(directory) / 'copy.cpp'
+            assembly = Path(directory) / 'copy.s'
+            source.write_text(code)
+            common = [compiler, '-std=c++20', '-O2',
+                      '--target=linx64v5-unknown-linux-musl', '-D__linx', '-mlxbc',
+                      '-fenable-matrix', '-mllvm', '-enable-all-vector-as-tilereg=true',
+                      '-resource-dir='+resource, '--sysroot='+sysroot,
+                      '-I', str(ROOT/'include')]
+            for output_mode, output in (('-S', assembly),
+                                        ('-c', Path(directory)/'copy.o')):
+                result = subprocess.run(common+[output_mode,str(source),'-o',str(output)],
+                                        text=True,capture_output=True)
+                self.assertEqual(result.returncode,0,result.stderr)
+            text = assembly.read_text()
+            self.assertRegex(text, r'BSTART\.TLSU\s+TMOV')
+            self.assertRegex(text, r'B\.SUBVIEW\s+0,')
+            self.assertNotRegex(text, r'BSTART\.(?:TEPL|VEC|SFU)\s+(?:TADD|TCVT)')
 
     def test_release_rejects_bad_ranges(self):
         for operation in (
