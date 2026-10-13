@@ -48,7 +48,7 @@ GMOV_CASES="fp64 s64 u64 dtype shape valid_shape layout capacity location shared
 TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape assemble_valid_shape"
 TEXPDIF_CASES="type narrow n8 mixed_layout shape"
 TCI2D_CASES="layout location dtype shape steps m16_rows"
-I64_CASES="fp64_element nonleaf m16 short_m32 subview_pair assemble_pair"
+I64_CASES="fp64_element unsupported_parent m16 short_m32 subview_pair assemble_pair writer_limit"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -100,7 +100,7 @@ fi
 for c in $I64_CASES; do
   define=SHOULD_FAIL_I64_$(echo "$c" | tr '[:lower:]' '[:upper:]')
   expect_rejected "i64_$c" "$define" ElementI64Negatives.cpp \
-    'ElementTile|64-bit CUBE_M16|64-bit CUBE_M32|complete CELL pairs|profile|CUBE CELL layouts'
+    'ElementTile|64-bit CUBE_M16|64-bit CUBE_M32|complete CELL pairs|profile|CUBE CELL layouts|at most 16 writers'
 done
 for c in $TS_CASES; do
   if "$CXX" "${FLAGS[@]}" -DSHOULD_FAIL_$c src/TStoreSharedNegatives.cpp \

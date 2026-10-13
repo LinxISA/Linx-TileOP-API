@@ -4,8 +4,10 @@
 
 #if defined(SHOULD_FAIL_I64_FP64_ELEMENT)
 pto::ElementTile<double, 32> rejected;
-#elif defined(SHOULD_FAIL_I64_NONLEAF)
-pto::ElementTile<uint64_t, 64> rejected;
+#elif defined(SHOULD_FAIL_I64_UNSUPPORTED_PARENT)
+pto::ElementTile<uint64_t, 2048> rejected;
+#elif defined(SHOULD_FAIL_I64_WRITER_LIMIT)
+pto::TileArray<pto::ElementTile<uint64_t, 32>, 1, 32> rejected;
 #elif defined(SHOULD_FAIL_I64_M16)
 pto::CubeTileM16<int64_t, 16, 1> rejected;
 #elif defined(SHOULD_FAIL_I64_SHORT_M32)

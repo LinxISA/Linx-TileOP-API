@@ -120,6 +120,50 @@ int main(){
 }
 ''', run=True)
 
+    def test_integer_parent_geometry_and_partitions(self):
+        self.compile(r'''
+#include <cassert>
+using namespace pto;
+template<class T, int N> void check() {
+  using Parent = ElementTile<T,N>;
+  static_assert(Parent::LogicalTileBytes == N * sizeof(T));
+  Parent parent;
+  for (unsigned valid : {0u,1u,31u,32u,unsigned(N-1),unsigned(N)}) {
+    auto parts = TPARTVIEW<32>(parent,valid);
+    unsigned total = 0;
+    for (unsigned p = 0; p < N/32; ++p) {
+      auto part = parts.part(p);
+      assert(part.GetRangeBase() == p * sizeof(T)/4);
+      for(unsigned e = 0; e < parts.valid_size(p); ++e) {
+        assert(parts.logical_index(p,e) == e*(N/32)+p);
+        assert(parts.logical_index(p,e) < valid);
+        ++total;
+      }
+    }
+    assert(total == valid);
+  }
+}
+template<class T> void all() {
+  check<T,64>(); check<T,128>(); check<T,256>();
+  check<T,512>(); check<T,1024>();
+}
+int main() { all<int64_t>(); all<uint64_t>(); all<int32_t>(); all<uint32_t>(); }
+''', run=True)
+
+    def test_direct_32_writer_parent_rejected(self):
+        self.compile(r'''
+pto::TileArray<pto::ElementTile<uint64_t,32>,1,32> rejected;
+''', accepts=False)
+
+    def test_parent_cannot_be_used_as_leaf_arithmetic(self):
+        self.compile(r'''
+int main() {
+  pto::ElementTile<uint64_t,1024> parent;
+  auto &bad = pto::TPARTELEMENT(parent);
+  (void)bad;
+}
+''', accepts=False)
+
     def test_exact_view_annotations(self):
         header = (ROOT / "include/common/pto_tile_region.hpp").read_text()
         for marker in (
@@ -131,8 +175,8 @@ int main(){
     def test_fp64_element_profile_rejected(self):
         self.compile("pto::ElementTile<double,32> value;", accepts=False)
 
-    def test_non_leaf_i64_profile_rejected(self):
-        self.compile("pto::ElementTile<uint64_t,64> value;", accepts=False)
+    def test_unsupported_i64_parent_rejected(self):
+        self.compile("pto::ElementTile<uint64_t,2048> value;", accepts=False)
 
     def test_m16_i64_rejected(self):
         self.compile("pto::CubeTileM16<uint64_t,16,1> value;", accepts=False)

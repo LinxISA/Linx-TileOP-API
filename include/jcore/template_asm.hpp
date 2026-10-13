@@ -3896,7 +3896,8 @@ template <is_tile_data_v TileType>
              (std::is_same_v<typename TileType::DType, int64_t> ||
               std::is_same_v<typename TileType::DType, uint64_t>)) ||
             TileType::Numel == 64 || TileType::Numel == 128 ||
-            TileType::Numel == 512 || TileType::Numel == 2048 ||
+            TileType::Numel == 256 || TileType::Numel == 512 ||
+            TileType::Numel == 1024 || TileType::Numel == 2048 ||
             TileType::Numel == 16384))
 void TLOAD(TileType &dst, const typename TileType::DType *input,
            std::size_t valid_elements) {
@@ -3906,9 +3907,12 @@ void TLOAD(TileType &dst, const typename TileType::DType *input,
   if (valid_elements > ParentNumel)
     __builtin_trap();
   using Element = typename TileType::DType;
-  constexpr bool IsLargeF32Storage =
-      std::is_same_v<Element, float> && ParentNumel >= 2048;
-  if constexpr (IsLargeF32Storage) {
+  constexpr bool IsWholeStorage =
+      (std::is_same_v<Element, float> && ParentNumel >= 2048) ||
+      (TileType::IsElement64Type && ParentNumel > 32) ||
+      (TileType::IsElement32Type &&
+       (ParentNumel == 256 || ParentNumel == 1024));
+  if constexpr (IsWholeStorage) {
     // Large storage profiles are assembly carriers.  Loading a partial
     // pointer range would require a large scalar scratch allocation, so keep
     // this convenience exact and let logical validity travel independently
@@ -3936,7 +3940,8 @@ template <is_tile_data_v TileType>
              (std::is_same_v<typename TileType::DType, int64_t> ||
               std::is_same_v<typename TileType::DType, uint64_t>)) ||
             TileType::Numel == 64 || TileType::Numel == 128 ||
-            TileType::Numel == 512 || TileType::Numel == 2048 ||
+            TileType::Numel == 256 || TileType::Numel == 512 ||
+            TileType::Numel == 1024 || TileType::Numel == 2048 ||
             TileType::Numel == 16384))
 void TSTORE(typename TileType::DType *output, const TileType &src,
             std::size_t valid_elements) {

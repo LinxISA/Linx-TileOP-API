@@ -229,6 +229,10 @@ public:
   static constexpr bool is_logical32_partition =
       is_element_tile_v<Parent> && is_element_tile_v<SubTile> &&
       (Parent::Numel == 128 || Parent::Numel == 512 ||
+       ((Parent::IsElement32Type || Parent::IsElement64Type) &&
+        !std::is_same_v<typename Parent::DType, float> &&
+        (Parent::Numel == 64 || Parent::Numel == 256 ||
+         Parent::Numel == 1024)) ||
        (std::is_same_v<typename Parent::DType, float> &&
         (Parent::Numel == 2048 || Parent::Numel == 16384))) &&
       SubTile::Numel == 32 && Rows == 1 && Cols == PartCount;
@@ -580,8 +584,8 @@ inline constexpr bool is_tile_array_output_ref_v =
 
 // Full-storage ElementTile fragments admitted by raw hierarchical assembly.
 // Logical32/logical64 leaves retain their existing profiles. Wider fragments
-// are limited to the closed F16/F32 storage levels used by the public
-// hierarchy; arbitrary same-sized element profiles are not interchangeable.
+// are limited to the closed storage levels used by the public hierarchy;
+// arbitrary same-sized element profiles are not interchangeable.
 template <typename T>
 inline constexpr bool is_element_assembly_fragment_v = [] {
   using TileType = std::remove_cvref_t<T>;
@@ -589,6 +593,11 @@ inline constexpr bool is_element_assembly_fragment_v = [] {
     return false;
   } else {
     return TileType::Numel == 32 || TileType::Numel == 64 ||
+           ((TileType::IsElement64Type ||
+             (TileType::IsElement32Type &&
+              !std::is_same_v<typename TileType::DType, float>)) &&
+            (TileType::Numel == 128 || TileType::Numel == 256 ||
+             TileType::Numel == 512)) ||
            (TileType::Numel == 128 &&
             (std::is_same_v<typename TileType::DType, float> ||
              std::is_same_v<typename TileType::DType, __half>)) ||
@@ -624,6 +633,9 @@ auto TPARTVIEW(Parent &parent, std::size_t valid_elements) {
   static_assert(
       (!IsDense16 &&
        (Parent::Numel == 128 || Parent::Numel == 512 ||
+        ((IsInteger32 || Parent::IsElement64Type) && Elements == 32 &&
+         (Parent::Numel == 64 || Parent::Numel == 256 ||
+          Parent::Numel == 1024)) ||
         (std::is_same_v<typename Parent::DType, float> && Elements == 32 &&
          (Parent::Numel == 2048 || Parent::Numel == 16384)) ||
         (IsInteger32 && Elements == 64 && Parent::Numel == 64))) ||

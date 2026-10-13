@@ -63,7 +63,7 @@ int main() {
   static_assert(is_element_assembly_fragment_v<ElementTile<__half,128>>);
   static_assert(is_element_assembly_fragment_v<ElementTile<float,128>>);
   static_assert(is_element_assembly_fragment_v<ElementTile<float,2048>>);
-  static_assert(!is_element_assembly_fragment_v<ElementTile<uint32_t,128>>);
+  static_assert(is_element_assembly_fragment_v<ElementTile<uint32_t,128>>);
   static_assert(!is_element_assembly_fragment_v<int>);
   using OpenView = SubTileView<ElementTile<float,128>,ElementTile<float,32>>;
   static_assert(!is_element_assembly_fragment_v<OpenView>);

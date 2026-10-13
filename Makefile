@@ -23,6 +23,7 @@ check:
 	python3 test/test_element_tile_api.py
 	python3 test/test_i64_element_tile_api.py
 	python3 test/test_i64_element_tile_runtime.py
+	python3 test/test_integer_element_storage.py
 	python3 test/test_dense_f16_element_tile_api.py
 	python3 test/test_hierarchical_element_storage_api.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
