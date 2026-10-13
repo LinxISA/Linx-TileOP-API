@@ -243,6 +243,9 @@ public:
       SubTile::Numel == 64 && Rows == 1 && Cols == PartCount;
   static constexpr bool is_element_partition =
       is_logical32_partition || is_logical64_partition;
+  static_assert(!is_element_partition ||
+                    static_cast<uint64_t>(Parent::Numel) <= UINT32_MAX,
+                "ElementTile logical indices require a B32 parent capacity");
 
   explicit BorrowedTileArray(Parent &parent) : parent_(&parent) {}
 
@@ -251,6 +254,7 @@ public:
       : parent_(&parent), valid_elements_(valid_elements) {
     if (valid_elements > static_cast<std::size_t>(Parent::Numel))
       __builtin_trap();
+    valid_elements_b32_ = static_cast<uint32_t>(valid_elements);
   }
 
   Parent &parent() const { return *parent_; }
@@ -307,12 +311,13 @@ public:
     if (part_index >= static_cast<std::size_t>(PartCount) ||
         element_index >= static_cast<uint32_t>(SubTile::Numel))
       __builtin_trap();
+    const uint32_t part_index_b32 = static_cast<uint32_t>(part_index);
     const uint32_t index = is_logical64_partition
         ? (element_index / 2) * static_cast<uint32_t>(Parent::Cols) +
-              2 * static_cast<uint32_t>(part_index) + element_index % 2
-        : static_cast<uint32_t>(part_index) +
+              2 * part_index_b32 + element_index % 2
+        : part_index_b32 +
               static_cast<uint32_t>(PartCount) * element_index;
-    if (static_cast<std::size_t>(index) >= valid_elements_)
+    if (index >= valid_elements_b32_)
       __builtin_trap();
     return index;
   }
@@ -363,6 +368,7 @@ public:
 private:
   Parent *parent_;
   std::size_t valid_elements_ = static_cast<std::size_t>(Parent::Numel);
+  uint32_t valid_elements_b32_ = static_cast<uint32_t>(Parent::Numel);
 };
 
 

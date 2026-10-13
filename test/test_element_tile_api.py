@@ -433,6 +433,7 @@ template void copy_part<uint32_t>(const uint32_t*,uint32_t*,unsigned);
                     run=True, release=True, runtime_reject=True)
         for operation in (
             'auto parts=pto::TPARTVIEW<32>(parent,513); (void)parts;',
+            'auto parts=pto::TPARTVIEW<32>(parent,static_cast<std::size_t>(-1)); (void)parts;',
             'auto parts=pto::TPARTVIEW<32>(parent,512); (void)parts.part(16);',
             'auto parts=pto::TPARTVIEW<32>(parent,512); (void)parts.valid_size(16);',
             'auto parts=pto::TPARTVIEW<32>(parent,512); (void)parts.logical_index(16,0);',

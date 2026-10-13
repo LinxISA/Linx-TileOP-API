@@ -70,6 +70,9 @@ int main() {
 
   ElementTile<float,16384> f32_parent;
   auto f32_parts = TPARTVIEW<32>(f32_parent, 777);
+  static_assert(std::is_same_v<
+      decltype(f32_parts.logical_index(std::size_t{}, uint32_t{})),
+      uint32_t>);
   assert(f32_parts.size() == 512);
   for (unsigned part = 0; part < f32_parts.size(); ++part) {
     unsigned expected = part < 777 ? (777 - part + 511) / 512 : 0;
@@ -80,6 +83,9 @@ int main() {
 
   ElementTile<__half,2048> f16_parent;
   auto f16_parts = TPARTVIEW<64>(f16_parent, 777);
+  static_assert(std::is_same_v<
+      decltype(f16_parts.logical_index(std::size_t{}, uint32_t{})),
+      uint32_t>);
   assert(f16_parts.size() == 32);
   for (unsigned part = 0; part < f16_parts.size(); ++part) {
     for (unsigned element = 0; element < f16_parts.valid_size(part); ++element)
