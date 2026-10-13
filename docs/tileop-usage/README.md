@@ -61,7 +61,8 @@ dense M32 profile，U32/S32 另提供匹配的 logical64 part。
   或浮点元素伪装成 U32。正式接口携带元素 view 的类型、shape 和布局合同；普通 indexed gather 的前端
   必须检查该合同，不能把同大小的原始 vector 自动当作此 view。已安装版本用
   `PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查强类型 view 能力。
-- F16/U16 及匹配的 U32/S32 索引使用 `TPARTVIEW<64>`；每个 part 是完整的 32x2、128-byte CELL。
+- F16/U16 及匹配的 U32/S32 索引使用 `TPARTVIEW<64>`。F16/U16 part 占 128 bytes，
+  匹配的 U32/S32 part 占 256 bytes；API 保持同一逻辑元素与 predicate 映射。
   分片内 element 顺序跨两列交错，`logical_index`、`valid_size` 和
   `store_predicate` 统一实现该映射。`TSTORE(output, tile, parts, part, count)`
   用 packed GPR predicate 精确写回 0..64 个元素；`count==0` 不构造目标地址。
@@ -70,7 +71,7 @@ dense M32 profile，U32/S32 另提供匹配的 logical64 part。
   `TileArray` 的单次 assembly 最多包含 16 个 writer；2048 元素的 F16/U16
   parent 可以加载并借用 32 个 part，但不能用 32 个 writer 打开同一 assembly。
   该 capability 表示公共类型和 transport 接口可用；logical64 的 pragma lowering
-  和双模型执行需要对应编译器、模型版本另行通过原始用例验收。
+  和 gfrun 功能执行需要对应编译器、模型版本通过原始用例验收；gfsim 在后续 PR 单独验收。
 - `TLOAD(parent, input, valid_elements)` 和对应的 pointer `TSTORE` 要求 pointer dtype
   与 `ElementTile` 完全一致，并复用现有统一 transport；最后一个不完整 block
   先复制有效输入到暂存区域，因此输入不需要额外 padding。有效数不能超过 parent 容量。
@@ -89,13 +90,14 @@ dense M32 profile，U32/S32 另提供匹配的 logical64 part。
 模板追加了默认 profile 参数；默认 Tile 的存储、大小、对齐和 data carrier 不变，
 但跨二进制边界传递 C++ Tile 类型的使用方需要随本版本重新编译。
 
-完整、实际编译并运行的 Tile/element-wise kernel 及逐例 gfrun/gfsim 检查见
+完整、实际编译并运行的 Tile/element-wise kernel 及逐例 gfrun 检查见
 [SuperNPUBench PR #202](https://github.com/PTO-ISA/SuperNPUBench/pull/202)。
 `#pragma pto element for` 的条件/atomic lowering 需要匹配的 Linx compiler，当前
 可执行模型的 atomic profile 是 U32 32-element MGATHER.ADD。纯 U32 表达式支持
 十种二元运算以及一元负号/补码，局部变量进入 Tile SSA；这不能用于宣称任意 C++
 循环都已支持自动并行。API metadata/拒绝边界由 `test/test_element_tile_api.py` 检查，执行语义
-由 benchmark 的独立 golden 和两模型结果检查。
+由 benchmark 的独立 golden 和 gfrun 实际内存结果检查。当前整数、FP16、FP32
+统一采用此功能验收标准；历史双模型结果保留其原始版本，gfsim 改动另行提交。
 
 ## 快速开始
 
