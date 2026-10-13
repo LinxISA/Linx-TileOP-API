@@ -31,6 +31,7 @@ ACTIVE_FIXTURES=(
   PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas MGatherAtomics MScatterAtomics
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs
   ElementDenseF16 ElementRawAssembly ElementHierarchicalAssembly
+  ElementI64
   ElementHierarchicalPragmaAssembly
   DirectCubeLayout TileRegionBinaryMixed Issue166RmsNormB128
   TAdd_mask TAdd TAdds TAnd TeplAss TeplAssSpecial TOrAssSubview TLoad TStore TCvt TDiv TDivs TExp TExpdif TMax TMaxs

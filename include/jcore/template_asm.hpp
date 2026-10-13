@@ -3892,7 +3892,10 @@ void TSTORE(gm_shape &dst, const cube_shape &src) {
 // is duplicated here. Pointer ranges are expressed in logical elements.
 template <is_tile_data_v TileType>
   requires(pto::is_element_tile_v<TileType> &&
-           (TileType::Numel == 64 || TileType::Numel == 128 ||
+           ((TileType::Numel == 32 &&
+             (std::is_same_v<typename TileType::DType, int64_t> ||
+              std::is_same_v<typename TileType::DType, uint64_t>)) ||
+            TileType::Numel == 64 || TileType::Numel == 128 ||
             TileType::Numel == 512 || TileType::Numel == 2048 ||
             TileType::Numel == 16384))
 void TLOAD(TileType &dst, const typename TileType::DType *input,
@@ -3929,7 +3932,10 @@ void TLOAD(TileType &dst, const typename TileType::DType *input,
 
 template <is_tile_data_v TileType>
   requires(pto::is_element_tile_v<TileType> &&
-           (TileType::Numel == 64 || TileType::Numel == 128 ||
+           ((TileType::Numel == 32 &&
+             (std::is_same_v<typename TileType::DType, int64_t> ||
+              std::is_same_v<typename TileType::DType, uint64_t>)) ||
+            TileType::Numel == 64 || TileType::Numel == 128 ||
             TileType::Numel == 512 || TileType::Numel == 2048 ||
             TileType::Numel == 16384))
 void TSTORE(typename TileType::DType *output, const TileType &src,

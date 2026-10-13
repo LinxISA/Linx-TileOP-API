@@ -641,6 +641,30 @@ template <typename TileType>
   requires(is_element_tile_v<TileType> &&
            std::remove_cvref_t<TileType>::Numel == 32 &&
            std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          uint64_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u64;rows=32;cols=1;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 32 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          int64_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=s64;rows=32;cols=1;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 32 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
                           uint32_t>)
 #if defined(__clang__) && defined(__linx)
 __attribute__((always_inline, annotate("pto.element.view:v1;dtype=u32;rows=32;cols=1;layout=cube_m32")))
