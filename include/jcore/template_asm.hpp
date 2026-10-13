@@ -3893,7 +3893,8 @@ void TSTORE(gm_shape &dst, const cube_shape &src) {
 template <is_tile_data_v TileType>
   requires(pto::is_element_tile_v<TileType> &&
            (TileType::Numel == 64 || TileType::Numel == 128 ||
-            TileType::Numel == 512 || TileType::Numel == 2048))
+            TileType::Numel == 512 || TileType::Numel == 2048 ||
+            TileType::Numel == 16384))
 void TLOAD(TileType &dst, const typename TileType::DType *input,
            std::size_t valid_elements) {
   constexpr std::size_t ParentNumel =
@@ -3902,21 +3903,35 @@ void TLOAD(TileType &dst, const typename TileType::DType *input,
   if (valid_elements > ParentNumel)
     __builtin_trap();
   using Element = typename TileType::DType;
-  alignas(128) Element tail[ParentNumel];
-  const Element *source = input;
-  if (valid_elements != ParentNumel) {
-    for (std::size_t element = 0; element < ParentNumel; ++element)
-      tail[element] = element < valid_elements ? input[element] : Element{};
-    source = tail;
+  constexpr bool IsLargeF32Storage =
+      std::is_same_v<Element, float> && ParentNumel >= 2048;
+  if constexpr (IsLargeF32Storage) {
+    // Large storage profiles are assembly carriers.  Loading a partial
+    // pointer range would require a large scalar scratch allocation, so keep
+    // this convenience exact and let logical validity travel independently
+    // through TPARTVIEW.
+    if (valid_elements != ParentNumel)
+      __builtin_trap();
+    pto::global_tensor<Element, pto::RowMajor<32, ParentCols>> memory(input);
+    TLOAD(dst, memory);
+  } else {
+    alignas(128) Element tail[ParentNumel];
+    const Element *source = input;
+    if (valid_elements != ParentNumel) {
+      for (std::size_t element = 0; element < ParentNumel; ++element)
+        tail[element] = element < valid_elements ? input[element] : Element{};
+      source = tail;
+    }
+    pto::global_tensor<Element, pto::RowMajor<32, ParentCols>> memory(source);
+    TLOAD(dst, memory);
   }
-  pto::global_tensor<Element, pto::RowMajor<32, ParentCols>> memory(source);
-  TLOAD(dst, memory);
 }
 
 template <is_tile_data_v TileType>
   requires(pto::is_element_tile_v<TileType> &&
            (TileType::Numel == 64 || TileType::Numel == 128 ||
-            TileType::Numel == 512 || TileType::Numel == 2048))
+            TileType::Numel == 512 || TileType::Numel == 2048 ||
+            TileType::Numel == 16384))
 void TSTORE(typename TileType::DType *output, const TileType &src,
             std::size_t valid_elements) {
   constexpr std::size_t ParentNumel =

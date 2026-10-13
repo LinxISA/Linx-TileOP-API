@@ -72,6 +72,17 @@ dense M32 profile，U32/S32 另提供匹配的 logical64 part。
   parent 可以加载并借用 32 个 part，但不能用 32 个 writer 打开同一 assembly。
   该 capability 表示公共类型和 transport 接口可用；logical64 的 pragma lowering
   和 gfrun 功能执行需要对应编译器、模型版本通过原始用例验收；gfsim 在后续 PR 单独验收。
+- 多层闭合 assembly 用完整 storage fragment 逐级组装：F16 可按
+  `64 -> 128 -> 2048`，F32 可按 `32 -> 128 -> 2048 -> 16384`。每一级
+  `TileArray` 仍最多 16 个 writer，最大 parent 是 64 KiB；上一级只接受已经
+  `TASSEMBLY` 闭合的完整 `ElementTile`，用 raw `TMOV` 保留 payload。F32 的
+  2048/16384 元素 profile 是 storage carrier，逻辑有效元素数由
+  `TPARTVIEW<32>(parent, valid_elements)` 独立携带，映射为
+  `element * ParentCols + part`。F16 logical64 映射保持
+  `(element / 2) * ParentCols + 2 * part + element % 2`。新增的 F32 2048/16384
+  storage profile 的 pointer `TLOAD` 只接受完整容量，避免为 partial load 分配
+  大块 scalar scratch；既有 F16 2048 profile 的行为保持不变。
+  消费方用 `PTO_TILEOP_API_HAS_HIERARCHICAL_ELEMENT_STORAGE` 检查该能力。
 - `TLOAD(parent, input, valid_elements)` 和对应的 pointer `TSTORE` 要求 pointer dtype
   与 `ElementTile` 完全一致，并复用现有统一 transport；最后一个不完整 block
   先复制有效输入到暂存区域，因此输入不需要额外 padding。有效数不能超过 parent 容量。
@@ -86,6 +97,8 @@ dense M32 profile，U32/S32 另提供匹配的 logical64 part。
 消费方使用 `PTO_TILEOP_API_HAS_ELEMENT_TILE` 检查逻辑 Tile 接口，并使用
 `PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查 typed view，并使用
 `PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE` 检查 dense logical64 profile。
+多层闭合 storage assembly 另用
+`PTO_TILEOP_API_HAS_HIERARCHICAL_ELEMENT_STORAGE` 检查。
 为使 `ElementTile` 与同 shape 的原始 `VecTileM32` 在类型系统中可区分，现有 `Tile`
 模板追加了默认 profile 参数；默认 Tile 的存储、大小、对齐和 data carrier 不变，
 但跨二进制边界传递 C++ Tile 类型的使用方需要随本版本重新编译。

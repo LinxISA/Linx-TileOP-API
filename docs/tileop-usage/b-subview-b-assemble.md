@@ -41,6 +41,13 @@ source、兼容代码和编码回归测试；`*_at_reg` 接口只出现在固定
 的 TileOP 会自动发出对应 `INIT → MIDDLE* → LAST` 生命周期的
 `B.ASSEMBLE`；`TASSEMBLY` 本身不发独立指令，只返回组装好的 parent。
 
+同一规则可以逐级组成更大的闭合 parent。每一级先完成自己的
+`INIT -> MIDDLE* -> LAST`，`TASSEMBLY` 返回的完整 `ElementTile` 才能作为下一
+级 raw `TMOV` writer 的 source。例如 F32 使用 `32 -> 128 -> 2048 -> 16384`
+三个闭合层级；各层 writer 数分别是 4、16、8，没有一层超过 16-writer 限制，
+最终 storage 是 64 KiB。中间层不写回 Global Memory，也不把仍处于 OPEN 状态
+的 `TileArray` slot 暴露为 source。
+
 ```cpp
 #include <common/pto_tileop.hpp>
 

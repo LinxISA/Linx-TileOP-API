@@ -702,8 +702,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tmov_assemble(
     region::TileArrayOutputRef<SubTile> &dst, const SubTile &src) {
   static_assert(is_element_tile_v<SubTile>,
                 "TMOV assembly currently requires an ElementTile fragment");
-  static_assert(SubTile::Numel == 32 || SubTile::Numel == 64,
-                "TMOV assembly requires a logical32 or logical64 fragment");
+  static_assert(is_element_assembly_fragment_v<SubTile>,
+                "TMOV assembly requires a supported full-storage element "
+                "fragment");
   const uintptr_t offset = dst.range_base_units();
 #define PTO_REGION_TMOV_PREFIX                                               \
   "BSTART.TLSU TMOV, %D[DataType]\n"                                      \
@@ -757,8 +758,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tmov_phase(
 }
 
 template <typename SubTile>
-  requires(is_element_tile_v<SubTile> &&
-           (SubTile::Numel == 32 || SubTile::Numel == 64))
+  requires(is_element_assembly_fragment_v<SubTile>)
 PTO_REGION_ALWAYS_INLINE void TMOV(region::TileArrayOutputRef<SubTile> dst,
                                   const SubTile &src) {
   switch (dst.parent_size_code()) {

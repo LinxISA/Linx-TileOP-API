@@ -1090,7 +1090,8 @@ public:
   static constexpr bool IsElement16Type =
       std::is_same_v<DType, __half> || std::is_same_v<DType, uint16_t>;
   static constexpr bool IsElementProfileShape =
-      (std::is_same_v<DType, float> && (Cols == 1 || Cols == 4)) ||
+      (std::is_same_v<DType, float> &&
+       (Cols == 1 || Cols == 4 || Cols == 64 || Cols == 512)) ||
       ((std::is_same_v<DType, uint32_t> || std::is_same_v<DType, int32_t>) &&
        (Cols == 1 || Cols == 2 || Cols == 4 || Cols == 16)) ||
       (IsElement16Type &&
@@ -1278,7 +1279,8 @@ struct element_tile_profile {
   static_assert(IsInteger32 || IsFloat32 || IsDense16,
                 "ElementTile supports U32, S32, F32, F16, or U16 elements");
   static constexpr bool IsSupportedShape =
-      (IsFloat32 && (Elements_ == 32 || Elements_ == 128)) ||
+      (IsFloat32 && (Elements_ == 32 || Elements_ == 128 ||
+                     Elements_ == 2048 || Elements_ == 16384)) ||
       (IsInteger32 && (Elements_ == 32 || Elements_ == 64 ||
                        Elements_ == 128 || Elements_ == 512)) ||
       (IsDense16 && (Elements_ == 64 || Elements_ == 128 ||
