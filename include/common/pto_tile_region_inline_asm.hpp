@@ -510,9 +510,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
   "B.DIM zero, %c3, ->lb0\n"                                                  \
   "B.DIM zero, %c4, ->lb1\n"                                                  \
   "B.DIM zero, %c5, ->lb2\n"                                              \
-  "B.IOT %2, mask=1111, last\n"                                           \
+  "B.IOT %2, %0, mask=1111, last\n"                                       \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
-  "B.IOT %0, mask=1111\n"                                                 \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_INPUTS                           \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
@@ -898,9 +897,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
   "B.DIM zero, %c6, ->lb2\n"                                               \
-  "B.IOT %3, mask=1111, last\n"                                           \
+  "B.IOT %3, %0, mask=1111, last\n"                                       \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
-  "B.IOT %0, mask=1111\n"                                                 \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS                            \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \

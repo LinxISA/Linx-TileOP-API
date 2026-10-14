@@ -7012,17 +7012,17 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 // ---------------------------------------------------------------------------
 // Non-MX TMATMUL.ACC / .BIAS dest-fold (SrcMask==0, OutMask==0). These match
 // the hand-folded plain overloads (matmul_acc / 3-src helper) so the option
-// path (e.g. cscale) stops leaving a sourceless D binder. No scales. ACC: C is
-// the leading Local source; CScale (when enabled) is the trailing Local source
-// that carries D, else D folds onto the last math source (SAB without CScale
-// has no trailing Local source, so it keeps the sourceless dest).
+// path (e.g. cscale) stops leaving a sourceless D binder. No scales. ACC: C
+// and A share the first record; B (and CScale when enabled, carrying D) forms
+// the final record, matching the SHARED_B C,A prefix (SAB without CScale has
+// no trailing Local source, so it keeps the sourceless dest).
 #define PTO_FIXP_ACC_FOLD_LOCAL(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR) \
-      "B.IOT %[C], mask=1111\n" \
+      "B.IOT %[C], %[A], mask=1111\n" \
       ".if %c[CScaleEn]\n" \
-      "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[B], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".else\n" \
-      "B.IOT %[A], %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".endif\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [B] "Tr"(b.data()), [CScaleOperand] "Tr"(cscale.data()), \
