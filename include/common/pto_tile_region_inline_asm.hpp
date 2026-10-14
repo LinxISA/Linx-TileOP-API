@@ -166,15 +166,15 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
                  : PTO_REGION_UNARY_ASSEMBLY_INPUTS
                  : "memory");
   } else {
-    // PTO-ISA #265 Local continuation: the final source-form SizeCode=0
-    // binder is exactly one Local ParentRef. The math input stays a
-    // source-only B.IOT and the parent register binds source-form.
+    // PTO-ISA #265 Local continuation: the final source-form binder slot
+    // carries the ParentRef (PTO-B-IOT-STREAM-001: the final effective
+    // record has L=1 and earlier records have L=0). The math input shares
+    // the final record ahead of the parent register.
     asm volatile("BSTART.TEPL %c7, %D1\n"
                  "B.DIM zero, %c3, ->lb0\n"
                  "B.DIM zero, %c4, ->lb1\n"
                  "B.DIM zero, %c5, ->lb2\n"
-                 "B.IOT %2, mask=1111, last\n"
-                 "B.IOT %0, mask=1111\n"
+                 "B.IOT %2, %0, mask=1111, last\n"
                  "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                  :
                  : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -272,15 +272,15 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
                  : PTO_REGION_SCALAR_ASSEMBLY_INPUTS
                  : "memory");
   } else {
-    // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder
-    // carries the ParentRef; the math input stays source-only.
+    // PTO-ISA #265 Local continuation: the final source-form binder slot
+    // carries the ParentRef (PTO-B-IOT-STREAM-001: the final effective
+    // record has L=1). The math input shares the final record.
     asm volatile("BSTART.TEPL %c7, %D1\n"
                  "B.DIM zero, %c3, ->lb0\n"
                  "B.DIM zero, %c4, ->lb1\n"
                  "B.DIM zero, %c5, ->lb2\n"
-                 "B.IOT %2, mask=1111, last\n"
+                 "B.IOT %2, %0, mask=1111, last\n"
                  "B.IOR [%[Scalar]],[]\n"
-                 "B.IOT %0, mask=1111\n"
                  "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                  :
                  : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -384,10 +384,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
   "B.DIM zero, %c3, ->lb0\n"                                                  \
   "B.DIM zero, %c4, ->lb1\n"                                                  \
   "B.DIM zero, %c5, ->lb2\n"                                              \
-  "B.IOT %2, mask=1111, last\n"                                           \
+  "B.IOT %2, %0, mask=1111, last\n"                                       \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.IOR [%14],[]\n"                                                       \
-  "B.IOT %0, mask=1111\n"                                                 \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_INPUTS                          \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
@@ -790,12 +789,12 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
                  : "memory");
     }
   } else {
-    // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder
-    // carries the ParentRef; the math input stays source-only.
+    // PTO-ISA #265 Local continuation: the final source-form binder slot
+    // carries the ParentRef (PTO-B-IOT-STREAM-001: the final effective
+    // record has L=1). The math input shares the final record.
     if constexpr (SourceCubeM) {
       asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
-                   "B.IOT %3, mask=1111, last\n"
-                   "B.IOT %0, mask=1111\n"
+                   "B.IOT %3, %0, mask=1111, last\n"
                    "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                    :
                    : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -804,8 +803,7 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
     } else {
       asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
                    "B.DIM zero, %c6, ->lb2\n"
-                   "B.IOT %3, mask=1111, last\n"
-                   "B.IOT %0, mask=1111\n"
+                   "B.IOT %3, %0, mask=1111, last\n"
                    "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                    :
                    : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -1808,10 +1806,10 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
   "B.DIM zero, %c6, ->lb2\n"                                               \
-  "B.IOT %2, %3, mask=1111, last\n"                                       \
+  "B.IOT %2, %3, mask=1111\n"                                             \
   "B.SUBVIEW 0, %8, 0, %c12\n"                                             \
   "B.SUBVIEW 1, %9, 0, %c12\n"                                             \
-  "B.IOT %0, mask=1111\n"                                                 \
+  "B.IOT %0, mask=1111, last\n"                                           \
   "B.ASSEMBLE %c14, %c15, %10, 0, %c13\n"
 #define PTO_REGION_BINARY_ASSEMBLY_INPUTS                                  \
   "i"(type_traits<typename SubTile0::DType>::TypeCode),                    \
@@ -1830,7 +1828,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
                  : PTO_REGION_BINARY_ASSEMBLY_INPUTS
                  : "memory");
   } else {
-    // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder.
+    // PTO-ISA #265 Local continuation: the final source-form binder slot
+    // carries the ParentRef (PTO-B-IOT-STREAM-001: the final effective
+    // record has L=1). Three operands cannot share one B.IOT record, so
+    // the math pair stays on an earlier L=0 record and the parent register
+    // binds the final record with L=1.
     asm volatile(PTO_REGION_BINARY_CONT_BODY
                  :
                  : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
