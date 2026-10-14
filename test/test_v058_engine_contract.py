@@ -930,13 +930,18 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("pe_mode_from_mask", type_header)
         self.assertNotIn("PEMask > 0 && PEMask < 16", self.header)
 
-    def test_fp6_cube_cell_instantiation_is_rejected(self) -> None:
+    def test_fp6_cube_cell_instantiation_uses_byte_carriers(self) -> None:
         compiler = os.environ.get("CXX") or shutil.which("c++")
         self.assertIsNotNone(compiler)
         source = """
 #include \"common/pto_tile.hpp\"
-using Bad = pto::CubeTileM16<__fp6_e3m2, 16, 32>;
-int main() { return sizeof(Bad); }
+using E3M2 = pto::CubeTileM16<__fp6_e3m2, 16, 32>;
+using E2M3 = pto::CubeTileM16<__fp6_e2m3, 16, 32>;
+static_assert(pto::tile_element_bits_v<__fp6_e3m2> == 8);
+static_assert(pto::tile_element_bits_v<__fp6_e2m3> == 8);
+static_assert(E3M2::CubeRequiredBytes == 512);
+static_assert(E2M3::CubeRequiredBytes == 512);
+int main() { return sizeof(E3M2) + sizeof(E2M3); }
 """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "bad_fp6_cube.cpp"
@@ -947,8 +952,7 @@ int main() { return sizeof(Bad); }
                  "-fsyntax-only", "-I", str(ROOT / "include"), str(path)],
                 text=True, capture_output=True,
             )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("CUBE CELL layouts support only", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     # --- TMOV shared source forms ---
 

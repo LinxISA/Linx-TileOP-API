@@ -814,6 +814,107 @@ decltype(auto) TPARTELEMENT(TileType &tile) {
   return tile.data();
 }
 
+// Exact FP32 NORM views used by scalar element loops over ordinary contiguous
+// RowMajor storage. The matrix profile exposes all 16x32 physical elements;
+// the row profile exposes one 1x32 Tile. Neither view changes layout or storage.
+template <typename TileType>
+  requires(is_tile_data_v<TileType> &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          float> &&
+           std::remove_cvref_t<TileType>::Loc == Location::Vec &&
+           std::remove_cvref_t<TileType>::BFractal == BLayout::RowMajor &&
+           std::remove_cvref_t<TileType>::SFractal == SLayout::NoneBox &&
+           std::remove_cvref_t<TileType>::Rows == 16 &&
+           std::remove_cvref_t<TileType>::Cols == 32 &&
+           std::remove_cvref_t<TileType>::ValidRow == 16 &&
+           std::remove_cvref_t<TileType>::ValidCol == 32)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v2;dtype=f32;layout=norm;physical_rows=16;physical_cols=32;valid_rows=16;valid_cols=32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+#ifdef __linx
+  using LogicalCarrier =
+      linx_tile_carrier<std::remove_cvref_t<TileType>::LogicalTileBytes, float>;
+  return reinterpret_cast<typename LogicalCarrier::RegisterType &>(tile.data());
+#else
+  return tile.data();
+#endif
+}
+
+template <typename TileType>
+  requires(is_tile_data_v<TileType> &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          float> &&
+           std::remove_cvref_t<TileType>::Loc == Location::Vec &&
+           std::remove_cvref_t<TileType>::BFractal == BLayout::RowMajor &&
+           std::remove_cvref_t<TileType>::SFractal == SLayout::NoneBox &&
+           std::remove_cvref_t<TileType>::Rows == 16 &&
+           std::remove_cvref_t<TileType>::Cols == 32 &&
+           std::remove_cvref_t<TileType>::ValidRow == 16 &&
+           std::remove_cvref_t<TileType>::ValidCol == 32)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v2;dtype=f32;layout=norm;physical_rows=16;physical_cols=32;valid_rows=16;valid_cols=32")))
+#endif
+decltype(auto) TPARTELEMENT(const TileType &tile) {
+#ifdef __linx
+  using LogicalCarrier =
+      linx_tile_carrier<std::remove_cvref_t<TileType>::LogicalTileBytes, float>;
+  return reinterpret_cast<const typename LogicalCarrier::RegisterType &>(
+      tile.data());
+#else
+  return tile.data();
+#endif
+}
+
+template <typename TileType>
+  requires(is_tile_data_v<TileType> &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          float> &&
+           std::remove_cvref_t<TileType>::Loc == Location::Vec &&
+           std::remove_cvref_t<TileType>::BFractal == BLayout::RowMajor &&
+           std::remove_cvref_t<TileType>::SFractal == SLayout::NoneBox &&
+           std::remove_cvref_t<TileType>::Rows == 1 &&
+           std::remove_cvref_t<TileType>::Cols == 32 &&
+           std::remove_cvref_t<TileType>::ValidRow == 1 &&
+           std::remove_cvref_t<TileType>::ValidCol == 32)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v2;dtype=f32;layout=norm;physical_rows=1;physical_cols=32;valid_rows=1;valid_cols=32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+#ifdef __linx
+  using LogicalCarrier =
+      linx_tile_carrier<std::remove_cvref_t<TileType>::LogicalTileBytes, float>;
+  return reinterpret_cast<typename LogicalCarrier::RegisterType &>(tile.data());
+#else
+  return tile.data();
+#endif
+}
+
+template <typename TileType>
+  requires(is_tile_data_v<TileType> &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          float> &&
+           std::remove_cvref_t<TileType>::Loc == Location::Vec &&
+           std::remove_cvref_t<TileType>::BFractal == BLayout::RowMajor &&
+           std::remove_cvref_t<TileType>::SFractal == SLayout::NoneBox &&
+           std::remove_cvref_t<TileType>::Rows == 1 &&
+           std::remove_cvref_t<TileType>::Cols == 32 &&
+           std::remove_cvref_t<TileType>::ValidRow == 1 &&
+           std::remove_cvref_t<TileType>::ValidCol == 32)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v2;dtype=f32;layout=norm;physical_rows=1;physical_cols=32;valid_rows=1;valid_cols=32")))
+#endif
+decltype(auto) TPARTELEMENT(const TileType &tile) {
+#ifdef __linx
+  using LogicalCarrier =
+      linx_tile_carrier<std::remove_cvref_t<TileType>::LogicalTileBytes, float>;
+  return reinterpret_cast<const typename LogicalCarrier::RegisterType &>(
+      tile.data());
+#else
+  return tile.data();
+#endif
+}
+
 
 
 template <typename Parent, typename SubTile, int Rows, int Cols>

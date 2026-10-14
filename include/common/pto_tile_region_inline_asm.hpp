@@ -1484,9 +1484,13 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
                 "column expansion broadcast cols must match the matrix");
   static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
                 "region expansion requires a static destination shape");
+  static_assert(Out::BFractal == SubTile::BFractal &&
+                    Out::BFractal == Tile::BFractal,
+                "column expansion sources must match the destination layout");
   const uintptr_t range_base0_units = src0.GetRangeBase();
   asm volatile(
       "BSTART.TEPL %c10, %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
@@ -1499,7 +1503,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
         "r"(range_base0_units),
         "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "i"(Opcode)
+        "i"(Opcode), [ElemLayout] "i"(local_layout_code_v<Out>)
       : "memory");
 }
 
@@ -1519,9 +1523,13 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
                 "column expansion broadcast cols must match the matrix");
   static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
                 "region expansion requires a static destination shape");
+  static_assert(Out::BFractal == SubTile::BFractal &&
+                    Out::BFractal == Tile::BFractal,
+                "column expansion sources must match the destination layout");
   const uintptr_t range_base1_units = src1.GetRangeBase();
   asm volatile(
       "BSTART.TEPL %c10, %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
@@ -1533,7 +1541,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
         "Tr"(src0.data()), "r"(range_base1_units),
         "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "i"(Opcode)
+        "i"(Opcode), [ElemLayout] "i"(local_layout_code_v<Out>)
       : "memory");
 }
 

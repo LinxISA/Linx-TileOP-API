@@ -5283,22 +5283,27 @@ constexpr void validate_matrix_scale_contract() {
     static_assert(type_traits<typename ScaleB::DType>::TypeCode == ScaleBType,
                   "MX ScaleB dtype must match its primary input type "
                   "(HiF4X2 uses U32; other scaled MX types use E8M0)");
-    static_assert(ScaleB::BFractal == BLayout::RowMajor &&
-                      ScaleB::SFractal == SLayout::NoneBox,
-                  "MX ScaleB must use ordinary RowMajor layout");
+    if constexpr (is_shared_tile_v<ScaleB>) {
+      static_assert(ScaleB::BFractal == BLayout::RowMajor &&
+                        ScaleB::SFractal == SLayout::NoneBox,
+                    "Shared MX ScaleB must use ordinary RowMajor layout");
+    } else {
+      static_assert(ScaleB::BFractal == BLayout::CubeM32 &&
+                        ScaleB::SFractal == SLayout::NoneBox,
+                    "Local MX ScaleB must use CUBE_M32 layout");
+    }
     static_assert(is_shared_tile_v<ScaleB> == is_shared_tile_v<B>,
                   "MX ScaleB storage must match B storage");
     // PTO spec #343: transpose controls apply only to the corresponding
-    // Shared primary operand. Shared ScaleB is always physically [N,
-    // KBlocksB], while Local ScaleB keeps its existing logical [KBlocksB,
-    // N] shape.
+    // Shared primary operand. Both Shared and Local ScaleB have valid
+    // shape [N, KBlocksB]; Local storage uses CUBE_M32 CELLs.
     if constexpr (is_shared_tile_v<ScaleB>) {
       static_assert(ScaleB::ValidRow == N && ScaleB::ValidCol == KBlocksB,
                     "Shared MX ScaleB physical shape must be "
                     "[N, ceil(K/groupB)] regardless of TransB");
     } else {
-      static_assert(ScaleB::ValidRow == KBlocksB && ScaleB::ValidCol == N,
-                    "MX ScaleB valid shape must be ceil(K/groupB) x N");
+      static_assert(ScaleB::ValidRow == N && ScaleB::ValidCol == KBlocksB,
+                    "Local MX ScaleB valid shape must be N x ceil(K/groupB)");
     }
   }
 }

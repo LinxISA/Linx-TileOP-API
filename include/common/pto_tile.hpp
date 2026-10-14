@@ -16,7 +16,10 @@ inline constexpr int tile_element_bits_v =
             type_traits<Element>::TypeCode == __type_int4x2 ||
             type_traits<Element>::TypeCode == __type_uint4x2
         ? 4
-        : type_traits<Element>::bits;
+        : (type_traits<Element>::TypeCode == __type_fp6_e3m2 ||
+           type_traits<Element>::TypeCode == __type_fp5_e2m3)
+              ? 8
+              : type_traits<Element>::bits;
 
 // PTO-ISA GMOVTypeLegal. Keep this based on architectural TypeCode values,
 // not C++ sizeof: several packed formats use an 8-bit carrier but have their
@@ -888,7 +891,7 @@ struct GlobalTensor {
 
   inline size_t GetStrideBytes(const int dim) const {
     const size_t elements = static_cast<size_t>(GetStride(dim));
-    return (elements * type_traits<DType>::bits + 7) / 8;
+    return (elements * tile_element_bits_v<DType> + 7) / 8;
   }
 
   DType *data() { return data_; }
@@ -1450,7 +1453,12 @@ public:
   static constexpr bool isRowMajor = kType == LayoutEnum::kRowMajor;
 
   using shape_t = Shape<1, 1, 1, 1, 1>;
-  using stride_t = typename stride_selector<Rows, Cols, isRowMajor>::type;
+  // Static MatrixLayout can describe a submatrix with a larger parent pitch.
+  // Preserve its declared logical strides rather than replacing them with
+  // dense Rows/Cols. Dynamic layouts keep the existing runtime constructors.
+  using stride_t = std::conditional_t<Rows != DYNAMIC && Cols != DYNAMIC,
+      Stride<1, 1, Rows * Cols, RowStride, ColStride>,
+      typename stride_selector<Rows, Cols, isRowMajor>::type>;
   static constexpr Layout layout_t = isRowMajor ? Layout::ND : Layout::DN;
 
   using Impl = GlobalTensor<DType, shape_t, stride_t, layout_t>;

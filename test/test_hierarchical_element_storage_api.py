@@ -187,6 +187,13 @@ int main() {
                 text=True, capture_output=True,
             )
             self.assertEqual(built.returncode, 0, built.stderr)
+            pragma_obj = Path(directory) / "pragma-hierarchy.o"
+            built = subprocess.run(
+                pragma_common + ["-c", str(pragma_source),
+                                 "-o", str(pragma_obj)],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(built.returncode, 0, built.stderr)
             self.assertGreater(pragma_obj.stat().st_size, 0)
             dumped = subprocess.run(
                 [str(Path(compiler).parent / "llvm-objdump"), "-d",
@@ -197,13 +204,6 @@ int main() {
             stores = re.findall(r"BSTART\.TLSU\s+TSTORE", dumped.stdout)
             self.assertEqual(len(stores), 2)
             self.assertRegex(dumped.stdout, r"B\.ASSEMBLE")
-            pragma_obj = Path(directory) / "pragma-hierarchy.o"
-            built = subprocess.run(
-                pragma_common + ["-c", str(pragma_source),
-                                 "-o", str(pragma_obj)],
-                text=True, capture_output=True,
-            )
-            self.assertEqual(built.returncode, 0, built.stderr)
 
 
 if __name__ == "__main__":
