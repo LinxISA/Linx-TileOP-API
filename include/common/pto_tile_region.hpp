@@ -232,7 +232,8 @@ public:
        ((Parent::IsElement32Type || Parent::IsElement64Type) &&
         !std::is_same_v<typename Parent::DType, float> &&
         (Parent::Numel == 64 || Parent::Numel == 256 ||
-         Parent::Numel == 1024)) ||
+         Parent::Numel == 1024 ||
+         (Parent::IsElement32Type && Parent::Numel == 2048))) ||
        (std::is_same_v<typename Parent::DType, float> &&
         (Parent::Numel == 2048 || Parent::Numel == 16384))) &&
       SubTile::Numel == 32 && Rows == 1 && Cols == PartCount;
@@ -635,7 +636,8 @@ auto TPARTVIEW(Parent &parent, std::size_t valid_elements) {
        (Parent::Numel == 128 || Parent::Numel == 512 ||
         ((IsInteger32 || Parent::IsElement64Type) && Elements == 32 &&
          (Parent::Numel == 64 || Parent::Numel == 256 ||
-          Parent::Numel == 1024)) ||
+          Parent::Numel == 1024 ||
+          (IsInteger32 && Parent::Numel == 2048))) ||
         (std::is_same_v<typename Parent::DType, float> && Elements == 32 &&
          (Parent::Numel == 2048 || Parent::Numel == 16384)) ||
         (IsInteger32 && Elements == 64 && Parent::Numel == 64))) ||

@@ -1132,7 +1132,7 @@ public:
        (Cols == 1 || Cols == 4 || Cols == 64 || Cols == 512)) ||
       ((std::is_same_v<DType, uint32_t> || std::is_same_v<DType, int32_t>) &&
        (Cols == 1 || Cols == 2 || Cols == 4 || Cols == 8 ||
-        Cols == 16 || Cols == 32)) ||
+        Cols == 16 || Cols == 32 || Cols == 64)) ||
       (IsElement16Type &&
        (Cols == 2 || Cols == 4 || Cols == 16 || Cols == 64)) ||
       (IsElement64Type &&
@@ -1328,7 +1328,8 @@ struct element_tile_profile {
                      Elements_ == 2048 || Elements_ == 16384)) ||
       (IsInteger32 && (Elements_ == 32 || Elements_ == 64 ||
                        Elements_ == 128 || Elements_ == 256 ||
-                       Elements_ == 512 || Elements_ == 1024)) ||
+                       Elements_ == 512 || Elements_ == 1024 ||
+                       Elements_ == 2048)) ||
       (IsDense16 && (Elements_ == 64 || Elements_ == 128 ||
                      Elements_ == 512 || Elements_ == 2048)) ||
       (IsInteger64 && (Elements_ == 32 || Elements_ == 64 ||

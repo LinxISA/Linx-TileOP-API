@@ -64,7 +64,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--elf', type=Path)
     parser.add_argument('--llvm-objdump', type=Path)
-    parser.add_argument('--count', type=int, choices=(64, 128, 256, 512, 1024))
+    parser.add_argument('--count', type=int, choices=(64, 128, 256, 512, 1024, 2048))
     parser.add_argument('--bits', type=int, choices=(32, 64))
     parser.add_argument('--print-range', action='store_true')
     parser.add_argument('--dump', type=Path)

@@ -450,7 +450,7 @@ template void copy_part<uint32_t>(const uint32_t*,uint32_t*,unsigned);
         self.compile('pto::ElementTile<int16_t,32> unsupported;\n', accepts=False)
 
     def test_reject_unsupported_capacity(self):
-        self.compile('pto::ElementTile<uint32_t,2048> unsupported;\n', accepts=False)
+        self.compile('pto::ElementTile<uint32_t,4096> unsupported;\n', accepts=False)
         self.compile('pto::ElementTile<float,512> unsupported;\n', accepts=False)
 
     def test_reject_wrong_part_size(self):

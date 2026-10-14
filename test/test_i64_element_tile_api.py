@@ -147,12 +147,32 @@ template<class T> void all() {
   check<T,64>(); check<T,128>(); check<T,256>();
   check<T,512>(); check<T,1024>();
 }
-int main() { all<int64_t>(); all<uint64_t>(); all<int32_t>(); all<uint32_t>(); }
+int main() {
+  all<int64_t>(); all<uint64_t>(); all<int32_t>(); all<uint32_t>();
+  check<int32_t,2048>(); check<uint32_t,2048>();
+}
 ''', run=True)
 
     def test_direct_32_writer_parent_rejected(self):
         self.compile(r'''
 pto::TileArray<pto::ElementTile<uint64_t,32>,1,32> rejected;
+''', accepts=False)
+
+    def test_i32_2048_is_storage_not_arithmetic_or_fragment(self):
+        self.compile(r'''
+#include <common/pto_tileop_api_revision.hpp>
+#ifndef PTO_TILEOP_API_HAS_I32_ELEMENT_STORAGE_2048
+#error "integer32 storage2048 feature macro is required"
+#endif
+using Parent = pto::ElementTile<uint32_t,2048>;
+static_assert(Parent::Rows == 32 && Parent::Cols == 64);
+static_assert(Parent::LogicalTileBytes == 8192);
+static_assert(!pto::is_element_assembly_fragment_v<Parent>);
+template<class T> concept HasElements = requires(T &v) { pto::TPARTELEMENT(v); };
+static_assert(!HasElements<Parent>);
+''')
+        self.compile(r'''
+pto::TileArray<pto::ElementTile<uint32_t,32>,1,64> rejected;
 ''', accepts=False)
 
     def test_parent_cannot_be_used_as_leaf_arithmetic(self):

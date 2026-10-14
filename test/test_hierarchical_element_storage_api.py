@@ -111,7 +111,7 @@ int main() {
     def test_rejects_unsupported_hierarchies(self):
         for code in (
             "pto::ElementTile<__half,16384> tile;",
-            "pto::ElementTile<uint32_t,2048> tile;",
+            "pto::ElementTile<uint32_t,4096> tile;",
             "pto::ElementTile<float,4096> tile;",
             "pto::TileArray<pto::ElementTile<float,32>,1,17> tile;",
             "void bad(){ pto::TileArray<pto::ElementTile<float,128>,1,16> a; "

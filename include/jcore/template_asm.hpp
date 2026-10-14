@@ -3911,7 +3911,7 @@ void TLOAD(TileType &dst, const typename TileType::DType *input,
       (std::is_same_v<Element, float> && ParentNumel >= 2048) ||
       (TileType::IsElement64Type && ParentNumel > 32) ||
       (TileType::IsElement32Type &&
-       (ParentNumel == 256 || ParentNumel == 1024));
+       (ParentNumel == 256 || ParentNumel == 1024 || ParentNumel == 2048));
   if constexpr (IsWholeStorage) {
     // Large storage profiles are assembly carriers.  Loading a partial
     // pointer range would require a large scalar scratch allocation, so keep

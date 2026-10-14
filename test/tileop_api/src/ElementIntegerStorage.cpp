@@ -75,10 +75,11 @@ template<unsigned N> int run_storage() {
     TSTORE(storage_reversed.data, result, N);
   } else {
     static_assert(N >= 256);
-    constexpr unsigned ChildElements = N / 2;
+    constexpr unsigned ChildElements = N > 1024 ? 512 : N / 2;
+    constexpr unsigned Groups = N / ChildElements;
     constexpr unsigned ChildColumns = ChildElements / 32;
-    TileArray<ElementTile<Element, ChildElements>, 1, 2> assembly;
-    for (unsigned group = 0; group < 2; ++group) {
+    TileArray<ElementTile<Element, ChildElements>, 1, Groups> assembly;
+    for (unsigned group = 0; group < Groups; ++group) {
       TileArray<Leaf, 1, ChildColumns> child;
       for (unsigned part = 0; part < ChildColumns; ++part) {
         auto source = parts.part(Columns - 1 - (group * ChildColumns + part));
