@@ -168,13 +168,15 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
   } else {
     // PTO-ISA #265 Local continuation: the final source-form SizeCode=0
     // binder is exactly one Local ParentRef. The math input stays a
-    // source-only B.IOT and the parent register binds source-form.
+    // source-only B.IOT; per PTO-B-IOT-STREAM-001 the final effective
+    // record carries L=1, so the parent-register binder terminates the
+    // B.IOT stream and the math-input record keeps L=0.
     asm volatile("BSTART.TEPL %c7, %D1\n"
                  "B.DIM zero, %c3, ->lb0\n"
                  "B.DIM zero, %c4, ->lb1\n"
                  "B.DIM zero, %c5, ->lb2\n"
-                 "B.IOT %2, mask=1111, last\n"
-                 "B.IOT %0, mask=1111\n"
+                 "B.IOT %2, mask=1111\n"
+                 "B.IOT %0, mask=1111, last\n"
                  "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                  :
                  : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -273,14 +275,16 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
                  : "memory");
   } else {
     // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder
-    // carries the ParentRef; the math input stays source-only.
+    // carries the ParentRef; the math input stays source-only. Per
+    // PTO-B-IOT-STREAM-001 the final effective record carries L=1, so the
+    // parent-register binder terminates the B.IOT stream.
     asm volatile("BSTART.TEPL %c7, %D1\n"
                  "B.DIM zero, %c3, ->lb0\n"
                  "B.DIM zero, %c4, ->lb1\n"
                  "B.DIM zero, %c5, ->lb2\n"
-                 "B.IOT %2, mask=1111, last\n"
+                 "B.IOT %2, mask=1111\n"
                  "B.IOR [%[Scalar]],[]\n"
-                 "B.IOT %0, mask=1111\n"
+                 "B.IOT %0, mask=1111, last\n"
                  "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                  :
                  : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -384,10 +388,10 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
   "B.DIM zero, %c3, ->lb0\n"                                                  \
   "B.DIM zero, %c4, ->lb1\n"                                                  \
   "B.DIM zero, %c5, ->lb2\n"                                              \
-  "B.IOT %2, mask=1111, last\n"                                           \
+  "B.IOT %2, mask=1111\n"                                                 \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.IOR [%14],[]\n"                                                       \
-  "B.IOT %0, mask=1111\n"                                                 \
+  "B.IOT %0, mask=1111, last\n"                                           \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_SCALAR_SUBVIEW_ASSEMBLY_INPUTS                          \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
@@ -785,11 +789,13 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
     }
   } else {
     // PTO-ISA #265 Local continuation: final source-form SizeCode=0 binder
-    // carries the ParentRef; the math input stays source-only.
+    // carries the ParentRef; the math input stays source-only. Per
+    // PTO-B-IOT-STREAM-001 the final effective record carries L=1, so the
+    // parent-register binder terminates the B.IOT stream.
     if constexpr (SourceCubeM) {
       asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
-                   "B.IOT %3, mask=1111, last\n"
-                   "B.IOT %0, mask=1111\n"
+                   "B.IOT %3, mask=1111\n"
+                   "B.IOT %0, mask=1111, last\n"
                    "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                    :
                    : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -798,8 +804,8 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
     } else {
       asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
                    "B.DIM zero, %c6, ->lb2\n"
-                   "B.IOT %3, mask=1111, last\n"
-                   "B.IOT %0, mask=1111\n"
+                   "B.IOT %3, mask=1111\n"
+                   "B.IOT %0, mask=1111, last\n"
                    "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                    :
                    : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -1801,10 +1807,10 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
   "B.DIM zero, %c6, ->lb2\n"                                               \
-  "B.IOT %2, %3, mask=1111, last\n"                                       \
+  "B.IOT %2, %3, mask=1111\n"                                             \
   "B.SUBVIEW 0, %8, 0, %c12\n"                                             \
   "B.SUBVIEW 1, %9, 0, %c12\n"                                             \
-  "B.IOT %0, mask=1111\n"                                                 \
+  "B.IOT %0, mask=1111, last\n"                                           \
   "B.ASSEMBLE %c14, %c15, %10, 0, %c13\n"
 #define PTO_REGION_BINARY_ASSEMBLY_INPUTS                                  \
   "i"(type_traits<typename SubTile0::DType>::TypeCode),                    \
