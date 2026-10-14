@@ -759,6 +759,61 @@ decltype(auto) TPARTELEMENT(TileType &tile) {
   return tile.data();
 }
 
+// Full-row NORM views expose the existing contiguous carrier directly. They
+// are not partitions and do not reinterpret NORM storage as CUBE_M32.  The v2
+// metadata keeps physical carrier geometry separate from the legal scalar
+// loop domain so a 128-column tail view never activates lanes 32..127.
+template <typename TileType>
+  requires(is_tile_data_v<TileType> &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          uint32_t> &&
+           std::remove_cvref_t<TileType>::Loc == Location::Vec &&
+           std::remove_cvref_t<TileType>::BFractal == BLayout::RowMajor &&
+           std::remove_cvref_t<TileType>::Rows == 1 &&
+           std::remove_cvref_t<TileType>::Cols == 128 &&
+           std::remove_cvref_t<TileType>::ValidRow == 1 &&
+           std::remove_cvref_t<TileType>::ValidCol == 128)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v2;dtype=u32;layout=norm;physical_rows=1;physical_cols=128;valid_rows=1;valid_cols=128")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_tile_data_v<TileType> &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          uint32_t> &&
+           std::remove_cvref_t<TileType>::Loc == Location::Vec &&
+           std::remove_cvref_t<TileType>::BFractal == BLayout::RowMajor &&
+           std::remove_cvref_t<TileType>::Rows == 1 &&
+           std::remove_cvref_t<TileType>::Cols == 128 &&
+           std::remove_cvref_t<TileType>::ValidRow == 1 &&
+           std::remove_cvref_t<TileType>::ValidCol == 32)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v2;dtype=u32;layout=norm;physical_rows=1;physical_cols=128;valid_rows=1;valid_cols=32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_tile_data_v<TileType> &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType,
+                          uint32_t> &&
+           std::remove_cvref_t<TileType>::Loc == Location::Vec &&
+           std::remove_cvref_t<TileType>::BFractal == BLayout::RowMajor &&
+           std::remove_cvref_t<TileType>::Rows == 1 &&
+           std::remove_cvref_t<TileType>::Cols == 2048 &&
+           std::remove_cvref_t<TileType>::ValidRow == 1 &&
+           std::remove_cvref_t<TileType>::ValidCol == 2048)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v2;dtype=u32;layout=norm;physical_rows=1;physical_cols=2048;valid_rows=1;valid_cols=2048")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
 
 
 template <typename Parent, typename SubTile, int Rows, int Cols>
