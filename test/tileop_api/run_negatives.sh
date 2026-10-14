@@ -49,6 +49,7 @@ TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape assemble_valid_shap
 TEXPDIF_CASES="type narrow n8 mixed_layout shape"
 TCI2D_CASES="layout location dtype shape steps m16_rows"
 I64_CASES="fp64_element unsupported_parent m16 short_m32 subview_pair assemble_pair writer_limit"
+TCOLSUM_CASES="dest_rows dest_cols dtype"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -102,6 +103,13 @@ for c in $I64_CASES; do
   expect_rejected "i64_$c" "$define" ElementI64Negatives.cpp \
     'ElementTile|64-bit CUBE_M16|64-bit CUBE_M32|complete CELL pairs|profile|CUBE CELL layouts|at most 16 writers'
 done
+for c in $TCOLSUM_CASES; do
+  define=SHOULD_FAIL_TCOLSUM_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "tcolsum_$c" "$define" \
+    TColSumNegatives.cpp "TCOLSUM"
+done
+expect_rejected "thistogram_retired" "SHOULD_FAIL_THISTOGRAM_RETIRED" \
+  TColSumNegatives.cpp "THISTOGRAM is retired"
 for c in $TS_CASES; do
   if "$CXX" "${FLAGS[@]}" -DSHOULD_FAIL_$c src/TStoreSharedNegatives.cpp \
        -o "$OUT/neg_ts_$c.o" >/dev/null 2>&1; then

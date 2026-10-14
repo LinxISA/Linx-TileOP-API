@@ -16308,6 +16308,10 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
                 "TCOLSUM destination layout must match the source "
                 "layout (B.DATR.Layout is shared by both operands)");
+  static_assert(std::is_same_v<typename tile_shape_out::DType,
+                               typename tile_shape_in::DType>,
+                "TCOLSUM destination dtype must match the selected source "
+                "operation dtype");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 80, %D1\n"
