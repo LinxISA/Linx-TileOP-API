@@ -47,6 +47,7 @@ for source in RangeSubview.cpp GMov.cpp TileRegionCubeSubview.cpp \
               TileRegionShift.cpp \
               Issue241ReductionPrefixBinary.cpp \
               Issue253RowExpandDualSubview.cpp \
+              Issue268CooperativeRowMax.cpp \
               TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
               SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp; do
