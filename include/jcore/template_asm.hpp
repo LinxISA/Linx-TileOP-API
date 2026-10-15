@@ -5180,9 +5180,11 @@ constexpr void validate_matrix_postprocess_contract() {
   constexpr int N = matrix_b_effective_n<B, Attr.TransB>;
   // Reduction outputs reduce the per-PE D rows: ASL MatrixRowMaxResult
   // iterates input.valid_rows, the per-PE clamp of group_M for a
-  // cooperative TMATMUL, not the core-total group_M.
+  // cooperative Shared-A/Shared-B TMATMUL, not the core-total group_M.
+  // A Local-A/Shared-B operand already carries the per-PE shard in A::ValidRow;
+  // only Shared-A carries the core-total group_M in its valid rows.
   constexpr int PPRows =
-      (is_shared_tile_v<A> || is_shared_tile_v<B>)
+      is_shared_tile_v<A>
           ? pto_matmul_detail::cooperative_group_m_rows_per_pe(M)
           : M;
   static_assert(Dst::IsCubeLayout && is_cube_m_layout_v<Dst>,
@@ -5204,8 +5206,9 @@ constexpr void validate_matrix_postprocess_contract() {
                   "RowMaxIn requires final D dtype FP32, FP16, or BF16");
     static_assert(type_traits<typename RowIn::DType>::TypeCode == DCode,
                   "RowMaxIn dtype must match final D dtype");
-    static_assert(RowIn::ValidRow == M && RowIn::ValidCol == 1,
-                  "RowMaxIn valid shape must be M x 1");
+    static_assert(RowIn::ValidRow == PPRows && RowIn::ValidCol == 1,
+                  "RowMaxIn valid shape must be per-PE M rows x 1 "
+                  "(group_M block for cooperative, effective M otherwise)");
     static_assert(RowIn::BFractal == Dst::BFractal &&
                       RowIn::SFractal == SLayout::NoneBox,
                   "RowMaxIn must use the primary destination CUBE layout");
