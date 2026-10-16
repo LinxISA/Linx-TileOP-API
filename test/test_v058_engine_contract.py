@@ -351,8 +351,12 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         # uses the must-zero padding convention.
         for op, opcode in (("TPERMUTE", 117), ("TSHUF", 118), ("TPACK", 119),
                            ("TUNPACK", 120)):
-            match = re.search(r'^void ' + op + r'\(.*?\n}\n', self.header,
-                              re.S | re.M)
+            if op == "TPACK":
+                match = re.search(r'^void tpack_emit\(.*?\n}\n', self.header,
+                                  re.S | re.M)
+            else:
+                match = re.search(r'^void ' + op + r'\(.*?\n}\n', self.header,
+                                  re.S | re.M)
             self.assertIsNotNone(match, op)
             body = match.group(0)
             self.assertIn(f'"BSTART.TEPL {opcode}, %D[Type]\\n"', body, op)
