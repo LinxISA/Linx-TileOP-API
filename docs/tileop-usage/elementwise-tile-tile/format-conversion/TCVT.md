@@ -17,23 +17,35 @@ void TCVT_T(DstTile &dst, SrcTile &src);  // 同上（兼容别名）
 ### 舍入模式（RMode）
 
 `RMode` 选择 `B.DATR` 的舍入模式，取 `LinxRMode` 枚举值（与 ISA
-`RMode` 字段 bits[17:15] 一一对应）：
+`RMode` 字段 bits[17:15] 一一对应）。对于同类型 `FP16`、`BF16`、`FP32`、
+`FP64`，PTO-SPEC #388 对显式非零模式增加了 TCVT 专用的“舍入到整数值”语义：
+结果仍保持原浮点类型，不会先转换到整数 Tile。
 
 | RMode | 编码 | 含义 |
 | --- | --- | --- |
-| `LINX_RNONE`（默认） | RNONE | 操作默认（对 TCVT 即 RNE），保持历史编码不变 |
-| `LINX_RNE` | RNE | 舍入到最近偶数 |
-| `LINX_RTZ` | RTZ | 向零舍入 |
-| `LINX_RDN` | RTM | **向下取整（floor）**——MX E8M0 block scale 量化（OCP MX §6.3 的 `floor(log2(amax))`）必须用此模式 |
-| `LINX_RUP` | RTP | 向上取整 |
-| `LINX_RNA` | RNA | 舍入到最近、away from zero |
-| `LINX_RTO` | RTO | odd 舍入 |
-| `LINX_RHB` | RHB | half-away 舍入 |
+| `LINX_RNONE`（默认） | RNONE | 操作默认；同类型浮点保持普通转换 |
+| `LINX_RNE` | RNE | 同类型浮点舍入到最近偶数的整数值 |
+| `LINX_RTZ` | RTZ | 同类型浮点向零舍入到整数值 |
+| `LINX_RDN` | RTM | 同类型浮点向下舍入到整数值；E8M0 仍表示 floor |
+| `LINX_RUP` | RTP | 同类型浮点向上舍入到整数值 |
+| `LINX_RNA` | RNA | 同类型浮点向最近、远离零舍入到整数值 |
+| `LINX_RTO` | RTO | 同类型 FP16/BF16/FP32/FP64 **非法**；其它合法转换保持原语义 |
+| `LINX_RHB` | RHB | 同类型浮点 half-away 舍入到整数值 |
 
 ```cpp
 // MX 量化场景：E8M0 scale 需要 floor
 TCVT<LINX_RDN>(scale_e8m0, scale_bf16);   // -> B.DATR ..., RTM
 ```
+
+同类型浮点的显式 `RNE/RTZ/RTM/RTP/RNA/RHB` 只改变有效有限值的数值，结果
+仍是原浮点格式；非整数输入设置 `NX`，整数、零和无穷值保持其编码，负数舍入到
+零时保留负零。`Sat` 不改变该专用路径的有限结果。显式 `RTO` 在完整预检阶段
+被拒绝，且不会分配目标 Tile 或发布部分结果。`PE_MASK=0000` 仍优先保持严格
+no-op。跨类型转换、scalar conversion、E8M0/E6M2 及 packed 类型不适用这条
+同类型浮点规则。
+
+这里的“同类型”指 TCVT 的操作类型；`reinterpret_tile` 的 backing 类型不改变
+该判断。例如 U32 backing 的 FP32 操作视图仍属于 FP32 -> FP32。
 
 注意 E8M0 的 RNE 语义是几何中点（√2），不等价于 floor；尾数在
 (√2, 2) 区间的输入用默认 RNE 会进位到 ceil，因此 MX scale 链路必须

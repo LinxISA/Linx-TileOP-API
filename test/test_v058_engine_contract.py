@@ -164,6 +164,25 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
                 '"B.IOT %3, mask=1111, last, ->%0<%Z4>\\n"'):
             self.assertIn(instruction, ordinary_branch)
 
+    def test_tcvt_same_type_rounding_scope_is_compile_time_checked(self) -> None:
+        self.assertIn("is_tcvt_same_type_round_integral_fp", self.header)
+        self.assertIn(
+            "TCVT RTO is illegal for same-type FP16/BF16/FP32/FP64",
+            self.header,
+        )
+        fixture = (ROOT / "test" / "tileop_api" / "src" /
+                   "TCvtSameTypeRounding.cpp").read_text(encoding="utf-8")
+        negative = (ROOT / "test" / "tileop_api" / "src" /
+                    "TCvtSameTypeRtoNegative.cpp").read_text(encoding="utf-8")
+        for mode in ("LINX_RNE", "LINX_RTZ", "LINX_RDN", "LINX_RUP",
+                     "LINX_RNA", "LINX_RHB"):
+            self.assertIn(f"same_type_round<{mode}>", fixture)
+        for dtype in ("FP16", "BF16", "FP32", "FP64", "REINTERPRETED",
+                      "PREFIX", "TILEARRAY"):
+            self.assertIn(f"SHOULD_FAIL_TCVT_SAME_TYPE_RTO_{dtype}", negative)
+        # The emitter still carries RTO for unrelated legal conversion pairs.
+        self.assertIn("RTO\\n", self.header)
+
     def test_tcvt_cube_layout_closure_uses_destination_tsize(self) -> None:
         tcvt = re.search(
             r'(?s)template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,'

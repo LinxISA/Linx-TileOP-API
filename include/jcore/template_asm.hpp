@@ -234,6 +234,12 @@ void TCVT_T(tile_shape_out &dst, tile_shape_in &src) {
                     type_traits<typename tile_shape_out::DType>::TypeCode),
                 "Illegal TCVT datatype pair: RCPE6M2 is source-only and "
                 "converts only to FP16/BF16 (pto-spec#322)");
+  static_assert(
+      !(RMode == LINX_RTO &&
+        is_tcvt_same_type_round_integral_fp(
+            type_traits<typename tile_shape_in::DType>::TypeCode,
+            type_traits<typename tile_shape_out::DType>::TypeCode)),
+      "TCVT RTO is illegal for same-type FP16/BF16/FP32/FP64");
   static_assert((tile_shape_out::ValidRow == DYNAMIC ||
                  tile_shape_out::Rows >= tile_shape_out::ValidRow) &&
                     (tile_shape_out::ValidCol == DYNAMIC ||
@@ -14638,6 +14644,12 @@ template <int RMode = LINX_RNONE, is_tile_data_v tile_shape_out,
 void TCVT(tile_shape_out &dst, View &src) {
   static_assert(tile_shape_out::BFractal == View::BFractal,
                 "TCVT CUBE_M16/M32 conversion must preserve the CUBE layout");
+  static_assert(
+      !(RMode == LINX_RTO &&
+        is_tcvt_same_type_round_integral_fp(
+            type_traits<typename View::DType>::TypeCode,
+            type_traits<typename tile_shape_out::DType>::TypeCode)),
+      "TCVT RTO is illegal for same-type FP16/BF16/FP32/FP64");
   static_assert(tile_shape_out::TilesizeCode >= __tilesize_128B &&
                     tile_shape_out::TilesizeCode <= __tilesize_64KB,
                 "TCVT CUBE_M16/M32 destination TSize must be 128 B..64 KiB");

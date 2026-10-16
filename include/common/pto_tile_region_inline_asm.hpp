@@ -739,6 +739,12 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
                 "ordinary (RowMajor) sources");
   static_assert(RMode >= 0 && RMode <= 7,
                 "TCVT RMode must be a LinxRMode value");
+  static_assert(
+      !(RMode == LINX_RTO &&
+        is_tcvt_same_type_round_integral_fp(
+            type_traits<typename In::DType>::TypeCode,
+            type_traits<typename SubTile::DType>::TypeCode)),
+      "TCVT region RTO is illegal for same-type FP16/BF16/FP32/FP64");
   // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase;
   // the INIT destination B.IOT allocates and carries the parent capacity.
   constexpr int writer_size =
