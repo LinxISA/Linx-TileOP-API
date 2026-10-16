@@ -201,8 +201,8 @@ using Matrix = CubeTileN8<__fp8_e4m3, 32, 32>;
 using D = CubeAccumulatorM16<float, 1, 32>;
 using ScaleVec = Tile<Location::Scaling, __fp8_e8m0, 16, 8,
                              BLayout::CubeM32, 1, 1>;
-using ScaleMatrix = Tile<Location::Scaling, __fp8_e8m0, 8, 32,
-                              BLayout::RowMajor, 1, 32>;
+using ScaleMatrix = Tile<Location::Scaling, __fp8_e8m0, 32, 8,
+                              BLayout::CubeM32, 32, 1>;
 using Bias = CubeBias<float, 32>;
 
 void gemv_mx_bias(D &d, Matrix &matrix, ScaleMatrix &scale_matrix, Vec &vec,

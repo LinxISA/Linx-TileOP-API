@@ -5,6 +5,10 @@ using namespace pto;
 using Parent = CubeTileM32<float, 32, 64>;
 using Fragment = CubeTileM32<float, 32, 16>;
 using Result = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using FragmentView = region::SubTileView<Parent, Fragment>;
+
+static_assert(FragmentView::PhysicalCol == Fragment::Cols);
+static_assert(FragmentView::PhysicalCol != Parent::Cols);
 
 __attribute__((noinline)) void cube_region_sources(Parent &parent,
                                                   Result &result) {

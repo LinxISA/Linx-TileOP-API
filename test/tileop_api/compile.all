@@ -28,12 +28,19 @@ ACTIVE_FIXTURES=(
   DynamicShape DynamicTlsuStride CubeCellTransport VecCubeLoadStore CubeTCvt SharedTranspose SharedRoleView TCI
   SharedTransposeNonSquare MatrixIntegerDtypes MXScaleVariants HiF4X2MatmulMX SharedMatmul
   TMatmulAccFullOptions TMatmulAccCScale TMatmulAllOptions TGEMVAllOptions TGEMVOperandOrder
-  PostProcessCombos SharedMatrixForms TCmpMode TSort TPrefetch MGatherCas MGatherAtomics MScatterAtomics
+  PostProcessCombos SharedMatrixForms TCmpMode TColSumContract TSort TPrefetch MGatherCas MGatherAtomics MScatterAtomics
   TMrgSort TQuant TImg2Col GroupMatmul TStoreShared SharedTLoad TAbs
   DirectCubeLayout TileRegionBinaryMixed Issue166RmsNormB128 Issue269ReductionCapacity Issue272PackPrefix Issue274PackViews Issue275PackAssemble Issue276ReinterpretMul TCvtSameTypeRounding
   TAdd_mask TAdd TAdds TAnd TeplAss TeplAssSpecial TOrAssSubview TLoad TStore TCvt TDiv TDivs TExp TExpdif TMax TMaxs
   RangeSubview RangeAssemble SharedRange TileRegionSharedSubview TileArray TileArrayCube TileArrayAssemblyOffsets TileArrayRegionAsm TileArrayTCVTE8M0 TileArrayWriterSize TileRegionUnaryAssembly TileRegion TileRegionUnary TileRegionBinary TileRegionBinaryAssembly TileRegionUnarySubviewAssembly TileRegionScalarAssembly TileRegionTCVTSubviewAssembly TileRegionTCVTSubview TileRegionShift TileRegionCubeSubview SubviewVecCube Issue138Subview Issue160ReductionPrefix Issue241ReductionPrefixBinary Issue187DynamicPrefix Issue178CubeTcvtNorm Issue195ConvCompose Issue194Timg2colNchw SubviewVecCubeIssue144
   ValidShapeImmediate ValidShapePerDim ValidShapePerDimSweep CoopGroupMOverloads CubeInternalAcc TSELCanonical Issue200TcmpsGpr Issue203CubeTcvtTileArray IssueA2CubeMxFp4Tcvt Issue111SharedSlot
+)
+
+# Keep element conformance fixtures separate from the upstream operation list.
+# Additions to that list then merge without sharing an edited array line.
+ACTIVE_FIXTURES+=(
+  ElementDenseF16 ElementRawAssembly ElementHierarchicalAssembly
+  ElementI64 ElementIntegerStorage ElementHierarchicalPragmaAssembly
 )
 
 # Pre-v0.58 wrapper designs remain available to cpu_sim only and are not part
@@ -42,12 +49,16 @@ ACTIVE_FIXTURES=(
 # TExpandScalar, TPad, TRowMaxExpand, and TRowSumExpand.
 
 run_objects() {
-  local log out passed=0 failed=0 testcase
+  local log out passed=0 failed=0 testcase fixture_opts
   out=$(mktemp -d "${TMPDIR:-/tmp}/tileop-objects.XXXXXX")
   "$MAKE_CMD" --no-print-directory --silent clean
   for testcase in "${ACTIVE_FIXTURES[@]}"; do
     log="$out/$testcase.log"
-    if "$MAKE_CMD" --no-print-directory --silent TESTCASE="$testcase" object \
+    fixture_opts="${CC_OPTS:-}"
+    if [[ "$testcase" == Element* ]]; then
+      fixture_opts+=" -mllvm -linxv5-enable-generic-element=true"
+    fi
+    if CC_OPTS="$fixture_opts" "$MAKE_CMD" --no-print-directory --silent TESTCASE="$testcase" object \
          >"$log" 2>&1; then
       echo "PASS object: $testcase"
       passed=$((passed + 1))

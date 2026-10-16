@@ -104,22 +104,26 @@ jobs:
         working-directory: toolchain
         env:
           LLVM_SOURCE_SHA: ${{ steps.llvm-source.outputs.sha }}
+        shell: bash
         run: |
+          set -euo pipefail
+
+          # Older v2 caches were saved after the candidate TileOP checkout was
+          # overlaid, so their embedded API repository can be dirty. Preserve
+          # that cached tree for diagnostics and let init-src create a clean
+          # checkout before it updates component branches.
+          TILEOP_SOURCE=src/Linx-TileOP-API
+          if [ -e "${TILEOP_SOURCE}" ] && \
+             { [ ! -d "${TILEOP_SOURCE}/.git" ] || \
+               [ -n "$(git -C "${TILEOP_SOURCE}" status --porcelain --untracked-files=all)" ]; }; then
+            CACHED_TILEOP_SOURCE="${RUNNER_TEMP}/cached-Linx-TileOP-API"
+            test ! -e "${CACHED_TILEOP_SOURCE}"
+            mv "${TILEOP_SOURCE}" "${CACHED_TILEOP_SOURCE}"
+          fi
+
           make init-src
           git -C src/llvm-project fetch origin "${LLVM_SOURCE_SHA}"
           git -C src/llvm-project checkout --detach "${LLVM_SOURCE_SHA}"
-
-      - name: Replace TileOP source with candidate content
-        run: |
-          rsync -a --delete \
-            --exclude .git \
-            tileop-api/ toolchain/src/Linx-TileOP-API/
-
-      - name: Show resolved source revisions
-        run: |
-          echo "TileOP candidate SHA: $(git -C tileop-api rev-parse HEAD)"
-          echo "Toolchain SHA: $(git -C toolchain rev-parse HEAD)"
-          echo "LLVM SHA: $(git -C toolchain/src/llvm-project rev-parse HEAD)"
 
       - name: Restore, incrementally update, or build toolchain
         working-directory: toolchain
@@ -186,6 +190,41 @@ jobs:
             toolchain/stamps
             toolchain/output/linx_blockisa_llvm_musl
           key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+
+      - name: Replace TileOP source with candidate content
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a --delete \
+            --exclude .git \
+            tileop-api/ toolchain/src/Linx-TileOP-API/
+
+      - name: Install candidate TileOP headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA="$(git -C tileop-api rev-parse HEAD)"
+          RESOURCE_DIR="$("${TOOLCHAIN_INSTALL_DIR}/bin/clang" -print-resource-dir)"
+          rm -rf "${RESOURCE_DIR}/include/tileop-api"
+          make -C toolchain/src/Linx-TileOP-API install \
+            CLANG_PREFIX="${TOOLCHAIN_INSTALL_DIR}" \
+            TILEOP_API_REVISION="${CANDIDATE_SHA}" \
+            TILEOP_API_REVISION_IS_EXACT=1
+          cmp \
+            toolchain/src/Linx-TileOP-API/include/common/pto_tile_region.hpp \
+            "${RESOURCE_DIR}/include/tileop-api/common/pto_tile_region.hpp"
+          cmp \
+            toolchain/src/Linx-TileOP-API/include/jcore/template_asm.hpp \
+            "${RESOURCE_DIR}/include/tileop-api/jcore/template_asm.hpp"
+          grep -Fq \
+            "#define PTO_TILEOP_API_REVISION \"${CANDIDATE_SHA}\"" \
+            "${RESOURCE_DIR}/include/tileop-api/common/pto_tileop_api_revision.hpp"
+
+      - name: Show resolved source revisions
+        run: |
+          echo "TileOP candidate SHA: $(git -C tileop-api rev-parse HEAD)"
+          echo "Toolchain SHA: $(git -C toolchain rev-parse HEAD)"
+          echo "LLVM SHA: $(git -C toolchain/src/llvm-project rev-parse HEAD)"
 
       - name: Check template_asm.hpp whitespace
         working-directory: tileop-api
@@ -254,7 +293,7 @@ jobs:
   automerge:
     name: Auto-merge after green gate
     needs: gate
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

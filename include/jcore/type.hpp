@@ -75,6 +75,7 @@ template<> struct type_traits<int8_t>         : public type_traits_base<__type_i
 template<> struct type_traits<__int4x2>       : public type_traits_base<__type_int4x2, 8> {};
 
 template<> struct type_traits<unsigned long>  : public type_traits_base<__type_uint64, 64> {};
+template<> struct type_traits<unsigned long long> : public type_traits_base<__type_uint64, 64> {};
 template<> struct type_traits<unsigned int>   : public type_traits_base<__type_uint32, 32> {};
 template<> struct type_traits<unsigned short> : public type_traits_base<__type_uint16, 16> {};
 template<> struct type_traits<unsigned char>  : public type_traits_base<__type_uint8, 8> {};

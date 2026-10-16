@@ -27,7 +27,9 @@ class PTO0585LayoutInterfaceTest(unittest.TestCase):
             '"B.IOT %[Indices], mask=1111, last, ->%[Dst]<%Z[Size]>\\n"',
             HEADER,
         )
-        self.assertEqual(HEADER.count('"B.IOR [%[Control]],[]\\n"'), 3)
+        # TPACK has three compile-time-distinct templates (plain, INIT, and
+        # continuation); only one is instantiated for a given destination.
+        self.assertEqual(HEADER.count('"B.IOR [%[Control]],[]\\n"'), 5)
         self.assertIn('"B.IOR [%[Gpr0],%[Gpr1],%[Gpr2]],[]\\n"', HEADER)
         self.assertIn('"B.IOR [%[Gpr3]],[]\\n"', HEADER)
         self.assertIn(

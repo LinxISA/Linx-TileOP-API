@@ -18,10 +18,21 @@ check:
 	python3 tools/check_tileop_usage_examples.py
 	python3 tools/check_no_legacy_tileop_api.py
 	python3 tools/check_pto_catalog_alignment.py
+	python3 test/test_packed_global_stride.py
+	python3 test/test_mx_local_scale_contract.py
+	python3 test/test_f32_norm_element_view_api.py
 	python3 test/test_v058_engine_contract.py
 	python3 test/test_pto0585_layout_interfaces.py
+	python3 test/test_issue_272_276_contract.py
+	python3 test/test_tpack_element_assembly_api.py
+	python3 test/test_pr_gate_cache_order.py
 	python3 test/test_version_header.py
 	python3 test/test_element_tile_api.py
+	python3 test/test_i64_element_tile_api.py
+	python3 test/test_i64_element_tile_runtime.py
+	python3 test/test_integer_element_storage.py
+	python3 test/test_dense_f16_element_tile_api.py
+	python3 test/test_hierarchical_element_storage_api.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
 		-fsyntax-only -Iinclude test/ptoas_linx_type_compat.cpp
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
@@ -51,6 +62,10 @@ install:
 		echo '#define PTO_TILEOP_API_HAS_ELEMENT_TILE 1'; \
 		echo '#define PTO_TILEOP_API_HAS_ELEMENT_VIEW_METADATA 1'; \
 		echo '#define PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS 1'; \
+		echo '#define PTO_TILEOP_API_HAS_512_INTEGER_ELEMENT_TILE 1'; \
+		echo '#define PTO_TILEOP_API_HAS_I64_ELEMENT_TILE_LEAF32 1'; \
+		echo '#define PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE 1'; \
+		echo '#define PTO_TILEOP_API_HAS_HIERARCHICAL_ELEMENT_STORAGE 1'; \
 		echo ''; \
 		echo '#endif'; \
 	} > $(INSTALL_DIR)/common/pto_tileop_api_revision.hpp

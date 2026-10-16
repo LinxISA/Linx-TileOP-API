@@ -123,7 +123,7 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
 
 ## 约束
 
-矩阵 MX 的 A/B 主输入分别独立选择 scale contract；普通 MX 类型使用 E8M0/group-32，而 HiF4X2 只能用于 Matrix-MX，并使用 `uint32_t`/group-64。ScaleA/ScaleB 的 storage 必须分别跟随 A/B 主输入，但 physical shape 需区分 Local 与 Shared：Local ScaleA/ScaleB 保持既有 `[M, G_A]` / `[G_B, N]` layout；Shared ScaleA 始终为 `[M, G_A]`，Shared ScaleB 始终为 `[N, G_B]`，均不随对应的 `TransA`/`TransB` 改变。转置只作用于对应的 Shared primary matrix。
+矩阵 MX 的 A/B 主输入分别独立选择 scale contract；普通 MX 类型使用 E8M0/group-32，而 HiF4X2 只能用于 Matrix-MX，并使用 `uint32_t`/group-64。ScaleA/ScaleB 的 storage 必须分别跟随 A/B 主输入，但 physical shape 需区分 Local 与 Shared：Local ScaleA/ScaleB 使用 CUBE_M32，valid shape 分别为 `[M, G_A]` / `[N, G_B]`；Shared ScaleA/ScaleB 使用 RowMajor，physical shape 分别为 `[M, G_A]` / `[N, G_B]`，均不随对应的 `TransA`/`TransB` 改变。转置只作用于对应的 Shared primary matrix。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
@@ -185,8 +185,8 @@ using namespace pto;
 using A = CubeTileM16<__half, 16, 32>;
 using B = CubeTileN8<__fp8_e4m3, 32, 16>; // local B is logical [K, N]
 using D = CubeAccumulatorM16<float, 16, 16>;
-using SB = Tile<Location::Scaling, __fp8_e8m0, 1, 16,
-                 BLayout::RowMajor, 1, 16>; // local scale: [ceil(K/32), N]
+using SB = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
+                 BLayout::CubeM32, 16, 1>; // local scale: [N, ceil(K/32)]
 
 void matmul_mx(D &d, A &a, B &b, SB &scale_b) {
   // D = A * dequant(B, scale_b)。
