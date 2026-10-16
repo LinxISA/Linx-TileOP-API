@@ -8,12 +8,16 @@
 ```cpp
 template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 void TPACK(D &dst, A &src0, B &src1, uint64_t control);
+
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TPACK_ASS(D &dst, A &src0, B &src1, uint64_t control);
 ```
 
 ### 支持的数据类型
 
 `dst` 的 operation type 可以是 U8、U16 或 U32。`src0` 和 `src1` 可以分别使用已有的
-Local numeric U8、U16 或 U32 backing type，且两个源的 backing type 可以不同。源和目标
+Local numeric 8/16/32-bit backing type，且两个源的 backing type 可以不同；也可以使用
+`TPARTVIEW` 或 `TREDUCEPREFIXVIEW` 的 CUBE source view。源和目标
 都必须使用 `CUBE_M16` 或 `CUBE_M32`；不会新增 U24 或其它 public carrier DataType。
 
 ### 参数说明
@@ -27,8 +31,10 @@ Local numeric U8、U16 或 U32 backing type，且两个源的 backing type 可�
 
 ## 约束
 
-- `src0` 和 `src1` 必须是 Local U8/U16/U32 numeric Tile，使用相同的 `CUBE_M16` 或 `CUBE_M32` layout、`valid_rows` 和有效 raw-word 数。源的 logical `valid_columns` 可以不同。
-- 每个源的有效行字节数必须是 4 的整数倍；两个源的每行 raw-word 数必须相同。`dst` 必须是 Local U8/U16/U32，并使用共同的 CUBE layout、`valid_rows`，其 `valid_columns` 为 `raw_words * (4 / bytes(dst.type))`。
+- `src0` 和 `src1` 必须是 Local 8/16/32-bit numeric Tile，使用相同的 `CUBE_M16` 或 `CUBE_M32` layout、`valid_rows` 和有效 raw-word 数。源的 logical `valid_columns` 可以不同。
+- 两个源的每行 raw-word 数必须相同；末尾 raw word 可以是部分有效，只要 control 选择的字节均在有效区域内。`dst` 必须是 Local U8/U16/U32，并使用共同的 CUBE layout、`valid_rows`，其 `valid_columns` 为 `raw_words * (4 / bytes(dst.type))`。
+- source view 会保留父 Tile 绑定并发出对应的 `B.SUBVIEW`；非零 fragment offset 不会丢失。
+- 目标是 `range::assemble<...>` 时，普通 `TPACK` 只能打开 INIT 槽；后续 MIDDLE/LAST 槽使用 `TPACK_ASS`，并在目标 binder 后发出 `B.ASSEMBLE`。
 - `control[7:0]` 是 `src0` 字段宽度，`control[15:8]` 是 `src1` 字段宽度；两者都必须至少为 1，且分别不超过对应源的 backing 宽度，宽度之和不能超过一个 32-bit raw word。目标 U8/U16/U32 只决定目标元素解释和几何，不改变 raw word 控制宽度。
 - `control[63:32]` 必须为零；非法 control 会在进入 Tile bundle 前通过 `__builtin_trap()` fail closed，不发布 destination，也不产生部分 Tile 副作用。
 - `dst` 必须是新目标，不得与任一源 alias；当前 wrapper 要求编译期已知且非零的 destination valid shape。
