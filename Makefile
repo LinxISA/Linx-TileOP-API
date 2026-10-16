@@ -14,6 +14,7 @@ INSTALL_DIR = $(shell $(CLANG_PREFIX)/bin/clang -print-resource-dir)/include/$(L
 check:
 	python3 tools/generate_engine_docs.py --check
 	python3 tools/check_issue_49_docs.py
+	python3 tools/check_issue_269_docs.py
 	python3 tools/check_tileop_usage_examples.py
 	python3 tools/check_no_legacy_tileop_api.py
 	python3 tools/check_pto_catalog_alignment.py

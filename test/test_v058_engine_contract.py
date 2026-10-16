@@ -819,14 +819,42 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("constexpr bool HasScaleB = (ScaleMask & 2) != 0;",
                       self.header)
         self.assertIn("PTO_MX_SCALE_INPUTS", self.header)
-        a_source = ('"B.IOT %[A], mask=1111\\n" ".if %c[HasScaleA]\\n" '
-                    '"B.IOT %[ScaleA], mask=1111\\n"')
-        b_source = ('"B.IOT %[B], mask=1111\\n" ".if %c[HasScaleB]\\n" '
-                    '"B.IOT %[ScaleB], mask=1111\\n"')
-        a_pos = self.header.find(a_source)
-        b_pos = self.header.find(b_source, a_pos)
-        self.assertGreaterEqual(a_pos, 0)
-        self.assertGreater(b_pos, a_pos)
+        # ScaleMask 3 has all scale operands at compile time, so every adjacent
+        # Local primary/scale pair must use the architectural 2-source B.IOT.
+        for packed_source in (
+            '"B.IOT %[A], %[ScaleA], mask=1111\\n"',
+            '"B.IOT %[B], %[ScaleB], mask=1111\\n"',
+            '"B.IOT %[Vec], %[ScaleVec], mask=1111\\n"',
+            '"B.IOT %[Mtx], %[ScaleMtx], mask=1111\\n"',
+        ):
+            self.assertIn(packed_source, self.header)
+
+        # Cover the seven requested classes: the three direct TMATMULMX forms,
+        # the three Options forms (including one-sided Shared storage), and the
+        # TGEMVMX base/ACC/BIAS family.
+        for packed_family in (
+            "PTO_FIXP_MX_L_PACKED",
+            "PTO_FIXP_MX_SB_PACKED",
+            "PTO_FIXP_MX_SA_PACKED",
+            "PTO_FIXP_MX_ACC_L_PACKED",
+            "PTO_FIXP_MX_ACC_SB_PACKED",
+            "PTO_FIXP_MX_ACC_SA_PACKED",
+            "PTO_FIXP_MX_BIAS_L_PACKED",
+            "PTO_FIXP_MX_BIAS_SB_PACKED",
+            "PTO_FIXP_MX_BIAS_SA_PACKED",
+            "PTO_FIXP_GV_GVMX_L_PACKED",
+            "PTO_FIXP_GV_GVMXB_L_PACKED",
+            "PTO_FIXP_GV_GVMXA_L_PACKED",
+        ):
+            self.assertIn(packed_family, self.header)
+
+        # Shared operands and Shared scales stay as separate B.IOS binders;
+        # the ISA does not define a two-source B.IOS encoding.
+        self.assertNotRegex(self.header, r'"B\.IOS[^"\\n]*,\s*%S\[')
+        self.assertIn(
+            '"B.IOS %S[SharedB], mask=1111\\n" "B.IOS %S[ScaleB], mask=1111\\n"',
+            self.header,
+        )
         fixture = (ROOT / "test" / "tileop_api" / "src" /
                    "MXScaleVariants.cpp").read_text(encoding="utf-8")
         for spelling in ("__half", "__bf16", "__fp8_e4m3", "__fp8_e5m2",

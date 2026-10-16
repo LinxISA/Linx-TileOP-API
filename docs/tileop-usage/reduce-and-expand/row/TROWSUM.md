@@ -79,7 +79,7 @@ assembled carrier、dtype 和容量等通用接口要求。
 assembled destination 的物理 shape、物理布局和物理列数不必等于该逻辑
 结果形状；这些属性不会改变归约计算或指令编码。
 
-源 Tile 的 allocated capacity 不得超过 **2048 bytes**。该限制针对归约源的物理分配容量，而不是输入的逻辑 valid shape；超过限制的源 Tile 不满足接口规范。
+源 Tile 的 allocated capacity 仅需满足通用 Tile allocation 规则；归约操作本身不额外施加 2048-byte 上限。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
