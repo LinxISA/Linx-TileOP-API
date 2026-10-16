@@ -33,6 +33,18 @@ class PRGateCacheOrderTest(unittest.TestCase):
             workflow,
         )
 
+    def test_element_objects_enable_generic_lowering_only(self):
+        compile_all = (ROOT / "test/tileop_api/compile.all").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('if [[ "$testcase" == Element* ]]', compile_all)
+        self.assertIn("-linxv5-enable-generic-element=true", compile_all)
+        self.assertNotIn(
+            'CC_OPTS="${CC_OPTS:-} -resource-dir $RESOURCE_OVERLAY '
+            '-mllvm -linxv5-enable-generic-element=true"',
+            compile_all,
+        )
+
     def test_candidate_overlay_happens_after_clean_cache_save(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
         save = workflow.index("      - name: Save LLVM build cache")

@@ -49,12 +49,16 @@ ACTIVE_FIXTURES+=(
 # TExpandScalar, TPad, TRowMaxExpand, and TRowSumExpand.
 
 run_objects() {
-  local log out passed=0 failed=0 testcase
+  local log out passed=0 failed=0 testcase fixture_opts
   out=$(mktemp -d "${TMPDIR:-/tmp}/tileop-objects.XXXXXX")
   "$MAKE_CMD" --no-print-directory --silent clean
   for testcase in "${ACTIVE_FIXTURES[@]}"; do
     log="$out/$testcase.log"
-    if "$MAKE_CMD" --no-print-directory --silent TESTCASE="$testcase" object \
+    fixture_opts="${CC_OPTS:-}"
+    if [[ "$testcase" == Element* ]]; then
+      fixture_opts+=" -mllvm -linxv5-enable-generic-element=true"
+    fi
+    if CC_OPTS="$fixture_opts" "$MAKE_CMD" --no-print-directory --silent TESTCASE="$testcase" object \
          >"$log" 2>&1; then
       echo "PASS object: $testcase"
       passed=$((passed + 1))
