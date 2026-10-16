@@ -25,6 +25,7 @@ check:
 	python3 test/test_pto0585_layout_interfaces.py
 	python3 test/test_issue_272_276_contract.py
 	python3 test/test_tpack_element_assembly_api.py
+	python3 test/test_pr_gate_cache_order.py
 	python3 test/test_version_header.py
 	python3 test/test_element_tile_api.py
 	python3 test/test_i64_element_tile_api.py
