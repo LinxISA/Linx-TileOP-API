@@ -146,6 +146,8 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
 ## 阅读路径
 
 - 先了解 [Tile 约束、location、shape 和 bundle](concepts/README.md)。
+- 需要在 typed Tile 元素上编写普通 C++ 条件、tail、gather 或 atomic 时，阅读
+  [Element-if 开发者使用手册](element-if.md)。
 - 需要从 GM 传输数据时，阅读 [TLSU load/store/move](tlsu/load-store-move/TLOAD.md)。
   其中卷积权重 GM 到 Shared NK 的 `OHWI2NK`/`OIHW2NK` 专用 `TLOAD` overload
   也在该页面说明。
