@@ -11139,8 +11139,8 @@ constexpr bool user_dims_legal(unsigned Col, unsigned Row) {
 // One elementwise bundle: header + layout + 3x B.DIM + record + operands.
 // DimSrc selects per-slot immediate (type-derived) vs register (user)
 // emission for lb0/lb1; lb2 (physical Cols) always uses the type value.
-template <is_tile_data_v Tile, is_tile_data_v Src0, is_tile_data_v Src1,
-          int Opcode>
+template <is_tile_data_v Tile, int Opcode, is_tile_data_v Src0 = Tile,
+          is_tile_data_v Src1 = Tile>
 PTO_SHARED_INLINE void emit_binary_user(
     Tile &dst, Src0 &src0, Src1 &src1, unsigned UserCol, unsigned UserRow) {
   unsigned Col = UserCol ? UserCol : (unsigned)Tile::ValidCol;
@@ -11402,7 +11402,7 @@ void TMUL(Dst &dst, Src0 &src0, Src1 &src1,
                 "TMUL operands must share layout and valid shape");
   using tile_shape = Dst;
   if (UserValidCol != 0 || UserValidRow != 0) {
-    pto_elementwise_user_dims::emit_binary_user<tile_shape, Src0, Src1, 2>(
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 2, Src0, Src1>(
         dst, src0, src1, UserValidCol, UserValidRow);
     return;
   }
