@@ -11139,9 +11139,10 @@ constexpr bool user_dims_legal(unsigned Col, unsigned Row) {
 // One elementwise bundle: header + layout + 3x B.DIM + record + operands.
 // DimSrc selects per-slot immediate (type-derived) vs register (user)
 // emission for lb0/lb1; lb2 (physical Cols) always uses the type value.
-template <is_tile_data_v Tile, int Opcode>
+template <is_tile_data_v Tile, is_tile_data_v Src0, is_tile_data_v Src1,
+          int Opcode>
 PTO_SHARED_INLINE void emit_binary_user(
-    Tile &dst, Tile &src0, Tile &src1, unsigned UserCol, unsigned UserRow) {
+    Tile &dst, Src0 &src0, Src1 &src1, unsigned UserCol, unsigned UserRow) {
   unsigned Col = UserCol ? UserCol : (unsigned)Tile::ValidCol;
   unsigned Row = UserRow ? UserRow : (unsigned)Tile::ValidRow;
   asm volatile(
@@ -11380,12 +11381,28 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1,
   );  }
 }
 
-// TMUL: dst = src0 * src1
-template <is_tile_data_v tile_shape>
-void TMUL(tile_shape &dst, tile_shape &src0, tile_shape &src1,
+// TMUL: dst = src0 * src1. The three operands may have independent C++
+// types with compatible operation dtype, geometry, and layout; a
+// reinterpret_tile view (equal-width dtype reinterpretation, same physical
+// carrier) can be mixed with an ordinary tile (issue #276). The destination
+// dtype drives the operation type; source registers keep their original
+// backing so no payload copy or descriptor retag is introduced.
+template <is_tile_data_v Dst, is_tile_data_v Src0, is_tile_data_v Src1>
+void TMUL(Dst &dst, Src0 &src0, Src1 &src1,
           unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+  static_assert(std::is_same_v<typename Dst::DType, typename Src0::DType> &&
+                    std::is_same_v<typename Dst::DType, typename Src1::DType>,
+                "TMUL operands must share the operation dtype");
+  static_assert(Dst::BFractal == Src0::BFractal &&
+                    Dst::BFractal == Src1::BFractal &&
+                    Dst::ValidRow == Src0::ValidRow &&
+                    Dst::ValidRow == Src1::ValidRow &&
+                    Dst::ValidCol == Src0::ValidCol &&
+                    Dst::ValidCol == Src1::ValidCol,
+                "TMUL operands must share layout and valid shape");
+  using tile_shape = Dst;
   if (UserValidCol != 0 || UserValidRow != 0) {
-    pto_elementwise_user_dims::emit_binary_user<tile_shape, 2>(
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, Src0, Src1, 2>(
         dst, src0, src1, UserValidCol, UserValidRow);
     return;
   }
@@ -19864,11 +19881,16 @@ constexpr bool tunpack_control_legal_v(uint64_t control,
          offset + count <= 4;
 }
 
+// PTO-ISA #338 / pto-spec PR #350: TileCellRearrangementDataTypeLegal accepts
+// any CUBE-supported Numeric backing with 8/16/32-bit ELEMENTS, not only
+// U8/U16/U32 storage spelling. BF16/FP16 (16-bit) and FP32 (32-bit) carriers
+// are legal pack sources when the control-selected prefix bytes fall inside
+// the valid element region. The fresh destination must still be exactly
+// U8/U16/U32 (BSTART selects it).
 template <typename T>
 constexpr bool tpack_source_type_legal_v =
-    (type_traits<T>::TypeCode == __type_uint8 ||
-     type_traits<T>::TypeCode == __type_uint16 ||
-     type_traits<T>::TypeCode == __type_uint32);
+    type_traits<T>::bits == 8 || type_traits<T>::bits == 16 ||
+    type_traits<T>::bits == 32;
 
 template <typename T>
 constexpr bool tpack_destination_type_legal_v =
@@ -19889,13 +19911,26 @@ constexpr bool tpack_type_is_local_numeric_v =
 template <typename T>
 constexpr unsigned tpack_type_bytes_v = tpack_source_bytes(type_traits<T>::bits);
 
+// PTO-ISA TileCellRearrangementWordsPerRow: ceil(valid bytes / 4).  The last
+// raw word of a row may be partial; only control-selected prefix bytes must be
+// defined (checked at runtime below), so sources need not be word-aligned.
 template <typename T>
 constexpr unsigned tpack_raw_words_per_row_v =
-    T::ValidCol * tpack_type_bytes_v<typename T::DType> / 4;
+    (T::ValidCol * tpack_type_bytes_v<typename T::DType> + 3) / 4;
 
-template <typename T>
-constexpr bool tpack_source_row_is_word_aligned_v =
-    (T::ValidCol * tpack_type_bytes_v<typename T::DType>) % 4 == 0;
+// TileCellRearrangementSelectedBytesDefined, compile-time counterpart: byte b
+// of a row is defined iff its containing element is inside the valid region,
+// i.e. b < valid_col * element_bytes.  Prefix selection applies the same
+// low-byte count to every raw word; only the last (possibly partial) word
+// can exceed the valid region, so checking its end is sufficient.
+constexpr bool tpack_selected_prefix_defined(unsigned valid_col,
+                                           unsigned element_bytes,
+                                           unsigned selected_bytes) {
+  const unsigned valid_bytes = valid_col * element_bytes;
+  const unsigned words = (valid_bytes + 3) / 4;
+  return words != 0 && selected_bytes != 0 &&
+         (words - 1) * 4 + selected_bytes <= valid_bytes;
+}
 
 template <typename T, typename D>
 constexpr unsigned tpack_destination_cols_v =
@@ -19950,26 +19985,43 @@ constexpr bool tunpack_control_legal_v(uint64_t control) {
   return tunpack_control_legal_v(control, 4);
 }
 
-template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
-void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
+template <bool Associated = false, is_tile_data_v D, is_tile_data_v A,
+          is_tile_data_v B>
+void tpack_emit(D &dst, A &src0, B &src1, uint64_t control) {
   static_assert(tpack_operation_descriptor_legal_v<D>,
                 "TPACK destination must be Local U8/U16/U32 CUBE_M16/M32");
   static_assert(tpack_source_descriptor_legal_v<A> &&
                     tpack_source_descriptor_legal_v<B>,
                 "TPACK sources must be Local 8/16/32-bit numeric CUBE tiles");
+  constexpr unsigned WriterCols = tpack_destination_cols_v<A, D>;
   static_assert(D::BFractal == A::BFractal && D::BFractal == B::BFractal &&
                     D::ValidRow == A::ValidRow && D::ValidRow == B::ValidRow &&
-                    tpack_source_row_is_word_aligned_v<A> &&
-                    tpack_source_row_is_word_aligned_v<B> &&
                     tpack_raw_words_per_row_v<A> == tpack_raw_words_per_row_v<B> &&
-                    D::ValidCol == tpack_destination_cols_v<A, D>,
+                    (is_assemble_v<D> ? D::ValidCol >= WriterCols
+                                       : D::ValidCol == WriterCols),
                 "TPACK requires matching layout/rows and raw-word shape");
-  if (!tpack_control_legal_v(
-          control, tpack_type_bytes_v<typename A::DType>,
-          tpack_type_bytes_v<typename B::DType>,
-          4))
+  if constexpr (is_assemble_v<D> && !Associated) {
+    static_assert(D::INIT,
+                  "plain TPACK on an assemble carrier must open an INIT slot; "
+                  "use TPACK_ASS for MIDDLE/LAST slots");
+  }
+  if (!tpack_control_legal_v(control, 3, 3, 4) ||
+      !tpack_selected_prefix_defined(
+          A::ValidCol, tpack_type_bytes_v<typename A::DType>, control & 0xff) ||
+      !tpack_selected_prefix_defined(
+          B::ValidCol, tpack_type_bytes_v<typename B::DType>, (control >> 8) & 0xff))
     __builtin_trap();
   uint64_t controlValue = control;
+  const uintptr_t src0Base = [&] {
+    if constexpr (is_subtile_view_v<A> || is_subview_v<A>)
+      return src0.GetRangeBase();
+    return uintptr_t{0};
+  }();
+  const uintptr_t src1Base = [&] {
+    if constexpr (is_subtile_view_v<B> || is_subview_v<B>)
+      return src1.GetRangeBase();
+    return uintptr_t{0};
+  }();
   asm("" : "+r"(controlValue));
   asm volatile(
       "BSTART.TEPL 119, %D[Type]\n"
@@ -19977,15 +20029,67 @@ void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
       "B.DIM zero, %c[Cols], ->lb0\n"
       "B.DIM zero, %c[Rows], ->lb1\n"
       "B.DIM zero, %c[FullCols], ->lb2\n"
-      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      "B.IOT %[Src0], %[Src1], mask=1111\n"
+      ".if %c[HasSrc0View]\n"
+      "B.SUBVIEW 0, %[Src0Base], 0, %c[Src0Size]\n"
+      ".endif\n"
+      ".if %c[HasSrc1View]\n"
+      "B.SUBVIEW 1, %[Src1Base], 0, %c[Src1Size]\n"
+      ".endif\n"
+      ".if %c[Assemble]\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
+      ".else\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      ".endif\n"
       "B.IOR [%[Control]],[]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+        [Src0Base] "r"(src0Base),
+        [Src1Base] "r"(src1Base),
         [Control] "r"(controlValue),
         [Type] "i"(type_traits<typename D::DType>::TypeCode),
-        [Cols] "i"(D::ValidCol), [Rows] "i"(D::ValidRow),
+        [Cols] "i"(WriterCols), [Rows] "i"(A::ValidRow),
         [FullCols] "i"(D::Cols), [Size] "i"(D::TilesizeCode),
+        [Src0Size] "i"(A::TilesizeCode), [Src1Size] "i"(B::TilesizeCode),
+        [HasSrc0View] "i"(static_cast<int>(is_subtile_view_v<A> || is_subview_v<A>)),
+        [HasSrc1View] "i"(static_cast<int>(is_subtile_view_v<B> || is_subview_v<B>)),
+        [Assemble] "i"(static_cast<int>(is_assemble_v<D>)),
+        [Init] "i"([] {
+          if constexpr (is_assemble_v<D>) return static_cast<int>(D::INIT);
+          return 0;
+        }()),
+        [Last] "i"([] {
+          if constexpr (is_assemble_v<D>) return static_cast<int>(D::LAST);
+          return 0;
+        }()),
+        [RegSrc] "r"([&] {
+          if constexpr (is_assemble_v<D>)
+            return static_cast<uintptr_t>(dst.GetRangeBase());
+          return uintptr_t{0};
+        }()),
+        [Off] "i"([] {
+          if constexpr (is_assemble_v<D>) return D::OffsetUnits;
+          return 0U;
+        }()),
+        [WriterSize] "i"([] {
+          if constexpr (is_assemble_v<D>) return D::WriterSizeCode;
+          return 0U;
+        }()),
         [ElemLayout] "i"(local_layout_code_v<D>));
+}
+
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
+  tpack_emit<false>(dst, src0, src1, control);
+}
+
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+  requires(is_assemble_v<D>)
+void TPACK_ASS(D &dst, A &src0, B &src1, uint64_t control) {
+  static_assert(!D::INIT,
+                "TPACK_ASS consumes an existing MIDDLE/LAST assemble slot");
+  tpack_emit<true>(dst, src0, src1, control);
 }
 
 template <is_tile_data_v D, is_tile_data_v S>
