@@ -45,7 +45,7 @@ RANGE_CASES="subview_dest assemble_source subview_length tadd_ass_init tadd_midd
 ROLE_VIEW_CASES="same_role local rvalue layout"
 SUBVIEW_LEGALITY_CASES="subview_rowmajor tpartview_rowmajor tpartview_shared"
 GMOV_CASES="fp64 s64 u64 dtype shape valid_shape layout capacity location shared cube_n8"
-TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape assemble_valid_shape"
+TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape assemble_valid_shape same_type_rto_fp16 same_type_rto_bf16 same_type_rto_fp32 same_type_rto_fp64 same_type_rto_reinterpreted same_type_rto_prefix same_type_rto_tilearray"
 TEXPDIF_CASES="type narrow n8 mixed_layout shape"
 TCI2D_CASES="layout location dtype shape steps m16_rows"
 PASS=0; FAIL=0
@@ -56,7 +56,7 @@ PASS=0; FAIL=0
 # SharedRange.cpp intentionally contains the retired TLOAD_ASS/RowMajor
 # Assemble example; it is not a valid positive preflight for the current API.
 # Keep the actual range legality checks below independent of that fixture.
-for source in TStoreShared.cpp PostProcessNegatives.cpp TStoreSharedNegatives.cpp CubeTCvt.cpp TCvtCubeNegatives.cpp GMov.cpp TileArrayCube.cpp RangeSubview.cpp; do
+for source in TStoreShared.cpp PostProcessNegatives.cpp TStoreSharedNegatives.cpp CubeTCvt.cpp TCvtCubeNegatives.cpp TCvtSameTypeRounding.cpp GMov.cpp TileArrayCube.cpp RangeSubview.cpp; do
   stem=${source%.cpp}
   if ! "$CXX" "${FLAGS[@]}" "src/$source" -o "$OUT/$stem.o" \
       >"$OUT/$stem.stdout" 2>"$OUT/$stem.stderr"; then
@@ -152,8 +152,19 @@ for c in $TCVT_CASES; do
     cube_n8) define=SHOULD_FAIL_TCVT_CUBE_N8 ;;
     valid_shape) define=SHOULD_FAIL_TCVT_VALID_SHAPE ;;
     assemble_valid_shape) define=SHOULD_FAIL_TCVT_ASSEMBLE_VALID_SHAPE ;;
+    same_type_rto_fp16) define=SHOULD_FAIL_TCVT_SAME_TYPE_RTO_FP16 ;;
+    same_type_rto_bf16) define=SHOULD_FAIL_TCVT_SAME_TYPE_RTO_BF16 ;;
+    same_type_rto_fp32) define=SHOULD_FAIL_TCVT_SAME_TYPE_RTO_FP32 ;;
+    same_type_rto_fp64) define=SHOULD_FAIL_TCVT_SAME_TYPE_RTO_FP64 ;;
+    same_type_rto_reinterpreted) define=SHOULD_FAIL_TCVT_SAME_TYPE_RTO_REINTERPRETED ;;
+    same_type_rto_prefix) define=SHOULD_FAIL_TCVT_SAME_TYPE_RTO_PREFIX ;;
+    same_type_rto_tilearray) define=SHOULD_FAIL_TCVT_SAME_TYPE_RTO_TILEARRAY ;;
   esac
-  if "$CXX" "${FLAGS[@]}" -D"$define" src/TCvtCubeNegatives.cpp \
+  negative_source=src/TCvtCubeNegatives.cpp
+  if [[ "$c" == same_type_rto_* ]]; then
+    negative_source=src/TCvtSameTypeRtoNegative.cpp
+  fi
+  if "$CXX" "${FLAGS[@]}" -D"$define" "$negative_source" \
        -o "$OUT/neg_tcvt_$c.o" >/dev/null 2>&1; then
     echo "FAIL (compiled but should not): tcvt_$c"; FAIL=$((FAIL+1))
   else
