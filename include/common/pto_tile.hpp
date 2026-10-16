@@ -323,6 +323,16 @@ constexpr bool is_legal_tcvt_datatype_pair(int SrcCode, int DstCode) {
   return true;
 }
 
+// PTO-SPEC #388: explicit nonzero TCVT rounding modes round same-type
+// floating operands to an integer-valued result. RTO is not applicable to
+// this specialization. Compare operation TypeCodes, rather than C++ or
+// backing-carrier types, so reinterpret_tile views follow the ISA rule.
+constexpr bool is_tcvt_same_type_round_integral_fp(int SrcCode, int DstCode) {
+  return SrcCode == DstCode &&
+         (SrcCode == __type_fp16 || SrcCode == __type_bf16 ||
+          SrcCode == __type_fp32 || SrcCode == __type_fp64);
+}
+
 constexpr bool is_valid_fixp_pre_quant(FixpPreQuantMode Mode) {
   switch (Mode) {
   case FixpPreQuantMode::None:
