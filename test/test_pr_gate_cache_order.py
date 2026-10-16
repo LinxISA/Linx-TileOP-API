@@ -25,6 +25,14 @@ def workflow_run_block(step_name: str) -> str:
 
 
 class PRGateCacheOrderTest(unittest.TestCase):
+    def test_automerge_skips_draft_pull_requests(self):
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn(
+            "if: github.event_name == 'pull_request' && "
+            "github.event.pull_request.draft == false",
+            workflow,
+        )
+
     def test_candidate_overlay_happens_after_clean_cache_save(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
         save = workflow.index("      - name: Save LLVM build cache")
