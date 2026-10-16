@@ -484,6 +484,11 @@ struct is_tile<region::SubTileView<Parent, SubTile>> : std::true_type {
   static constexpr SLayout layout_enum = SubTile::SFractal;
 };
 
+template <typename Parent, typename SubTile>
+struct is_tile<region::ReductionPrefixView<Parent, SubTile>> : std::true_type {
+  static constexpr SLayout layout_enum = SubTile::SFractal;
+};
+
 // Range-modifier trait for the reduction-prefix source carrier: borrows the
 // first CELL of a wide CUBE reduction destination as a zero-copy source
 // (PTO #311).
