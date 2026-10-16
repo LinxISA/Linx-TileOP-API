@@ -9,11 +9,8 @@
 
 // Optional worker callbacks supplied by the application/launcher.  The
 // carrier is linked only with -mlinx-group-runtime and is independent of
-// musl's _start/_start_c path.
-extern "C" int __linx_group_worker_main(unsigned pe_id)
-    __attribute__((weak));
-extern "C" void __linx_group_worker_complete(int status)
-    __attribute__((weak, noreturn));
+// musl's _start/_start_c path.  The worker entry calls the image's ordinary
+// main(), then parks; main owns any shared-memory completion protocol.
 extern "C" void __linx_group_worker_start(void)
     __attribute__((weak, noreturn));
 
