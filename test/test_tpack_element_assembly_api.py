@@ -103,7 +103,7 @@ class TPackElementAssemblyAPI(unittest.TestCase):
             )
             self.assertIn("B.ASSEMBLE ${17:c}, ${18:c}", init)
             self.assertRegex(continuation, r"B\.IOT \$2, mask=1111, last")
-            self.assertNotIn("B.IOT $2, mask=1111, last, ->", continuation)
+            self.assertNotIn("B.IOT $2.reuse, mask=1111, last, ->", continuation)
             self.assertRegex(continuation, r'"@2Tr,@2Tr,@2Tr,')
 
             obj = work / "assemble.o"

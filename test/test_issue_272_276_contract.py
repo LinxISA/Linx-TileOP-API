@@ -42,7 +42,7 @@ class Issue272To276Contract(unittest.TestCase):
         self.assertIn('B.ASSEMBLE %c[Init]', init)
         self.assertEqual(init.count('"B.IOT '), 1)
         self.assertNotIn('->%[Dst]<%Z[Size]>', associated)
-        self.assertIn('B.IOT %[ParentRef], mask=1111, last', associated)
+        self.assertIn('B.IOT %[ParentRef].reuse, mask=1111, last', associated)
         self.assertIn('[ParentRef] "Tr"(dst.data())', associated)
         self.assertIn('B.ASSEMBLE %c[Init]', associated)
         self.assertEqual(associated.count('"B.IOT '), 2)

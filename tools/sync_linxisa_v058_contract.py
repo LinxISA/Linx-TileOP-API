@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project the reviewed LinxISA/PTO 0.58.3 engine catalog into this API."""
+"""Project the reviewed LinxISA and PTO development golden into this API."""
 
 from __future__ import annotations
 
@@ -12,14 +12,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "contracts" / "linxisa-v0.58-engine-ops.json"
-EXPECTED_COUNTS = {"CUBE": 12, "SFU": 57, "TLSU": 10, "VEC": 31}
-EXPECTED_COMMIT = "dd52a2e579d8058c0d8e33043e705122b340e73f"
-EXPECTED_TREE = "1cfc7343e714489f95f67592475e8b9f079241ee"
-EXPECTED_CATALOG_SHA256 = "34ecbcfa075166490b622647eb53c13a9c360848d6c7acb2e034d3e47f8c9a8a"
-EXPECTED_PTO_COMMIT = "e599a3d36ebfad43362ff591ea5e128816c684c7"
-EXPECTED_PTO_TREE = "abb6899d2e664e378ac9c1b77062670daa4d31b4"
-EXPECTED_PTO_ENCODING_SHA256 = "8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172"
-EXPECTED_PTO_CONTENT_SHA256 = "f299fe3d256c5d071e57bb4aaa2be2de2e4a386ae090048df1f73ae92d392678"
+DEFAULT_PTO_OUTPUT = ROOT / "contracts" / "pto-isa-0.58.7-tile-operations.json"
+EXPECTED_COUNTS = {"CUBE": 12, "SFU": 47, "TLSU": 28, "VEC": 32}
+EXPECTED_COMMIT = "f77a8960f61f97c264a90b7aee757f99891b0943"
+EXPECTED_TREE = "da085d3f000a5b92031c9694024dc9a7f3cdaa89"
+EXPECTED_CATALOG_SHA256 = "51ca9be275518d29ec48bed570b7a9bd441a65b9c5e6d4f79072f650ee732925"
+EXPECTED_PTO_COMMIT = "f0a876e449a95d26841c5ee7affb4c905ebc5f5b"
+EXPECTED_PTO_TREE = "fe9e8e050375fbce3f526d08acca13c37cd15830"
+EXPECTED_PTO_MANIFEST_SHA256 = "0c6d0b2a1ec0b49e32e13971e751a5ea19946351a3880bfdfcef0f50351944f7"
+EXPECTED_PTO_TILE_SHA256 = "533db9b8f31f118af5978de813cfaa3fa738de820ee24655faa2ee71f343a706"
+EXPECTED_IDENTITY = {
+    "release": "0.58.7",
+    "encoding_abi": "pto-isa-0.58.7-mode-function-v1",
+    "encoding_projection_sha256": "a5f78ecd707bde4a014542158ea257c783796b95fa4fbcce37742e41fee6a881",
+}
 
 
 def git(repo: Path, *args: str) -> str:
@@ -32,62 +38,114 @@ def git(repo: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def build_projection(source: Path) -> dict[str, object]:
-    source = source.resolve()
-    repo = Path(git(source.parent, "rev-parse", "--show-toplevel"))
-    if git(repo, "status", "--porcelain=v1", "--untracked-files=all"):
-        raise SystemExit(f"refusing dirty LinxISA source tree: {repo}")
-    commit = git(repo, "rev-parse", "HEAD")
-    tree = git(repo, "rev-parse", "HEAD^{tree}")
-    source_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
-    if (commit, tree, source_sha256) != (EXPECTED_COMMIT, EXPECTED_TREE, EXPECTED_CATALOG_SHA256):
-        raise SystemExit("LinxISA v0.58 source identity does not match the reviewed release")
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
-    data = json.loads(source.read_text(encoding="utf-8"))
-    if data.get("isa") != "LinxISA" or data.get("version") != "0.58.3":
-        raise SystemExit("source is not the LinxISA/PTO 0.58.3 canonical catalog")
-    engine_ops = data["state"]["engine_ops"]
-    if engine_ops["semantic_engine_counts"] != EXPECTED_COUNTS:
-        raise SystemExit("unexpected LinxISA v0.58 engine counts")
-    pto_lock_path = source.parent / "pto-spec.lock.json"
-    pto_lock = json.loads(pto_lock_path.read_text(encoding="utf-8"))
-    pto_identity = (
-        pto_lock.get("release"),
-        pto_lock.get("source", {}).get("commit"),
-        pto_lock.get("source", {}).get("tree"),
-        pto_lock.get("encoding_projection_sha256"),
-        pto_lock.get("content_sha256"),
+
+def require_clean_exact_repo(repo: Path, commit: str, tree: str, label: str) -> None:
+    if git(repo, "status", "--porcelain=v1", "--untracked-files=all"):
+        raise SystemExit(f"refusing dirty {label} source tree: {repo}")
+    actual = (git(repo, "rev-parse", "HEAD"), git(repo, "rev-parse", "HEAD^{tree}"))
+    if actual != (commit, tree):
+        raise SystemExit(f"{label} source identity does not match the reviewed golden")
+
+
+def load_sources(
+    source: Path, pto_root: Path
+) -> tuple[dict[str, object], dict[str, object], Path]:
+    source = source.resolve()
+    linx_repo = Path(git(source.parent, "rev-parse", "--show-toplevel"))
+    require_clean_exact_repo(linx_repo, EXPECTED_COMMIT, EXPECTED_TREE, "LinxISA v0.58.7")
+    if sha256(source) != EXPECTED_CATALOG_SHA256:
+        raise SystemExit("LinxISA catalog bytes do not match the reviewed golden")
+
+    pto_repo = Path(git(pto_root.resolve(), "rev-parse", "--show-toplevel"))
+    require_clean_exact_repo(pto_repo, EXPECTED_PTO_COMMIT, EXPECTED_PTO_TREE, "PTO ISA")
+    manifest_path = pto_repo / "spec" / "development-manifest.json"
+    tile_catalog_path = pto_repo / "spec" / "catalog" / "tile-operations.json"
+    if sha256(manifest_path) != EXPECTED_PTO_MANIFEST_SHA256:
+        raise SystemExit("PTO development manifest bytes do not match the reviewed golden")
+    if sha256(tile_catalog_path) != EXPECTED_PTO_TILE_SHA256:
+        raise SystemExit("PTO Tile catalog bytes do not match the reviewed golden")
+
+    linx_data = json.loads(source.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    tile_catalog = json.loads(tile_catalog_path.read_text(encoding="utf-8"))
+    if linx_data.get("isa") != "LinxISA" or linx_data.get("version") != "0.58.7":
+        raise SystemExit("source is not the reviewed LinxISA 0.58.7 catalog")
+    if manifest.get("status") != "development-not-published" or manifest.get("publication") is not None:
+        raise SystemExit("PTO golden must remain an unpublished development identity")
+    if manifest.get("identity") != EXPECTED_IDENTITY:
+        raise SystemExit("unexpected PTO development identity")
+    if manifest.get("catalog_counts", {}).get("tile_operations") != 119:
+        raise SystemExit("unexpected PTO development Tile operation count")
+    if tile_catalog.get("operation_count") != 119 or len(tile_catalog.get("operations", [])) != 119:
+        raise SystemExit("unexpected PTO Tile catalog inventory")
+
+    lock_path = source.parent / "pto-scalar-proposal.lock.json"
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    lock_identity = (
+        lock.get("status"),
+        lock.get("source", {}).get("commit"),
+        lock.get("source", {}).get("tree"),
+        lock.get("development_manifest", {}).get("sha256"),
+        lock.get("identity"),
+        lock.get("catalogs", {}).get("tile_operations", {}).get("sha256"),
+        lock.get("catalogs", {}).get("tile_operations", {}).get("count"),
     )
-    expected_pto_identity = (
-        "0.58.3",
+    expected_lock_identity = (
+        "development-not-published",
         EXPECTED_PTO_COMMIT,
         EXPECTED_PTO_TREE,
-        EXPECTED_PTO_ENCODING_SHA256,
-        EXPECTED_PTO_CONTENT_SHA256,
+        EXPECTED_PTO_MANIFEST_SHA256,
+        EXPECTED_IDENTITY,
+        EXPECTED_PTO_TILE_SHA256,
+        119,
     )
-    if pto_identity != expected_pto_identity:
-        raise SystemExit("LinxISA authority does not carry the reviewed PTO 0.58.3 lock")
+    if lock_identity != expected_lock_identity:
+        raise SystemExit("LinxISA authority does not carry the reviewed PTO development lock")
+    return linx_data, manifest, tile_catalog_path
 
-    relative = source.relative_to(repo).as_posix()
-    return {
-        "schema": "linx-tileop-api.engine-ops-projection.v1",
+
+def build_projection(source: Path, pto_root: Path) -> tuple[dict[str, object], bytes]:
+    linx_data, manifest, tile_catalog_path = load_sources(source, pto_root)
+    engine_ops = linx_data["state"]["engine_ops"]
+    if engine_ops["semantic_engine_counts"] != EXPECTED_COUNTS:
+        raise SystemExit("unexpected LinxISA v0.58.7 engine counts")
+    if sum(EXPECTED_COUNTS.values()) != 119:
+        raise SystemExit("engine counts do not cover the PTO development Tile catalog")
+
+    linx_repo = Path(git(source.resolve().parent, "rev-parse", "--show-toplevel"))
+    relative = source.resolve().relative_to(linx_repo).as_posix()
+    projection = {
+        "schema": "linx-tileop-api.engine-ops-projection.v2",
         "profile": "v0.58",
         "source": {
             "repo": "https://github.com/LinxISA/linx-isa",
-            "release": "0.58.3",
-            "commit": commit,
-            "tree": tree,
+            "release": "0.58.7",
+            "commit": EXPECTED_COMMIT,
+            "tree": EXPECTED_TREE,
             "path": relative,
-            "sha256": source_sha256,
+            "sha256": EXPECTED_CATALOG_SHA256,
         },
         "pto_source": {
-            "repo": pto_lock["source"]["repository"],
-            "release": pto_lock["release"],
-            "commit": pto_lock["source"]["commit"],
-            "tree": pto_lock["source"]["tree"],
-            "encoding_abi": pto_lock["encoding_abi"],
-            "encoding_projection_sha256": pto_lock["encoding_projection_sha256"],
-            "content_sha256": pto_lock["content_sha256"],
+            "repo": "https://github.com/PTO-ISA/pto-spec.git",
+            "status": manifest["status"],
+            "publication": manifest["publication"],
+            "release": EXPECTED_IDENTITY["release"],
+            "commit": EXPECTED_PTO_COMMIT,
+            "tree": EXPECTED_PTO_TREE,
+            "development_manifest": {
+                "path": "spec/development-manifest.json",
+                "sha256": EXPECTED_PTO_MANIFEST_SHA256,
+            },
+            "encoding_abi": EXPECTED_IDENTITY["encoding_abi"],
+            "encoding_projection_sha256": EXPECTED_IDENTITY["encoding_projection_sha256"],
+            "tile_catalog": {
+                "path": "spec/catalog/tile-operations.json",
+                "sha256": EXPECTED_PTO_TILE_SHA256,
+                "count": 119,
+            },
         },
         "semantic_engine_counts": engine_ops["semantic_engine_counts"],
         "tepl_carrier": {
@@ -125,8 +183,9 @@ def build_projection(source: Path) -> dict[str, object]:
             }
             for row in engine_ops["cube"]["legal_aliases"]
         ],
-        "deleted_tile_names": data["retired_encodings"]["deleted_tile_names"],
+        "deleted_tile_names": linx_data["retired_encodings"]["deleted_tile_names"],
     }
+    return projection, tile_catalog_path.read_bytes()
 
 
 def render(projection: dict[str, object]) -> str:
@@ -135,19 +194,26 @@ def render(projection: dict[str, object]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("source", type=Path, help="released isa/v0.58/linxisa-v0.58.json")
+    parser.add_argument("source", type=Path, help="reviewed isa/v0.58/linxisa-v0.58.json")
+    parser.add_argument("--pto-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--pto-output", type=Path, default=DEFAULT_PTO_OUTPUT)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
 
-    expected = render(build_projection(args.source))
+    projection, tile_catalog = build_projection(args.source, args.pto_root)
+    expected = render(projection)
     if args.check:
         if not args.output.exists() or args.output.read_text(encoding="utf-8") != expected:
             raise SystemExit(f"stale LinxISA v0.58 projection: {args.output}")
+        if not args.pto_output.exists() or args.pto_output.read_bytes() != tile_catalog:
+            raise SystemExit(f"stale PTO development Tile catalog: {args.pto_output}")
         return 0
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(expected, encoding="utf-8")
+    args.pto_output.parent.mkdir(parents=True, exist_ok=True)
+    args.pto_output.write_bytes(tile_catalog)
     return 0
 
 

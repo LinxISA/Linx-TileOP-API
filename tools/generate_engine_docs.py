@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Generate the wrapper engine compatibility view from the pinned projection.
 
-The output mirrors the active portion exposed by this wrapper. The checked-in
-projection is historical LinxISA/PTO 0.58.3 data and is not a replacement for
-the PTO ISA 0.58.7 catalog.
+The output mirrors the reviewed PTO ISA 0.58.7 development catalog
 (spec/catalog/tile-operations.json) for the four architectural engine
 classes: **VEC**, **SFU**, **TLSU**, and **CUBE**.  Engine and
 classification are decoupled (per ADR 0057): TEXP/TLOG/... are SFU-executed
@@ -18,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 
@@ -29,6 +28,24 @@ OUTPUT = ROOT / "docs" / "tileop-usage" / "generated" / "engines.md"
 def render() -> str:
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
     deleted_names = set(contract.get("deleted_tile_names", []))
+    implementation_text = "\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in (ROOT / "include").rglob("*")
+        if path.is_file()
+    )
+
+    def wrapper_status(name: str) -> str:
+        if re.search(rf"\b{re.escape(name)}\b", implementation_text):
+            return "源码有引用；不代表完整语义一致"
+        return "尚无 wrapper"
+
+    operation_names = {
+        row["name"]
+        for key in ("tepl_ops", "tlsu_ops", "cube_ops")
+        for row in contract[key]
+    }
+    source_referenced = sum(wrapper_status(name).startswith("源码有引用")
+                            for name in operation_names)
     lines = [
         "# LinxISA / PTO ISA v0.58.7 wrapper engine compatibility view",
         "",
@@ -37,8 +54,10 @@ def render() -> str:
         "TEPL 仍是唯一的编译 carrier 标识。`BSTART.VEC` 和 `BSTART.SFU` 是特定引擎的汇编别名；",
         "inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。",
         "",
-        "下表根据本仓库固定的 LinxISA 历史投影生成，数据记录在",
+        "下表根据本仓库固定的 LinxISA/PTO development golden 投影生成，数据记录在",
         "[`contracts/linxisa-v0.58-engine-ops.json`](../../../contracts/linxisa-v0.58-engine-ops.json) 中。",
+        f"Golden 共 {len(operation_names)} 项；其中 {source_referenced} 项在 `include/` 有名称引用，",
+        f"{len(operation_names) - source_referenced} 项明确没有 wrapper。名称引用不证明 ASL/NDF 语义完整实现。",
         "",
     ]
 
@@ -48,8 +67,8 @@ def render() -> str:
             [
                 f"## {engine}",
                 "",
-                "| API / 操作 | 规范汇编 | 逻辑 selector | 分类 |",
-                "| --- | --- | ---: | --- |",
+                "| Golden 操作 | 规范汇编 | 逻辑 selector | 分类 | Wrapper 状态 |",
+                "| --- | --- | ---: | --- | --- |",
             ]
         )
         for row in rows:
@@ -57,7 +76,8 @@ def render() -> str:
                 continue
             lines.append(
                 f"| `{row['name']}` | `BSTART.{engine} {row['name']}` | "
-                f"{row['logical_selector']} | {row['classification']} |"
+                f"{row['logical_selector']} | {row['classification']} | "
+                f"{wrapper_status(row['name'])} |"
             )
         lines.append("")
 
@@ -66,14 +86,17 @@ def render() -> str:
             [
                 f"## {engine}",
                 "",
-                "| 操作 | 规范 block 起始指令 | Function |",
-                "| --- | --- | ---: |",
+                "| Golden 操作 | 规范 block 起始指令 | Function | Wrapper 状态 |",
+                "| --- | --- | ---: | --- |",
             ]
         )
         for row in contract[key]:
             if row["name"] in deleted_names:
                 continue
-            lines.append(f"| `{row['name']}` | `{row['mnemonic']}` | {row['function']} |")
+            lines.append(
+                f"| `{row['name']}` | `{row['mnemonic']}` | {row['function']} | "
+                f"{wrapper_status(row['name'])} |"
+            )
         lines.append("")
 
     lines.extend(
@@ -81,7 +104,7 @@ def render() -> str:
             "## 分类语义",
             "",
             "PTO ISA 0.58.7 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；",
-            "其底层投影仍保留历史版本的 selector 数据。`elementwise-tile-tile`",
+            "其底层投影记录当前 development golden selector 数据。`elementwise-tile-tile`",
             "和 `tile-scalar-and-immediate` 类别在 VEC 上执行逐元素操作，但其中的",
             "`TEXP`、`TLOG`、`TRECIP`、`TSQRT`、`TRSQRT` 由 SFU 执行。",
             "`reduce-and-expand`、`layout-and-rearrangement` 和 `irregular-and-complex` 类别由 SFU 执行。",

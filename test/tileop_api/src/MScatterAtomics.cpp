@@ -1,6 +1,6 @@
 // TLSU GM_RED_VALUE / GM_RED_POPC family: atomic reduction scatter at logical
 // element indices with no destination (PTO ISA functions 19-27; canonical
-// BSTART.TLSU MSCATTER.<op>). Requires a function-aware assembler (0.58.6+) to
+// BSTART.MSCATTER.<op>). Requires a function-aware assembler (0.58.6+) to
 // lower the bundles. U32 is legal for every reduction member; POPC takes only
 // an index tile.
 #include <common/pto_tileop.hpp>
