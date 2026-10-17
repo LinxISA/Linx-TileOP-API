@@ -269,7 +269,7 @@ asm volatile(
       PTO_CUBE_TCVT_DATR_ASM
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      "B.IOT %3.reuse, mask=1111, last, ->%0<%Z4>\n"
       : "=Tr"(dst.data())
       : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -286,7 +286,7 @@ asm volatile(
       PTO_CUBE_TCVT_DATR_ASM
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM %[tcvt_row], 0, ->lb1\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      "B.IOT %3.reuse, mask=1111, last, ->%0<%Z4>\n"
       : "=Tr"(dst.data())
       : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -303,7 +303,7 @@ asm volatile(
       PTO_CUBE_TCVT_DATR_ASM
       "B.DIM %[tcvt_col], 0, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      "B.IOT %3.reuse, mask=1111, last, ->%0<%Z4>\n"
       : "=Tr"(dst.data())
       : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -320,7 +320,7 @@ asm volatile(
       PTO_CUBE_TCVT_DATR_ASM
       "B.DIM %[tcvt_col], 0, ->lb0\n"
       "B.DIM %[tcvt_row], 0, ->lb1\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      "B.IOT %3.reuse, mask=1111, last, ->%0<%Z4>\n"
       : "=Tr"(dst.data())
       : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -380,7 +380,7 @@ asm volatile(
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
       "B.DIM zero, %c7, ->lb2\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      "B.IOT %3.reuse, mask=1111, last, ->%0<%Z4>\n"
       : "=Tr"(dst.data())
       : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -406,7 +406,7 @@ asm volatile(
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM %[tcvt_row], 0, ->lb1\n"
       "B.DIM zero, %c7, ->lb2\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      "B.IOT %3.reuse, mask=1111, last, ->%0<%Z4>\n"
       : "=Tr"(dst.data())
       : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -432,7 +432,7 @@ asm volatile(
       "B.DIM %[tcvt_col], 0, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
       "B.DIM zero, %c7, ->lb2\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      "B.IOT %3.reuse, mask=1111, last, ->%0<%Z4>\n"
       : "=Tr"(dst.data())
       : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -458,7 +458,7 @@ asm volatile(
       "B.DIM %[tcvt_col], 0, ->lb0\n"
       "B.DIM %[tcvt_row], 0, ->lb1\n"
       "B.DIM zero, %c7, ->lb2\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      "B.IOT %3.reuse, mask=1111, last, ->%0<%Z4>\n"
       : "=Tr"(dst.data())
       : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -492,12 +492,12 @@ inline void TMOV(Tile &dst, const Tile &src) {
   const size_t valid_row = src.GetValidRow();
   if constexpr (Tile::ValidCol > 0 && Tile::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TMOV, %D[DataType]\n"
+    "BSTART.TMOV %D[DataType]\n"
     PTO_TMOV_LAYOUT_ASM
     "B.DIM zero, %c[ValidCol], ->lb0\n"
     "B.DIM zero, %c[ValidRow], ->lb1\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
-    "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+    "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=&Tr"(dst.data())
     : [Src] "Tr"(src.data()),
       [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
@@ -508,12 +508,12 @@ asm volatile(
       [ElemLayout] "i"(local_layout_code_v<Tile>));  }
   else if constexpr (Tile::ValidCol > 0 && Tile::ValidRow < 0) {
 asm volatile(
-    "BSTART.TLSU TMOV, %D[DataType]\n"
+    "BSTART.TMOV %D[DataType]\n"
     PTO_TMOV_LAYOUT_ASM
     "B.DIM zero, %c[ValidCol], ->lb0\n"
     "B.DIM %[ValidRow], 0, ->lb1\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
-    "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+    "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=&Tr"(dst.data())
     : [Src] "Tr"(src.data()),
       [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
@@ -524,12 +524,12 @@ asm volatile(
       [ElemLayout] "i"(local_layout_code_v<Tile>));  }
   else if constexpr (Tile::ValidCol < 0 && Tile::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TMOV, %D[DataType]\n"
+    "BSTART.TMOV %D[DataType]\n"
     PTO_TMOV_LAYOUT_ASM
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM zero, %c[ValidRow], ->lb1\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
-    "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+    "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=&Tr"(dst.data())
     : [Src] "Tr"(src.data()),
       [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
@@ -540,12 +540,12 @@ asm volatile(
       [ElemLayout] "i"(local_layout_code_v<Tile>));  }
   else {
 asm volatile(
-    "BSTART.TLSU TMOV, %D[DataType]\n"
+    "BSTART.TMOV %D[DataType]\n"
     PTO_TMOV_LAYOUT_ASM
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM %[ValidRow], 0, ->lb1\n"
     "B.DIM zero, %c[PhysicalCol], ->lb2\n"
-    "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+    "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=&Tr"(dst.data())
     : [Src] "Tr"(src.data()),
       [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
@@ -574,12 +574,12 @@ PTO_SHARED_INLINE void TMOV(Tile &dst,
                 "Local B.SUBVIEW size must fit SizeCode 1..10");
   const uintptr_t range_base = src.GetRangeBase();
   asm volatile(
-      "BSTART.TLSU TMOV, %D[DataType]\n"
+      "BSTART.TMOV %D[DataType]\n"
     PTO_TMOV_LAYOUT_ASM
       "B.DIM zero, %c[ValidCol], ->lb0\n"
       "B.DIM zero, %c[ValidRow], ->lb1\n"
       "B.DIM zero, %c[PhysicalCol], ->lb2\n"
-      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
       "B.SUBVIEW 0, %[RangeBase], 0, %c[SubviewSize]\n"
       : [Dst] "=&Tr"(dst.data())
       : [Src] "Tr"(src.data()),
@@ -608,7 +608,7 @@ void TLOAD2_ND2NZ(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
                     "GM_SHAPE should ND and TILE_SHAPE should be Nz ");
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR ND2NZ, %D[__pto_DstType], Null\n"
     "B.DIM zero, %c[__pto_VCOL], ->lb0\n"
     "B.DIM zero, %c[__pto_VROW], ->lb1\n"
@@ -626,7 +626,7 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
 asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR ND2NZ, %D[__pto_DstType], Null\n"
     "B.DIM zero, %c[__pto_VCOL], ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -644,7 +644,7 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR ND2NZ, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM zero, %c[__pto_VROW], ->lb1\n"
@@ -662,7 +662,7 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR ND2NZ, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -686,7 +686,7 @@ void TLOAD2_ND2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
                     "GM_SHAPE should ND and TILE_SHAPE should be Zn ");
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR ND2ZN, %D[__pto_DstType], Null\n"
     "B.DIM zero, %c[__pto_VCOL], ->lb0\n"
     "B.DIM zero, %c[__pto_VROW], ->lb1\n"
@@ -704,7 +704,7 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
 asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR ND2ZN, %D[__pto_DstType], Null\n"
     "B.DIM zero, %c[__pto_VCOL], ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -722,7 +722,7 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR ND2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM zero, %c[__pto_VROW], ->lb1\n"
@@ -740,7 +740,7 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR ND2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -763,7 +763,7 @@ void TLOAD2_DN2ZN(tile_shape &dst1, tile_shape &dst0, gm_shape &src) {
   static_assert(!gm_shape::isRowMajor && is_Nz_layout<tile_shape>::value,
                     "GM_SHAPE should DN and TILE_SHAPE should be Zn ");
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR DN2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -787,12 +787,12 @@ void TSTORE2_DN2DN(gm_shape &dst, tile_shape &src1, tile_shape &src0) {
                     "GM_SHAPE should DN and TILE_SHAPE should be DN");
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TSTORE, %D[__pto_SrcType]\n"
+    "BSTART.TSTORE %D[__pto_SrcType]\n"
     "B.DATR NORM, %D[__pto_DstType], Null\n"
     "B.DIM zero, %c[__pto_VCOL], ->lb0\n"
     "B.DIM zero, %c[__pto_VROW], ->lb1\n"
     "B.DIM zero, %c[__pto_COL], ->lb2\n"
-    "B.IOT %[__pto_s0], %[s1], mask=1111, last\n"
+    "B.IOT %[__pto_s0].reuse, %[s1].reuse, mask=1111, last\n"
     "B.IOR [%[__pto_d0],%[__pto_GmStride]], []\n"
     :
     : [__pto_d0]"r"(dst.data()), [__pto_s0]"Tr"(src0.data()), [s1]"Tr"(src1.data()),
@@ -803,12 +803,12 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
 asm volatile(
-    "BSTART.TLSU TSTORE, %D[__pto_SrcType]\n"
+    "BSTART.TSTORE %D[__pto_SrcType]\n"
     "B.DATR NORM, %D[__pto_DstType], Null\n"
     "B.DIM zero, %c[__pto_VCOL], ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %c[__pto_COL], ->lb2\n"
-    "B.IOT %[__pto_s0], %[s1], mask=1111, last\n"
+    "B.IOT %[__pto_s0].reuse, %[s1].reuse, mask=1111, last\n"
     "B.IOR [%[__pto_d0],%[__pto_GmStride]], []\n"
     :
     : [__pto_d0]"r"(dst.data()), [__pto_s0]"Tr"(src0.data()), [s1]"Tr"(src1.data()),
@@ -819,12 +819,12 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TSTORE, %D[__pto_SrcType]\n"
+    "BSTART.TSTORE %D[__pto_SrcType]\n"
     "B.DATR NORM, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM zero, %c[__pto_VROW], ->lb1\n"
     "B.DIM zero, %c[__pto_COL], ->lb2\n"
-    "B.IOT %[__pto_s0], %[s1], mask=1111, last\n"
+    "B.IOT %[__pto_s0].reuse, %[s1].reuse, mask=1111, last\n"
     "B.IOR [%[__pto_d0],%[__pto_GmStride]], []\n"
     :
     : [__pto_d0]"r"(dst.data()), [__pto_s0]"Tr"(src0.data()), [s1]"Tr"(src1.data()),
@@ -835,12 +835,12 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-    "BSTART.TLSU TSTORE, %D[__pto_SrcType]\n"
+    "BSTART.TSTORE %D[__pto_SrcType]\n"
     "B.DATR NORM, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
     "B.DIM zero, %c[__pto_COL], ->lb2\n"
-    "B.IOT %[__pto_s0], %[s1], mask=1111, last\n"
+    "B.IOT %[__pto_s0].reuse, %[s1].reuse, mask=1111, last\n"
     "B.IOR [%[__pto_d0],%[__pto_GmStride]], []\n"
     :
     : [__pto_d0]"r"(dst.data()), [__pto_s0]"Tr"(src0.data()), [s1]"Tr"(src1.data()),
@@ -856,7 +856,7 @@ void TLOAD4_ND2NZ(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
   static_assert(gm_shape::isRowMajor && is_Nz_layout<tile_shape>::value,
                     "GM_SHAPE should ND and TILE_SHAPE should be Nz ");
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR ND2NZ, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -881,7 +881,7 @@ void TLOAD4_ND2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
   static_assert(gm_shape::isRowMajor && is_Zn_layout<tile_shape>::value,
                     "GM_SHAPE should ND and TILE_SHAPE should be Nz ");
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR ND2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -906,7 +906,7 @@ void TLOAD4_DN2ZN(tile_shape &dst3, tile_shape &dst2, tile_shape &dst1, tile_sha
   static_assert(!gm_shape::isRowMajor && is_Zn_layout<tile_shape>::value,
                     "GM_SHAPE should DN and TILE_SHAPE should be Zn ");
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[__pto_SrcType]\n"
+    "BSTART.TLOAD %D[__pto_SrcType]\n"
     "B.DATR DN2ZN, %D[__pto_DstType], Null\n"
     "B.DIM %[__pto_VCOL], 0, ->lb0\n"
     "B.DIM %[__pto_VROW], 0, ->lb1\n"
@@ -968,12 +968,12 @@ inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
                 "per DavinciOO v5 B.IOT encoding");
   if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU MGATHER, %D[DataType]\n"
+      "BSTART.MGATHER %D[DataType]\n"
       PTO_GATHER_PAD_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOT %[off].reuse, mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -988,12 +988,12 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
-      "BSTART.TLSU MGATHER, %D[DataType]\n"
+      "BSTART.MGATHER %D[DataType]\n"
       PTO_GATHER_PAD_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOT %[off].reuse, mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -1008,12 +1008,12 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU MGATHER, %D[DataType]\n"
+      "BSTART.MGATHER %D[DataType]\n"
       PTO_GATHER_PAD_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOT %[off].reuse, mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -1028,12 +1028,12 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-      "BSTART.TLSU MGATHER, %D[DataType]\n"
+      "BSTART.MGATHER %D[DataType]\n"
       PTO_GATHER_PAD_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOT %[off].reuse, mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -1058,12 +1058,12 @@ inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
                 "per DavinciOO v5 B.IOT encoding");
   if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      "BSTART.MSCATTER %D[DataType]\n"
       PTO_SCATTER_LAYOUT_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=1111, last\n"
+      "B.IOT %[src].reuse, %[off].reuse, mask=1111, last\n"
       "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
@@ -1076,12 +1076,12 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
-      "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      "BSTART.MSCATTER %D[DataType]\n"
       PTO_SCATTER_LAYOUT_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=1111, last\n"
+      "B.IOT %[src].reuse, %[off].reuse, mask=1111, last\n"
       "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
@@ -1094,12 +1094,12 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      "BSTART.MSCATTER %D[DataType]\n"
       PTO_SCATTER_LAYOUT_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=1111, last\n"
+      "B.IOT %[src].reuse, %[off].reuse, mask=1111, last\n"
       "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
@@ -1112,12 +1112,12 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-      "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      "BSTART.MSCATTER %D[DataType]\n"
       PTO_SCATTER_LAYOUT_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=1111, last\n"
+      "B.IOT %[src].reuse, %[off].reuse, mask=1111, last\n"
       "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
@@ -1142,12 +1142,12 @@ inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
                 "per DavinciOO v5 B.IOT encoding");
   if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
+      "BSTART.MGATHER.MASK %D[DataType]\n"
       PTO_GATHER_PAD_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOT %[off].reuse, %[mask].reuse, mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -1163,12 +1163,12 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
-      "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
+      "BSTART.MGATHER.MASK %D[DataType]\n"
       PTO_GATHER_PAD_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOT %[off].reuse, %[mask].reuse, mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -1184,12 +1184,12 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
+      "BSTART.MGATHER.MASK %D[DataType]\n"
       PTO_GATHER_PAD_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOT %[off].reuse, %[mask].reuse, mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -1205,12 +1205,12 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-      "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
+      "BSTART.MGATHER.MASK %D[DataType]\n"
       PTO_GATHER_PAD_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOT %[off].reuse, %[mask].reuse, mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
       "B.IOR [%[base]], []\n"
       : [dst] "=Tr"(dst.data())
       : [base] "r"(src.data()), [off] "Tr"(offset.data()),
@@ -1237,13 +1237,13 @@ inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
                 "per DavinciOO v5 B.IOT encoding");
   if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      "BSTART.MSCATTER.MASK %D[DataType]\n"
       PTO_SCATTER_LAYOUT_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=1111\n"
-      "B.IOT %[mask], mask=1111, last\n"
+      "B.IOT %[src].reuse, %[off].reuse, mask=1111\n"
+      "B.IOT %[mask].reuse, mask=1111, last\n"
       "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
@@ -1256,13 +1256,13 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
 asm volatile(
-      "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      "BSTART.MSCATTER.MASK %D[DataType]\n"
       PTO_SCATTER_LAYOUT_ASM
       "B.DIM zero, %c[ValidCol], ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=1111\n"
-      "B.IOT %[mask], mask=1111, last\n"
+      "B.IOT %[src].reuse, %[off].reuse, mask=1111\n"
+      "B.IOT %[mask].reuse, mask=1111, last\n"
       "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
@@ -1275,13 +1275,13 @@ asm volatile(
       : "memory");  }
   else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      "BSTART.MSCATTER.MASK %D[DataType]\n"
       PTO_SCATTER_LAYOUT_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM zero, %c[ValidRow], ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=1111\n"
-      "B.IOT %[mask], mask=1111, last\n"
+      "B.IOT %[src].reuse, %[off].reuse, mask=1111\n"
+      "B.IOT %[mask].reuse, mask=1111, last\n"
       "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
@@ -1294,13 +1294,13 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-      "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      "BSTART.MSCATTER.MASK %D[DataType]\n"
       PTO_SCATTER_LAYOUT_ASM
       "B.DIM %[ValidCol], 0, ->LB0\n"
       "B.DIM %[ValidRow], 0, ->LB1\n"
       "B.DIM zero, %c[Col], ->LB2\n"
-      "B.IOT %[src], %[off], mask=1111\n"
-      "B.IOT %[mask], mask=1111, last\n"
+      "B.IOT %[src].reuse, %[off].reuse, mask=1111\n"
+      "B.IOT %[mask].reuse, mask=1111, last\n"
       "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
@@ -2488,7 +2488,7 @@ blkv_bf16x2_max(const BLKV_BF16X2_TYPE &src_l,
 //
 // Block-start function values per the pinned LinxISA v0.58 catalog
 // (contracts/linxisa-v0.58-engine-ops.json):
-//   named TLSU starts: BSTART.TLSU TLOAD/TSTORE/TMOV/TPREFETCH/MGATHER/MSCATTER
+//   named TLSU starts: BSTART.TLOAD/TSTORE/TMOV/TPREFETCH/MGATHER/MSCATTER
 //                    MGATHER_MASK=6 MSCATTER_MASK=7 MGATHER_CAS=8 GMOV=13
 //   named CUBE starts: TMATMUL, TMATMUL.BIAS, TMATMUL.ACC, TMATMULMX,
 //                   TMATMULMX.BIAS=5, TMATMULMX.ACC=6,
@@ -2498,11 +2498,11 @@ blkv_bf16x2_max(const BLKV_BF16X2_TYPE &src_l,
 // are rendered from the TEPL Mode/Function carrier without changing encoding.
 // The historical `TMATMUL*.FIXP` suffix was an implementation-local name;
 // PTO-ISA 0.58 carries post-processing through the B.FPATR attribute, so the
-// canonical emission is `BSTART.CUBE TMATMUL` + `B.FPATR`.
+// canonical emission is `BSTART.TMATMUL` + `B.FPATR`.
 // All variants below are the NORM (no layout conversion) generic form.
 //===----------------------------------------------------------------------===//
 
-// TLOAD: GM -> Local Tile (BSTART.TLSU TLOAD). dst[i,j] = src[r0+i, c0+j].
+// TLOAD: GM -> Local Tile (BSTART.TLOAD). dst[i,j] = src[r0+i, c0+j].
 template <is_tile_data_v tile_shape, is_global_data_v gm_shape>
   requires(!tile_shape::IsCubeLayout)
 void TLOAD(tile_shape &dst, gm_shape &src) {
@@ -2539,7 +2539,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
         const uintptr_t range_base =
             static_cast<uintptr_t>(dst.GetRangeBase());
         asm volatile(
-          "BSTART.TLSU TLOAD, %D[SrcType]\n"
+          "BSTART.TLOAD %D[SrcType]\n"
           "B.DIM zero, %c[VCOL], ->lb0\n"
           "B.DIM zero, %c[VROW], ->lb1\n"
           "B.DIM zero, %c[COL], ->lb2\n"
@@ -2565,7 +2565,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
           register uintptr_t range_base asm("r" #N) = \
               static_cast<uintptr_t>(dst.GetRangeBase()); \
           asm volatile( \
-            "BSTART.TLSU TLOAD, %D[SrcType]\n" \
+            "BSTART.TLOAD %D[SrcType]\n" \
             "B.DIM zero, %c[VCOL], ->lb0\n" \
             "B.DIM zero, %c[VROW], ->lb1\n" \
             "B.DIM zero, %c[COL], ->lb2\n" \
@@ -2608,7 +2608,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       const uintptr_t range_base =
           static_cast<uintptr_t>(dst.GetRangeBase());
       asm volatile(
-        "BSTART.TLSU TLOAD, %D[SrcType]\n"
+        "BSTART.TLOAD %D[SrcType]\n"
         "B.DIM zero, %c[VCOL], ->lb0\n"
         "B.DIM zero, %c[VROW], ->lb1\n"
         "B.DIM zero, %c[COL], ->lb2\n"
@@ -2634,7 +2634,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
         register uintptr_t range_base asm("r" #N) = \
             static_cast<uintptr_t>(dst.GetRangeBase()); \
         asm volatile( \
-          "BSTART.TLSU TLOAD, %D[SrcType]\n" \
+          "BSTART.TLOAD %D[SrcType]\n" \
           "B.DIM zero, %c[VCOL], ->lb0\n" \
           "B.DIM zero, %c[VROW], ->lb1\n" \
           "B.DIM zero, %c[COL], ->lb2\n" \
@@ -2676,7 +2676,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
   // form. Per-dim SS/SD/DS/DD dispatch mirrors TLOAD_CUBE.
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2692,7 +2692,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       : "memory");
   } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2708,7 +2708,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       : "memory");
   } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2724,7 +2724,7 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
       : "memory");
   } else {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2755,11 +2755,11 @@ void TLOAD_ASS(tile_shape &dst, const gm_shape &src) {
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOT %[d0], mask=1111, last\n"
+    "B.IOT %[d0].reuse, mask=1111, last\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
     :
     : [d0] "Tr"(dst.data()), [s0] "r"(src.data()),
@@ -2791,11 +2791,11 @@ void TLOAD_ASS(
   if constexpr (RegSrc == 0 || RegSrc == range::AutoRegSrc) {
     const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
     asm volatile(
-      "BSTART.TLSU TLOAD, %D[SrcType]\n"
+      "BSTART.TLOAD %D[SrcType]\n"
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[COL], ->lb2\n"
-      "B.IOT %[d0], mask=1111, last\n"
+      "B.IOT %[d0].reuse, mask=1111, last\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       "B.IOR [%[s0],%[GmStride]], []\n"
       :
@@ -2813,11 +2813,11 @@ void TLOAD_ASS(
     register uintptr_t range_base asm("r" #N) =                               \
         static_cast<uintptr_t>(dst.GetRangeBase());                           \
     asm volatile(                                                             \
-      "BSTART.TLSU TLOAD, %D[SrcType]\n"                                      \
+      "BSTART.TLOAD %D[SrcType]\n"                                      \
       "B.DIM zero, %c[VCOL], ->lb0\n"                                         \
       "B.DIM zero, %c[VROW], ->lb1\n"                                         \
       "B.DIM zero, %c[COL], ->lb2\n"                                          \
-      "B.IOT %[d0], mask=1111, last\n"                                        \
+      "B.IOT %[d0].reuse, mask=1111, last\n"                                        \
       "B.ASSEMBLE %c[Init], %c[Last], r" #N ", %c[Off], %c[WriterSize]\n"     \
       "B.IOR [%[s0],%[GmStride]], []\n"                                       \
       :                                                                       \
@@ -2861,7 +2861,7 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
   // ASL B.DIM: dynamic dims load from a GPR; per-dim SS/SD/DS/DD dispatch.
   if constexpr (shp::ValidCol > 0 && shp::ValidRow > 0) {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2878,7 +2878,7 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
       : "memory");
   } else if constexpr (shp::ValidCol > 0 && shp::ValidRow < 0) {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2895,7 +2895,7 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
       : "memory");
   } else if constexpr (shp::ValidCol < 0 && shp::ValidRow > 0) {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2912,7 +2912,7 @@ PTO_SHARED_INLINE SharedTile<shp> TLOAD(const gm_shape &src) {
       : "memory");
   } else {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2944,7 +2944,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
   // ASL B.DIM: dynamic dims load from a GPR; per-dim SS/SD/DS/DD dispatch.
   if constexpr (shp::ValidCol > 0 && shp::ValidRow > 0) {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2961,7 +2961,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       : "memory");
   } else if constexpr (shp::ValidCol > 0 && shp::ValidRow < 0) {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2978,7 +2978,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       : "memory");
   } else if constexpr (shp::ValidCol < 0 && shp::ValidRow > 0) {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -2995,7 +2995,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src) {
       : "memory");
   } else {
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
@@ -3053,7 +3053,7 @@ PTO_SHARED_INLINE void TLOAD(SharedTile<shp> &dst, const gm_shape &src,
   uint64_t start_word = params.start_word;
   asm("" : "+r"(start_word));
   asm volatile(
-      "BSTART.TLSU TLOAD, %D[SrcType]\n"
+      "BSTART.TLOAD %D[SrcType]\n"
       ".if %c[WeightLayout] == 10\nB.DATR OHWI2NK, DTYPE_NONE, Zero\n"
       ".elseif %c[WeightLayout] == 11\nB.DATR OIHW2NK, DTYPE_NONE, Zero\n"
       ".endif\n"
@@ -3096,7 +3096,7 @@ PTO_SHARED_INLINE void TLOAD_SLOT(const gm_shape &src,
   asm("" : "+r"(shape_word));
   asm("" : "+r"(start_word));
   asm volatile(
-      "BSTART.TLSU TLOAD, %D[SrcType]\n"
+      "BSTART.TLOAD %D[SrcType]\n"
       ".if %c[WeightLayout] == 10\nB.DATR OHWI2NK, DTYPE_NONE, Zero\n"
       ".elseif %c[WeightLayout] == 11\nB.DATR OIHW2NK, DTYPE_NONE, Zero\n"
       ".endif\n"
@@ -3131,11 +3131,11 @@ PTO_SHARED_INLINE void TLOAD_ASS(SharedTile<shp> &dst, const gm_shape &src) {
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS %S[d0], mask=1111\n"
+    "B.IOS %S[d0].reuse, mask=1111\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
     :
     : [d0] "Sr"(dst.handle_ref()), [s0] "r"(src.data()),
@@ -3176,11 +3176,11 @@ PTO_SHARED_INLINE void TLOAD_ASS(
                 "not supported; use the default or *_at_reg plain forms");
   const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[SrcType]\n"
+    "BSTART.TLOAD %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS %S[d0], mask=1111\n"
+    "B.IOS %S[d0].reuse, mask=1111\n"
     "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
     "B.IOR [%[s0],%[GmStride]], []\n"
     :
@@ -3214,11 +3214,11 @@ void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src) {
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   asm volatile(
-    "BSTART.TLSU TLOAD, %D[DataType]\n"
+    "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
-    "B.IOT %[Dst], mask=1111, last\n"
+    "B.IOT %[Dst].reuse, mask=1111, last\n"
     "B.IOR [%[Base],%[RowStrideBytes]], []\n"
     :
     : [Dst] "Tr"(dst.data()), [Base] "r"(src.data()),
@@ -3230,7 +3230,7 @@ void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src) {
     : "memory");
 }
 
-// TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
+// TSTORE: Tile -> GM (BSTART.TSTORE). dst[r0+i, c0+j] = src[i,j].
 template <is_global_data_v gm_shape, is_tile_data_v tile_shape>
   requires(!tile_shape::IsCubeLayout || is_subview_v<tile_shape> ||
            is_assemble_v<tile_shape>)
@@ -3255,11 +3255,11 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
         const uintptr_t range_base =
             static_cast<uintptr_t>(src.GetRangeBase());
         asm volatile(
-          "BSTART.TLSU TSTORE, %D[SrcType]\n"
+          "BSTART.TSTORE %D[SrcType]\n"
           "B.DIM zero, %c[VCOL], ->lb0\n"
           "B.DIM zero, %c[VROW], ->lb1\n"
           "B.DIM zero, %c[COL], ->lb2\n"
-          "B.IOS %S[s0], mask=1111\n"
+          "B.IOS %S[s0].reuse, mask=1111\n"
           "B.SUBVIEW %c[SrcSelect], %[RegSrc], %c[Off], %c[SubSize]\n"
           "B.IOR [%[d0],%[GmStride]], []\n"
           :
@@ -3278,11 +3278,11 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
           register uintptr_t range_base asm("r" #N) = \
               static_cast<uintptr_t>(src.GetRangeBase()); \
           asm volatile( \
-            "BSTART.TLSU TSTORE, %D[SrcType]\n" \
+            "BSTART.TSTORE %D[SrcType]\n" \
             "B.DIM zero, %c[VCOL], ->lb0\n" \
             "B.DIM zero, %c[VROW], ->lb1\n" \
             "B.DIM zero, %c[COL], ->lb2\n" \
-            "B.IOS %S[s0], mask=1111\n" \
+            "B.IOS %S[s0].reuse, mask=1111\n" \
             "B.SUBVIEW %c[SrcSelect], r" #N ", %c[Off], %c[SubSize]\n" \
             "B.IOR [%[d0],%[GmStride]], []\n" \
             : \
@@ -3317,11 +3317,11 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       const uintptr_t range_base =
           static_cast<uintptr_t>(src.GetRangeBase());
       asm volatile(
-        "BSTART.TLSU TSTORE, %D[SrcType]\n"
+        "BSTART.TSTORE %D[SrcType]\n"
         "B.DIM zero, %c[VCOL], ->lb0\n"
         "B.DIM zero, %c[VROW], ->lb1\n"
         "B.DIM zero, %c[COL], ->lb2\n"
-        "B.IOT %[s0], mask=1111, last\n"
+        "B.IOT %[s0].reuse, mask=1111, last\n"
         "B.SUBVIEW %c[SrcSelect], %[RegSrc], %c[Off], %c[SubSize]\n"
         "B.IOR [%[d0],%[GmStride]], []\n"
         :
@@ -3340,11 +3340,11 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
         register uintptr_t range_base asm("r" #N) = \
             static_cast<uintptr_t>(src.GetRangeBase()); \
         asm volatile( \
-          "BSTART.TLSU TSTORE, %D[SrcType]\n" \
+          "BSTART.TSTORE %D[SrcType]\n" \
           "B.DIM zero, %c[VCOL], ->lb0\n" \
           "B.DIM zero, %c[VROW], ->lb1\n" \
           "B.DIM zero, %c[COL], ->lb2\n" \
-          "B.IOT %[s0], mask=1111, last\n" \
+          "B.IOT %[s0].reuse, mask=1111, last\n" \
           "B.SUBVIEW %c[SrcSelect], r" #N ", %c[Off], %c[SubSize]\n" \
           "B.IOR [%[d0],%[GmStride]], []\n" \
           : \
@@ -3378,11 +3378,11 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
   // ASL B.DIM: dynamic dims load from a GPR; per-dim SS/SD/DS/DD dispatch.
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
-    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "BSTART.TSTORE %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOT %[s0], mask=1111, last\n"
+    "B.IOT %[s0].reuse, mask=1111, last\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
@@ -3393,11 +3393,11 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       : "memory");
   } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
   asm volatile(
-    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "BSTART.TSTORE %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOT %[s0], mask=1111, last\n"
+    "B.IOT %[s0].reuse, mask=1111, last\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
@@ -3408,11 +3408,11 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       : "memory");
   } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
   asm volatile(
-    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "BSTART.TSTORE %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOT %[s0], mask=1111, last\n"
+    "B.IOT %[s0].reuse, mask=1111, last\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
@@ -3423,11 +3423,11 @@ void TSTORE(gm_shape &dst, tile_shape &src) {
       : "memory");
   } else {
   asm volatile(
-    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "BSTART.TSTORE %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOT %[s0], mask=1111, last\n"
+    "B.IOT %[s0].reuse, mask=1111, last\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0]"r"(dst.data()), [s0]"Tr"(src.data()),
@@ -3468,7 +3468,7 @@ void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
   if constexpr (cube_shape::BFractal == BLayout::CubeM32) {
   if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
@@ -3485,7 +3485,7 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow < 0) {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -3502,7 +3502,7 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol < 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
@@ -3519,7 +3519,7 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -3537,7 +3537,7 @@ asm volatile(
   } else if constexpr (cube_shape::BFractal == BLayout::CubeM16) {
   if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
@@ -3554,7 +3554,7 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow < 0) {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -3571,7 +3571,7 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol < 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
@@ -3588,7 +3588,7 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -3606,7 +3606,7 @@ asm volatile(
   } else { // CubeN8
   if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
@@ -3623,7 +3623,7 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow < 0) {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -3640,7 +3640,7 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol < 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
@@ -3657,7 +3657,7 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-      "BSTART.TLSU TLOAD, %D[DataType]\n"
+      "BSTART.TLOAD %D[DataType]\n"
     PTO_CUBE_LOAD_DATR_ASM
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
@@ -3699,11 +3699,11 @@ void TSTORE_CUBE(gm_shape &dst, const cube_shape &src) {
   if constexpr (cube_shape::BFractal == BLayout::CubeM32) {
   if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR M322ND.normal, Null\n"
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3713,11 +3713,11 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow < 0) {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR M322ND.normal, Null\n"
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3727,11 +3727,11 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol < 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR M322ND.normal, Null\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3741,11 +3741,11 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR M322ND.normal, Null\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3756,11 +3756,11 @@ asm volatile(
   } else if constexpr (cube_shape::BFractal == BLayout::CubeM16) {
   if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR M162ND.normal, Null\n"
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3770,11 +3770,11 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow < 0) {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR M162ND.normal, Null\n"
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3784,11 +3784,11 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol < 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR M162ND.normal, Null\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3798,11 +3798,11 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR M162ND.normal, Null\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3813,11 +3813,11 @@ asm volatile(
   } else { // CubeN8
   if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR N82ND.normal, Null\n"
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3827,11 +3827,11 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol > 0 && cube_shape::ValidRow < 0) {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR N82ND.normal, Null\n"
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3841,11 +3841,11 @@ asm volatile(
       : "memory");  }
   else if constexpr (cube_shape::ValidCol < 0 && cube_shape::ValidRow > 0) {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR N82ND.normal, Null\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -3855,11 +3855,11 @@ asm volatile(
       : "memory");  }
   else {
 asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR N82ND.normal, Null\n"
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes]], []\n"
       :
       : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
@@ -4008,11 +4008,11 @@ void TSTORE(typename TileType::DType *block_base, const TileType &src,
   const uint64_t predicate = parts.store_predicate(count);
   auto memory = parts.logical_region(block_base, part);
   asm volatile(
-      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "BSTART.TSTORE %D[DataType]\n"
       "B.DATR M322ND, DTYPE_NONE, Null, byte0, Eq, RNONE, nosat, 0, 0\n"
       "B.DIM zero, 2, ->lb0\n"
       "B.DIM zero, 32, ->lb1\n"
-      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOT %[Src].reuse, mask=1111, last\n"
       "B.IOR [%[Base],%[RowStrideBytes],%[Predicate]], ExecMaskPresent\n"
       :
       : [Base] "r"(memory.data()), [Src] "Tr"(src.data()),
@@ -4040,11 +4040,11 @@ PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src) {
   const size_t valid_row = src.GetValidRow();
   if constexpr (SharedTileT::ValidCol > 0 && SharedTileT::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "BSTART.TSTORE %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS %S[Shared], mask=1111\n"
+    "B.IOS %S[Shared].reuse, mask=1111\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
@@ -4055,11 +4055,11 @@ asm volatile(
     : "memory");  }
   else if constexpr (SharedTileT::ValidCol > 0 && SharedTileT::ValidRow < 0) {
 asm volatile(
-    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "BSTART.TSTORE %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS %S[Shared], mask=1111\n"
+    "B.IOS %S[Shared].reuse, mask=1111\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
@@ -4070,11 +4070,11 @@ asm volatile(
     : "memory");  }
   else if constexpr (SharedTileT::ValidCol < 0 && SharedTileT::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "BSTART.TSTORE %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS %S[Shared], mask=1111\n"
+    "B.IOS %S[Shared].reuse, mask=1111\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
@@ -4085,11 +4085,11 @@ asm volatile(
     : "memory");  }
   else {
 asm volatile(
-    "BSTART.TLSU TSTORE, %D[SrcType]\n"
+    "BSTART.TSTORE %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    "B.IOS %S[Shared], mask=1111\n"
+    "B.IOS %S[Shared].reuse, mask=1111\n"
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
@@ -4120,11 +4120,11 @@ PTO_SHARED_INLINE void TSTORE_PART(gm_shape &dst, const SharedTileT &src) {
   const size_t valid_row = src.GetValidRow();
   if constexpr (SharedTileT::ValidCol > 0 && SharedTileT::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TSTORE.SPART, %D[SrcType]\n"
+    "BSTART.TSTORE.SPART %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
+    PTO_PE_MASK_ASM("B.IOS %S[Shared].reuse, mask=", "\n")
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
@@ -4136,11 +4136,11 @@ asm volatile(
     : "memory");  }
   else if constexpr (SharedTileT::ValidCol > 0 && SharedTileT::ValidRow < 0) {
 asm volatile(
-    "BSTART.TLSU TSTORE.SPART, %D[SrcType]\n"
+    "BSTART.TSTORE.SPART %D[SrcType]\n"
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
+    PTO_PE_MASK_ASM("B.IOS %S[Shared].reuse, mask=", "\n")
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
@@ -4152,11 +4152,11 @@ asm volatile(
     : "memory");  }
   else if constexpr (SharedTileT::ValidCol < 0 && SharedTileT::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU TSTORE.SPART, %D[SrcType]\n"
+    "BSTART.TSTORE.SPART %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
+    PTO_PE_MASK_ASM("B.IOS %S[Shared].reuse, mask=", "\n")
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
@@ -4168,11 +4168,11 @@ asm volatile(
     : "memory");  }
   else {
 asm volatile(
-    "BSTART.TLSU TSTORE.SPART, %D[SrcType]\n"
+    "BSTART.TSTORE.SPART %D[SrcType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
-    PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
+    PTO_PE_MASK_ASM("B.IOS %S[Shared].reuse, mask=", "\n")
     "B.IOR [%[d0],%[GmStride]], []\n"
     :
     : [d0] "r"(dst.data()), [Shared] "Sr"(src.handle()),
@@ -4200,7 +4200,7 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
   // register form. LB0/LB1 are runtime function arguments by contract.
   if constexpr (gm_shape::Cols != DYNAMIC) {
   asm volatile(
-    "BSTART.TLSU TPREFETCH, %D[DataType]\n"
+    "BSTART.TPREFETCH %D[DataType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[Col], ->lb2\n"
@@ -4213,7 +4213,7 @@ void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
     : "memory");
   } else {
   asm volatile(
-    "BSTART.TLSU TPREFETCH, %D[DataType]\n"
+    "BSTART.TPREFETCH %D[DataType]\n"
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM %[Col], 0, ->lb2\n"
@@ -4269,13 +4269,13 @@ void MGATHER_CAS(DstTile &observedOld, uint64_t base,
                 "layouts must match");
   if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
+    "BSTART.MGATHER.CAS %D[DataType]\n"
     PTO_ATOM_LAYOUT_ASM
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[Col], ->lb2\n"
-    "B.IOT %[Idx], %[Exp], mask=1111\n"
-    "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    "B.IOT %[Idx].reuse, %[Exp].reuse, mask=1111\n"
+    "B.IOT %[Rep].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
     "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
     : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
@@ -4289,13 +4289,13 @@ asm volatile(
     : "memory");  }
   else if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow < 0) {
 asm volatile(
-    "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
+    "BSTART.MGATHER.CAS %D[DataType]\n"
     PTO_ATOM_LAYOUT_ASM
     "B.DIM zero, %c[VCOL], ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[Col], ->lb2\n"
-    "B.IOT %[Idx], %[Exp], mask=1111\n"
-    "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    "B.IOT %[Idx].reuse, %[Exp].reuse, mask=1111\n"
+    "B.IOT %[Rep].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
     "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
     : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
@@ -4309,13 +4309,13 @@ asm volatile(
     : "memory");  }
   else if constexpr (DstTile::ValidCol < 0 && DstTile::ValidRow > 0) {
 asm volatile(
-    "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
+    "BSTART.MGATHER.CAS %D[DataType]\n"
     PTO_ATOM_LAYOUT_ASM
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM zero, %c[VROW], ->lb1\n"
     "B.DIM zero, %c[Col], ->lb2\n"
-    "B.IOT %[Idx], %[Exp], mask=1111\n"
-    "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    "B.IOT %[Idx].reuse, %[Exp].reuse, mask=1111\n"
+    "B.IOT %[Rep].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
     "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
     : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
@@ -4329,13 +4329,13 @@ asm volatile(
     : "memory");  }
   else {
 asm volatile(
-    "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
+    "BSTART.MGATHER.CAS %D[DataType]\n"
     PTO_ATOM_LAYOUT_ASM
     "B.DIM %[VCOL], 0, ->lb0\n"
     "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[Col], ->lb2\n"
-    "B.IOT %[Idx], %[Exp], mask=1111\n"
-    "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    "B.IOT %[Idx].reuse, %[Exp].reuse, mask=1111\n"
+    "B.IOT %[Rep].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
     "B.IOR [%[Base]], []\n"
     : [Dst] "=&Tr"(observedOld.data())
     : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
@@ -4390,12 +4390,12 @@ asm volatile(
                   #FnName " tiles must match the resolved ValidRow x ValidCol");\
     if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow > 0) {            \
       asm volatile(                                                            \
-          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "BSTART." Mnem " %D[DataType]\n"                              \
           PTO_ATOM_LAYOUT_ASM                                                     \
           "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
           "B.DIM zero, %c[VROW], ->lb1\n"                                     \
           "B.DIM zero, %c[Col], ->lb2\n"                                      \
-          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOT %[Idx].reuse, %[Val].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
           "B.IOR [%[Base]], []\n"                                             \
           : [Dst] "=&Tr"(observedOld.data())                                 \
           : [Idx] "Tr"(elementIndices.data()),                               \
@@ -4407,12 +4407,12 @@ asm volatile(
           : "memory");                                                        \
     } else if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow < 0) {    \
       asm volatile(                                                            \
-          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "BSTART." Mnem " %D[DataType]\n"                              \
           PTO_ATOM_LAYOUT_ASM                                                     \
           "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
           "B.DIM %[VROW], 0, ->lb1\n"                                         \
           "B.DIM zero, %c[Col], ->lb2\n"                                      \
-          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOT %[Idx].reuse, %[Val].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
           "B.IOR [%[Base]], []\n"                                             \
           : [Dst] "=&Tr"(observedOld.data())                                 \
           : [Idx] "Tr"(elementIndices.data()),                               \
@@ -4424,12 +4424,12 @@ asm volatile(
           : "memory");                                                        \
     } else if constexpr (DstTile::ValidCol < 0 && DstTile::ValidRow > 0) {    \
       asm volatile(                                                            \
-          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "BSTART." Mnem " %D[DataType]\n"                              \
           PTO_ATOM_LAYOUT_ASM                                                     \
           "B.DIM %[VCOL], 0, ->lb0\n"                                         \
           "B.DIM zero, %c[VROW], ->lb1\n"                                     \
           "B.DIM zero, %c[Col], ->lb2\n"                                      \
-          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOT %[Idx].reuse, %[Val].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
           "B.IOR [%[Base]], []\n"                                             \
           : [Dst] "=&Tr"(observedOld.data())                                 \
           : [Idx] "Tr"(elementIndices.data()),                               \
@@ -4441,12 +4441,12 @@ asm volatile(
           : "memory");                                                        \
     } else {                                                                  \
       asm volatile(                                                            \
-          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "BSTART." Mnem " %D[DataType]\n"                              \
           PTO_ATOM_LAYOUT_ASM                                                     \
           "B.DIM %[VCOL], 0, ->lb0\n"                                         \
           "B.DIM %[VROW], 0, ->lb1\n"                                         \
           "B.DIM zero, %c[Col], ->lb2\n"                                      \
-          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOT %[Idx].reuse, %[Val].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
           "B.IOR [%[Base]], []\n"                                             \
           : [Dst] "=&Tr"(observedOld.data())                                 \
           : [Idx] "Tr"(elementIndices.data()),                               \
@@ -4523,12 +4523,12 @@ PTO_DEFINE_MGATHER_ATOM(MGATHER_XOR, "MGATHER.XOR", value,
                   #FnName " tiles must match the resolved ValidRow x ValidCol");\
     if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow > 0) {        \
       asm volatile(                                                            \
-          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "BSTART." Mnem " %D[DataType]\n"                              \
           PTO_ATOM_LAYOUT_ASM                                                     \
           "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
           "B.DIM zero, %c[VROW], ->lb1\n"                                     \
           "B.DIM zero, %c[Col], ->lb2\n"                                      \
-          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOT %[Idx].reuse, %[Val].reuse, mask=1111, last\n"                          \
           "B.IOR [%[Base]], []\n"                                             \
           :                                                                   \
           : [Idx] "Tr"(elementIndices.data()),                               \
@@ -4539,12 +4539,12 @@ PTO_DEFINE_MGATHER_ATOM(MGATHER_XOR, "MGATHER.XOR", value,
           : "memory");                                                        \
     } else if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow < 0) { \
       asm volatile(                                                            \
-          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "BSTART." Mnem " %D[DataType]\n"                              \
           PTO_ATOM_LAYOUT_ASM                                                     \
           "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
           "B.DIM %[VROW], 0, ->lb1\n"                                         \
           "B.DIM zero, %c[Col], ->lb2\n"                                      \
-          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOT %[Idx].reuse, %[Val].reuse, mask=1111, last\n"                          \
           "B.IOR [%[Base]], []\n"                                             \
           :                                                                   \
           : [Idx] "Tr"(elementIndices.data()),                               \
@@ -4555,12 +4555,12 @@ PTO_DEFINE_MGATHER_ATOM(MGATHER_XOR, "MGATHER.XOR", value,
           : "memory");                                                        \
     } else if constexpr (IndexTile::ValidCol < 0 && IndexTile::ValidRow > 0) { \
       asm volatile(                                                            \
-          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "BSTART." Mnem " %D[DataType]\n"                              \
           PTO_ATOM_LAYOUT_ASM                                                     \
           "B.DIM %[VCOL], 0, ->lb0\n"                                         \
           "B.DIM zero, %c[VROW], ->lb1\n"                                     \
           "B.DIM zero, %c[Col], ->lb2\n"                                      \
-          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOT %[Idx].reuse, %[Val].reuse, mask=1111, last\n"                          \
           "B.IOR [%[Base]], []\n"                                             \
           :                                                                   \
           : [Idx] "Tr"(elementIndices.data()),                               \
@@ -4571,12 +4571,12 @@ PTO_DEFINE_MGATHER_ATOM(MGATHER_XOR, "MGATHER.XOR", value,
           : "memory");                                                        \
     } else {                                                                  \
       asm volatile(                                                            \
-          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          "BSTART." Mnem " %D[DataType]\n"                              \
           PTO_ATOM_LAYOUT_ASM                                                     \
           "B.DIM %[VCOL], 0, ->lb0\n"                                         \
           "B.DIM %[VROW], 0, ->lb1\n"                                         \
           "B.DIM zero, %c[Col], ->lb2\n"                                      \
-          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOT %[Idx].reuse, %[Val].reuse, mask=1111, last\n"                          \
           "B.IOR [%[Base]], []\n"                                             \
           :                                                                   \
           : [Idx] "Tr"(elementIndices.data()),                               \
@@ -4637,12 +4637,12 @@ void MSCATTER_POPC(uint64_t base, IndexTile &elementIndices, uint32_t validCol,
       "MSCATTER_POPC index tile must use S32, U32, S64, or U64");
   if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow > 0) {
     asm volatile(
-        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "BSTART.MSCATTER.POPC %D[DataType]\n"
         PTO_ATOM_LAYOUT_ASM
         "B.DIM zero, %c[VCOL], ->lb0\n"
         "B.DIM zero, %c[VROW], ->lb1\n"
         "B.DIM zero, %c[Col], ->lb2\n"
-        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOT %[Idx].reuse, mask=1111, last\n"
         "B.IOR [%[Base]], []\n"
         :
         : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
@@ -4653,12 +4653,12 @@ void MSCATTER_POPC(uint64_t base, IndexTile &elementIndices, uint32_t validCol,
         : "memory");
   } else if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow < 0) {
     asm volatile(
-        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "BSTART.MSCATTER.POPC %D[DataType]\n"
         PTO_ATOM_LAYOUT_ASM
         "B.DIM zero, %c[VCOL], ->lb0\n"
         "B.DIM %[VROW], 0, ->lb1\n"
         "B.DIM zero, %c[Col], ->lb2\n"
-        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOT %[Idx].reuse, mask=1111, last\n"
         "B.IOR [%[Base]], []\n"
         :
         : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
@@ -4669,12 +4669,12 @@ void MSCATTER_POPC(uint64_t base, IndexTile &elementIndices, uint32_t validCol,
         : "memory");
   } else if constexpr (IndexTile::ValidCol < 0 && IndexTile::ValidRow > 0) {
     asm volatile(
-        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "BSTART.MSCATTER.POPC %D[DataType]\n"
         PTO_ATOM_LAYOUT_ASM
         "B.DIM %[VCOL], 0, ->lb0\n"
         "B.DIM zero, %c[VROW], ->lb1\n"
         "B.DIM zero, %c[Col], ->lb2\n"
-        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOT %[Idx].reuse, mask=1111, last\n"
         "B.IOR [%[Base]], []\n"
         :
         : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
@@ -4685,12 +4685,12 @@ void MSCATTER_POPC(uint64_t base, IndexTile &elementIndices, uint32_t validCol,
         : "memory");
   } else {
     asm volatile(
-        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        "BSTART.MSCATTER.POPC %D[DataType]\n"
         PTO_ATOM_LAYOUT_ASM
         "B.DIM %[VCOL], 0, ->lb0\n"
         "B.DIM %[VROW], 0, ->lb1\n"
         "B.DIM zero, %c[Col], ->lb2\n"
-        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOT %[Idx].reuse, mask=1111, last\n"
         "B.IOR [%[Base]], []\n"
         :
         : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
@@ -4746,7 +4746,7 @@ void GMOV(tile_shape_dst &dst, uint64_t peer_tid, const tile_shape_src &src) {
   asm volatile(
       "BSTART.GMOV %D[DataType]\n"
       PTO_ZERO_PAD_LAYOUT_ASM
-      PTO_PE_MASK_ASM("B.IOT %[src], mask=",
+      PTO_PE_MASK_ASM("B.IOT %[src].reuse, mask=",
                       ", last, ->%[dst]<%Z[TileSize]>\n")
       "B.IOR [%[peer]],[]\n"
       : [dst] "=Tr"(dst.data())
@@ -4775,9 +4775,9 @@ TMOV_L2S_INSERT(SharedTile<tile_shape_src> &dst,
       "TMOV.L2S.INSERT logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   dst.SetValidShape(src);
   asm volatile(
-      "BSTART.TLSU TMOV.L2S.INSERT, %D[DataType]\n"
+      "BSTART.TMOV.L2S.INSERT %D[DataType]\n"
       PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
-      PTO_PE_MASK_ASM("B.IOT %[src], mask=", ", last\n")
+      PTO_PE_MASK_ASM("B.IOT %[src].reuse, mask=", ", last\n")
       : [Shared] "=Sr"(dst.handle_ref())
       : [src] "Tr"(src.data()),
         [PEMask] "i"(PEMask),
@@ -4806,9 +4806,9 @@ TMOV_L2S_PUBLISH(SharedTile<tile_shape_src> &dst,
       "TMOV.L2S.PUBLISH logical Tile size must be 128 B..256 KB (SizeCode=1..12)");
   dst.SetValidShape(src);
   asm volatile(
-      "BSTART.TLSU TMOV.L2S.PUBLISH, %D[DataType]\n"
+      "BSTART.TMOV.L2S.PUBLISH %D[DataType]\n"
       PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[TileSize]>\n")
-      PTO_PE_MASK_ASM("B.IOT %[src], mask=", ", last\n")
+      PTO_PE_MASK_ASM("B.IOT %[src].reuse, mask=", ", last\n")
       : [Shared] "=Sr"(dst.handle_ref())
       : [src] "Tr"(src.data()),
         [PEMask] "i"(PEMask),
@@ -4836,8 +4836,8 @@ TMOV_S2L_BROADCAST(tile_shape_dst &dst,
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "TMOV.S2L.BROADCAST logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
   asm volatile(
-      "BSTART.TLSU TMOV.S2L.BROADCAST, %D[DataType]\n"
-      PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
+      "BSTART.TMOV.S2L.BROADCAST %D[DataType]\n"
+      PTO_PE_MASK_ASM("B.IOS %S[Shared].reuse, mask=", "\n")
       PTO_PE_MASK_ASM("B.IOT mask=", ", last, ->%[dst]<%Z[TileSize]>\n")
       : [dst] "=Tr"(dst.data())
       : [Shared] "Sr"(shared.handle()), [PEMask] "i"(PEMask),
@@ -4856,8 +4856,8 @@ PTO_SHARED_INLINE void TMOV_S2L_EXTRACT(
       tile_type_traits<typename tile_shape_dst::TileDType>::IsValidActiveSize,
       "TMOV.S2L.EXTRACT logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
   asm volatile(
-      "BSTART.TLSU TMOV.S2L.EXTRACT, %D[DataType]\n"
-      PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
+      "BSTART.TMOV.S2L.EXTRACT %D[DataType]\n"
+      PTO_PE_MASK_ASM("B.IOS %S[Shared].reuse, mask=", "\n")
       PTO_PE_MASK_ASM("B.IOT mask=", ", last, ->%[dst]<%Z[TileSize]>\n")
       : [dst] "=Tr"(dst.data())
       : [Shared] "Sr"(shared.handle()), [PEMask] "i"(PEMask),
@@ -4890,7 +4890,7 @@ namespace pto_matmul_detail {
 // must emit RNONE. Only the programmable integer pre-quant modes retain
 // the RNE spelling through the trailing fallback.
 #define PTO_MATMUL_HEADER(OPCODE, EXTRA_ATTRS)                                  \
-  "BSTART.CUBE " OPCODE ", %D[DataTypeA]\n"                                      \
+  "BSTART." OPCODE " %D[DataTypeA]\n"                                      \
   ".if %c[PreQuant] == 0 && %c[CCTRL] == 0\n"                                    \
   "B.DATR %D[DataTypeB], byte0, Zero, RNONE, NOSAT\n"                            \
   ".elseif %c[PreQuant] == 0 && %c[CCTRL] == 1\n"                                \
@@ -5479,7 +5479,7 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "B.IOT %[A], %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOT %[A].reuse, %[B].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
           PTO_FIXP_ATTR_INPUTS,
@@ -5488,8 +5488,8 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOS %S[SharedA].reuse, mask=1111\n"
+        "B.IOT %[B].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),
           PTO_FIXP_ATTR_INPUTS,
@@ -5498,8 +5498,8 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT %[A], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOS %S[SharedB].reuse, mask=1111\n"
+        "B.IOT %[A].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),
           PTO_FIXP_ATTR_INPUTS,
@@ -5508,8 +5508,8 @@ PTO_SHARED_INLINE void matmul(Dst &dst, A &a, B &b, size_t M, size_t N,
   } else {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL", PTO_FIXP_ATTR)
-        "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOS %S[SharedB], mask=1111\n"
+        "B.IOS %S[SharedA].reuse, mask=1111\n"
+        "B.IOS %S[SharedB].reuse, mask=1111\n"
         "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),
@@ -5540,14 +5540,14 @@ PTO_SHARED_INLINE void matmul_slot_impl(Dst &dst) {
   constexpr int TileSize =
       tile_type_traits<typename Dst::TileDType>::TilesizeCode;
   asm volatile(
-      "BSTART.CUBE TMATMUL, FP32\n"
+      "BSTART.TMATMUL FP32\n"
       "B.DATR FP32, byte0, Zero, RNONE, NOSAT\n"
       PTO_FIXP_ATTR
       "B.DIM zero, %c[M], ->lb0\n"
       "B.DIM zero, %c[N], ->lb1\n"
       "B.DIM zero, %c[K], ->lb2\n"
-      "B.IOS S%c[SharedA], mask=1111\n"
-      "B.IOS S%c[SharedB], mask=1111\n"
+      "B.IOS S%c[SharedA].reuse, mask=1111\n"
+      "B.IOS S%c[SharedB].reuse, mask=1111\n"
       "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
       : [Dst] "=&Tr"(dst.data())
       : [SharedA] "i"(SlotA), [SharedB] "i"(SlotB),
@@ -5568,8 +5568,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                 \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
-        "B.IOT %[A], %[B], mask=1111\n"                                         \
-        "B.IOT %[Extra], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
+        "B.IOT %[A].reuse, %[B].reuse, mask=1111\n"                                         \
+        "B.IOT %[Extra].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [A] "Tr"(a.data()), [B] "Tr"(b.data()),                             \
           [Extra] "Tr"(extra.data()),                                          \
@@ -5579,8 +5579,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {           \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
-        "B.IOS %S[SharedA], mask=1111\n"                                               \
-        "B.IOT %[B], %[Extra], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
+        "B.IOS %S[SharedA].reuse, mask=1111\n"                                               \
+        "B.IOT %[B].reuse, %[Extra].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()),                     \
           [Extra] "Tr"(extra.data()),                                          \
@@ -5590,8 +5590,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {           \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
-        "B.IOS %S[SharedB], mask=1111\n"                                               \
-        "B.IOT %[A], %[Extra], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
+        "B.IOS %S[SharedB].reuse, mask=1111\n"                                               \
+        "B.IOT %[A].reuse, %[Extra].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()),                     \
           [Extra] "Tr"(extra.data()),                                          \
@@ -5601,9 +5601,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, B &b, Extra &extra,                 
   } else {                                                                       \
     asm volatile(                                                                \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                                \
-        "B.IOS %S[SharedA], mask=1111\n"                                               \
-        "B.IOS %S[SharedB], mask=1111\n"                                               \
-        "B.IOT %[Extra], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
+        "B.IOS %S[SharedA].reuse, mask=1111\n"                                               \
+        "B.IOS %S[SharedB].reuse, mask=1111\n"                                               \
+        "B.IOT %[Extra].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                       \
         : [Dst] "=&Tr"(dst.data())                                             \
         : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()),             \
           [Extra] "Tr"(extra.data()),                                          \
@@ -5625,8 +5625,8 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOT %[C], mask=1111\n"
-        "B.IOT %[A], %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOT %[C].reuse, mask=1111\n"
+        "B.IOT %[A].reuse, %[B].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [B] "Tr"(b.data()),
           PTO_FIXP_ATTR_INPUTS,
@@ -5635,8 +5635,8 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOT %[C], %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOS %S[SharedA].reuse, mask=1111\n"
+        "B.IOT %[C].reuse, %[B].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()),
           [B] "Tr"(b.data()), PTO_FIXP_ATTR_INPUTS,
@@ -5645,8 +5645,8 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT %[C], %[A], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOS %S[SharedB].reuse, mask=1111\n"
+        "B.IOT %[C].reuse, %[A].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [C] "Tr"(c.data()), [A] "Tr"(a.data()),
           [SharedB] "Sr"(b.handle()), PTO_FIXP_ATTR_INPUTS,
@@ -5655,9 +5655,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   } else {
     asm volatile(
         PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR)
-        "B.IOS %S[SharedA], mask=1111\n"
-        "B.IOS %S[SharedB], mask=1111\n"
-        "B.IOT %[C], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOS %S[SharedA].reuse, mask=1111\n"
+        "B.IOS %S[SharedB].reuse, mask=1111\n"
+        "B.IOT %[C].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
         : [Dst] "=&Tr"(dst.data())
         : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()),
           [SharedB] "Sr"(b.handle()), PTO_FIXP_ATTR_INPUTS,
@@ -5675,24 +5675,24 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 // first and then reference the matching PTO_FIXP_PPSRC_<mask>.
 #define PTO_FIXP_PPSRC_0
 #define PTO_FIXP_PPSRC_1 \
-  "B.IOT %[RowIn], mask=1111\n"
+  "B.IOT %[RowIn].reuse, mask=1111\n"
 #define PTO_FIXP_PPSRC_2 \
-  "B.IOT %[QuantTile], mask=1111\n"
+  "B.IOT %[QuantTile].reuse, mask=1111\n"
 #define PTO_FIXP_PPSRC_3 \
-  "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
+  "B.IOT %[RowIn].reuse, %[QuantTile].reuse, mask=1111\n"
 #define PTO_FIXP_PPSRC_4 \
-  "B.IOT %[ReluTile], mask=1111\n"
+  "B.IOT %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_PPSRC_5 \
-  "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
+  "B.IOT %[RowIn].reuse, %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_PPSRC_6 \
-  "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
+  "B.IOT %[QuantTile].reuse, %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_PPSRC_7 \
-  "B.IOT %[RowIn], %[QuantTile], mask=1111\n" \
-  "B.IOT %[ReluTile], mask=1111\n"
+  "B.IOT %[RowIn].reuse, %[QuantTile].reuse, mask=1111\n" \
+  "B.IOT %[ReluTile].reuse, mask=1111\n"
 
 #define PTO_FIXP_ACC_CSCALE \
   ".if %c[CScaleEn]\n" \
-  "B.IOT %[CScaleOperand], mask=1111\n" \
+  "B.IOT %[CScaleOperand].reuse, mask=1111\n" \
   ".endif\n"
 
 #define PTO_FIXP_ACC_PPSRC_0 PTO_FIXP_ACC_CSCALE PTO_FIXP_PPSRC_0
@@ -5784,131 +5784,131 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   ".else\n" PTO_FIXP_BIOT_2(X, "%[RowIn]") PTO_FIXP_BIOT_2("%[QuantTile]", "%[ReluTile]") ".endif\n"
 
 #define PTO_FIXP_ACC_L_SRC_0 \
-  "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[B], mask=1111\n" \
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_ACC_L_SRC_1 \
-  "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[B], mask=1111\n" \
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_ACC_L_SRC_2 \
-  "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[B], mask=1111\n" \
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_ACC_L_SRC_3 \
-  "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[B], mask=1111\n" \
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_ACC_L_SRC_4 \
-  "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[B], mask=1111\n" \
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_ACC_L_SRC_5 \
-  "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[B], mask=1111\n" \
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_ACC_L_SRC_6 \
-  "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[B], mask=1111\n" \
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_ACC_L_SRC_7 \
-  "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[B], mask=1111\n" \
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_7
 
 #define PTO_FIXP_ACC_SB_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_ACC_SB_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_ACC_SB_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_ACC_SB_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_ACC_SB_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_ACC_SB_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_ACC_SB_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_ACC_SB_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_7
 
 #define PTO_FIXP_ACC_SA_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_ACC_SA_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_ACC_SA_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_ACC_SA_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_ACC_SA_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_ACC_SA_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_ACC_SA_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_ACC_SA_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_7
 
 #define PTO_FIXP_ACC_SAB_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_ACC_SAB_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_ACC_SAB_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_ACC_SAB_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_ACC_SAB_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_ACC_SAB_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_ACC_SAB_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_ACC_SAB_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, mask=1111\n" \
   PTO_FIXP_ACC_PPSRC_7
 
 // Re-declare ACC source families with the CScale/PostProcess tail folded into
@@ -5922,14 +5922,14 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_ACC_L_SRC_5
 #undef PTO_FIXP_ACC_L_SRC_6
 #undef PTO_FIXP_ACC_L_SRC_7
-#define PTO_FIXP_ACC_L_SRC_0 "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_0("%[B]")
-#define PTO_FIXP_ACC_L_SRC_1 "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_1("%[B]")
-#define PTO_FIXP_ACC_L_SRC_2 "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_2("%[B]")
-#define PTO_FIXP_ACC_L_SRC_3 "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_3("%[B]")
-#define PTO_FIXP_ACC_L_SRC_4 "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_4("%[B]")
-#define PTO_FIXP_ACC_L_SRC_5 "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_5("%[B]")
-#define PTO_FIXP_ACC_L_SRC_6 "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_6("%[B]")
-#define PTO_FIXP_ACC_L_SRC_7 "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_7("%[B]")
+#define PTO_FIXP_ACC_L_SRC_0 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_0("%[B]")
+#define PTO_FIXP_ACC_L_SRC_1 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_1("%[B]")
+#define PTO_FIXP_ACC_L_SRC_2 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_2("%[B]")
+#define PTO_FIXP_ACC_L_SRC_3 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_3("%[B]")
+#define PTO_FIXP_ACC_L_SRC_4 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_4("%[B]")
+#define PTO_FIXP_ACC_L_SRC_5 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_5("%[B]")
+#define PTO_FIXP_ACC_L_SRC_6 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_6("%[B]")
+#define PTO_FIXP_ACC_L_SRC_7 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_7("%[B]")
 #undef PTO_FIXP_ACC_SB_SRC_0
 #undef PTO_FIXP_ACC_SB_SRC_1
 #undef PTO_FIXP_ACC_SB_SRC_2
@@ -5938,14 +5938,14 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_ACC_SB_SRC_5
 #undef PTO_FIXP_ACC_SB_SRC_6
 #undef PTO_FIXP_ACC_SB_SRC_7
-#define PTO_FIXP_ACC_SB_SRC_0 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_0
-#define PTO_FIXP_ACC_SB_SRC_1 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_1
-#define PTO_FIXP_ACC_SB_SRC_2 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_2
-#define PTO_FIXP_ACC_SB_SRC_3 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_3
-#define PTO_FIXP_ACC_SB_SRC_4 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_4
-#define PTO_FIXP_ACC_SB_SRC_5 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_5
-#define PTO_FIXP_ACC_SB_SRC_6 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_6
-#define PTO_FIXP_ACC_SB_SRC_7 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_7
+#define PTO_FIXP_ACC_SB_SRC_0 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_0
+#define PTO_FIXP_ACC_SB_SRC_1 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_1
+#define PTO_FIXP_ACC_SB_SRC_2 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_2
+#define PTO_FIXP_ACC_SB_SRC_3 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_3
+#define PTO_FIXP_ACC_SB_SRC_4 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_4
+#define PTO_FIXP_ACC_SB_SRC_5 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_5
+#define PTO_FIXP_ACC_SB_SRC_6 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_6
+#define PTO_FIXP_ACC_SB_SRC_7 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_7
 #undef PTO_FIXP_ACC_SA_SRC_0
 #undef PTO_FIXP_ACC_SA_SRC_1
 #undef PTO_FIXP_ACC_SA_SRC_2
@@ -5954,14 +5954,14 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_ACC_SA_SRC_5
 #undef PTO_FIXP_ACC_SA_SRC_6
 #undef PTO_FIXP_ACC_SA_SRC_7
-#define PTO_FIXP_ACC_SA_SRC_0 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_0
-#define PTO_FIXP_ACC_SA_SRC_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_1
-#define PTO_FIXP_ACC_SA_SRC_2 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_2
-#define PTO_FIXP_ACC_SA_SRC_3 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_3
-#define PTO_FIXP_ACC_SA_SRC_4 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_4
-#define PTO_FIXP_ACC_SA_SRC_5 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_5
-#define PTO_FIXP_ACC_SA_SRC_6 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_6
-#define PTO_FIXP_ACC_SA_SRC_7 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_7
+#define PTO_FIXP_ACC_SA_SRC_0 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_0
+#define PTO_FIXP_ACC_SA_SRC_1 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_1
+#define PTO_FIXP_ACC_SA_SRC_2 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_2
+#define PTO_FIXP_ACC_SA_SRC_3 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_3
+#define PTO_FIXP_ACC_SA_SRC_4 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_4
+#define PTO_FIXP_ACC_SA_SRC_5 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_5
+#define PTO_FIXP_ACC_SA_SRC_6 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_6
+#define PTO_FIXP_ACC_SA_SRC_7 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" PTO_FIXP_ACC_EVEN_TAIL_7
 #undef PTO_FIXP_ACC_SAB_SRC_0
 #undef PTO_FIXP_ACC_SAB_SRC_1
 #undef PTO_FIXP_ACC_SAB_SRC_2
@@ -5970,551 +5970,551 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_ACC_SAB_SRC_5
 #undef PTO_FIXP_ACC_SAB_SRC_6
 #undef PTO_FIXP_ACC_SAB_SRC_7
-#define PTO_FIXP_ACC_SAB_SRC_0 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_0("%[C]")
-#define PTO_FIXP_ACC_SAB_SRC_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_1("%[C]")
-#define PTO_FIXP_ACC_SAB_SRC_2 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_2("%[C]")
-#define PTO_FIXP_ACC_SAB_SRC_3 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_3("%[C]")
-#define PTO_FIXP_ACC_SAB_SRC_4 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_4("%[C]")
-#define PTO_FIXP_ACC_SAB_SRC_5 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_5("%[C]")
-#define PTO_FIXP_ACC_SAB_SRC_6 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_6("%[C]")
-#define PTO_FIXP_ACC_SAB_SRC_7 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_7("%[C]")
+#define PTO_FIXP_ACC_SAB_SRC_0 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_0("%[C]")
+#define PTO_FIXP_ACC_SAB_SRC_1 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_1("%[C]")
+#define PTO_FIXP_ACC_SAB_SRC_2 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_2("%[C]")
+#define PTO_FIXP_ACC_SAB_SRC_3 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_3("%[C]")
+#define PTO_FIXP_ACC_SAB_SRC_4 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_4("%[C]")
+#define PTO_FIXP_ACC_SAB_SRC_5 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_5("%[C]")
+#define PTO_FIXP_ACC_SAB_SRC_6 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_6("%[C]")
+#define PTO_FIXP_ACC_SAB_SRC_7 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" PTO_FIXP_ACC_ODD_TAIL_7("%[C]")
 
 #define PTO_FIXP_BIAS_L_SRC_0 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_BIAS_L_SRC_1 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_BIAS_L_SRC_2 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_BIAS_L_SRC_3 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_BIAS_L_SRC_4 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_BIAS_L_SRC_5 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_BIAS_L_SRC_6 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_BIAS_L_SRC_7 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_BIAS_SB_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_BIAS_SB_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_BIAS_SB_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_BIAS_SB_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_BIAS_SB_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_BIAS_SB_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_BIAS_SB_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_BIAS_SB_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_BIAS_SA_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_BIAS_SA_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_BIAS_SA_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_BIAS_SA_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_BIAS_SA_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_BIAS_SA_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_BIAS_SA_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_BIAS_SA_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_BIAS_SAB_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_BIAS_SAB_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_BIAS_SAB_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_BIAS_SAB_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_BIAS_SAB_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_BIAS_SAB_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_BIAS_SAB_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_BIAS_SAB_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_L_SRC_0 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_L_SRC_1 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_L_SRC_2 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_L_SRC_3 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_L_SRC_4 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_L_SRC_5 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_L_SRC_6 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_L_SRC_7 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_SB_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_SB_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_SB_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_SB_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_SB_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_SB_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_SB_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_SB_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_SA_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_SA_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_SA_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_SA_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_SA_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_SA_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_SA_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_SA_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_SAB_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_SAB_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_SAB_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_SAB_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_SAB_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_SAB_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_SAB_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_SAB_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 // CScale-aware MX ACC source streams keep the CScale source after all matrix and MX scale sources.
 #define PTO_FIXP_MX_ACC_L_SRC_0 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_MX_ACC_L_SRC_1 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_MX_ACC_L_SRC_2 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_MX_ACC_L_SRC_3 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_MX_ACC_L_SRC_4 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_MX_ACC_L_SRC_5 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_MX_ACC_L_SRC_6 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_MX_ACC_L_SRC_7 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_7
 
 #define PTO_FIXP_MX_ACC_SB_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_MX_ACC_SB_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_MX_ACC_SB_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_MX_ACC_SB_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_MX_ACC_SB_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_MX_ACC_SB_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_MX_ACC_SB_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_MX_ACC_SB_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_7
 
 #define PTO_FIXP_MX_ACC_SA_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_MX_ACC_SA_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_MX_ACC_SA_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_MX_ACC_SA_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_MX_ACC_SA_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_MX_ACC_SA_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_MX_ACC_SA_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_MX_ACC_SA_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_7
 
 #define PTO_FIXP_MX_ACC_SAB_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_0
 
 #define PTO_FIXP_MX_ACC_SAB_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_1
 
 #define PTO_FIXP_MX_ACC_SAB_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_2
 
 #define PTO_FIXP_MX_ACC_SAB_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_3
 
 #define PTO_FIXP_MX_ACC_SAB_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_4
 
 #define PTO_FIXP_MX_ACC_SAB_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_5
 
 #define PTO_FIXP_MX_ACC_SAB_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_6
 
 #define PTO_FIXP_MX_ACC_SAB_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_ACC_PPSRC_7
 
 
 #define PTO_FIXP_MX_BIAS_L_SRC_0 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_L_SRC_1 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_L_SRC_2 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_L_SRC_3 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_L_SRC_4 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_L_SRC_5 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_L_SRC_6 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_L_SRC_7 \
-  "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" \
-  "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" \
+  "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_SB_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[A], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[A].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_SA_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOT %[B], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOT %[B].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_MX_BIAS_SAB_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA], mask=1111\n" ".endif\n" "B.IOS %S[SharedB], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOS %S[SharedA].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" ".endif\n" "B.IOS %S[SharedB].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 // ScaleMask==3 uses the FIXP source families above.  Keep the complete
@@ -6531,7 +6531,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_MX_L_SRC_5
 #undef PTO_FIXP_MX_L_SRC_6
 #undef PTO_FIXP_MX_L_SRC_7
-#define PTO_FIXP_MX_L_PACKED "B.IOT %[A], %[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB], mask=1111\n"
+#define PTO_FIXP_MX_L_PACKED "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\n"
 #define PTO_FIXP_MX_L_SRC_0 PTO_FIXP_MX_L_PACKED PTO_FIXP_PPSRC_0
 #define PTO_FIXP_MX_L_SRC_1 PTO_FIXP_MX_L_PACKED PTO_FIXP_PPSRC_1
 #define PTO_FIXP_MX_L_SRC_2 PTO_FIXP_MX_L_PACKED PTO_FIXP_PPSRC_2
@@ -6549,7 +6549,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_MX_SB_SRC_5
 #undef PTO_FIXP_MX_SB_SRC_6
 #undef PTO_FIXP_MX_SB_SRC_7
-#define PTO_FIXP_MX_SB_PACKED "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], %[ScaleA], mask=1111\n"
+#define PTO_FIXP_MX_SB_PACKED "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n"
 #define PTO_FIXP_MX_SB_SRC_0 PTO_FIXP_MX_SB_PACKED PTO_FIXP_PPSRC_0
 #define PTO_FIXP_MX_SB_SRC_1 PTO_FIXP_MX_SB_PACKED PTO_FIXP_PPSRC_1
 #define PTO_FIXP_MX_SB_SRC_2 PTO_FIXP_MX_SB_PACKED PTO_FIXP_PPSRC_2
@@ -6567,7 +6567,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_MX_SA_SRC_5
 #undef PTO_FIXP_MX_SA_SRC_6
 #undef PTO_FIXP_MX_SA_SRC_7
-#define PTO_FIXP_MX_SA_PACKED "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], %[ScaleB], mask=1111\n"
+#define PTO_FIXP_MX_SA_PACKED "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\n"
 #define PTO_FIXP_MX_SA_SRC_0 PTO_FIXP_MX_SA_PACKED PTO_FIXP_PPSRC_0
 #define PTO_FIXP_MX_SA_SRC_1 PTO_FIXP_MX_SA_PACKED PTO_FIXP_PPSRC_1
 #define PTO_FIXP_MX_SA_SRC_2 PTO_FIXP_MX_SA_PACKED PTO_FIXP_PPSRC_2
@@ -6585,7 +6585,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_MX_ACC_L_SRC_5
 #undef PTO_FIXP_MX_ACC_L_SRC_6
 #undef PTO_FIXP_MX_ACC_L_SRC_7
-#define PTO_FIXP_MX_ACC_L_PACKED "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[ScaleA], %[B], mask=1111\n"
+#define PTO_FIXP_MX_ACC_L_PACKED "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[ScaleA].reuse, %[B].reuse, mask=1111\n"
 #define PTO_FIXP_MX_ACC_L_SRC_0 PTO_FIXP_MX_ACC_L_PACKED PTO_FIXP_ACC_EVEN_X_TAIL_0("%[ScaleB]")
 #define PTO_FIXP_MX_ACC_L_SRC_1 PTO_FIXP_MX_ACC_L_PACKED PTO_FIXP_ACC_EVEN_X_TAIL_1("%[ScaleB]")
 #define PTO_FIXP_MX_ACC_L_SRC_2 PTO_FIXP_MX_ACC_L_PACKED PTO_FIXP_ACC_EVEN_X_TAIL_2("%[ScaleB]")
@@ -6603,7 +6603,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_MX_ACC_SB_SRC_5
 #undef PTO_FIXP_MX_ACC_SB_SRC_6
 #undef PTO_FIXP_MX_ACC_SB_SRC_7
-#define PTO_FIXP_MX_ACC_SB_PACKED "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n"
+#define PTO_FIXP_MX_ACC_SB_PACKED "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n"
 #define PTO_FIXP_MX_ACC_SB_SRC_0 PTO_FIXP_MX_ACC_SB_PACKED PTO_FIXP_ACC_ODD_TAIL_0("%[ScaleA]")
 #define PTO_FIXP_MX_ACC_SB_SRC_1 PTO_FIXP_MX_ACC_SB_PACKED PTO_FIXP_ACC_ODD_TAIL_1("%[ScaleA]")
 #define PTO_FIXP_MX_ACC_SB_SRC_2 PTO_FIXP_MX_ACC_SB_PACKED PTO_FIXP_ACC_ODD_TAIL_2("%[ScaleA]")
@@ -6621,7 +6621,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_MX_ACC_SA_SRC_5
 #undef PTO_FIXP_MX_ACC_SA_SRC_6
 #undef PTO_FIXP_MX_ACC_SA_SRC_7
-#define PTO_FIXP_MX_ACC_SA_PACKED "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n"
+#define PTO_FIXP_MX_ACC_SA_PACKED "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n"
 #define PTO_FIXP_MX_ACC_SA_SRC_0 PTO_FIXP_MX_ACC_SA_PACKED PTO_FIXP_ACC_ODD_TAIL_0("%[ScaleB]")
 #define PTO_FIXP_MX_ACC_SA_SRC_1 PTO_FIXP_MX_ACC_SA_PACKED PTO_FIXP_ACC_ODD_TAIL_1("%[ScaleB]")
 #define PTO_FIXP_MX_ACC_SA_SRC_2 PTO_FIXP_MX_ACC_SA_PACKED PTO_FIXP_ACC_ODD_TAIL_2("%[ScaleB]")
@@ -6639,7 +6639,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_MX_ACC_SAB_SRC_5
 #undef PTO_FIXP_MX_ACC_SAB_SRC_6
 #undef PTO_FIXP_MX_ACC_SAB_SRC_7
-#define PTO_FIXP_MX_ACC_SAB_PACKED "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n"
+#define PTO_FIXP_MX_ACC_SAB_PACKED "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOS %S[ScaleB].reuse, mask=1111\n"
 #define PTO_FIXP_MX_ACC_SAB_SRC_0 PTO_FIXP_MX_ACC_SAB_PACKED PTO_FIXP_ACC_ODD_TAIL_0("%[C]")
 #define PTO_FIXP_MX_ACC_SAB_SRC_1 PTO_FIXP_MX_ACC_SAB_PACKED PTO_FIXP_ACC_ODD_TAIL_1("%[C]")
 #define PTO_FIXP_MX_ACC_SAB_SRC_2 PTO_FIXP_MX_ACC_SAB_PACKED PTO_FIXP_ACC_ODD_TAIL_2("%[C]")
@@ -6657,7 +6657,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_MX_BIAS_L_SRC_5
 #undef PTO_FIXP_MX_BIAS_L_SRC_6
 #undef PTO_FIXP_MX_BIAS_L_SRC_7
-#define PTO_FIXP_MX_BIAS_L_PACKED PTO_FIXP_MX_L_PACKED "B.IOT %[Bias], mask=1111\n"
+#define PTO_FIXP_MX_BIAS_L_PACKED PTO_FIXP_MX_L_PACKED "B.IOT %[Bias].reuse, mask=1111\n"
 #define PTO_FIXP_MX_BIAS_L_SRC_0 PTO_FIXP_MX_BIAS_L_PACKED PTO_FIXP_PPSRC_0
 #define PTO_FIXP_MX_BIAS_L_SRC_1 PTO_FIXP_MX_BIAS_L_PACKED PTO_FIXP_PPSRC_1
 #define PTO_FIXP_MX_BIAS_L_SRC_2 PTO_FIXP_MX_BIAS_L_PACKED PTO_FIXP_PPSRC_2
@@ -6675,7 +6675,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_MX_BIAS_SB_SRC_5
 #undef PTO_FIXP_MX_BIAS_SB_SRC_6
 #undef PTO_FIXP_MX_BIAS_SB_SRC_7
-#define PTO_FIXP_MX_BIAS_SB_PACKED PTO_FIXP_MX_SB_PACKED "B.IOT %[Bias], mask=1111\n"
+#define PTO_FIXP_MX_BIAS_SB_PACKED PTO_FIXP_MX_SB_PACKED "B.IOT %[Bias].reuse, mask=1111\n"
 #define PTO_FIXP_MX_BIAS_SB_SRC_0 PTO_FIXP_MX_BIAS_SB_PACKED PTO_FIXP_PPSRC_0
 #define PTO_FIXP_MX_BIAS_SB_SRC_1 PTO_FIXP_MX_BIAS_SB_PACKED PTO_FIXP_PPSRC_1
 #define PTO_FIXP_MX_BIAS_SB_SRC_2 PTO_FIXP_MX_BIAS_SB_PACKED PTO_FIXP_PPSRC_2
@@ -6693,7 +6693,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_MX_BIAS_SA_SRC_5
 #undef PTO_FIXP_MX_BIAS_SA_SRC_6
 #undef PTO_FIXP_MX_BIAS_SA_SRC_7
-#define PTO_FIXP_MX_BIAS_SA_PACKED PTO_FIXP_MX_SA_PACKED "B.IOT %[Bias], mask=1111\n"
+#define PTO_FIXP_MX_BIAS_SA_PACKED PTO_FIXP_MX_SA_PACKED "B.IOT %[Bias].reuse, mask=1111\n"
 #define PTO_FIXP_MX_BIAS_SA_SRC_0 PTO_FIXP_MX_BIAS_SA_PACKED PTO_FIXP_PPSRC_0
 #define PTO_FIXP_MX_BIAS_SA_SRC_1 PTO_FIXP_MX_BIAS_SA_PACKED PTO_FIXP_PPSRC_1
 #define PTO_FIXP_MX_BIAS_SA_SRC_2 PTO_FIXP_MX_BIAS_SA_PACKED PTO_FIXP_PPSRC_2
@@ -6707,195 +6707,195 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 // handoff Sec 1.5 (any B.IOS is illegal). A=1xK vector (M=1), B=KxN
 // matrix, C=1xN output. Scales follow their matrix/vector shape.
 #define PTO_FIXP_GV_GV_L_SRC_0 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GV_L_SRC_1 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GV_L_SRC_2 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GV_L_SRC_3 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GV_L_SRC_4 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GV_L_SRC_5 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GV_L_SRC_6 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GV_L_SRC_7 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVB_L_SRC_0 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVB_L_SRC_1 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVB_L_SRC_2 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVB_L_SRC_3 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVB_L_SRC_4 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVB_L_SRC_5 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVB_L_SRC_6 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVB_L_SRC_7 \
-  "B.IOT %[Vec], %[Mtx], mask=1111\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVA_L_SRC_0 \
-  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[C].reuse, mask=1111\n" "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVA_L_SRC_1 \
-  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[C].reuse, mask=1111\n" "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVA_L_SRC_2 \
-  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[C].reuse, mask=1111\n" "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVA_L_SRC_3 \
-  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[C].reuse, mask=1111\n" "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVA_L_SRC_4 \
-  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[C].reuse, mask=1111\n" "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVA_L_SRC_5 \
-  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[C].reuse, mask=1111\n" "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVA_L_SRC_6 \
-  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[C].reuse, mask=1111\n" "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVA_L_SRC_7 \
-  "B.IOT %[C], mask=1111\n" "B.IOT %[Vec], %[Mtx], mask=1111\n" \
+  "B.IOT %[C].reuse, mask=1111\n" "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVMX_L_SRC_0 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVMX_L_SRC_1 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVMX_L_SRC_2 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVMX_L_SRC_3 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVMX_L_SRC_4 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVMX_L_SRC_5 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVMX_L_SRC_6 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVMX_L_SRC_7 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_0 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_1 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_2 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_3 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_4 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_5 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_6 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVMXB_L_SRC_7 \
-  "B.IOT %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" "B.IOT %[Bias], mask=1111\n" \
+  "B.IOT %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" "B.IOT %[Bias].reuse, mask=1111\n" \
   PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_0 \
-  "B.IOT %[C], %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[C].reuse, %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_0
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_1 \
-  "B.IOT %[C], %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[C].reuse, %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_1
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_2 \
-  "B.IOT %[C], %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[C].reuse, %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_2
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_3 \
-  "B.IOT %[C], %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[C].reuse, %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_3
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_4 \
-  "B.IOT %[C], %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[C].reuse, %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_4
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_5 \
-  "B.IOT %[C], %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[C].reuse, %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_5
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_6 \
-  "B.IOT %[C], %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[C].reuse, %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_6
 
 #define PTO_FIXP_GV_GVMXA_L_SRC_7 \
-  "B.IOT %[C], %[Vec], mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec], mask=1111\n" ".endif\n" "B.IOT %[Mtx], mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx], mask=1111\n" ".endif\n" \
+  "B.IOT %[C].reuse, %[Vec].reuse, mask=1111\n" ".if %c[HasScaleA]\n" "B.IOT %[ScaleVec].reuse, mask=1111\n" ".endif\n" "B.IOT %[Mtx].reuse, mask=1111\n" ".if %c[HasScaleB]\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n" ".endif\n" \
   PTO_FIXP_PPSRC_7
 
 // TGEMVMX is Local-only.  Pack its ScaleMask==3 math stream for every
@@ -6908,7 +6908,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_GV_GVMX_L_SRC_5
 #undef PTO_FIXP_GV_GVMX_L_SRC_6
 #undef PTO_FIXP_GV_GVMX_L_SRC_7
-#define PTO_FIXP_GV_GVMX_L_PACKED "B.IOT %[Vec], %[ScaleVec], mask=1111\n" "B.IOT %[Mtx], %[ScaleMtx], mask=1111\n"
+#define PTO_FIXP_GV_GVMX_L_PACKED "B.IOT %[Vec].reuse, %[ScaleVec].reuse, mask=1111\n" "B.IOT %[Mtx].reuse, %[ScaleMtx].reuse, mask=1111\n"
 #define PTO_FIXP_GV_GVMX_L_SRC_0 PTO_FIXP_GV_GVMX_L_PACKED PTO_FIXP_PPSRC_0
 #define PTO_FIXP_GV_GVMX_L_SRC_1 PTO_FIXP_GV_GVMX_L_PACKED PTO_FIXP_PPSRC_1
 #define PTO_FIXP_GV_GVMX_L_SRC_2 PTO_FIXP_GV_GVMX_L_PACKED PTO_FIXP_PPSRC_2
@@ -6926,7 +6926,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_GV_GVMXB_L_SRC_5
 #undef PTO_FIXP_GV_GVMXB_L_SRC_6
 #undef PTO_FIXP_GV_GVMXB_L_SRC_7
-#define PTO_FIXP_GV_GVMXB_L_PACKED PTO_FIXP_GV_GVMX_L_PACKED "B.IOT %[Bias], mask=1111\n"
+#define PTO_FIXP_GV_GVMXB_L_PACKED PTO_FIXP_GV_GVMX_L_PACKED "B.IOT %[Bias].reuse, mask=1111\n"
 #define PTO_FIXP_GV_GVMXB_L_SRC_0 PTO_FIXP_GV_GVMXB_L_PACKED PTO_FIXP_PPSRC_0
 #define PTO_FIXP_GV_GVMXB_L_SRC_1 PTO_FIXP_GV_GVMXB_L_PACKED PTO_FIXP_PPSRC_1
 #define PTO_FIXP_GV_GVMXB_L_SRC_2 PTO_FIXP_GV_GVMXB_L_PACKED PTO_FIXP_PPSRC_2
@@ -6944,7 +6944,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #undef PTO_FIXP_GV_GVMXA_L_SRC_5
 #undef PTO_FIXP_GV_GVMXA_L_SRC_6
 #undef PTO_FIXP_GV_GVMXA_L_SRC_7
-#define PTO_FIXP_GV_GVMXA_L_PACKED "B.IOT %[C], %[Vec], mask=1111\n" "B.IOT %[ScaleVec], %[Mtx], mask=1111\n" "B.IOT %[ScaleMtx], mask=1111\n"
+#define PTO_FIXP_GV_GVMXA_L_PACKED "B.IOT %[C].reuse, %[Vec].reuse, mask=1111\n" "B.IOT %[ScaleVec].reuse, %[Mtx].reuse, mask=1111\n" "B.IOT %[ScaleMtx].reuse, mask=1111\n"
 #define PTO_FIXP_GV_GVMXA_L_SRC_0 PTO_FIXP_GV_GVMXA_L_PACKED PTO_FIXP_PPSRC_0
 #define PTO_FIXP_GV_GVMXA_L_SRC_1 PTO_FIXP_GV_GVMXA_L_PACKED PTO_FIXP_PPSRC_1
 #define PTO_FIXP_GV_GVMXA_L_SRC_2 PTO_FIXP_GV_GVMXA_L_PACKED PTO_FIXP_PPSRC_2
@@ -6955,83 +6955,83 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_GV_GVMXA_L_SRC_7 PTO_FIXP_GV_GVMXA_L_PACKED PTO_FIXP_PPSRC_7
 
 #define PTO_FIXP_SRC_0 \
-  "B.IOT %[A], %[B], mask=1111\n"
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n"
 #define PTO_FIXP_SRC_1 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], mask=1111\n"
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[RowIn].reuse, mask=1111\n"
 #define PTO_FIXP_SRC_2 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile], mask=1111\n"
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[QuantTile].reuse, mask=1111\n"
 #define PTO_FIXP_SRC_3 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[RowIn].reuse, %[QuantTile].reuse, mask=1111\n"
 #define PTO_FIXP_SRC_4 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[ReluTile], mask=1111\n"
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SRC_5 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[RowIn].reuse, %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SRC_6 \
-  "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[QuantTile].reuse, %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SRC_7 \
-  "B.IOT %[A], %[B], mask=1111\n" \
-  "B.IOT %[RowIn], %[QuantTile], mask=1111\n" \
-  "B.IOT %[ReluTile], mask=1111\n"
+  "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" \
+  "B.IOT %[RowIn].reuse, %[QuantTile].reuse, mask=1111\n" \
+  "B.IOT %[ReluTile].reuse, mask=1111\n"
 
 #define PTO_FIXP_SHARED_B_SRC_0 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n"
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_1 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[RowIn], mask=1111\n"
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[RowIn].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_2 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[QuantTile], mask=1111\n"
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[QuantTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_3 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
-  "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, mask=1111\n" \
+  "B.IOT %[RowIn].reuse, %[QuantTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_4 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[ReluTile], mask=1111\n"
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_5 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
-  "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, mask=1111\n" \
+  "B.IOT %[RowIn].reuse, %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_6 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
-  "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, mask=1111\n" \
+  "B.IOT %[QuantTile].reuse, %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_B_SRC_7 \
-  "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n" \
-  "B.IOT %[RowIn], %[QuantTile], mask=1111\n" "B.IOT %[ReluTile], mask=1111\n"
+  "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, mask=1111\n" \
+  "B.IOT %[RowIn].reuse, %[QuantTile].reuse, mask=1111\n" "B.IOT %[ReluTile].reuse, mask=1111\n"
 
 #define PTO_FIXP_SHARED_A_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], mask=1111\n"
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_1 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n"
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[RowIn].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_2 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile], mask=1111\n"
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[QuantTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_3 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n" \
-  "B.IOT %[QuantTile], mask=1111\n"
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[RowIn].reuse, mask=1111\n" \
+  "B.IOT %[QuantTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_4 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[ReluTile], mask=1111\n"
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_5 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n" \
-  "B.IOT %[ReluTile], mask=1111\n"
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[RowIn].reuse, mask=1111\n" \
+  "B.IOT %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_6 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[QuantTile], mask=1111\n" \
-  "B.IOT %[ReluTile], mask=1111\n"
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[QuantTile].reuse, mask=1111\n" \
+  "B.IOT %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_A_SRC_7 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[RowIn], mask=1111\n" \
-  "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[RowIn].reuse, mask=1111\n" \
+  "B.IOT %[QuantTile].reuse, %[ReluTile].reuse, mask=1111\n"
 
 #define PTO_FIXP_SHARED_AB_SRC_0 \
-  "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
+  "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_1 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], mask=1111\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_2 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile], mask=1111\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_3 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[QuantTile], mask=1111\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn].reuse, %[QuantTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_4 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[ReluTile], mask=1111\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_5 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[ReluTile], mask=1111\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn].reuse, %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_6 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile], %[ReluTile], mask=1111\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[QuantTile].reuse, %[ReluTile].reuse, mask=1111\n"
 #define PTO_FIXP_SHARED_AB_SRC_7 \
-  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn], %[QuantTile], mask=1111\n" \
-  "B.IOT %[ReluTile], mask=1111\n"
+  PTO_FIXP_SHARED_AB_SRC_0 "B.IOT %[RowIn].reuse, %[QuantTile].reuse, mask=1111\n" \
+  "B.IOT %[ReluTile].reuse, mask=1111\n"
 
 #define PTO_FIXP_IOR_0 ""
 #define PTO_FIXP_IOR_1 "B.IOR [%[QuantGpr]],[]\n"
@@ -7186,11 +7186,11 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 // no trailing Local source, so it keeps the sourceless dest).
 #define PTO_FIXP_ACC_FOLD_LOCAL(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR) \
-      "B.IOT %[C], %[A], mask=1111\n" \
+      "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
       ".if %c[CScaleEn]\n" \
-      "B.IOT %[B], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[B].reuse, %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".else\n" \
-      "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[B].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".endif\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [B] "Tr"(b.data()), [CScaleOperand] "Tr"(cscale.data()), \
@@ -7198,11 +7198,11 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       : "memory")
 #define PTO_FIXP_ACC_FOLD_SHARED_B(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR) \
-      "B.IOS %S[SharedB], mask=1111\n" \
+      "B.IOS %S[SharedB].reuse, mask=1111\n" \
       ".if %c[CScaleEn]\n" \
-      "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".else\n" \
-      "B.IOT %[C], %[A], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[C].reuse, %[A].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".endif\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [C] "Tr"(c.data()), [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()), [CScaleOperand] "Tr"(cscale.data()), \
@@ -7210,11 +7210,11 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       : "memory")
 #define PTO_FIXP_ACC_FOLD_SHARED_A(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR) \
-      "B.IOS %S[SharedA], mask=1111\n" \
+      "B.IOS %S[SharedA].reuse, mask=1111\n" \
       ".if %c[CScaleEn]\n" \
-      "B.IOT %[C], %[B], mask=1111\n" "B.IOT %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" "B.IOT %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".else\n" \
-      "B.IOT %[C], %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[C].reuse, %[B].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".endif\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()), [CScaleOperand] "Tr"(cscale.data()), \
@@ -7222,11 +7222,11 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       : "memory")
 #define PTO_FIXP_ACC_FOLD_SHARED_AB(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TMATMUL.ACC", PTO_FIXP_ATTR) \
-      "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" \
+      "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" \
       ".if %c[CScaleEn]\n" \
-      "B.IOT %[C], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[C].reuse, %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".else\n" \
-      "B.IOT %[C], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[C].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".endif\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [C] "Tr"(c.data()), [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()), [CScaleOperand] "Tr"(cscale.data()), \
@@ -7235,28 +7235,28 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 
 #define PTO_FIXP_BIAS_FOLD_LOCAL(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TMATMUL.BIAS", PTO_FIXP_ATTR) \
-      "B.IOT %[A], %[B], mask=1111\n" "B.IOT %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOT %[A].reuse, %[B].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [A] "Tr"(a.data()), [B] "Tr"(b.data()), [Bias] "Tr"(bias.data()), \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 #define PTO_FIXP_BIAS_FOLD_SHARED_B(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TMATMUL.BIAS", PTO_FIXP_ATTR) \
-      "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()), [Bias] "Tr"(bias.data()), \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 #define PTO_FIXP_BIAS_FOLD_SHARED_A(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TMATMUL.BIAS", PTO_FIXP_ATTR) \
-      "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()), [Bias] "Tr"(bias.data()), \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 #define PTO_FIXP_BIAS_FOLD_SHARED_AB(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TMATMUL.BIAS", PTO_FIXP_ATTR) \
-      "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()), [Bias] "Tr"(bias.data()), \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -7306,8 +7306,8 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_FOLD_LOCAL(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
-      "B.IOT %[A], %[ScaleA], mask=1111\n"                                   \
-      "B.IOT %[B], %[ScaleB], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"      \
+      "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n"                                   \
+      "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"      \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
@@ -7317,9 +7317,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_FOLD_SHARED_B(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
-      "B.IOS %S[SharedB], mask=1111\n"                                       \
-      "B.IOS %S[ScaleB], mask=1111\n"                                        \
-      "B.IOT %[A], %[ScaleA], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"      \
+      "B.IOS %S[SharedB].reuse, mask=1111\n"                                       \
+      "B.IOS %S[ScaleB].reuse, mask=1111\n"                                        \
+      "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"      \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS,\
@@ -7329,9 +7329,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_FOLD_SHARED_A(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)                          \
-      "B.IOS %S[SharedA], mask=1111\n"                                       \
-      "B.IOS %S[ScaleA], mask=1111\n"                                        \
-      "B.IOT %[B], %[ScaleB], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"      \
+      "B.IOS %S[SharedA].reuse, mask=1111\n"                                       \
+      "B.IOS %S[ScaleA].reuse, mask=1111\n"                                        \
+      "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"      \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
       : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS,\
@@ -7398,12 +7398,12 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_ACC_FOLD_LOCAL(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
-      "B.IOT %[C], %[A], mask=1111\n"                                        \
-      "B.IOT %[ScaleA], %[B], mask=1111\n"                                   \
+      "B.IOT %[C].reuse, %[A].reuse, mask=1111\n"                                        \
+      "B.IOT %[ScaleA].reuse, %[B].reuse, mask=1111\n"                                   \
       ".if %c[CScaleEn]\n"                                                   \
-      "B.IOT %[ScaleB], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[ScaleB].reuse, %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".else\n"                                                             \
-      "B.IOT %[ScaleB], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"           \
+      "B.IOT %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"           \
       ".endif\n"                                                            \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
@@ -7414,13 +7414,13 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_ACC_FOLD_SHARED_B(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
-      "B.IOS %S[SharedB], mask=1111\n"                                       \
-      "B.IOS %S[ScaleB], mask=1111\n"                                        \
-      "B.IOT %[C], %[A], mask=1111\n"                                        \
+      "B.IOS %S[SharedB].reuse, mask=1111\n"                                       \
+      "B.IOS %S[ScaleB].reuse, mask=1111\n"                                        \
+      "B.IOT %[C].reuse, %[A].reuse, mask=1111\n"                                        \
       ".if %c[CScaleEn]\n"                                                   \
-      "B.IOT %[ScaleA], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[ScaleA].reuse, %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".else\n"                                                             \
-      "B.IOT %[ScaleA], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"           \
+      "B.IOT %[ScaleA].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"           \
       ".endif\n"                                                            \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
@@ -7431,13 +7431,13 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_ACC_FOLD_SHARED_A(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
-      "B.IOS %S[SharedA], mask=1111\n"                                       \
-      "B.IOS %S[ScaleA], mask=1111\n"                                        \
-      "B.IOT %[C], %[B], mask=1111\n"                                        \
+      "B.IOS %S[SharedA].reuse, mask=1111\n"                                       \
+      "B.IOS %S[ScaleA].reuse, mask=1111\n"                                        \
+      "B.IOT %[C].reuse, %[B].reuse, mask=1111\n"                                        \
       ".if %c[CScaleEn]\n"                                                   \
-      "B.IOT %[ScaleB], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[ScaleB].reuse, %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".else\n"                                                             \
-      "B.IOT %[ScaleB], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"           \
+      "B.IOT %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"           \
       ".endif\n"                                                            \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
@@ -7448,14 +7448,14 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_ACC_FOLD_SHARED_AB(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.ACC", PTO_FIXP_ATTR)                          \
-      "B.IOS %S[SharedA], mask=1111\n"                                       \
-      "B.IOS %S[ScaleA], mask=1111\n"                                        \
-      "B.IOS %S[SharedB], mask=1111\n"                                       \
-      "B.IOS %S[ScaleB], mask=1111\n"                                        \
+      "B.IOS %S[SharedA].reuse, mask=1111\n"                                       \
+      "B.IOS %S[ScaleA].reuse, mask=1111\n"                                        \
+      "B.IOS %S[SharedB].reuse, mask=1111\n"                                       \
+      "B.IOS %S[ScaleB].reuse, mask=1111\n"                                        \
       ".if %c[CScaleEn]\n"                                                   \
-      "B.IOT %[C], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+      "B.IOT %[C].reuse, %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
       ".else\n"                                                             \
-      "B.IOT %[C], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"               \
+      "B.IOT %[C].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"               \
       ".endif\n"                                                            \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
@@ -7512,9 +7512,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_BIAS_FOLD_LOCAL(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.BIAS", PTO_FIXP_ATTR)                     \
-      "B.IOT %[A], %[ScaleA], mask=1111\n"                                   \
-      "B.IOT %[B], %[ScaleB], mask=1111\n"                                   \
-      "B.IOT %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"             \
+      "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n"                                   \
+      "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\n"                                   \
+      "B.IOT %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"             \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
@@ -7524,10 +7524,10 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_BIAS_FOLD_SHARED_B(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.BIAS", PTO_FIXP_ATTR)                     \
-      "B.IOS %S[SharedB], mask=1111\n"                                       \
-      "B.IOS %S[ScaleB], mask=1111\n"                                        \
-      "B.IOT %[A], %[ScaleA], mask=1111\n"                                   \
-      "B.IOT %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"             \
+      "B.IOS %S[SharedB].reuse, mask=1111\n"                                       \
+      "B.IOS %S[ScaleB].reuse, mask=1111\n"                                        \
+      "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n"                                   \
+      "B.IOT %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"             \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
@@ -7537,10 +7537,10 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_BIAS_FOLD_SHARED_A(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.BIAS", PTO_FIXP_ATTR)                     \
-      "B.IOS %S[SharedA], mask=1111\n"                                       \
-      "B.IOS %S[ScaleA], mask=1111\n"                                        \
-      "B.IOT %[B], %[ScaleB], mask=1111\n"                                   \
-      "B.IOT %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"             \
+      "B.IOS %S[SharedA].reuse, mask=1111\n"                                       \
+      "B.IOS %S[ScaleA].reuse, mask=1111\n"                                        \
+      "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\n"                                   \
+      "B.IOT %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"             \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
       : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
@@ -7550,11 +7550,11 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_FIXP_MX_BIAS_FOLD_SHARED_AB(IOR) \
   asm volatile(                                                              \
       PTO_MATMUL_HEADER("TMATMULMX.BIAS", PTO_FIXP_ATTR)                     \
-      "B.IOS %S[SharedA], mask=1111\n"                                       \
-      "B.IOS %S[ScaleA], mask=1111\n"                                        \
-      "B.IOS %S[SharedB], mask=1111\n"                                       \
-      "B.IOS %S[ScaleB], mask=1111\n"                                        \
-      "B.IOT %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"             \
+      "B.IOS %S[SharedA].reuse, mask=1111\n"                                       \
+      "B.IOS %S[ScaleA].reuse, mask=1111\n"                                        \
+      "B.IOS %S[SharedB].reuse, mask=1111\n"                                       \
+      "B.IOS %S[ScaleB].reuse, mask=1111\n"                                        \
+      "B.IOT %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"             \
       PTO_FIXP_IOR_##IOR                                                     \
       : PTO_FIXP_OUT_DECL_0                                                  \
       : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()),\
@@ -7564,30 +7564,30 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 // Optional MX scale paths must omit absent operands from the LLVM IR inline-
 // asm constraint list.  These fragments describe exactly the architectural
 // source stream for ScaleMask 0/1/2; ScaleMask 3 uses the established emitters.
-#define PTO_MX_L_SRC_0 "B.IOT %[A], %[B], mask=1111\n"
-#define PTO_MX_L_SRC_1 "B.IOT %[A], %[ScaleA], mask=1111\n" "B.IOT %[B], mask=1111\n"
-#define PTO_MX_L_SRC_2 "B.IOT %[A], mask=1111\n" "B.IOT %[B], %[ScaleB], mask=1111\n"
+#define PTO_MX_L_SRC_0 "B.IOT %[A].reuse, %[B].reuse, mask=1111\n"
+#define PTO_MX_L_SRC_1 "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n"
+#define PTO_MX_L_SRC_2 "B.IOT %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\n"
 #define PTO_MX_L_INPUTS_0 [A] "Tr"(a.data()), [B] "Tr"(b.data())
 #define PTO_MX_L_INPUTS_1 [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [B] "Tr"(b.data())
 #define PTO_MX_L_INPUTS_2 [A] "Tr"(a.data()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data())
 
-#define PTO_MX_SB_SRC_0 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111\n"
-#define PTO_MX_SB_SRC_1 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[ScaleA], mask=1111\n"
-#define PTO_MX_SB_SRC_2 "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], mask=1111\n"
+#define PTO_MX_SB_SRC_0 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, mask=1111\n"
+#define PTO_MX_SB_SRC_1 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n"
+#define PTO_MX_SB_SRC_2 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" "B.IOT %[A].reuse, mask=1111\n"
 #define PTO_MX_SB_INPUTS_0 [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle())
 #define PTO_MX_SB_INPUTS_1 [A] "Tr"(a.data()), [ScaleA] "Tr"(ascale.data()), [SharedB] "Sr"(b.handle())
 #define PTO_MX_SB_INPUTS_2 [A] "Tr"(a.data()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle())
 
-#define PTO_MX_SA_SRC_0 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], mask=1111\n"
-#define PTO_MX_SA_SRC_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], mask=1111\n"
-#define PTO_MX_SA_SRC_2 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[ScaleB], mask=1111\n"
+#define PTO_MX_SA_SRC_0 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n"
+#define PTO_MX_SA_SRC_1 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111\n"
+#define PTO_MX_SA_SRC_2 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\n"
 #define PTO_MX_SA_INPUTS_0 [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data())
 #define PTO_MX_SA_INPUTS_1 [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [B] "Tr"(b.data())
 #define PTO_MX_SA_INPUTS_2 [SharedA] "Sr"(a.handle()), [B] "Tr"(b.data()), [ScaleB] "Tr"(bscale.data())
 
-#define PTO_MX_SAB_SRC_0 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
-#define PTO_MX_SAB_SRC_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
-#define PTO_MX_SAB_SRC_2 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n"
+#define PTO_MX_SAB_SRC_0 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n"
+#define PTO_MX_SAB_SRC_1 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n"
+#define PTO_MX_SAB_SRC_2 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOS %S[ScaleB].reuse, mask=1111\n"
 #define PTO_MX_SAB_INPUTS_0 [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle())
 #define PTO_MX_SAB_INPUTS_1 [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(ascale.handle()), [SharedB] "Sr"(b.handle())
 #define PTO_MX_SAB_INPUTS_2 [SharedA] "Sr"(a.handle()), [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(bscale.handle())
@@ -7611,36 +7611,36 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 
 #define PTO_MX_ACC_CSCALE \
   ".if %c[CScaleEn]\n" \
-  "B.IOT %[CScaleOperand], mask=1111\n" \
+  "B.IOT %[CScaleOperand].reuse, mask=1111\n" \
   ".endif\n"
 
 // Optional-scale ACC source streams. Shared operands are emitted first; the
 // remaining Local stream starts with C and is packed continuously through the
 // optional CScale/PostProcess tail.
-#define PTO_MX_ACC_L_PREFIX_0 "B.IOT %[C], %[A], mask=1111\n"
-#define PTO_MX_ACC_L_PREFIX_1 "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[ScaleA], %[B], mask=1111\n"
-#define PTO_MX_ACC_L_PREFIX_2 "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[B], %[ScaleB], mask=1111\n"
+#define PTO_MX_ACC_L_PREFIX_0 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n"
+#define PTO_MX_ACC_L_PREFIX_1 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[ScaleA].reuse, %[B].reuse, mask=1111\n"
+#define PTO_MX_ACC_L_PREFIX_2 "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\n"
 #define PTO_MX_ACC_L_TAIL_0(SRC) PTO_FIXP_ACC_EVEN_TAIL_##SRC
 #define PTO_MX_ACC_L_TAIL_1(SRC) PTO_FIXP_ACC_EVEN_TAIL_##SRC
 #define PTO_MX_ACC_L_TAIL_2(SRC) PTO_FIXP_ACC_EVEN_TAIL_##SRC
 
-#define PTO_MX_ACC_SB_PREFIX_0 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n"
-#define PTO_MX_ACC_SB_PREFIX_1 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n"
-#define PTO_MX_ACC_SB_PREFIX_2 "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[C], %[A], mask=1111\n"
+#define PTO_MX_ACC_SB_PREFIX_0 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n"
+#define PTO_MX_ACC_SB_PREFIX_1 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n"
+#define PTO_MX_ACC_SB_PREFIX_2 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n"
 #define PTO_MX_ACC_SB_TAIL_0(SRC) PTO_FIXP_ACC_EVEN_TAIL_##SRC
 #define PTO_MX_ACC_SB_TAIL_1(SRC) PTO_FIXP_ACC_ODD_TAIL_##SRC("%[ScaleA]")
 #define PTO_MX_ACC_SB_TAIL_2(SRC) PTO_FIXP_ACC_EVEN_TAIL_##SRC
 
-#define PTO_MX_ACC_SA_PREFIX_0 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n"
-#define PTO_MX_ACC_SA_PREFIX_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n"
-#define PTO_MX_ACC_SA_PREFIX_2 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[C], %[B], mask=1111\n"
+#define PTO_MX_ACC_SA_PREFIX_0 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n"
+#define PTO_MX_ACC_SA_PREFIX_1 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n"
+#define PTO_MX_ACC_SA_PREFIX_2 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n"
 #define PTO_MX_ACC_SA_TAIL_0(SRC) PTO_FIXP_ACC_EVEN_TAIL_##SRC
 #define PTO_MX_ACC_SA_TAIL_1(SRC) PTO_FIXP_ACC_EVEN_TAIL_##SRC
 #define PTO_MX_ACC_SA_TAIL_2(SRC) PTO_FIXP_ACC_ODD_TAIL_##SRC("%[ScaleB]")
 
-#define PTO_MX_ACC_SAB_PREFIX_0 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
-#define PTO_MX_ACC_SAB_PREFIX_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
-#define PTO_MX_ACC_SAB_PREFIX_2 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n"
+#define PTO_MX_ACC_SAB_PREFIX_0 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n"
+#define PTO_MX_ACC_SAB_PREFIX_1 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n"
+#define PTO_MX_ACC_SAB_PREFIX_2 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOS %S[ScaleB].reuse, mask=1111\n"
 #define PTO_MX_ACC_SAB_TAIL_0(SRC) PTO_FIXP_ACC_ODD_TAIL_##SRC("%[C]")
 #define PTO_MX_ACC_SAB_TAIL_1(SRC) PTO_FIXP_ACC_ODD_TAIL_##SRC("%[C]")
 #define PTO_MX_ACC_SAB_TAIL_2(SRC) PTO_FIXP_ACC_ODD_TAIL_##SRC("%[C]")
@@ -7668,10 +7668,10 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_MX_OPT_ACC_SB(M,S,O,I) PTO_MX_ACC_OPTIONAL_EMIT(M,S,O,I,SB)
 #define PTO_MX_OPT_ACC_SA(M,S,O,I) PTO_MX_ACC_OPTIONAL_EMIT(M,S,O,I,SA)
 #define PTO_MX_OPT_ACC_SAB(M,S,O,I) PTO_MX_ACC_OPTIONAL_EMIT(M,S,O,I,SAB)
-#define PTO_MX_OPT_BIAS_L(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",L,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
-#define PTO_MX_OPT_BIAS_SB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SB,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
-#define PTO_MX_OPT_BIAS_SA(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SA,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
-#define PTO_MX_OPT_BIAS_SAB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SAB,"","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
+#define PTO_MX_OPT_BIAS_L(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",L,"","B.IOT %[Bias].reuse, mask=1111\n",BIAS,M,S,O,I)
+#define PTO_MX_OPT_BIAS_SB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SB,"","B.IOT %[Bias].reuse, mask=1111\n",BIAS,M,S,O,I)
+#define PTO_MX_OPT_BIAS_SA(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SA,"","B.IOT %[Bias].reuse, mask=1111\n",BIAS,M,S,O,I)
+#define PTO_MX_OPT_BIAS_SAB(M,S,O,I) PTO_MX_OPTIONAL_EMIT("TMATMULMX.BIAS",SAB,"","B.IOT %[Bias].reuse, mask=1111\n",BIAS,M,S,O,I)
 #define PTO_MX_OPT_PLAIN_L_0(S,O,I) PTO_MX_OPT_PLAIN_L(0,S,O,I)
 #define PTO_MX_OPT_PLAIN_L_1(S,O,I) PTO_MX_OPT_PLAIN_L(1,S,O,I)
 #define PTO_MX_OPT_PLAIN_L_2(S,O,I) PTO_MX_OPT_PLAIN_L(2,S,O,I)
@@ -7721,15 +7721,15 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 // destination (+ last) folded onto their final Local B.IOT, removing that
 // extra binder. SAB has no Local source, so its "fold" keeps the sourceless
 // dest (no change) -- kept here only so the dispatch is uniform across storage.
-#define PTO_MXF_L_SRC_0 "B.IOT %[A], %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-#define PTO_MXF_L_SRC_1 "B.IOT %[A], %[ScaleA], mask=1111\n" "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-#define PTO_MXF_L_SRC_2 "B.IOT %[A], mask=1111\n" "B.IOT %[B], %[ScaleB], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-#define PTO_MXF_SB_SRC_0 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-#define PTO_MXF_SB_SRC_1 "B.IOS %S[SharedB], mask=1111\n" "B.IOT %[A], %[ScaleA], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-#define PTO_MXF_SB_SRC_2 "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n" "B.IOT %[A], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-#define PTO_MXF_SA_SRC_0 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-#define PTO_MXF_SA_SRC_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-#define PTO_MXF_SA_SRC_2 "B.IOS %S[SharedA], mask=1111\n" "B.IOT %[B], %[ScaleB], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_MXF_L_SRC_0 "B.IOT %[A].reuse, %[B].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_MXF_L_SRC_1 "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_MXF_L_SRC_2 "B.IOT %[A].reuse, mask=1111\n" "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_MXF_SB_SRC_0 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_MXF_SB_SRC_1 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_MXF_SB_SRC_2 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" "B.IOT %[A].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_MXF_SA_SRC_0 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_MXF_SA_SRC_1 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" "B.IOT %[B].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_MXF_SA_SRC_2 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
 #define PTO_MXF_SAB_SRC_0 PTO_MX_SAB_SRC_0 "B.IOT mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
 #define PTO_MXF_SAB_SRC_1 PTO_MX_SAB_SRC_1 "B.IOT mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
 #define PTO_MXF_SAB_SRC_2 PTO_MX_SAB_SRC_2 "B.IOT mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
@@ -7751,7 +7751,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_MX_FOLD_BIAS(STORAGE, MASK, IOR) \
   asm volatile(PTO_MATMUL_HEADER("TMATMULMX.BIAS", PTO_FIXP_ATTR) \
       PTO_MX_##STORAGE##_SRC_##MASK \
-      "B.IOT %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOT %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [Bias] "Tr"(bias.data()), PTO_MX_##STORAGE##_INPUTS_##MASK, \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, \
@@ -7767,47 +7767,47 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_MX_ACCF_IOS_L_0
 #define PTO_MX_ACCF_IOS_L_1
 #define PTO_MX_ACCF_IOS_L_2
-#define PTO_MX_ACCF_IOS_SB_0 "B.IOS %S[SharedB], mask=1111\n"
-#define PTO_MX_ACCF_IOS_SB_1 "B.IOS %S[SharedB], mask=1111\n"
-#define PTO_MX_ACCF_IOS_SB_2 "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n"
-#define PTO_MX_ACCF_IOS_SA_0 "B.IOS %S[SharedA], mask=1111\n"
-#define PTO_MX_ACCF_IOS_SA_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n"
-#define PTO_MX_ACCF_IOS_SA_2 "B.IOS %S[SharedA], mask=1111\n"
-#define PTO_MX_ACCF_IOS_SAB_0 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
-#define PTO_MX_ACCF_IOS_SAB_1 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[ScaleA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n"
-#define PTO_MX_ACCF_IOS_SAB_2 "B.IOS %S[SharedA], mask=1111\n" "B.IOS %S[SharedB], mask=1111\n" "B.IOS %S[ScaleB], mask=1111\n"
+#define PTO_MX_ACCF_IOS_SB_0 "B.IOS %S[SharedB].reuse, mask=1111\n"
+#define PTO_MX_ACCF_IOS_SB_1 "B.IOS %S[SharedB].reuse, mask=1111\n"
+#define PTO_MX_ACCF_IOS_SB_2 "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOS %S[ScaleB].reuse, mask=1111\n"
+#define PTO_MX_ACCF_IOS_SA_0 "B.IOS %S[SharedA].reuse, mask=1111\n"
+#define PTO_MX_ACCF_IOS_SA_1 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[ScaleA].reuse, mask=1111\n"
+#define PTO_MX_ACCF_IOS_SA_2 "B.IOS %S[SharedA].reuse, mask=1111\n"
+#define PTO_MX_ACCF_IOS_SAB_0 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n"
+#define PTO_MX_ACCF_IOS_SAB_1 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[ScaleA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n"
+#define PTO_MX_ACCF_IOS_SAB_2 "B.IOS %S[SharedA].reuse, mask=1111\n" "B.IOS %S[SharedB].reuse, mask=1111\n" "B.IOS %S[ScaleB].reuse, mask=1111\n"
 
 #define PTO_MX_ACCF_LOCAL_L_0 \
-  "B.IOT %[C], %[A], mask=1111\n" \
-  ".if %c[CScaleEn]\n" "B.IOT %[B], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
-  ".else\n" "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
+  ".if %c[CScaleEn]\n" "B.IOT %[B].reuse, %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+  ".else\n" "B.IOT %[B].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
 #define PTO_MX_ACCF_LOCAL_L_1 \
-  "B.IOT %[C], %[A], mask=1111\n" \
-  ".if %c[CScaleEn]\n" "B.IOT %[ScaleA], %[B], mask=1111\n" "B.IOT %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
-  ".else\n" "B.IOT %[ScaleA], %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
+  ".if %c[CScaleEn]\n" "B.IOT %[ScaleA].reuse, %[B].reuse, mask=1111\n" "B.IOT %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+  ".else\n" "B.IOT %[ScaleA].reuse, %[B].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
 #define PTO_MX_ACCF_LOCAL_L_2 \
-  "B.IOT %[C], %[A], mask=1111\n" \
-  ".if %c[CScaleEn]\n" "B.IOT %[B], %[ScaleB], mask=1111\n" "B.IOT %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
-  ".else\n" "B.IOT %[B], %[ScaleB], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
+  ".if %c[CScaleEn]\n" "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\n" "B.IOT %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+  ".else\n" "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
 #define PTO_MX_ACCF_LOCAL_SB_0 \
-  ".if %c[CScaleEn]\n" "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
-  ".else\n" "B.IOT %[C], %[A], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
+  ".if %c[CScaleEn]\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" "B.IOT %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+  ".else\n" "B.IOT %[C].reuse, %[A].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
 #define PTO_MX_ACCF_LOCAL_SB_1 \
-  "B.IOT %[C], %[A], mask=1111\n" \
-  ".if %c[CScaleEn]\n" "B.IOT %[ScaleA], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
-  ".else\n" "B.IOT %[ScaleA], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
+  "B.IOT %[C].reuse, %[A].reuse, mask=1111\n" \
+  ".if %c[CScaleEn]\n" "B.IOT %[ScaleA].reuse, %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+  ".else\n" "B.IOT %[ScaleA].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
 #define PTO_MX_ACCF_LOCAL_SB_2 PTO_MX_ACCF_LOCAL_SB_0
 #define PTO_MX_ACCF_LOCAL_SA_0 \
-  ".if %c[CScaleEn]\n" "B.IOT %[C], %[B], mask=1111\n" "B.IOT %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
-  ".else\n" "B.IOT %[C], %[B], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
+  ".if %c[CScaleEn]\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" "B.IOT %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+  ".else\n" "B.IOT %[C].reuse, %[B].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
 #define PTO_MX_ACCF_LOCAL_SA_1 PTO_MX_ACCF_LOCAL_SA_0
 #define PTO_MX_ACCF_LOCAL_SA_2 \
-  "B.IOT %[C], %[B], mask=1111\n" \
-  ".if %c[CScaleEn]\n" "B.IOT %[ScaleB], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
-  ".else\n" "B.IOT %[ScaleB], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
+  "B.IOT %[C].reuse, %[B].reuse, mask=1111\n" \
+  ".if %c[CScaleEn]\n" "B.IOT %[ScaleB].reuse, %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+  ".else\n" "B.IOT %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
 #define PTO_MX_ACCF_LOCAL_SAB_0 \
-  ".if %c[CScaleEn]\n" "B.IOT %[C], %[CScaleOperand], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
-  ".else\n" "B.IOT %[C], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
+  ".if %c[CScaleEn]\n" "B.IOT %[C].reuse, %[CScaleOperand].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" \
+  ".else\n" "B.IOT %[C].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" ".endif\n"
 #define PTO_MX_ACCF_LOCAL_SAB_1 PTO_MX_ACCF_LOCAL_SAB_0
 #define PTO_MX_ACCF_LOCAL_SAB_2 PTO_MX_ACCF_LOCAL_SAB_0
 
@@ -7837,9 +7837,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
   else if constexpr (ScaleMask == 1) { PTO_MX_DISPATCH_FOLD_I(OP, STORAGE, 1); } \
   else { PTO_MX_DISPATCH_FOLD_I(OP, STORAGE, 2); }
 
-#define PTO_GV_MX_SRC_0 "B.IOT %[Vec], %[Mtx], mask=1111\n"
-#define PTO_GV_MX_SRC_1 "B.IOT %[Vec], %[ScaleVec], mask=1111\n" "B.IOT %[Mtx], mask=1111\n"
-#define PTO_GV_MX_SRC_2 "B.IOT %[Vec], mask=1111\n" "B.IOT %[Mtx], %[ScaleMtx], mask=1111\n"
+#define PTO_GV_MX_SRC_0 "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n"
+#define PTO_GV_MX_SRC_1 "B.IOT %[Vec].reuse, %[ScaleVec].reuse, mask=1111\n" "B.IOT %[Mtx].reuse, mask=1111\n"
+#define PTO_GV_MX_SRC_2 "B.IOT %[Vec].reuse, mask=1111\n" "B.IOT %[Mtx].reuse, %[ScaleMtx].reuse, mask=1111\n"
 #define PTO_GV_MX_INPUTS_0 [Vec] "Tr"(vec.data()), [Mtx] "Tr"(mtx.data())
 #define PTO_GV_MX_INPUTS_1 [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), [Mtx] "Tr"(mtx.data())
 #define PTO_GV_MX_INPUTS_2 [Vec] "Tr"(vec.data()), [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data())
@@ -7847,9 +7847,9 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 // TGEMVMX ScaleMask 0/1/2 dest-fold (SrcMask==0, OutMask==0). The optional
 // source macros already pack each Local scale with its primary; these fold D
 // onto the final Local B.IOT and drop the sourceless dest binder.
-#define PTO_GVF_MX_SRC_0 "B.IOT %[Vec], %[Mtx], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-#define PTO_GVF_MX_SRC_1 "B.IOT %[Vec], %[ScaleVec], mask=1111\n" "B.IOT %[Mtx], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
-#define PTO_GVF_MX_SRC_2 "B.IOT %[Vec], mask=1111\n" "B.IOT %[Mtx], %[ScaleMtx], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_GVF_MX_SRC_0 "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_GVF_MX_SRC_1 "B.IOT %[Vec].reuse, %[ScaleVec].reuse, mask=1111\n" "B.IOT %[Mtx].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+#define PTO_GVF_MX_SRC_2 "B.IOT %[Vec].reuse, mask=1111\n" "B.IOT %[Mtx].reuse, %[ScaleMtx].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
 
 #define PTO_GV_FOLD_PLAIN(MASK, IOR) \
   asm volatile(PTO_MATMUL_HEADER("TGEMVMX", PTO_FIXP_ATTR) \
@@ -7860,14 +7860,14 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       : "memory")
 #define PTO_GV_FOLD_ACC(MASK, IOR) \
   asm volatile(PTO_MATMUL_HEADER("TGEMVMX.ACC", PTO_FIXP_ATTR) \
-      "B.IOT %[C], mask=1111\n" PTO_GVF_MX_SRC_##MASK PTO_FIXP_IOR_##IOR \
+      "B.IOT %[C].reuse, mask=1111\n" PTO_GVF_MX_SRC_##MASK PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [C] "Tr"(c.data()), PTO_GV_MX_INPUTS_##MASK, \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 #define PTO_GV_FOLD_BIAS(MASK, IOR) \
   asm volatile(PTO_MATMUL_HEADER("TGEMVMX.BIAS", PTO_FIXP_ATTR) \
-      PTO_GV_MX_SRC_##MASK "B.IOT %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      PTO_GV_MX_SRC_##MASK "B.IOT %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [Bias] "Tr"(bias.data()), PTO_GV_MX_INPUTS_##MASK, \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -7895,8 +7895,8 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
         [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
 #define PTO_GV_OPT_PLAIN(M,S,O,I) PTO_GV_MX_OPTIONAL_EMIT("TGEMVMX","","",NONE,M,S,O,I)
-#define PTO_GV_OPT_ACC(M,S,O,I) PTO_GV_MX_OPTIONAL_EMIT("TGEMVMX.ACC","B.IOT %[C], mask=1111\n","",ACC,M,S,O,I)
-#define PTO_GV_OPT_BIAS(M,S,O,I) PTO_GV_MX_OPTIONAL_EMIT("TGEMVMX.BIAS","","B.IOT %[Bias], mask=1111\n",BIAS,M,S,O,I)
+#define PTO_GV_OPT_ACC(M,S,O,I) PTO_GV_MX_OPTIONAL_EMIT("TGEMVMX.ACC","B.IOT %[C].reuse, mask=1111\n","",ACC,M,S,O,I)
+#define PTO_GV_OPT_BIAS(M,S,O,I) PTO_GV_MX_OPTIONAL_EMIT("TGEMVMX.BIAS","","B.IOT %[Bias].reuse, mask=1111\n",BIAS,M,S,O,I)
 #define PTO_GV_OPT_PLAIN_0(S,O,I) PTO_GV_OPT_PLAIN(0,S,O,I)
 #define PTO_GV_OPT_PLAIN_1(S,O,I) PTO_GV_OPT_PLAIN(1,S,O,I)
 #define PTO_GV_OPT_PLAIN_2(S,O,I) PTO_GV_OPT_PLAIN(2,S,O,I)
@@ -8298,7 +8298,7 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
 //   GVA:   C,Vec,Mtx                       GVMXA:  C,Vec,ScaleVec,Mtx,ScaleMtx
 #define PTO_FIXP_GV_GV_FOLD(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TGEMV", PTO_FIXP_ATTR) \
-      "B.IOT %[Vec], %[Mtx], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()), \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -8306,8 +8306,8 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
 
 #define PTO_FIXP_GV_GVB_FOLD(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TGEMV.BIAS", PTO_FIXP_ATTR) \
-      "B.IOT %[Vec], %[Mtx], mask=1111\n" \
-      "B.IOT %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\n" \
+      "B.IOT %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()), [Bias] "Tr"(bias.data()), \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -8315,8 +8315,8 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
 
 #define PTO_FIXP_GV_GVA_FOLD(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TGEMV.ACC", PTO_FIXP_ATTR) \
-      "B.IOT %[C], mask=1111\n" \
-      "B.IOT %[Vec], %[Mtx], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOT %[C].reuse, mask=1111\n" \
+      "B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [C] "Tr"(c.data()), [Mtx] "Tr"(mtx.data()), [Vec] "Tr"(vec.data()), \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -8324,8 +8324,8 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
 
 #define PTO_FIXP_GV_GVMX_FOLD(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TGEMVMX", PTO_FIXP_ATTR) \
-      "B.IOT %[Vec], %[ScaleVec], mask=1111\n" \
-      "B.IOT %[Mtx], %[ScaleMtx], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOT %[Vec].reuse, %[ScaleVec].reuse, mask=1111\n" \
+      "B.IOT %[Mtx].reuse, %[ScaleMtx].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), PTO_MX_SCALE_INPUTS, \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -8333,9 +8333,9 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
 
 #define PTO_FIXP_GV_GVMXB_FOLD(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TGEMVMX.BIAS", PTO_FIXP_ATTR) \
-      "B.IOT %[Vec], %[ScaleVec], mask=1111\n" \
-      "B.IOT %[Mtx], %[ScaleMtx], mask=1111\n" \
-      "B.IOT %[Bias], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOT %[Vec].reuse, %[ScaleVec].reuse, mask=1111\n" \
+      "B.IOT %[Mtx].reuse, %[ScaleMtx].reuse, mask=1111\n" \
+      "B.IOT %[Bias].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), PTO_MX_SCALE_INPUTS, [Bias] "Tr"(bias.data()), \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -8343,9 +8343,9 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
 
 #define PTO_FIXP_GV_GVMXA_FOLD(IOR) \
   asm volatile(PTO_MATMUL_HEADER("TGEMVMX.ACC", PTO_FIXP_ATTR) \
-      "B.IOT %[C], %[Vec], mask=1111\n" \
-      "B.IOT %[ScaleVec], %[Mtx], mask=1111\n" \
-      "B.IOT %[ScaleMtx], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
+      "B.IOT %[C].reuse, %[Vec].reuse, mask=1111\n" \
+      "B.IOT %[ScaleVec].reuse, %[Mtx].reuse, mask=1111\n" \
+      "B.IOT %[ScaleMtx].reuse, mask=1111, last, ->%[Dst]<%Z[DstSize]>\n" PTO_FIXP_IOR_##IOR \
       : PTO_FIXP_OUT_DECL_0 \
       : [C] "Tr"(c.data()), [Mtx] "Tr"(mtx.data()), [ScaleMtx] "Tr"(smtx.data()), [Vec] "Tr"(vec.data()), [ScaleVec] "Tr"(svec.data()), PTO_MX_SCALE_INPUTS, \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
@@ -8569,8 +8569,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOT %[A], %[ScaleA], mask=1111\n"                                  \
-        "B.IOT %[B], %[ScaleB], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"     \
+        "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n"                                  \
+        "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"     \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -8580,9 +8580,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOS %S[SharedA], mask=1111\n"                                              \
-        "B.IOS %S[ScaleA], mask=1111\n"                                        \
-        "B.IOT %[B], %[ScaleB], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"     \
+        "B.IOS %S[SharedA].reuse, mask=1111\n"                                              \
+        "B.IOS %S[ScaleA].reuse, mask=1111\n"                                        \
+        "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"     \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(scale_a.handle()),       \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -8592,9 +8592,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOS %S[SharedB], mask=1111\n"                                              \
-        ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB], mask=1111\n" ".endif\n"                             \
-        "B.IOT %[A], %[ScaleA], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"     \
+        "B.IOS %S[SharedB].reuse, mask=1111\n"                                              \
+        ".if %c[HasScaleB]\n" "B.IOS %S[ScaleB].reuse, mask=1111\n" ".endif\n"                             \
+        "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"     \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(scale_b.handle()),       \
@@ -8604,10 +8604,10 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else {                                                                      \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOS %S[SharedA], mask=1111\n"                                              \
-        "B.IOS %S[ScaleA], mask=1111\n"                                        \
-        "B.IOS %S[SharedB], mask=1111\n"                                              \
-        "B.IOS %S[ScaleB], mask=1111\n"                                        \
+        "B.IOS %S[SharedA].reuse, mask=1111\n"                                              \
+        "B.IOS %S[ScaleA].reuse, mask=1111\n"                                        \
+        "B.IOS %S[SharedB].reuse, mask=1111\n"                                              \
+        "B.IOS %S[ScaleB].reuse, mask=1111\n"                                        \
         "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                      \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(scale_a.handle()),       \
@@ -8628,7 +8628,7 @@ PTO_SHARED_INLINE void matmul_mx_no_scale_local(
   validate_matrix_scale_contract<Attr, false, false, A, A, B, B>();
   asm volatile(
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)
-      "B.IOT %[A], %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      "B.IOT %[A].reuse, %[B].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
       : [Dst] "=&Tr"(dst.data())
       : [A] "Tr"(a.data()), [B] "Tr"(b.data()), PTO_FIXP_ATTR_INPUTS,
         PTO_MATMUL_COMMON_INPUTS(Dst, A, B, M, N, K)
@@ -8644,8 +8644,8 @@ PTO_SHARED_INLINE void matmul_mx_scale_a_local(
   validate_matrix_scale_contract<Attr, true, false, ScaleA, A, B, B>();
   asm volatile(
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)
-      "B.IOT %[A], %[ScaleA], mask=1111\n"
-      "B.IOT %[B], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n"
+      "B.IOT %[B].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
       : [Dst] "=&Tr"(dst.data())
       : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),
         [B] "Tr"(b.data()), PTO_FIXP_ATTR_INPUTS,
@@ -8662,8 +8662,8 @@ PTO_SHARED_INLINE void matmul_mx_scale_b_local(
   validate_matrix_scale_contract<Attr, false, true, A, A, ScaleB, B>();
   asm volatile(
       PTO_MATMUL_HEADER("TMATMULMX", PTO_FIXP_ATTR)
-      "B.IOT %[A], mask=1111\n"
-      "B.IOT %[B], %[ScaleB], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      "B.IOT %[A].reuse, mask=1111\n"
+      "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
       : [Dst] "=&Tr"(dst.data())
       : [A] "Tr"(a.data()), [B] "Tr"(b.data()),
         [ScaleB] "Tr"(scale_b.data()), PTO_FIXP_ATTR_INPUTS,
@@ -8689,9 +8689,9 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOT %[A], %[ScaleA], mask=1111\n"                                \
-        "B.IOT %[B], %[ScaleB], mask=1111\n"                                \
-        "B.IOT %[Extra], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                                                   \
+        "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n"                                \
+        "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\n"                                \
+        "B.IOT %[Extra].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                                                   \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -8702,10 +8702,10 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOS %S[SharedA], mask=1111\n"                                              \
-        "B.IOS %S[ScaleA], mask=1111\n"                                        \
-        "B.IOT %[B], %[ScaleB], mask=1111\n"                                   \
-        "B.IOT %[Extra], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"             \
+        "B.IOS %S[SharedA].reuse, mask=1111\n"                                              \
+        "B.IOS %S[ScaleA].reuse, mask=1111\n"                                        \
+        "B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\n"                                   \
+        "B.IOT %[Extra].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"             \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(scale_a.handle()),       \
           [B] "Tr"(b.data()), [ScaleB] "Tr"(scale_b.data()),                 \
@@ -8716,10 +8716,10 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {          \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOS %S[SharedB], mask=1111\n"                                              \
-        "B.IOS %S[ScaleB], mask=1111\n"                                        \
-        "B.IOT %[A], %[ScaleA], mask=1111\n"                                  \
-        "B.IOT %[Extra], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                                          \
+        "B.IOS %S[SharedB].reuse, mask=1111\n"                                              \
+        "B.IOS %S[ScaleB].reuse, mask=1111\n"                                        \
+        "B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\n"                                  \
+        "B.IOT %[Extra].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                                          \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [A] "Tr"(a.data()), [ScaleA] "Tr"(scale_a.data()),                 \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(scale_b.handle()),       \
@@ -8730,11 +8730,11 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   } else {                                                                      \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
-        "B.IOS %S[SharedA], mask=1111\n"                                              \
-        "B.IOS %S[ScaleA], mask=1111\n"                                        \
-        "B.IOS %S[SharedB], mask=1111\n"                                              \
-        "B.IOS %S[ScaleB], mask=1111\n"                                        \
-        "B.IOT %[Extra], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                                                   \
+        "B.IOS %S[SharedA].reuse, mask=1111\n"                                              \
+        "B.IOS %S[ScaleA].reuse, mask=1111\n"                                        \
+        "B.IOS %S[SharedB].reuse, mask=1111\n"                                              \
+        "B.IOS %S[ScaleB].reuse, mask=1111\n"                                        \
+        "B.IOT %[Extra].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"                                                   \
         : [Dst] "=&Tr"(dst.data())                                            \
         : [SharedA] "Sr"(a.handle()), [ScaleA] "Sr"(scale_a.handle()),         \
           [SharedB] "Sr"(b.handle()), [ScaleB] "Sr"(scale_b.handle()),       \
@@ -9465,7 +9465,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
       quant_gpr, lrelu_gpr, M, N, K);
 }
 
-// TMATMUL_BIAS: C = A*B + bias (BSTART.CUBE TMATMUL.BIAS).
+// TMATMUL_BIAS: C = A*B + bias (BSTART.TMATMUL.BIAS).
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
           is_local_or_shared_right tile_shape_b,
@@ -9637,7 +9637,7 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   pto_matmul_detail::emit_matmul_bias_fixp<Attr, SrcMask, OutMask, IorMode>(c, a, b, bias, row_in, quant_tile, relu_tile, row_out, group_out, quant_gpr, lrelu_gpr, groupM, N, K);
 }
 
-// TMATMUL_MX: C = (A * aScale) * (B * bScale) (BSTART.CUBE TMATMULMX).
+// TMATMUL_MX: C = (A * aScale) * (B * bScale) (BSTART.TMATMULMX).
 template <FixpAttr Attr = FixpAttr{}, is_tile_data_v tile_shape_c,
           is_local_or_shared_left tile_shape_a,
           typename tile_shape_ascale,
@@ -11108,7 +11108,7 @@ PTO_SHARED_INLINE void emit_binary_assemble_init(D &dst, A &src0, B &src1) {
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       : [Dst] "=Tr"(dst.data())
       : [Type] "i"(type_traits<typename A::DType>::TypeCode),
@@ -11151,7 +11151,7 @@ PTO_SHARED_INLINE void emit_binary_user(
       "B.DIM %[ucol], 0, ->lb0\n"
       "B.DIM %[urow], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
       : [Dst] "=Tr"(dst.data())
       : [ucol] "r"(Col), [urow] "r"(Row),
         [Type] "i"(type_traits<typename Tile::DType>::TypeCode),
@@ -11186,7 +11186,7 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11204,7 +11204,7 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11222,7 +11222,7 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11240,7 +11240,7 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11313,7 +11313,7 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11331,7 +11331,7 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11349,7 +11349,7 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11367,7 +11367,7 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11413,7 +11413,7 @@ void TMUL(Dst &dst, Src0 &src0, Src1 &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11432,7 +11432,7 @@ void TMUL(Dst &dst, Src0 &src0, Src1 &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[valid_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11451,7 +11451,7 @@ void TMUL(Dst &dst, Src0 &src0, Src1 &src1,
     "B.DIM %[valid_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11471,7 +11471,7 @@ void TMUL(Dst &dst, Src0 &src0, Src1 &src1,
     "B.DIM %[valid_col], 0, ->lb0\n"
     "B.DIM %[valid_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11501,7 +11501,7 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11519,7 +11519,7 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11537,7 +11537,7 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11555,7 +11555,7 @@ void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11579,7 +11579,7 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11597,7 +11597,7 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11615,7 +11615,7 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11633,7 +11633,7 @@ void TREM(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11671,7 +11671,7 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11689,7 +11689,7 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11707,7 +11707,7 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11725,7 +11725,7 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11755,7 +11755,7 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11773,7 +11773,7 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11791,7 +11791,7 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11809,7 +11809,7 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11839,7 +11839,7 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11857,7 +11857,7 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11875,7 +11875,7 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11893,7 +11893,7 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11923,7 +11923,7 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11941,7 +11941,7 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11959,7 +11959,7 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -11977,7 +11977,7 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12007,7 +12007,7 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12025,7 +12025,7 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12043,7 +12043,7 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12061,7 +12061,7 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12091,7 +12091,7 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12109,7 +12109,7 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12127,7 +12127,7 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12145,7 +12145,7 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12175,7 +12175,7 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12193,7 +12193,7 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12211,7 +12211,7 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12229,7 +12229,7 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1,
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12273,7 +12273,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12291,7 +12291,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12309,7 +12309,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12327,7 +12327,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12346,7 +12346,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12364,7 +12364,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12382,7 +12382,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12400,7 +12400,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12419,7 +12419,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12437,7 +12437,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12455,7 +12455,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12473,7 +12473,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12492,7 +12492,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12510,7 +12510,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12528,7 +12528,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12546,7 +12546,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12565,7 +12565,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12583,7 +12583,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12601,7 +12601,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12619,7 +12619,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12638,7 +12638,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12656,7 +12656,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12674,7 +12674,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12692,7 +12692,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S0], %[S1], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S0].reuse, %[S1].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       ""
       : [D] "=Tr"(dst.data())
       : [TCode] "i"(type_traits<typename tile_shape_in0::DType>::TypeCode),
@@ -12751,8 +12751,8 @@ void TSEL(tile_shape &dst, mask_shape &mask, true_shape &true_src) {
     "B.DIM zero, %c3, ->lb0\n"
     "B.DIM zero, %c4, ->lb1\n"
     "B.DIM zero, %c5, ->lb2\n"
-    "B.IOT %6, %7, mask=1111\n"
-    "B.IOT %1, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %6.reuse, %7.reuse, mask=1111\n"
+    "B.IOT %1.reuse, mask=1111, last, ->%0<%Z8>\n"
     ""
     : [Dst] "=Tr"(dst.data())
     : [Prior] "0"(dst.data()),
@@ -12769,8 +12769,8 @@ void TSEL(tile_shape &dst, mask_shape &mask, true_shape &true_src) {
     "B.DIM zero, %c3, ->lb0\n"
     "B.DIM %[mask____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c5, ->lb2\n"
-    "B.IOT %6, %7, mask=1111\n"
-    "B.IOT %1, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %6.reuse, %7.reuse, mask=1111\n"
+    "B.IOT %1.reuse, mask=1111, last, ->%0<%Z8>\n"
     ""
     : [Dst] "=Tr"(dst.data())
     : [Prior] "0"(dst.data()),
@@ -12787,8 +12787,8 @@ void TSEL(tile_shape &dst, mask_shape &mask, true_shape &true_src) {
     "B.DIM %[mask____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c4, ->lb1\n"
     "B.DIM zero, %c5, ->lb2\n"
-    "B.IOT %6, %7, mask=1111\n"
-    "B.IOT %1, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %6.reuse, %7.reuse, mask=1111\n"
+    "B.IOT %1.reuse, mask=1111, last, ->%0<%Z8>\n"
     ""
     : [Dst] "=Tr"(dst.data())
     : [Prior] "0"(dst.data()),
@@ -12805,8 +12805,8 @@ void TSEL(tile_shape &dst, mask_shape &mask, true_shape &true_src) {
     "B.DIM %[mask____dimcol], 0, ->lb0\n"
     "B.DIM %[mask____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c5, ->lb2\n"
-    "B.IOT %6, %7, mask=1111\n"
-    "B.IOT %1, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %6.reuse, %7.reuse, mask=1111\n"
+    "B.IOT %1.reuse, mask=1111, last, ->%0<%Z8>\n"
     ""
     : [Dst] "=Tr"(dst.data())
     : [Prior] "0"(dst.data()),
@@ -12838,7 +12838,7 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -12855,7 +12855,7 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -12872,7 +12872,7 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -12889,7 +12889,7 @@ void TABS(tile_shape_out &dst, const tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -12912,7 +12912,7 @@ void TNOT(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12929,7 +12929,7 @@ void TNOT(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12946,7 +12946,7 @@ void TNOT(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12963,7 +12963,7 @@ void TNOT(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -12986,7 +12986,7 @@ void TNEG(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13003,7 +13003,7 @@ void TNEG(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13020,7 +13020,7 @@ void TNEG(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13037,7 +13037,7 @@ void TNEG(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13060,7 +13060,7 @@ void TEXP(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13077,7 +13077,7 @@ void TEXP(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13094,7 +13094,7 @@ void TEXP(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13111,7 +13111,7 @@ void TEXP(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13151,7 +13151,7 @@ void TEXPDIF(D &dst, A &src0, B &src1) {
       "B.DIM zero, %c[ValidCol], ->lb0\n"
       "B.DIM zero, %c[ValidRow], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111, last, ->%[Dst]<%Z[Size]>\n"
       ""
       : [Dst] "=Tr"(dst.data())
       : [SrcType] "i"(type_traits<typename A::DType>::TypeCode),
@@ -13174,7 +13174,7 @@ void TLOG(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13191,7 +13191,7 @@ void TLOG(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13208,7 +13208,7 @@ void TLOG(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13225,7 +13225,7 @@ void TLOG(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13250,7 +13250,7 @@ asm volatile(
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13267,7 +13267,7 @@ asm volatile(
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13284,7 +13284,7 @@ asm volatile(
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13301,7 +13301,7 @@ asm volatile(
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13323,7 +13323,7 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13340,7 +13340,7 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13357,7 +13357,7 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13374,7 +13374,7 @@ void TSQRT(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13397,7 +13397,7 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13414,7 +13414,7 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13431,7 +13431,7 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13448,7 +13448,7 @@ void TRSQRT(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13471,7 +13471,7 @@ void TRELU(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13488,7 +13488,7 @@ void TRELU(tile_shape &dst, tile_shape &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13505,7 +13505,7 @@ void TRELU(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13522,7 +13522,7 @@ void TRELU(tile_shape &dst, tile_shape &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -13577,7 +13577,7 @@ asm volatile(
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13596,7 +13596,7 @@ asm volatile(
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13615,7 +13615,7 @@ asm volatile(
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13634,7 +13634,7 @@ asm volatile(
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13662,7 +13662,7 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13685,7 +13685,7 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13708,7 +13708,7 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13731,7 +13731,7 @@ void TSUBS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13762,7 +13762,7 @@ asm volatile(
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13781,7 +13781,7 @@ asm volatile(
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13800,7 +13800,7 @@ asm volatile(
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13819,7 +13819,7 @@ asm volatile(
     "B.DIM %[dyn_col], 0, ->lb0\n"
     "B.DIM %[dyn_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13847,7 +13847,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13870,7 +13870,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13893,7 +13893,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13916,7 +13916,7 @@ void TDIVS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13945,7 +13945,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13968,7 +13968,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -13991,7 +13991,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14014,7 +14014,7 @@ void TREMS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14051,7 +14051,7 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14074,7 +14074,7 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14097,7 +14097,7 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14120,7 +14120,7 @@ void TANDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14149,7 +14149,7 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14172,7 +14172,7 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14195,7 +14195,7 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14218,7 +14218,7 @@ void TORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14247,7 +14247,7 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14270,7 +14270,7 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14293,7 +14293,7 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14316,7 +14316,7 @@ void TXORS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14345,7 +14345,7 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14368,7 +14368,7 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14391,7 +14391,7 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14414,7 +14414,7 @@ void TSHLS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14443,7 +14443,7 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14466,7 +14466,7 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14489,7 +14489,7 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14512,7 +14512,7 @@ void TSHRS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14541,7 +14541,7 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14564,7 +14564,7 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14587,7 +14587,7 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14610,7 +14610,7 @@ void TMAXS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14639,7 +14639,7 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14662,7 +14662,7 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14685,7 +14685,7 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14708,7 +14708,7 @@ void TMINS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.IOR [%7],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -14739,7 +14739,7 @@ void pto_prefix_unary(tile_shape &dst, View &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.SUBVIEW 0, %7, 0, 1\n"
     ""
     : "=Tr"(dst.data())
@@ -14770,7 +14770,7 @@ void pto_prefix_scalar(tile_shape &dst, View &src,
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     "B.SUBVIEW 0, %7, 0, 1\n"
     "B.IOR [%8],[]\n"
     ""
@@ -14852,7 +14852,7 @@ void TCVT(tile_shape_out &dst, View &src) {
       PTO_CUBE_TCVT_DATR_ASM
       "B.DIM zero, %c5, ->lb0\n"
       "B.DIM zero, %c6, ->lb1\n"
-      "B.IOT %3, mask=1111, last, ->%0<%Z4>\n"
+      "B.IOT %3.reuse, mask=1111, last, ->%0<%Z4>\n"
       "B.SUBVIEW 0, %7, 0, 1\n"
       : "=Tr"(dst.data())
       : "i"(type_traits<typename View::DType>::TypeCode),
@@ -14890,7 +14890,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -14909,7 +14909,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -14928,7 +14928,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -14947,7 +14947,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -14967,7 +14967,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -14986,7 +14986,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15005,7 +15005,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15024,7 +15024,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15044,7 +15044,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15063,7 +15063,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15082,7 +15082,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15101,7 +15101,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15121,7 +15121,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15140,7 +15140,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15159,7 +15159,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15178,7 +15178,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15198,7 +15198,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15217,7 +15217,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15236,7 +15236,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15255,7 +15255,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15275,7 +15275,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15294,7 +15294,7 @@ asm volatile(
       "B.DIM zero, %c[VCOL], ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15313,7 +15313,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM zero, %c[VROW], ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15332,7 +15332,7 @@ asm volatile(
       "B.DIM %[VCOL], 0, ->lb0\n"
       "B.DIM %[VROW], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[S], mask=1111, last, ->%[D]<%Z[TSize]>\n"
+      "B.IOT %[S].reuse, mask=1111, last, ->%[D]<%Z[TSize]>\n"
       "B.IOR [%[Scalar]],[]\n"
       ""
       : [D] "=Tr"(dst.data())
@@ -15399,7 +15399,7 @@ uint64_t TCMPS(tile_shape_in &src, typename tile_shape_in::DType s) {
         "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
         "B.DIM zero, %c[VROW], ->lb1\n"                                     \
         "B.DIM zero, %c[Cols], ->lb2\n"                                     \
-        "B.IOT %[Src], mask=1111, last\n"                                    \
+        "B.IOT %[Src].reuse, mask=1111, last\n"                                    \
         "B.IOR [%[Scalar]], %[Dst]\n"                                        \
         : [Dst] "=r"(result)                                                 \
         : [Type] "i"(TypeCode), [VCOL] "i"(tile_shape_in::ValidCol),        \
@@ -15471,7 +15471,7 @@ asm volatile(
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     "B.IOR [%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -15489,7 +15489,7 @@ asm volatile(
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     "B.IOR [%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -15507,7 +15507,7 @@ asm volatile(
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     "B.IOR [%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -15525,7 +15525,7 @@ asm volatile(
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     "B.IOR [%8],[]\n"
     ""
     : "=Tr"(dst.data())
@@ -15646,8 +15646,8 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111\n"
-    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111\n"
+    "B.IOT %7.reuse, mask=1111, last, ->%0<%Z8>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -15666,8 +15666,8 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111\n"
-    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111\n"
+    "B.IOT %7.reuse, mask=1111, last, ->%0<%Z8>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -15686,8 +15686,8 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111\n"
-    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111\n"
+    "B.IOT %7.reuse, mask=1111, last, ->%0<%Z8>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -15706,8 +15706,8 @@ void TFMA(tile_shape &dst, tile_shape &src0, tile_shape &src1, tile_shape &src2)
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111\n"
-    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111\n"
+    "B.IOT %7.reuse, mask=1111, last, ->%0<%Z8>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape::DType>::TypeCode),
@@ -15740,8 +15740,8 @@ void TFMA(tile_shape &dst, mul0 &src0, mul1 &src1, View &src2) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111\n"
-    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111\n"
+    "B.IOT %7.reuse, mask=1111, last, ->%0<%Z8>\n"
     "B.SUBVIEW 0, %9, 0, 1\n"
     ""
     : "=Tr"(dst.data())
@@ -15762,8 +15762,8 @@ void TFMA(tile_shape &dst, mul0 &src0, mul1 &src1, View &src2) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111\n"
-    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111\n"
+    "B.IOT %7.reuse, mask=1111, last, ->%0<%Z8>\n"
     "B.SUBVIEW 0, %9, 0, 1\n"
     ""
     : "=Tr"(dst.data())
@@ -15784,8 +15784,8 @@ void TFMA(tile_shape &dst, mul0 &src0, mul1 &src1, View &src2) {
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111\n"
-    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111\n"
+    "B.IOT %7.reuse, mask=1111, last, ->%0<%Z8>\n"
     "B.SUBVIEW 0, %9, 0, 1\n"
     ""
     : "=Tr"(dst.data())
@@ -15806,8 +15806,8 @@ void TFMA(tile_shape &dst, mul0 &src0, mul1 &src1, View &src2) {
     "B.DIM %[src0____dimcol], 0, ->lb0\n"
     "B.DIM %[src0____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111\n"
-    "B.IOT %7, mask=1111, last, ->%0<%Z8>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111\n"
+    "B.IOT %7.reuse, mask=1111, last, ->%0<%Z8>\n"
     "B.SUBVIEW 0, %9, 0, 1\n"
     ""
     : "=Tr"(dst.data())
@@ -16489,7 +16489,7 @@ void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %7, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, %7.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16505,7 +16505,7 @@ void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[off____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %7, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, %7.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16521,7 +16521,7 @@ void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     "B.DIM %[off____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %7, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, %7.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16537,7 +16537,7 @@ void TGATHER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     "B.DIM %[off____dimcol], 0, ->lb0\n"
     "B.DIM %[off____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %7, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, %7.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16559,7 +16559,7 @@ void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %7, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, %7.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16575,7 +16575,7 @@ void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[off____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %7, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, %7.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16591,7 +16591,7 @@ void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     "B.DIM %[off____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %7, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, %7.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16607,7 +16607,7 @@ void TSCATTER(tile_shape_out &dst, tile_shape_in &src, tile_shape_off &off) {
     "B.DIM %[off____dimcol], 0, ->lb0\n"
     "B.DIM %[off____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %7, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, %7.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16698,7 +16698,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     DIM_COL                                                                 \
     DIM_ROW                                                                 \
     "B.DIM zero, %c4, ->lb2\n"                                                \
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"                                   \
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"                                   \
     "B.ASSEMBLE 1, %c8, %[RegSrc], %c7, %c[WriterSize]\n"
 #define PTO_TROWSUM_ASM_INIT_INPUTS                                         \
     : "=Tr"(dst.data())                                                     \
@@ -16741,7 +16741,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16759,7 +16759,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[valid_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16777,7 +16777,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[valid_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16796,7 +16796,7 @@ void TROWSUM(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[valid_col], 0, ->lb0\n"
     "B.DIM %[valid_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16828,7 +16828,7 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16845,7 +16845,7 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16862,7 +16862,7 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16879,7 +16879,7 @@ void TROWMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16911,7 +16911,7 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16928,7 +16928,7 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16945,7 +16945,7 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16962,7 +16962,7 @@ void TROWMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -16994,7 +16994,7 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17011,7 +17011,7 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17028,7 +17028,7 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17045,7 +17045,7 @@ void TROWPROD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17079,7 +17079,7 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17097,7 +17097,7 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17115,7 +17115,7 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17133,7 +17133,7 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17166,7 +17166,7 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17183,7 +17183,7 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17200,7 +17200,7 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17217,7 +17217,7 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17249,7 +17249,7 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17266,7 +17266,7 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17283,7 +17283,7 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17300,7 +17300,7 @@ void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17341,7 +17341,7 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17358,7 +17358,7 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17375,7 +17375,7 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17392,7 +17392,7 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17429,7 +17429,7 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17446,7 +17446,7 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17463,7 +17463,7 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17480,7 +17480,7 @@ void TCOLMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17517,7 +17517,7 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17534,7 +17534,7 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17551,7 +17551,7 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17568,7 +17568,7 @@ void TCOLMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17605,7 +17605,7 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17622,7 +17622,7 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17639,7 +17639,7 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17656,7 +17656,7 @@ void TCOLPROD(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17687,7 +17687,7 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17704,7 +17704,7 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17721,7 +17721,7 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17738,7 +17738,7 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17775,7 +17775,7 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17792,7 +17792,7 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17809,7 +17809,7 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17826,7 +17826,7 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17863,7 +17863,7 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17880,7 +17880,7 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17897,7 +17897,7 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17914,7 +17914,7 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
     "B.DIM %[src____dimcol], 0, ->lb0\n"
     "B.DIM %[src____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
@@ -17961,7 +17961,7 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -17988,7 +17988,7 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18015,7 +18015,7 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18042,7 +18042,7 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18091,7 +18091,7 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18118,7 +18118,7 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18145,7 +18145,7 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18172,7 +18172,7 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18221,7 +18221,7 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18249,7 +18249,7 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[valid_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18277,7 +18277,7 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[valid_col], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18306,7 +18306,7 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[valid_col], 0, ->lb0\n"
     "B.DIM %[valid_row], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18355,7 +18355,7 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18382,7 +18382,7 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18409,7 +18409,7 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18436,7 +18436,7 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18485,7 +18485,7 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18512,7 +18512,7 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18539,7 +18539,7 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18566,7 +18566,7 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18615,7 +18615,7 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18642,7 +18642,7 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18669,7 +18669,7 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18696,7 +18696,7 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18745,7 +18745,7 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18772,7 +18772,7 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18799,7 +18799,7 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18826,7 +18826,7 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18868,7 +18868,7 @@ void pto_prefix_row_expand(tile_shape_out &dst, matrix &src0, View &src1) {
     "B.DIM zero, %c[DstValidCol], ->lb0\n"
     "B.DIM zero, %c[DstValidRow], ->lb1\n"
     "B.DIM zero, %c[DstCols], ->lb2\n"
-    "B.IOT %2, %3, mask=1111, last, ->%0<%Z4>\n"
+    "B.IOT %2.reuse, %3.reuse, mask=1111, last, ->%0<%Z4>\n"
     "B.SUBVIEW 1, %5, 0, 1\n"
     ""
     : "=Tr"(dst.data())
@@ -18938,7 +18938,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18964,7 +18964,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -18990,7 +18990,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19016,7 +19016,7 @@ void TCOLEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19061,7 +19061,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19087,7 +19087,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19113,7 +19113,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19139,7 +19139,7 @@ void TCOLEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19184,7 +19184,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19210,7 +19210,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19236,7 +19236,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19262,7 +19262,7 @@ void TCOLEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19307,7 +19307,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19333,7 +19333,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19359,7 +19359,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19385,7 +19385,7 @@ void TCOLEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19430,7 +19430,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19456,7 +19456,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19482,7 +19482,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19508,7 +19508,7 @@ void TCOLEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19553,7 +19553,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19579,7 +19579,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19605,7 +19605,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19631,7 +19631,7 @@ void TCOLEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19676,7 +19676,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19702,7 +19702,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.DIM zero, %c2, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19728,7 +19728,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM zero, %c3, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19754,7 +19754,7 @@ void TCOLEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
     "B.DIM %[dst____dimcol], 0, ->lb0\n"
     "B.DIM %[dst____dimrow], 0, ->lb1\n"
     "B.DIM zero, %c4, ->lb2\n"
-    "B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\n"
+    "B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\n"
     ""
     : "=Tr"(dst.data())
     : "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
@@ -19807,8 +19807,8 @@ void TPERMUTE(D &dst, A &src0, B &src1, I &indices) {
       "B.DIM zero, %c[Cols], ->lb0\n"
       "B.DIM zero, %c[Rows], ->lb1\n"
       "B.DIM zero, %c[FullCols], ->lb2\n"
-      "B.IOT %[Src0], %[Src1], mask=1111\n"
-      "B.IOT %[Indices], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111\n"
+      "B.IOT %[Indices].reuse, mask=1111, last, ->%[Dst]<%Z[Size]>\n"
       : [Dst] "=Tr"(dst.data())
       : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
         [Indices] "Tr"(indices.data()),
@@ -19840,7 +19840,7 @@ void TSHUF(D &dst, S &src, C &controls, uint64_t control) {
       "B.DIM zero, %c[Cols], ->lb0\n"
       "B.DIM zero, %c[Rows], ->lb1\n"
       "B.DIM zero, %c[FullCols], ->lb2\n"
-      "B.IOT %[Src], %[Controls], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      "B.IOT %[Src].reuse, %[Controls].reuse, mask=1111, last, ->%[Dst]<%Z[Size]>\n"
       "B.IOR [%[Control]],[]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src] "Tr"(src.data()), [Controls] "Tr"(controls.data()),
@@ -20054,14 +20054,14 @@ void tpack_emit(D &dst, A &src0, B &src1, uint64_t control) {
         "B.DIM zero, %c[Cols], ->lb0\n"
         "B.DIM zero, %c[Rows], ->lb1\n"
         "B.DIM zero, %c[FullCols], ->lb2\n"
-        "B.IOT %[Src0], %[Src1], mask=1111\n"
+        "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111\n"
         ".if %c[HasSrc0View]\n"
         "B.SUBVIEW 0, %[Src0Base], %c[Src0Off], %c[Src0Size]\n"
         ".endif\n"
         ".if %c[HasSrc1View]\n"
         "B.SUBVIEW 1, %[Src1Base], %c[Src1Off], %c[Src1Size]\n"
         ".endif\n"
-        "B.IOT %[ParentRef], mask=1111, last\n"
+        "B.IOT %[ParentRef].reuse, mask=1111, last\n"
         "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
         "B.IOR [%[Control]],[]\n"
         :
@@ -20089,7 +20089,7 @@ void tpack_emit(D &dst, A &src0, B &src1, uint64_t control) {
         "B.DIM zero, %c[Cols], ->lb0\n"
         "B.DIM zero, %c[Rows], ->lb1\n"
         "B.DIM zero, %c[FullCols], ->lb2\n"
-        "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+        "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111, last, ->%[Dst]<%Z[Size]>\n"
         ".if %c[HasSrc0View]\n"
         "B.SUBVIEW 0, %[Src0Base], %c[Src0Off], %c[Src0Size]\n"
         ".endif\n"
@@ -20123,7 +20123,7 @@ void tpack_emit(D &dst, A &src0, B &src1, uint64_t control) {
         "B.DIM zero, %c[Cols], ->lb0\n"
         "B.DIM zero, %c[Rows], ->lb1\n"
         "B.DIM zero, %c[FullCols], ->lb2\n"
-        "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+        "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111, last, ->%[Dst]<%Z[Size]>\n"
         ".if %c[HasSrc0View]\n"
         "B.SUBVIEW 0, %[Src0Base], %c[Src0Off], %c[Src0Size]\n"
         ".endif\n"
@@ -20182,7 +20182,7 @@ void TUNPACK(D &dst, S &src, uint64_t control) {
       "B.DIM zero, %c[Cols], ->lb0\n"
       "B.DIM zero, %c[Rows], ->lb1\n"
       "B.DIM zero, %c[FullCols], ->lb2\n"
-      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+      "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[Size]>\n"
       "B.IOR [%[Control]],[]\n"
       : [Dst] "=Tr"(dst.data())
       : [Src] "Tr"(src.data()), [Control] "r"(controlValue),
@@ -20317,14 +20317,14 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
         "B.DIM %[Col], 0, ->lb0\n"
         "B.DIM %[Row], 0, ->lb1\n"
         "B.DIM zero, %c[Cols], ->lb2\n"
-        "B.IOT %[Src0], %[Src1], mask=1111\n"
+        "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111\n"
         ".if %c[HasSrc0View]\n"
         "B.SUBVIEW 0, %[Src0Base], %c[Src0Off], %c[Src0Size]\n"
         ".endif\n"
         ".if %c[HasSrc1View]\n"
         "B.SUBVIEW 1, %[Src1Base], %c[Src1Off], %c[Src1Size]\n"
         ".endif\n"
-        "B.IOT %[Dst], mask=1111, last\n"
+        "B.IOT %[Dst].reuse, mask=1111, last\n"
         "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
         :
         : [Type] "i"(type_traits<typename A::DType>::TypeCode),
@@ -20349,8 +20349,8 @@ PTO_SHARED_INLINE void binary(D &dst, A &src0, B &src1) {
         "B.DIM %[Col], 0, ->lb0\n"
         "B.DIM %[Row], 0, ->lb1\n"
         "B.DIM zero, %c[Cols], ->lb2\n"
-        "B.IOT %[Src0], %[Src1], mask=1111\n"
-        "B.IOT %[Dst], mask=1111, last\n"
+        "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111\n"
+        "B.IOT %[Dst].reuse, mask=1111, last\n"
         "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
         :
         : [Type] "i"(type_traits<typename A::DType>::TypeCode),
@@ -20392,7 +20392,7 @@ PTO_SHARED_INLINE void unary(D &dst, S &src) {
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[Src], %[Dst], mask=1111, last\n"
+      "B.IOT %[Src].reuse, %[Dst].reuse, mask=1111, last\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Type] "i"(type_traits<typename S::DType>::TypeCode),
@@ -20435,7 +20435,7 @@ PTO_SHARED_INLINE void scalar(D &dst, S &src, typename S::DType value) {
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[Src], %[Dst], mask=1111, last\n"
+      "B.IOT %[Src].reuse, %[Dst].reuse, mask=1111, last\n"
       "B.IOR [%[Scalar]],[]\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
@@ -20530,7 +20530,7 @@ PTO_SHARED_INLINE void unary_special(D &dst, S &src) {
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[Src], %[Dst], mask=1111, last\n"
+      "B.IOT %[Src].reuse, %[Dst].reuse, mask=1111, last\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
@@ -20565,8 +20565,8 @@ PTO_SHARED_INLINE void ternary(D &dst, A &a, B &b, A &c) {
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[A], %[B], mask=1111\n"
-      "B.IOT %[C], %[Dst], mask=1111, last\n"
+      "B.IOT %[A].reuse, %[B].reuse, mask=1111\n"
+      "B.IOT %[C].reuse, %[Dst].reuse, mask=1111, last\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode), [Type] "i"(type_traits<typename A::DType>::TypeCode),
@@ -20596,7 +20596,7 @@ PTO_SHARED_INLINE void convert(D &dst, S &src) {
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[Src], %[Dst], mask=1111, last\n"
+      "B.IOT %[Src].reuse, %[Dst].reuse, mask=1111, last\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
@@ -20633,8 +20633,8 @@ PTO_SHARED_INLINE void binary_special(D &dst, A &a, B &b) {
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[A], %[B], mask=1111\n"
-      "B.IOT %[Dst], mask=1111, last\n"
+      "B.IOT %[A].reuse, %[B].reuse, mask=1111\n"
+      "B.IOT %[Dst].reuse, mask=1111, last\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode), [Type] "i"(type_traits<typename A::DType>::TypeCode),
@@ -20684,7 +20684,7 @@ PTO_SHARED_INLINE void reduce(D &dst, S &src) {
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[Src], %[Dst], mask=1111, last\n"
+      "B.IOT %[Src].reuse, %[Dst].reuse, mask=1111, last\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
@@ -20712,7 +20712,7 @@ PTO_SHARED_INLINE void expand(D &dst, S &src) {
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[Src], %[Dst], mask=1111, last\n"
+      "B.IOT %[Src].reuse, %[Dst].reuse, mask=1111, last\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
@@ -20737,8 +20737,8 @@ PTO_SHARED_INLINE void output_geometry_binary(D &dst, A &a, B &b) {
       "B.DIM %[Col], 0, ->lb0\n"
       "B.DIM %[Row], 0, ->lb1\n"
       "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[A], %[B], mask=1111\n"
-      "B.IOT %[Dst], mask=1111, last\n"
+      "B.IOT %[A].reuse, %[B].reuse, mask=1111\n"
+      "B.IOT %[Dst].reuse, mask=1111, last\n"
       "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
       :
       : [Opcode] "i"(Opcode),
@@ -20767,8 +20767,8 @@ PTO_SHARED_INLINE void compare(D &dst, A &a, B &b) {
         "B.DIM %[Col], 0, ->lb0\n"                                           \
         "B.DIM %[Row], 0, ->lb1\n"                                           \
         "B.DIM zero, %c[Cols], ->lb2\n"                                      \
-        "B.IOT %[A], %[B], mask=1111\n"                                     \
-        "B.IOT %[Dst], mask=1111, last\n"                                   \
+        "B.IOT %[A].reuse, %[B].reuse, mask=1111\n"                                     \
+        "B.IOT %[Dst].reuse, mask=1111, last\n"                                   \
         "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n" \
         :                                                                      \
         : [Type] "i"(type_traits<typename A::DType>::TypeCode),               \
@@ -20805,7 +20805,7 @@ PTO_SHARED_INLINE void compare_scalar(D &dst, S &src,
         "B.DIM %[Col], 0, ->lb0\n"                                           \
         "B.DIM %[Row], 0, ->lb1\n"                                           \
         "B.DIM zero, %c[Cols], ->lb2\n"                                      \
-        "B.IOT %[Src], %[Dst], mask=1111, last\n"                            \
+        "B.IOT %[Src].reuse, %[Dst].reuse, mask=1111, last\n"                            \
         "B.IOR [%[Scalar]],[]\n"                                             \
         "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n" \
         :                                                                      \
@@ -20855,7 +20855,13 @@ PTO_TEPL_ASS_CONVERT(TCVT, 27)
 PTO_TEPL_ASS_UNARY_SPECIAL(TSQRT, 21)
 PTO_TEPL_ASS_UNARY_SPECIAL(TRSQRT, 22)
 PTO_TEPL_ASS_UNARY_SPECIAL(TRELU, 23)
-PTO_TEPL_ASS_UNARY_SPECIAL(TTRANS, 110)
+
+template <is_tile_data_v D, is_tile_data_v S>
+PTO_SHARED_INLINE void TTRANS_ASS(D &, S &) {
+  static_assert(pto_dependent_false_v<D, S>,
+                "TTRANS_ASS is retired (PTO-ISA 0.58.5); the TEPL 110 "
+                "selector must not be emitted");
+}
 
 #define PTO_TEPL_ASS_REDUCE(NAME, OPCODE)                                      \
   template <is_tile_data_v D, is_tile_data_v S>                                \
@@ -20899,7 +20905,13 @@ PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDDIV, 88)
 PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDMAX, 89)
 PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDMIN, 90)
 PTO_TEPL_ASS_OUTPUT_BINARY(TCOLEXPANDEXPDIF, 91)
-PTO_TEPL_ASS_OUTPUT_BINARY(TCONCAT, 96)
+
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+PTO_SHARED_INLINE void TCONCAT_ASS(D &, A &, B &) {
+  static_assert(pto_dependent_false_v<D, A, B>,
+                "TCONCAT_ASS is retired (PTO-ISA 0.58.5); the TEPL 96 "
+                "selector must not be emitted");
+}
 
 template <CmpMode Mode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
 PTO_SHARED_INLINE void TCMP_ASS(D &dst, A &a, B &b) {

@@ -1,8 +1,9 @@
 # Linx TileOP API
 
 Header-only C++ TileOP bindings for the LinxISA / PTO ISA 0.58.7 architectural contract.
-The checked-in catalog and documentation are generated against the PTO ISA 0.58.7
-baseline (`0.58.7.0`, ABI `pto-isa-0.58.7-mode-function-v1`).
+The checked-in catalog and documentation are generated against the reviewed
+PTO ISA 0.58.7 development golden (`development-not-published`, ABI
+`pto-isa-0.58.7-mode-function-v1`).
 
 Installed headers expose their provenance through
 `<common/pto_tileop_api_revision.hpp>`. `PTO_TILEOP_API_VERSION` and

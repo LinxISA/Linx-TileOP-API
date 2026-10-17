@@ -444,7 +444,7 @@ Matrix 使用或完整组合不合法，会在 operand consumption、allocation 
 C++ 调用者无需手写汇编；生成代码可按以下结构核对：
 
 ```asm
-BSTART.CUBE TMATMUL, AType
+BSTART.TMATMUL AType
 B.DATR      BType, RMode, Sat
 B.FPATR     PreQuant, Relu, GroupNCode,
             RowMaxEn, GroupMaxEn, RowMaxInit, MaxAbsEn,

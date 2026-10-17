@@ -5,137 +5,154 @@ VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及
 TEPL 仍是唯一的编译 carrier 标识。`BSTART.VEC` 和 `BSTART.SFU` 是特定引擎的汇编别名；
 inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 
-下表根据本仓库固定的 LinxISA 历史投影生成，数据记录在
+下表根据本仓库固定的 LinxISA/PTO development golden 投影生成，数据记录在
 [`contracts/linxisa-v0.58-engine-ops.json`](../../../contracts/linxisa-v0.58-engine-ops.json) 中。
+Golden 共 119 项；其中 118 项在 `include/` 有名称引用，
+1 项明确没有 wrapper。名称引用不证明 ASL/NDF 语义完整实现。
 
 ## VEC
 
-| API / 操作 | 规范汇编 | 逻辑 selector | 分类 |
-| --- | --- | ---: | --- |
-| `TADD` | `BSTART.VEC TADD` | 0 | elementwise-tile-tile |
-| `TSUB` | `BSTART.VEC TSUB` | 1 | elementwise-tile-tile |
-| `TMUL` | `BSTART.VEC TMUL` | 2 | elementwise-tile-tile |
-| `TAND` | `BSTART.VEC TAND` | 6 | elementwise-tile-tile |
-| `TOR` | `BSTART.VEC TOR` | 7 | elementwise-tile-tile |
-| `TXOR` | `BSTART.VEC TXOR` | 8 | elementwise-tile-tile |
-| `TSHL` | `BSTART.VEC TSHL` | 9 | elementwise-tile-tile |
-| `TSHR` | `BSTART.VEC TSHR` | 10 | elementwise-tile-tile |
-| `TMAX` | `BSTART.VEC TMAX` | 11 | elementwise-tile-tile |
-| `TMIN` | `BSTART.VEC TMIN` | 12 | elementwise-tile-tile |
-| `TCMP` | `BSTART.VEC TCMP` | 13 | elementwise-tile-tile |
-| `TABS` | `BSTART.VEC TABS` | 15 | elementwise-tile-tile |
-| `TNOT` | `BSTART.VEC TNOT` | 16 | elementwise-tile-tile |
-| `TNEG` | `BSTART.VEC TNEG` | 17 | elementwise-tile-tile |
-| `TRELU` | `BSTART.VEC TRELU` | 23 | elementwise-tile-tile |
-| `TSEL` | `BSTART.VEC TSEL` | 26 | elementwise-tile-tile |
-| `TCVT` | `BSTART.VEC TCVT` | 27 | elementwise-tile-tile |
-| `TFMA` | `BSTART.VEC TFMA` | 28 | elementwise-tile-tile |
-| `TADDS` | `BSTART.VEC TADDS` | 32 | tile-scalar-and-immediate |
-| `TSUBS` | `BSTART.VEC TSUBS` | 33 | tile-scalar-and-immediate |
-| `TMULS` | `BSTART.VEC TMULS` | 34 | tile-scalar-and-immediate |
-| `TANDS` | `BSTART.VEC TANDS` | 38 | tile-scalar-and-immediate |
-| `TORS` | `BSTART.VEC TORS` | 39 | tile-scalar-and-immediate |
-| `TXORS` | `BSTART.VEC TXORS` | 40 | tile-scalar-and-immediate |
-| `TSHLS` | `BSTART.VEC TSHLS` | 41 | tile-scalar-and-immediate |
-| `TSHRS` | `BSTART.VEC TSHRS` | 42 | tile-scalar-and-immediate |
-| `TMAXS` | `BSTART.VEC TMAXS` | 43 | tile-scalar-and-immediate |
-| `TMINS` | `BSTART.VEC TMINS` | 44 | tile-scalar-and-immediate |
-| `TCMPS` | `BSTART.VEC TCMPS` | 45 | tile-scalar-and-immediate |
-| `TSELS` | `BSTART.VEC TSELS` | 58 | tile-scalar-and-immediate |
-| `TEXPANDS` | `BSTART.VEC TEXPANDS` | 59 | tile-scalar-and-immediate |
+| Golden 操作 | 规范汇编 | 逻辑 selector | 分类 | Wrapper 状态 |
+| --- | --- | ---: | --- | --- |
+| `TADD` | `BSTART.VEC TADD` | 0 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TSUB` | `BSTART.VEC TSUB` | 1 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TMUL` | `BSTART.VEC TMUL` | 2 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TAND` | `BSTART.VEC TAND` | 6 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TOR` | `BSTART.VEC TOR` | 7 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TXOR` | `BSTART.VEC TXOR` | 8 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TSHL` | `BSTART.VEC TSHL` | 9 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TSHR` | `BSTART.VEC TSHR` | 10 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TMAX` | `BSTART.VEC TMAX` | 11 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TMIN` | `BSTART.VEC TMIN` | 12 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TCMP` | `BSTART.VEC TCMP` | 13 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TABS` | `BSTART.VEC TABS` | 15 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TNOT` | `BSTART.VEC TNOT` | 16 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TNEG` | `BSTART.VEC TNEG` | 17 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TRELU` | `BSTART.VEC TRELU` | 23 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TSEL` | `BSTART.VEC TSEL` | 26 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TCVT` | `BSTART.VEC TCVT` | 27 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TFMA` | `BSTART.VEC TFMA` | 28 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TADDS` | `BSTART.VEC TADDS` | 32 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TSUBS` | `BSTART.VEC TSUBS` | 33 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TMULS` | `BSTART.VEC TMULS` | 34 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TANDS` | `BSTART.VEC TANDS` | 38 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TORS` | `BSTART.VEC TORS` | 39 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TXORS` | `BSTART.VEC TXORS` | 40 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TSHLS` | `BSTART.VEC TSHLS` | 41 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TSHRS` | `BSTART.VEC TSHRS` | 42 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TMAXS` | `BSTART.VEC TMAXS` | 43 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TMINS` | `BSTART.VEC TMINS` | 44 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TCMPS` | `BSTART.VEC TCMPS` | 45 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TSELS` | `BSTART.VEC TSELS` | 58 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TEXPANDS` | `BSTART.VEC TEXPANDS` | 59 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TLEA` | `BSTART.VEC TLEA` | 46 | tile-scalar-and-immediate | 尚无 wrapper |
 
 ## SFU
 
-| API / 操作 | 规范汇编 | 逻辑 selector | 分类 |
-| --- | --- | ---: | --- |
-| `TDIV` | `BSTART.SFU TDIV` | 3 | elementwise-tile-tile |
-| `TREM` | `BSTART.SFU TREM` | 4 | elementwise-tile-tile |
-| `TEXP` | `BSTART.SFU TEXP` | 18 | elementwise-tile-tile |
-| `TLOG` | `BSTART.SFU TLOG` | 19 | elementwise-tile-tile |
-| `TRECIP` | `BSTART.SFU TRECIP` | 20 | elementwise-tile-tile |
-| `TSQRT` | `BSTART.SFU TSQRT` | 21 | elementwise-tile-tile |
-| `TRSQRT` | `BSTART.SFU TRSQRT` | 22 | elementwise-tile-tile |
-| `TEXPDIF` | `BSTART.SFU TEXPDIF` | 29 | elementwise-tile-tile |
-| `TDIVS` | `BSTART.SFU TDIVS` | 35 | tile-scalar-and-immediate |
-| `TREMS` | `BSTART.SFU TREMS` | 36 | tile-scalar-and-immediate |
-| `TROWSUM` | `BSTART.SFU TROWSUM` | 64 | reduce-and-expand |
-| `TROWMAX` | `BSTART.SFU TROWMAX` | 65 | reduce-and-expand |
-| `TROWMIN` | `BSTART.SFU TROWMIN` | 66 | reduce-and-expand |
-| `TROWPROD` | `BSTART.SFU TROWPROD` | 67 | reduce-and-expand |
-| `TROWEXPAND` | `BSTART.SFU TROWEXPAND` | 68 | reduce-and-expand |
-| `TROWEXPANDADD` | `BSTART.SFU TROWEXPANDADD` | 69 | reduce-and-expand |
-| `TROWEXPANDSUB` | `BSTART.SFU TROWEXPANDSUB` | 70 | reduce-and-expand |
-| `TROWEXPANDMUL` | `BSTART.SFU TROWEXPANDMUL` | 71 | reduce-and-expand |
-| `TROWEXPANDDIV` | `BSTART.SFU TROWEXPANDDIV` | 72 | reduce-and-expand |
-| `TROWEXPANDMAX` | `BSTART.SFU TROWEXPANDMAX` | 73 | reduce-and-expand |
-| `TROWEXPANDMIN` | `BSTART.SFU TROWEXPANDMIN` | 74 | reduce-and-expand |
-| `TROWEXPANDEXPDIF` | `BSTART.SFU TROWEXPANDEXPDIF` | 75 | reduce-and-expand |
-| `TROWARGMAX` | `BSTART.SFU TROWARGMAX` | 76 | reduce-and-expand |
-| `TROWARGMIN` | `BSTART.SFU TROWARGMIN` | 77 | reduce-and-expand |
-| `TCOLSUM` | `BSTART.SFU TCOLSUM` | 80 | reduce-and-expand |
-| `TCOLMAX` | `BSTART.SFU TCOLMAX` | 81 | reduce-and-expand |
-| `TCOLMIN` | `BSTART.SFU TCOLMIN` | 82 | reduce-and-expand |
-| `TCOLPROD` | `BSTART.SFU TCOLPROD` | 83 | reduce-and-expand |
-| `TCOLEXPAND` | `BSTART.SFU TCOLEXPAND` | 84 | reduce-and-expand |
-| `TCOLEXPANDADD` | `BSTART.SFU TCOLEXPANDADD` | 85 | reduce-and-expand |
-| `TCOLEXPANDSUB` | `BSTART.SFU TCOLEXPANDSUB` | 86 | reduce-and-expand |
-| `TCOLEXPANDMUL` | `BSTART.SFU TCOLEXPANDMUL` | 87 | reduce-and-expand |
-| `TCOLEXPANDDIV` | `BSTART.SFU TCOLEXPANDDIV` | 88 | reduce-and-expand |
-| `TCOLEXPANDMAX` | `BSTART.SFU TCOLEXPANDMAX` | 89 | reduce-and-expand |
-| `TCOLEXPANDMIN` | `BSTART.SFU TCOLEXPANDMIN` | 90 | reduce-and-expand |
-| `TCOLEXPANDEXPDIF` | `BSTART.SFU TCOLEXPANDEXPDIF` | 91 | reduce-and-expand |
-| `TCOLARGMAX` | `BSTART.SFU TCOLARGMAX` | 92 | reduce-and-expand |
-| `TCOLARGMIN` | `BSTART.SFU TCOLARGMIN` | 93 | reduce-and-expand |
-| `TCONCAT` | `BSTART.SFU TCONCAT` | 96 | layout-and-rearrangement |
-| `TEXTRACT` | `BSTART.SFU TEXTRACT` | 98 | layout-and-rearrangement |
-| `TINSERT` | `BSTART.SFU TINSERT` | 99 | layout-and-rearrangement |
-| `TIMG2COL` | `BSTART.SFU TIMG2COL` | 100 | layout-and-rearrangement |
-| `TCI` | `BSTART.SFU TCI` | 102 | irregular-and-complex |
-| `TTRI` | `BSTART.SFU TTRI` | 103 | irregular-and-complex |
-| `THISTOGRAM` | `BSTART.SFU THISTOGRAM` | 104 | irregular-and-complex |
-| `TQUANT` | `BSTART.SFU TQUANT` | 106 | irregular-and-complex |
-| `TDEQUANT` | `BSTART.SFU TDEQUANT` | 107 | irregular-and-complex |
-| `TSORT` | `BSTART.SFU TSORT` | 108 | irregular-and-complex |
-| `TMRGSORT` | `BSTART.SFU TMRGSORT` | 109 | irregular-and-complex |
-| `TGATHER` | `BSTART.SFU TGATHER` | 111 | irregular-and-complex |
-| `TSCATTER` | `BSTART.SFU TSCATTER` | 112 | irregular-and-complex |
+| Golden 操作 | 规范汇编 | 逻辑 selector | 分类 | Wrapper 状态 |
+| --- | --- | ---: | --- | --- |
+| `TDIV` | `BSTART.SFU TDIV` | 3 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TREM` | `BSTART.SFU TREM` | 4 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TEXP` | `BSTART.SFU TEXP` | 18 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TLOG` | `BSTART.SFU TLOG` | 19 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TRECIP` | `BSTART.SFU TRECIP` | 20 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TSQRT` | `BSTART.SFU TSQRT` | 21 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TRSQRT` | `BSTART.SFU TRSQRT` | 22 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
+| `TDIVS` | `BSTART.SFU TDIVS` | 35 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TREMS` | `BSTART.SFU TREMS` | 36 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
+| `TROWSUM` | `BSTART.SFU TROWSUM` | 64 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWMAX` | `BSTART.SFU TROWMAX` | 65 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWMIN` | `BSTART.SFU TROWMIN` | 66 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWPROD` | `BSTART.SFU TROWPROD` | 67 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWEXPAND` | `BSTART.SFU TROWEXPAND` | 68 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWEXPANDADD` | `BSTART.SFU TROWEXPANDADD` | 69 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWEXPANDSUB` | `BSTART.SFU TROWEXPANDSUB` | 70 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWEXPANDMUL` | `BSTART.SFU TROWEXPANDMUL` | 71 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWEXPANDDIV` | `BSTART.SFU TROWEXPANDDIV` | 72 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWEXPANDMAX` | `BSTART.SFU TROWEXPANDMAX` | 73 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWEXPANDMIN` | `BSTART.SFU TROWEXPANDMIN` | 74 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWEXPANDEXPDIF` | `BSTART.SFU TROWEXPANDEXPDIF` | 75 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWARGMAX` | `BSTART.SFU TROWARGMAX` | 76 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TROWARGMIN` | `BSTART.SFU TROWARGMIN` | 77 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLSUM` | `BSTART.SFU TCOLSUM` | 80 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLMAX` | `BSTART.SFU TCOLMAX` | 81 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLMIN` | `BSTART.SFU TCOLMIN` | 82 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLPROD` | `BSTART.SFU TCOLPROD` | 83 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLEXPAND` | `BSTART.SFU TCOLEXPAND` | 84 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLEXPANDADD` | `BSTART.SFU TCOLEXPANDADD` | 85 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLEXPANDSUB` | `BSTART.SFU TCOLEXPANDSUB` | 86 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLEXPANDMUL` | `BSTART.SFU TCOLEXPANDMUL` | 87 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLEXPANDDIV` | `BSTART.SFU TCOLEXPANDDIV` | 88 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLEXPANDMAX` | `BSTART.SFU TCOLEXPANDMAX` | 89 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLEXPANDMIN` | `BSTART.SFU TCOLEXPANDMIN` | 90 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLEXPANDEXPDIF` | `BSTART.SFU TCOLEXPANDEXPDIF` | 91 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLARGMAX` | `BSTART.SFU TCOLARGMAX` | 92 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCOLARGMIN` | `BSTART.SFU TCOLARGMIN` | 93 | reduce-and-expand | 源码有引用；不代表完整语义一致 |
+| `TCI` | `BSTART.SFU TCI` | 102 | irregular-and-complex | 源码有引用；不代表完整语义一致 |
+| `TTRI` | `BSTART.SFU TTRI` | 103 | irregular-and-complex | 源码有引用；不代表完整语义一致 |
+| `TGATHER` | `BSTART.SFU TGATHER` | 111 | irregular-and-complex | 源码有引用；不代表完整语义一致 |
+| `TSCATTER` | `BSTART.SFU TSCATTER` | 112 | irregular-and-complex | 源码有引用；不代表完整语义一致 |
+| `TPERMUTE` | `BSTART.SFU TPERMUTE` | 117 | layout-and-rearrangement | 源码有引用；不代表完整语义一致 |
+| `TSHUF` | `BSTART.SFU TSHUF` | 118 | layout-and-rearrangement | 源码有引用；不代表完整语义一致 |
+| `TPACK` | `BSTART.SFU TPACK` | 119 | layout-and-rearrangement | 源码有引用；不代表完整语义一致 |
+| `TUNPACK` | `BSTART.SFU TUNPACK` | 120 | layout-and-rearrangement | 源码有引用；不代表完整语义一致 |
+| `TGPR2T` | `BSTART.SFU TGPR2T` | 126 | layout-and-rearrangement | 源码有引用；不代表完整语义一致 |
+| `TEXPDIF` | `BSTART.SFU TEXPDIF` | 29 | elementwise-tile-tile | 源码有引用；不代表完整语义一致 |
 
 ## TLSU
 
-| 操作 | 规范 block 起始指令 | Function |
-| --- | --- | ---: |
-| `TLOAD` | `BSTART.TLSU TLOAD` | 0 |
-| `TSTORE` | `BSTART.TLSU TSTORE` | 1 |
-| `TMOV` | `BSTART.TLSU TMOV` | 2 |
-| `TPREFETCH` | `BSTART.TLSU TPREFETCH` | 3 |
-| `MGATHER` | `BSTART.TLSU MGATHER` | 4 |
-| `MSCATTER` | `BSTART.TLSU MSCATTER` | 5 |
-| `MGATHER_MASK` | `BSTART.TLSU MGATHER.MASK` | 6 |
-| `MSCATTER_MASK` | `BSTART.TLSU MSCATTER.MASK` | 7 |
-| `MGATHER_CAS` | `BSTART.TLSU MGATHER.CAS` | 8 |
-| `GMOV` | `BSTART.GMOV` | 13 |
+| Golden 操作 | 规范 block 起始指令 | Function | Wrapper 状态 |
+| --- | --- | ---: | --- |
+| `TLOAD` | `BSTART.TLOAD` | 0 | 源码有引用；不代表完整语义一致 |
+| `TSTORE` | `BSTART.TSTORE` | 1 | 源码有引用；不代表完整语义一致 |
+| `TMOV` | `BSTART.TMOV` | 2 | 源码有引用；不代表完整语义一致 |
+| `TPREFETCH` | `BSTART.TPREFETCH` | 3 | 源码有引用；不代表完整语义一致 |
+| `MGATHER` | `BSTART.MGATHER` | 4 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER` | `BSTART.MSCATTER` | 5 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_MASK` | `BSTART.MGATHER.MASK` | 6 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER_MASK` | `BSTART.MSCATTER.MASK` | 7 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_CAS` | `BSTART.MGATHER.CAS` | 8 | 源码有引用；不代表完整语义一致 |
+| `GMOV` | `BSTART.GMOV` | 13 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_EXCH` | `BSTART.MGATHER.EXCH` | 9 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_MAX` | `BSTART.MGATHER.MAX` | 10 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_MIN` | `BSTART.MGATHER.MIN` | 11 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_ADD` | `BSTART.MGATHER.ADD` | 12 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_INC` | `BSTART.MGATHER.INC` | 14 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_DEC` | `BSTART.MGATHER.DEC` | 15 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_AND` | `BSTART.MGATHER.AND` | 16 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_OR` | `BSTART.MGATHER.OR` | 17 | 源码有引用；不代表完整语义一致 |
+| `MGATHER_XOR` | `BSTART.MGATHER.XOR` | 18 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER_MAX` | `BSTART.MSCATTER.MAX` | 19 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER_MIN` | `BSTART.MSCATTER.MIN` | 20 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER_ADD` | `BSTART.MSCATTER.ADD` | 21 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER_INC` | `BSTART.MSCATTER.INC` | 22 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER_DEC` | `BSTART.MSCATTER.DEC` | 23 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER_AND` | `BSTART.MSCATTER.AND` | 24 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER_OR` | `BSTART.MSCATTER.OR` | 25 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER_XOR` | `BSTART.MSCATTER.XOR` | 26 | 源码有引用；不代表完整语义一致 |
+| `MSCATTER_POPC` | `BSTART.MSCATTER.POPC` | 27 | 源码有引用；不代表完整语义一致 |
 
 ## CUBE
 
-| 操作 | 规范 block 起始指令 | Function |
-| --- | --- | ---: |
-| `TMATMUL` | `BSTART.CUBE TMATMUL` | 0 |
-| `TMATMUL_BIAS` | `BSTART.CUBE TMATMUL.BIAS` | 1 |
-| `TMATMUL_ACC` | `BSTART.CUBE TMATMUL.ACC` | 2 |
-| `TMATMUL_MX` | `BSTART.CUBE TMATMULMX` | 4 |
-| `TMATMUL_MX_BIAS` | `BSTART.CUBE TMATMULMX.BIAS` | 5 |
-| `TMATMUL_MX_ACC` | `BSTART.CUBE TMATMULMX.ACC` | 6 |
-| `TGEMV` | `BSTART.CUBE TGEMV` | 16 |
-| `TGEMV_BIAS` | `BSTART.CUBE TGEMV.BIAS` | 17 |
-| `TGEMV_ACC` | `BSTART.CUBE TGEMV.ACC` | 18 |
-| `TGEMV_MX` | `BSTART.CUBE TGEMVMX` | 20 |
-| `TGEMV_MX_BIAS` | `BSTART.CUBE TGEMVMX.BIAS` | 21 |
-| `TGEMV_MX_ACC` | `BSTART.CUBE TGEMVMX.ACC` | 22 |
+| Golden 操作 | 规范 block 起始指令 | Function | Wrapper 状态 |
+| --- | --- | ---: | --- |
+| `TMATMUL` | `BSTART.TMATMUL` | 0 | 源码有引用；不代表完整语义一致 |
+| `TMATMUL_BIAS` | `BSTART.TMATMUL.BIAS` | 1 | 源码有引用；不代表完整语义一致 |
+| `TMATMUL_ACC` | `BSTART.TMATMUL.ACC` | 2 | 源码有引用；不代表完整语义一致 |
+| `TMATMUL_MX` | `BSTART.TMATMULMX` | 4 | 源码有引用；不代表完整语义一致 |
+| `TMATMUL_MX_BIAS` | `BSTART.TMATMULMX.BIAS` | 5 | 源码有引用；不代表完整语义一致 |
+| `TMATMUL_MX_ACC` | `BSTART.TMATMULMX.ACC` | 6 | 源码有引用；不代表完整语义一致 |
+| `TGEMV` | `BSTART.TGEMV` | 16 | 源码有引用；不代表完整语义一致 |
+| `TGEMV_BIAS` | `BSTART.TGEMV.BIAS` | 17 | 源码有引用；不代表完整语义一致 |
+| `TGEMV_ACC` | `BSTART.TGEMV.ACC` | 18 | 源码有引用；不代表完整语义一致 |
+| `TGEMV_MX` | `BSTART.TGEMVMX` | 20 | 源码有引用；不代表完整语义一致 |
+| `TGEMV_MX_BIAS` | `BSTART.TGEMVMX.BIAS` | 21 | 源码有引用；不代表完整语义一致 |
+| `TGEMV_MX_ACC` | `BSTART.TGEMVMX.ACC` | 22 | 源码有引用；不代表完整语义一致 |
 
 ## 分类语义
 
 PTO ISA 0.58.7 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；
-其底层投影仍保留历史版本的 selector 数据。`elementwise-tile-tile`
+其底层投影记录当前 development golden selector 数据。`elementwise-tile-tile`
 和 `tile-scalar-and-immediate` 类别在 VEC 上执行逐元素操作，但其中的
 `TEXP`、`TLOG`、`TRECIP`、`TSQRT`、`TRSQRT` 由 SFU 执行。
 `reduce-and-expand`、`layout-and-rearrangement` 和 `irregular-and-complex` 类别由 SFU 执行。

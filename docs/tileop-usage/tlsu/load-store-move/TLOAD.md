@@ -291,7 +291,7 @@ void load_vector_cubes(float *data16, float *data32,
 开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
 
 ```asm
-BSTART.TLSU TLOAD, FP16
+BSTART.TLOAD FP16
 B.DIM       rValidCol, 0, ->LB0
 B.DIM       rValidRow, 0, ->LB1
 B.DIM       rCol, 0, ->LB2

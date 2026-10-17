@@ -1,6 +1,6 @@
 # PTO ISA 0.58.7 wrapper 支持状态
 
-本表以 `contracts/pto-isa-0.58.7-tile-operations.json` 的 118 个
+本表以 `contracts/pto-isa-0.58.7-tile-operations.json` 的 119 个
 `accepted-direct-operation` 为操作清单。它描述 Linx TileOP C++ wrapper 的
 公开实现状态，不替代 PTO-ISA/pto-spec 的 ASL/NDF 合法性、fault、completion、
 rollback、definedness 或 memory-order 语义。
@@ -16,7 +16,8 @@ rollback、definedness 或 memory-order 语义。
 
 | PTO catalog 范围 | 状态 | 说明 |
 | --- | --- | --- |
-| TEPL elementwise、scalar、reduce/expand、irregular | 已实现 | 逐操作页面和 `jcore/template_asm.hpp` 为 wrapper 权威；dtype、valid region、padding 和 selector 仍受 ASL 约束。 |
+| TEPL elementwise、scalar、reduce/expand、irregular（除 `TLEA`） | 已实现 | 逐操作页面和 `jcore/template_asm.hpp` 为 wrapper 权威；dtype、valid region、padding 和 selector 仍受 ASL 约束。 |
+| `TLEA` | 尚无 wrapper | PTO development golden 已分配 SFU selector 31；本仓库尚无公开 C++ wrapper，不以相近操作代替。 |
 | `TEXPDIF` | CPU simulator、JCORE inline-asm 已实现；LLVM MC catalog 已实现；LLVM compiler lowering 尚未完成；AArch64/SME 不支持 | PTO 0.58.7 selector 29。已有 wrapper 不等于 LLVM compiler 已具备从 IR/builtin 到 TEXPDIF 的端到端 lowering。 |
 | TLSU `TLOAD`/`TSTORE`/`TMOV`/`TPREFETCH`/`GMOV` | 已实现 | 传输、peer move 和 prefetch 有独立 C++ 入口；layout conversion 仅对页面列出的组合开放。 |
 | TLSU `MGATHER`/`MSCATTER` 及 atomic/reduction variants | 仅部分 layout 支持 | wrapper 覆盖当前公开 selector；ColumnMajor selector、mask/索引 dtype 和不同 atomic 组合不得由普通 gather/scatter 重载推断。 |
@@ -28,7 +29,8 @@ rollback、definedness 或 memory-order 语义。
 
 ## 版本边界
 
-- 当前 API/spec 基线：PTO ISA `0.58.7`，publication `0.58.7.0`，ABI
+- 当前 API/spec 基线：PTO ISA development golden `0.58.7`，状态
+  `development-not-published`，publication 为空，ABI
   `pto-isa-0.58.7-mode-function-v1`。
 - backend 能力必须分别判断：CPU simulator/JCORE wrapper、LLVM MC
   assembler/parser、LLVM compiler lowering 以及 AArch64/SME 并不是同一个状态。

@@ -1,6 +1,6 @@
 // TLSU GM_ATOM_VALUE family: atomic RMW gather at logical element indices with
 // observed-old-value publication (PTO ISA functions 9-18; canonical
-// BSTART.TLSU MGATHER.<op>). Requires a function-aware assembler (0.58.6+) to
+// BSTART.MGATHER.<op>). Requires a function-aware assembler (0.58.6+) to
 // lower the bundles. U32 is legal for every member below, so one transfer tile
 // covers ADD/MAX/MIN/AND/OR/XOR/EXCH/INC/DEC.
 #include <common/pto_tileop.hpp>

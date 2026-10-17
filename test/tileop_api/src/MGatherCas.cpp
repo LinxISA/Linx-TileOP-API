@@ -1,5 +1,5 @@
 // MGATHER_CAS: atomic compare-and-swap at logical element indices
-// (PTO ISA 0.58.7 TLSU function 8; canonical BSTART.TLSU MGATHER.CAS).
+// (PTO ISA 0.58.7 TLSU function 8; canonical BSTART.MGATHER.CAS).
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
