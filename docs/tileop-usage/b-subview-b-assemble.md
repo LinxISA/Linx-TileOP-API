@@ -340,20 +340,30 @@ void session(GM &gm_lo, GM &gm_hi, Src &a, Src &b) {
 ### 完整会话示例（多 fragment 拼装一个 parent）
 
 ```cpp
-using Dst = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
-using GM  = global_tensor<float, RowMajor<4, 8>>;
+using Parent = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
+using GM = global_tensor<float, RowMajor<32, 4>>;
 
-void load_three(GM &gm0, GM &gm1, GM &gm2, Dst &tile) {
-  auto first  = range::assemble(tile);            // INIT
+void load_four(GM &gm0, GM &gm1, GM &gm2, GM &gm3, Parent &out) {
+  Parent tile;  // 2 KiB parent，四个 512 B writer 覆盖不同范围
+  auto first = range::assemble<4, 0>(tile);
   TLOAD(first, gm0);
 
-  auto middle = range::assemble_middle(tile);     // MIDDLE
-  TLOAD_ASS(middle, gm1);                        // 非 INIT slot 用 _ASS
+  auto middle0 = range::assemble_middle<4, 4>(tile);
+  TLOAD_ASS(middle0, gm1);
+  auto middle1 = range::assemble_middle<4, 8>(tile);
+  TLOAD_ASS(middle1, gm2);
 
-  auto last   = range::assemble_last(tile);       // LAST
-  TLOAD_ASS(last, gm2);
+  auto last = range::assemble_last<4, 12>(tile);
+  TLOAD_ASS(last, gm3);
+  out = tile;  // LAST 后才发布完整 parent
 }
 ```
+
+LAST 之前的 parent 处于 OPEN 状态，只能由后续 assembly slot 消费。不能
+提前 `TSTORE`、普通 `TMOV` 或通过输出引用把它写回内存；函数只发出 INIT
+后返回也不合法。使用局部 parent 完成整个 session，再向外发布。
+`AssemblyLifetime.cpp` 验证完整 session 可生成对象，并要求两种提前发布路径
+被编译器拒绝。`RangeAssemble.cpp` 中的孤立 slot 仅用于语法与 IR 检查。
 
 ## `*_ASS`：TEPL 计算直接写入 assembled destination
 

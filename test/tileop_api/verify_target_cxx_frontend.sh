@@ -95,7 +95,18 @@ done
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/RangeAssemble.cpp" -o "$OUT/RangeAssemble.ll"
 "$TC_DIR/clang++" "${FLAGS[@]}" -c \
-  "$ROOT/test/tileop_api/src/RangeAssemble.cpp" -o "$OUT/RangeAssemble.o"
+  "$ROOT/test/tileop_api/src/AssemblyLifetime.cpp" -o "$OUT/AssemblyLifetime.o"
+# RangeAssemble contains isolated INIT/MIDDLE syntax probes; only complete
+# sessions are legal object-level programs. Keep escaping OPEN parents negative.
+for mode in TEST_OPEN_ESCAPE TEST_OPEN_STORE; do
+  if "$TC_DIR/clang++" "${FLAGS[@]}" -D"$mode" -c \
+      "$ROOT/test/tileop_api/src/AssemblyLifetime.cpp" \
+      -o "$OUT/$mode.o" >"$OUT/$mode.log" 2>&1; then
+    echo "FAIL: $mode accepted an OPEN assembly parent escape" >&2
+    exit 1
+  fi
+  grep -Fq "cannot use an OPEN B.ASSEMBLE parent" "$OUT/$mode.log"
+done
 python3 - "$OUT/TileRegionUnary.ll" "$OUT/TileRegionCubeSubview.ll" \
           "$OUT/Issue166RmsNormB128.ll" "$OUT/RangeAssemble.ll" <<'PY'
 import re
@@ -145,13 +156,13 @@ operations = [line for line in body.splitlines()
               if "asm sideeffect" in line and "BSTART.TEPL" in line]
 if len(operations) != 3:
     raise SystemExit(f"RangeAssemble: expected 3 TADD operations, got {len(operations)}")
-if "B.IOT $5, $6, mask=1111, last, ->$0" not in operations[0]:
+if "B.IOT $5.reuse, $6.reuse, mask=1111, last, ->$0" not in operations[0]:
     raise SystemExit("RangeAssemble: INIT TADD must allocate its destination")
 if "B.ASSEMBLE ${8:c}, ${9:c}" not in operations[0]:
     raise SystemExit("RangeAssemble: INIT TADD is missing B.ASSEMBLE")
 for operation in operations[1:]:
-    if "B.IOT $4, $5, mask=1111" not in operation or \
-       "B.IOT $7, mask=1111, last" not in operation:
+    if "B.IOT $4.reuse, $5.reuse, mask=1111" not in operation or \
+       "B.IOT $7.reuse, mask=1111, last" not in operation:
         raise SystemExit("RangeAssemble: continuation TADD has invalid binders")
     if "B.ASSEMBLE" not in operation:
         raise SystemExit("RangeAssemble: continuation TADD is missing B.ASSEMBLE")
@@ -507,6 +518,6 @@ PY
 grep -Eiq 'BSTART\.CUBE[[:space:]]+TMATMULMX,[[:space:]]+FP16' "$OUT/MXScaleVariants.dis"
 grep -Eiq 'BSTART\.CUBE[[:space:]]+TMATMULMX\.ACC,[[:space:]]+E4M3' "$OUT/MXScaleVariants.dis"
 grep -Eiq 'BSTART\.CUBE[[:space:]]+TGEMVMX\.BIAS,[[:space:]]+BF16' "$OUT/MXScaleVariants.dis"
-grep -Eq 'B\.IOT[[:space:]]+t#[1-8], t#[1-8], mask=1111' "$OUT/MXScaleVariants.dis"
+grep -Eq 'B\.IOT[[:space:]]+t#[1-8]\.reuse, t#[1-8]\.reuse, mask=1111' "$OUT/MXScaleVariants.dis"
 
 echo "Linx target C++ frontend MX/effective-shape contract: PASS"
