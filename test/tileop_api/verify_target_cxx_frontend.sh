@@ -12,7 +12,8 @@ trap 'rm -rf "$OUT"' EXIT
 # Use a copied resource tree whose tileop-api subtree is this checkout, so the
 # verification cannot accidentally exercise stale installed headers.
 RESOURCE_DIR="$OUT/clang-resource"
-cp -R "$("$TC_DIR/clang++" -print-resource-dir)" "$RESOURCE_DIR"
+BASE_RESOURCE_DIR=${CLANG_RESOURCE_DIR:-$("$TC_DIR/clang++" -print-resource-dir)}
+cp -R "$BASE_RESOURCE_DIR" "$RESOURCE_DIR"
 rm -rf "$RESOURCE_DIR/include/tileop-api"
 cp -R "$ROOT/include" "$RESOURCE_DIR/include/tileop-api"
 
@@ -51,10 +52,41 @@ for source in RangeSubview.cpp GMov.cpp TileRegionUnary.cpp \
               Issue268CooperativeRowMax.cpp \
               TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
-              SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp; do
+              SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp \
+              RuntimePhysicalCols.cpp; do
   "$TC_DIR/clang++" "${FLAGS[@]}" -fsyntax-only \
     "$ROOT/test/tileop_api/src/$source"
 done
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/RuntimePhysicalCols.cpp" \
+  -o "$OUT/RuntimePhysicalCols.ll"
+python3 - "$OUT/RuntimePhysicalCols.ll" <<'PY_RUNTIME_COLS'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+            if part.startswith("define ") and "runtime_physical_cols" in part)
+operations = [part for part in re.split(r"(?=BSTART\.TEPL)", body)
+              if "BSTART.TEPL" in part]
+runtime_operations = [operation for operation in operations
+                      if "B.DIM $" in operation and ", 0, ->lb2" in operation]
+if len(runtime_operations) != 4:
+    raise SystemExit(
+        f"expected four register-LB2 operations, got {len(runtime_operations)}")
+if sum("B.IOR" in operation for operation in runtime_operations) != 1:
+    raise SystemExit("runtime-geometry fixture lost scalar-fill binding")
+odd = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+           if part.startswith("define ") and "odd_runtime_physical_cols" in part)
+if "BSTART.TEPL" not in odd or "->lb2" not in odd:
+    raise SystemExit("odd runtime PhysicalCol fixture was not emitted")
+defaults = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+                if part.startswith("define ") and "runtime_valid_shape_defaults" in part)
+if defaults.count("BSTART.TEPL") != 2:
+    raise SystemExit("dynamic zero overrides must use instance dimensions, not DYNAMIC=-1")
+PY_RUNTIME_COLS
 
 for source in TileRegionUnary TileRegionCubeSubview Issue166RmsNormB128; do
   "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \

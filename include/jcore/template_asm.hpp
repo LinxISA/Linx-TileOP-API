@@ -11122,43 +11122,81 @@ PTO_SHARED_INLINE void emit_binary_assemble_init(D &dst, A &src0, B &src1) {
       : "memory");
 }
 
-// The optional ValidCol/ValidRow arguments let a caller narrow the B.DIM
-// geometry of the emitted bundle without changing the tile types: 0 (the
-// default) emits the type-derived dimension; N > 0 overrides it via the
-// runtime register form. Constraints: both values nonzero and within the
-// tile capacity when overridden; a nonzero ValidRow requires a nonzero
-// ValidCol because LB0 is mandatory in every elementwise bundle.
+// Optional runtime dimensions let a caller narrow the descriptor carried by
+// a capacity-sized Tile without changing that Tile's SizeCode. Zero keeps the
+// corresponding valid dimension from the Tile instance (or static Cols for
+// PhysicalCol); a nonzero PhysicalCol is bounded by Cols
+// and must contain ValidCol. CUBE storage rounds that logical physical column
+// through the ISA CELL geometry, so odd values remain valid where the dtype
+// and layout support them.
 
 template <is_tile_data_v T>
-constexpr bool user_dims_legal(unsigned Col, unsigned Row) {
-  if (Col == 0 || Row == 0)
+constexpr bool user_dims_legal(unsigned Col, unsigned Row,
+                               unsigned PhysicalCol) {
+  if (Col == 0 || Row == 0 || PhysicalCol == 0)
     return false;
-  return Col <= (unsigned)T::Cols && Row <= (unsigned)T::Rows;
+  if (Col > PhysicalCol || PhysicalCol > (unsigned)T::Cols ||
+      Row > (unsigned)T::Rows)
+    return false;
+  return true;
 }
 
 // One elementwise bundle: header + layout + 3x B.DIM + record + operands.
 // DimSrc selects per-slot immediate (type-derived) vs register (user)
-// emission for lb0/lb1; lb2 (physical Cols) always uses the type value.
+// emission for lb0/lb1/lb2.
 template <is_tile_data_v Tile, int Opcode, is_tile_data_v Src0 = Tile,
           is_tile_data_v Src1 = Tile>
 PTO_SHARED_INLINE void emit_binary_user(
-    Tile &dst, Src0 &src0, Src1 &src1, unsigned UserCol, unsigned UserRow) {
-  unsigned Col = UserCol ? UserCol : (unsigned)Tile::ValidCol;
-  unsigned Row = UserRow ? UserRow : (unsigned)Tile::ValidRow;
+    Tile &dst, Src0 &src0, Src1 &src1, unsigned UserCol, unsigned UserRow,
+    unsigned UserPhysicalCol = 0) {
+  unsigned Col = UserCol ? UserCol : (unsigned)dst.GetValidCol();
+  unsigned Row = UserRow ? UserRow : (unsigned)dst.GetValidRow();
+  unsigned PhysicalCol = UserPhysicalCol ? UserPhysicalCol
+                                         : (unsigned)Tile::Cols;
+  if (!user_dims_legal<Tile>(Col, Row, PhysicalCol))
+    __builtin_trap();
   asm volatile(
       "BSTART.TEPL %c[Opcode], %D[Type]\n"
       PTO_ELEMENTWISE_LAYOUT_ASM
       "B.DIM %[ucol], 0, ->lb0\n"
       "B.DIM %[urow], 0, ->lb1\n"
-      "B.DIM zero, %c[Cols], ->lb2\n"
+      "B.DIM %[pcol], 0, ->lb2\n"
       "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
       : [Dst] "=Tr"(dst.data())
-      : [ucol] "r"(Col), [urow] "r"(Row),
+      : [ucol] "r"(Col), [urow] "r"(Row), [pcol] "r"(PhysicalCol),
         [Type] "i"(type_traits<typename Tile::DType>::TypeCode),
-        [Cols] "i"(Tile::Cols),
         [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
         [Opcode] "i"(Opcode),
         [TileSize] "i"(tile_type_traits<typename Tile::TileDType>::TilesizeCode),
+        [ElemLayout] "i"(local_layout_code_v<Tile>)
+      : "memory");
+}
+
+template <is_tile_data_v Tile>
+PTO_SHARED_INLINE void emit_fill_user(
+    Tile &dst, typename Tile::DType scalar, unsigned UserCol,
+    unsigned UserRow, unsigned UserPhysicalCol) {
+  const unsigned Col = UserCol ? UserCol : (unsigned)dst.GetValidCol();
+  const unsigned Row = UserRow ? UserRow : (unsigned)dst.GetValidRow();
+  const unsigned PhysicalCol = UserPhysicalCol ? UserPhysicalCol
+                                                : (unsigned)Tile::Cols;
+  if (!user_dims_legal<Tile>(Col, Row, PhysicalCol))
+    __builtin_trap();
+  typename Tile::DType scalarValue = scalar;
+  asm("" : "+r"(scalarValue));
+  asm volatile(
+      "BSTART.TEPL 59, %D[Type]\n"
+      PTO_ELEMENTWISE_LAYOUT_ASM
+      "B.DIM %[vcol], 0, ->lb0\n"
+      "B.DIM %[vrow], 0, ->lb1\n"
+      "B.DIM %[pcol], 0, ->lb2\n"
+      "B.IOT mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      "B.IOR [%[Scalar]],[]\n"
+      : [Dst] "=Tr"(dst.data())
+      : [vcol] "r"(Col), [vrow] "r"(Row), [pcol] "r"(PhysicalCol),
+        [Type] "i"(type_traits<typename Tile::DType>::TypeCode),
+        [TileSize] "i"(tile_type_traits<typename Tile::TileDType>::TilesizeCode),
+        [Scalar] "r"(scalarValue),
         [ElemLayout] "i"(local_layout_code_v<Tile>)
       : "memory");
 }
@@ -11168,16 +11206,13 @@ PTO_SHARED_INLINE void emit_binary_user(
 template <is_tile_data_v tile_shape>
   requires(!is_assemble_v<tile_shape>)
 void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape);
-  if constexpr (tile_shape::ValidCol > 0 || tile_shape::ValidRow > 0) {
-    if (UserValidCol != 0 || UserValidRow != 0) {
-      // User override: both dims take the runtime register form, matching
-      // the ISA B.DIM RegSrc contract for non-schema dims.
-      pto_elementwise_user_dims::emit_binary_user<tile_shape, 0>(
-          dst, src0, src1, UserValidCol, UserValidRow);
-      return;
-    }
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
+    pto_elementwise_user_dims::emit_binary_user<tile_shape, 0>(
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
+    return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
     asm volatile(
@@ -11279,8 +11314,8 @@ void TADD(range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits,
   PTO_SHARED_INLINE void NAME##_U(tile_shape &dst, tile_shape &src0,           \
                                   tile_shape &src1) {                          \
     static_assert(                                                             \
-        pto_elementwise_user_dims::user_dims_legal<tile_shape>(ValidCol,       \
-                                                              ValidRow),       \
+        pto_elementwise_user_dims::user_dims_legal<tile_shape>(               \
+            ValidCol, ValidRow, tile_shape::Cols),                            \
         #NAME "_U user dims must be nonzero and within tile capacity");        \
     pto_elementwise_user_dims::emit_binary_user<tile_shape, OPCODE>(                   dst, src0, src1, ValidCol, ValidRow);                                  \
   }
@@ -11300,10 +11335,11 @@ PTO_DEFINE_ELEMENTWISE_USER_DIMS(TMIN, 12)
 // TSUB: dst = src0 - src1
 template <is_tile_data_v tile_shape>
 void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
-  if (UserValidCol != 0 || UserValidRow != 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
     pto_elementwise_user_dims::emit_binary_user<tile_shape, 1>(
-        dst, src0, src1, UserValidCol, UserValidRow);
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
     return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -11389,7 +11425,8 @@ void TSUB(tile_shape &dst, tile_shape &src0, tile_shape &src1,
 // backing so no payload copy or descriptor retag is introduced.
 template <is_tile_data_v Dst, is_tile_data_v Src0, is_tile_data_v Src1>
 void TMUL(Dst &dst, Src0 &src0, Src1 &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
   static_assert(std::is_same_v<typename Dst::DType, typename Src0::DType> &&
                     std::is_same_v<typename Dst::DType, typename Src1::DType>,
                 "TMUL operands must share the operation dtype");
@@ -11401,9 +11438,9 @@ void TMUL(Dst &dst, Src0 &src0, Src1 &src1,
                     Dst::ValidCol == Src1::ValidCol,
                 "TMUL operands must share layout and valid shape");
   using tile_shape = Dst;
-  if (UserValidCol != 0 || UserValidRow != 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
     pto_elementwise_user_dims::emit_binary_user<tile_shape, 2, Src0, Src1>(
-        dst, src0, src1, UserValidCol, UserValidRow);
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
     return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -11488,10 +11525,11 @@ void TMUL(Dst &dst, Src0 &src0, Src1 &src1,
 // TDIV: dst = src0 / src1
 template <is_tile_data_v tile_shape>
 void TDIV(tile_shape &dst, tile_shape &src0, tile_shape &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
-  if (UserValidCol != 0 || UserValidRow != 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
     pto_elementwise_user_dims::emit_binary_user<tile_shape, 3>(
-        dst, src0, src1, UserValidCol, UserValidRow);
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
     return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -11658,10 +11696,11 @@ void TFMOD(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 // TAND: dst = src0 & src1
 template <is_tile_data_v tile_shape>
 void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
-  if (UserValidCol != 0 || UserValidRow != 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
     pto_elementwise_user_dims::emit_binary_user<tile_shape, 6>(
-        dst, src0, src1, UserValidCol, UserValidRow);
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
     return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -11742,10 +11781,11 @@ void TAND(tile_shape &dst, tile_shape &src0, tile_shape &src1,
 // TOR: dst = src0 | src1
 template <is_tile_data_v tile_shape>
 void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
-  if (UserValidCol != 0 || UserValidRow != 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
     pto_elementwise_user_dims::emit_binary_user<tile_shape, 7>(
-        dst, src0, src1, UserValidCol, UserValidRow);
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
     return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -11826,10 +11866,11 @@ void TOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
 // TXOR: dst = src0 ^ src1
 template <is_tile_data_v tile_shape>
 void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
-  if (UserValidCol != 0 || UserValidRow != 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
     pto_elementwise_user_dims::emit_binary_user<tile_shape, 8>(
-        dst, src0, src1, UserValidCol, UserValidRow);
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
     return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -11910,10 +11951,11 @@ void TXOR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
 // TSHL: dst = src0 << src1
 template <is_tile_data_v tile_shape>
 void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
-  if (UserValidCol != 0 || UserValidRow != 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
     pto_elementwise_user_dims::emit_binary_user<tile_shape, 9>(
-        dst, src0, src1, UserValidCol, UserValidRow);
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
     return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -11994,10 +12036,11 @@ void TSHL(tile_shape &dst, tile_shape &src0, tile_shape &src1,
 // TSHR: dst = src0 >> src1
 template <is_tile_data_v tile_shape>
 void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
-  if (UserValidCol != 0 || UserValidRow != 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
     pto_elementwise_user_dims::emit_binary_user<tile_shape, 10>(
-        dst, src0, src1, UserValidCol, UserValidRow);
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
     return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -12078,10 +12121,11 @@ void TSHR(tile_shape &dst, tile_shape &src0, tile_shape &src1,
 // TMAX: dst = max(src0, src1)
 template <is_tile_data_v tile_shape>
 void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
-  if (UserValidCol != 0 || UserValidRow != 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
     pto_elementwise_user_dims::emit_binary_user<tile_shape, 11>(
-        dst, src0, src1, UserValidCol, UserValidRow);
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
     return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -12162,10 +12206,11 @@ void TMAX(tile_shape &dst, tile_shape &src0, tile_shape &src1,
 // TMIN: dst = min(src0, src1)
 template <is_tile_data_v tile_shape>
 void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1,
-          unsigned UserValidCol = 0, unsigned UserValidRow = 0) {
-  if (UserValidCol != 0 || UserValidRow != 0) {
+          unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+          unsigned UserPhysicalCol = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
     pto_elementwise_user_dims::emit_binary_user<tile_shape, 12>(
-        dst, src0, src1, UserValidCol, UserValidRow);
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
     return;
   }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
@@ -15541,7 +15586,14 @@ asm volatile(
 
 // TEXPANDS: broadcast scalar into dst tile
 template <is_tile_data_v tile_shape>
-void TEXPANDS(tile_shape &dst, typename tile_shape::DType s) {
+void TEXPANDS(tile_shape &dst, typename tile_shape::DType s,
+              unsigned UserValidCol = 0, unsigned UserValidRow = 0,
+              unsigned UserPhysicalCol = 0) {
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
+    pto_elementwise_user_dims::emit_fill_user(
+        dst, s, UserValidCol, UserValidRow, UserPhysicalCol);
+    return;
+  }
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   // Anti-fold: keep a compile-time-constant scalar (e.g. 0) off the zero
   // register so B.IOR [zero],[] still matches an instruction.
@@ -17927,13 +17979,53 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
   );  }
 }
 
+namespace pto_row_expand_user_dims {
+
+template <int Opcode, int BroadcastByteOffset, is_tile_data_v Out,
+          is_tile_data_v Src0, is_tile_data_v Src1>
+PTO_SHARED_INLINE void emit_binary(
+    Out &dst, Src0 &src0, Src1 &src1, unsigned UserValidCol,
+    unsigned UserValidRow, unsigned UserPhysicalCol) {
+  const unsigned validCol = UserValidCol ? UserValidCol
+                                         : (unsigned)src0.GetValidCol();
+  const unsigned validRow = UserValidRow ? UserValidRow
+                                         : (unsigned)src0.GetValidRow();
+  const unsigned physicalCol = UserPhysicalCol ? UserPhysicalCol
+                                                : (unsigned)Out::Cols;
+  if (!pto_elementwise_user_dims::user_dims_legal<Out>(
+          validCol, validRow, physicalCol))
+    __builtin_trap();
+  asm volatile(
+      "BSTART.TEPL %c[Opcode], %D[Type]\n"
+      PTO_ROW_EXPAND_LAYOUT_ASM
+      "B.DIM %[ValidCol], 0, ->lb0\n"
+      "B.DIM %[ValidRow], 0, ->lb1\n"
+      "B.DIM %[PhysicalCol], 0, ->lb2\n"
+      "B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111, last, "
+      "->%[Dst]<%Z[TileSize]>\n"
+      : [Dst] "=Tr"(dst.data())
+      : [Type] "i"(type_traits<typename Out::DType>::TypeCode),
+        [ValidCol] "r"(validCol), [ValidRow] "r"(validRow),
+        [PhysicalCol] "r"(physicalCol), [Src0] "Tr"(src0.data()),
+        [Src1] "Tr"(src1.data()), [Opcode] "i"(Opcode),
+        [TileSize] "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
+        [BroadcastByteOffset] "i"(BroadcastByteOffset),
+        [ElemLayout] "i"(local_layout_code_v<Out>)
+      : "memory");
+}
+
+} // namespace pto_row_expand_user_dims
+
 // TROWEXPANDADD: row broadcast add
 // src1 is a per-row scalar/byte-strip operand whose shape may differ from src0
 // (see pto/TROWEXPANDMUL.md Mode 1/2); only dtype is required to match.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1,
           int BroadcastByteOffset = 0>
-void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0,
+                   tile_shape_in1 &src1, unsigned UserValidCol = 0,
+                   unsigned UserValidRow = 0,
+                   unsigned UserPhysicalCol = 0) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
@@ -17946,6 +18038,11 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDADD source and broadcast layouts must match the "
                 "destination layout");
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
+    pto_row_expand_user_dims::emit_binary<69, BroadcastByteOffset>(
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
+    return;
+  }
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
   static_assert(tile_carrier_width_compatible(
       type_traits<typename tile_shape_in1::DType>::TypeCode,
@@ -18063,7 +18160,10 @@ void TROWEXPANDADD(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1,
           int BroadcastByteOffset = 0>
-void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0,
+                   tile_shape_in1 &src1, unsigned UserValidCol = 0,
+                   unsigned UserValidRow = 0,
+                   unsigned UserPhysicalCol = 0) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
@@ -18076,6 +18176,11 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDSUB source and broadcast layouts must match the "
                 "destination layout");
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
+    pto_row_expand_user_dims::emit_binary<70, BroadcastByteOffset>(
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
+    return;
+  }
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
   static_assert(tile_carrier_width_compatible(
       type_traits<typename tile_shape_in1::DType>::TypeCode,
@@ -18193,7 +18298,10 @@ void TROWEXPANDSUB(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1,
           int BroadcastByteOffset = 0>
-void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0,
+                   tile_shape_in1 &src1, unsigned UserValidCol = 0,
+                   unsigned UserValidRow = 0,
+                   unsigned UserPhysicalCol = 0) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
@@ -18206,6 +18314,11 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMUL source and broadcast layouts must match the "
                 "destination layout");
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
+    pto_row_expand_user_dims::emit_binary<71, BroadcastByteOffset>(
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
+    return;
+  }
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
   static_assert(tile_carrier_width_compatible(
       type_traits<typename tile_shape_in1::DType>::TypeCode,
@@ -18327,7 +18440,10 @@ void TROWEXPANDMUL(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1,
           int BroadcastByteOffset = 0>
-void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0,
+                   tile_shape_in1 &src1, unsigned UserValidCol = 0,
+                   unsigned UserValidRow = 0,
+                   unsigned UserPhysicalCol = 0) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
@@ -18340,6 +18456,11 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDDIV source and broadcast layouts must match the "
                 "destination layout");
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
+    pto_row_expand_user_dims::emit_binary<72, BroadcastByteOffset>(
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
+    return;
+  }
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
   static_assert(tile_carrier_width_compatible(
       type_traits<typename tile_shape_in1::DType>::TypeCode,
@@ -18457,7 +18578,10 @@ void TROWEXPANDDIV(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1,
           int BroadcastByteOffset = 0>
-void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0,
+                   tile_shape_in1 &src1, unsigned UserValidCol = 0,
+                   unsigned UserValidRow = 0,
+                   unsigned UserPhysicalCol = 0) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
@@ -18470,6 +18594,11 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMAX source and broadcast layouts must match the "
                 "destination layout");
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
+    pto_row_expand_user_dims::emit_binary<73, BroadcastByteOffset>(
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
+    return;
+  }
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
   static_assert(tile_carrier_width_compatible(
       type_traits<typename tile_shape_in1::DType>::TypeCode,
@@ -18587,7 +18716,10 @@ void TROWEXPANDMAX(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1,
           int BroadcastByteOffset = 0>
-void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0,
+                   tile_shape_in1 &src1, unsigned UserValidCol = 0,
+                   unsigned UserValidRow = 0,
+                   unsigned UserPhysicalCol = 0) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
@@ -18600,6 +18732,11 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDMIN source and broadcast layouts must match the "
                 "destination layout");
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
+    pto_row_expand_user_dims::emit_binary<74, BroadcastByteOffset>(
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
+    return;
+  }
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
   static_assert(tile_carrier_width_compatible(
       type_traits<typename tile_shape_in1::DType>::TypeCode,
@@ -18717,7 +18854,10 @@ void TROWEXPANDMIN(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &sr
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in0,
           is_tile_data_v tile_shape_in1,
           int BroadcastByteOffset = 0>
-void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0,
+                      tile_shape_in1 &src1, unsigned UserValidCol = 0,
+                      unsigned UserValidRow = 0,
+                      unsigned UserPhysicalCol = 0) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in0);
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in1);
   PTO_ROW_EXPAND_OFFSET_CHECK(tile_shape_out, tile_shape_in1);
@@ -18730,6 +18870,11 @@ void TROWEXPANDEXPDIF(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 
                     tile_shape_out::BFractal == tile_shape_in1::BFractal,
                 "TROWEXPANDEXPDIF source and broadcast layouts must match the "
                 "destination layout");
+  if (UserValidCol != 0 || UserValidRow != 0 || UserPhysicalCol != 0) {
+    pto_row_expand_user_dims::emit_binary<75, BroadcastByteOffset>(
+        dst, src0, src1, UserValidCol, UserValidRow, UserPhysicalCol);
+    return;
+  }
   if constexpr (tile_shape_out::ValidCol > 0 && tile_shape_out::ValidRow > 0) {
   static_assert(tile_carrier_width_compatible(
       type_traits<typename tile_shape_in1::DType>::TypeCode,
