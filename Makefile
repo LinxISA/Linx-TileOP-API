@@ -21,6 +21,7 @@ check:
 	python3 test/test_v058_engine_contract.py
 	python3 test/test_pto0585_layout_interfaces.py
 	python3 test/test_version_header.py
+	python3 test/test_layout_header_link.py
 	python3 test/test_element_tile_api.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
 		-fsyntax-only -Iinclude test/ptoas_linx_type_compat.cpp
