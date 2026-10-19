@@ -116,7 +116,7 @@ class TileArrayParticipantMaskTest(unittest.TestCase):
             ]
             assembly_blocks = [
                 block for block in re.findall(
-                    r"BSTART\.TLSU\s+TMOV[\s\S]*?(?=BSTART|$)", pe0_asm
+                    r"BSTART(?:\.TLSU\s+|\.)TMOV\b[\s\S]*?(?=BSTART|$)", pe0_asm
                 ) if "B.ASSEMBLE" in block
             ]
             self.assertGreater(len(assembly_blocks), 4)
@@ -127,7 +127,7 @@ class TileArrayParticipantMaskTest(unittest.TestCase):
             self.assertRegex(pe0_asm, r"B\.ASSEMBLE\s+1, 0, [^,]+, 0, 3")
             self.assertRegex(pe0_asm, r"BSTART\.TEPL\s+TXOR")
             self.assertEqual(
-                len(re.findall(r"BSTART\.TLSU\s+TSTORE", pe0_asm)), 2
+                len(re.findall(r"BSTART(?:\.TLSU\s+|\.)TSTORE\b", pe0_asm)), 2
             )
             default_asm = dumped.stdout[dumped.stdout.index("<assemble_default"):]
             self.assertRegex(default_asm, r"B\.IOT[^\n]*mask=1111")
