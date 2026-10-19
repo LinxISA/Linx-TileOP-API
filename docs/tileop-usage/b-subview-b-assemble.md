@@ -41,6 +41,28 @@ source、兼容代码和编码回归测试；`*_at_reg` 接口只出现在固定
 的 TileOP 会自动发出对应 `INIT → MIDDLE* → LAST` 生命周期的
 `B.ASSEMBLE`；`TASSEMBLY` 本身不发独立指令，只返回组装好的 parent。
 
+`TileArray<Fragment, Rows, Cols, ParticipantMask>` 的第四个模板参数指定
+raw `TMOV` assembly writer 的参与 PE 集合，默认值为 `15`。合法的非零原生
+mask 是 `1, 2, 4, 8, 12, 14, 15`；位序为 `bit = 3 - PE`，所以 PE0-only
+写作 `8`（`1000`）。同一次 INIT/MIDDLE/LAST assembly 生命周期中的所有
+`B.IOT` 都携带相同 mask。
+
+显式非默认 mask 的 writer 应放在 `PTO_PE_DOMAIN(mask)` 标记的函数中。该宏
+要求编译器提供 `__LINX_PTO_PE_DOMAIN__`；旧编译器会把调用诊断为 unavailable，
+不会静默忽略域信息。当前非默认 mask 只开放给 raw `TMOV` writer，其他仍按
+默认 mask 定义的 TileArray destination overload 会在类型检查时拒绝该 slot。
+
+```cpp
+PTO_PE_DOMAIN(8)
+void assemble_pe0(ElementTile<uint32_t, 32> (&parts)[4]) {
+  TileArray<ElementTile<uint32_t, 32>, 1, 4, 8> outputs;
+  for (int i = 0; i < 4; ++i)
+    TMOV(outputs[0][i], parts[i]);
+  auto parent = TASSEMBLY<ElementTile<uint32_t, 128>>(std::move(outputs));
+  // 在本函数域内继续消费或写回 parent。
+}
+```
+
 ```cpp
 #include <common/pto_tileop.hpp>
 

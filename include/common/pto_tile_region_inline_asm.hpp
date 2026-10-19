@@ -692,6 +692,93 @@ PTO_REGION_SCALAR_SUBVIEW_DEST_WRAPPER(TMINS, 44)
 #undef PTO_REGION_SCALAR_DEST_WRAPPER
 #undef PTO_REGION_SCALAR_SUBVIEW_DEST_WRAPPER
 
+// Raw TileArray assembly transport. INIT allocates the parent; continuation
+// writers retain that ParentRef and use the same participant mask.
+template <int ParentSize, bool Init, bool Last, typename SubTile,
+          unsigned ParticipantMask>
+PTO_REGION_ALWAYS_INLINE void pto_region_tmov_assemble(
+    region::TileArrayOutputRef<SubTile, ParticipantMask> &dst,
+    const SubTile &src) {
+  static_assert(is_element_assembly_fragment_v<SubTile>,
+                "TMOV assembly requires a supported ElementTile fragment");
+  const uintptr_t offset = dst.range_base_units();
+#define PTO_REGION_TMOV_PREFIX                                               \
+  "BSTART.TMOV %D[DataType]\n"                                             \
+  PTO_TMOV_LAYOUT_ASM                                                       \
+  "B.DIM zero, %c[ValidCol], ->lb0\n"                                      \
+  "B.DIM zero, %c[ValidRow], ->lb1\n"                                      \
+  "B.DIM zero, %c[PhysicalCol], ->lb2\n"
+#define PTO_REGION_TMOV_ASSEMBLE                                            \
+  "B.ASSEMBLE %c[Init], %c[Last], %[Offset], 0, %c[WriterSize]\n"
+#define PTO_REGION_TMOV_INPUTS                                              \
+  [Src] "Tr"(src.data()),                                                   \
+  [DataType] "i"(type_traits<typename SubTile::DType>::TypeCode),           \
+  [ValidCol] "i"(SubTile::ValidCol), [ValidRow] "i"(SubTile::ValidRow),    \
+  [PhysicalCol] "i"(SubTile::Cols), [ParentSize] "i"(ParentSize),          \
+  [WriterSize] "i"(SubTile::TilesizeCode), [Offset] "r"(offset),           \
+  [Init] "i"(Init), [Last] "i"(Last), [PEMask] "i"(ParticipantMask),      \
+  [ElemLayout] "i"(local_layout_code_v<SubTile>)
+  if constexpr (Init) {
+    asm volatile(PTO_REGION_TMOV_PREFIX
+                 PTO_PE_MASK_ASM(
+                     "B.IOT %[Src].reuse, mask=",
+                     ", last, ->%[Dst]<%Z[ParentSize]>\n")
+                 PTO_REGION_TMOV_ASSEMBLE
+                 : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
+                 : PTO_REGION_TMOV_INPUTS
+                 : "memory");
+  } else {
+    asm volatile(PTO_REGION_TMOV_PREFIX
+                 PTO_PE_MASK_ASM("B.IOT %[Src].reuse, mask=", ", last\n")
+                 PTO_PE_MASK_ASM("B.IOT %[Dst].reuse, mask=", "\n")
+                 PTO_REGION_TMOV_ASSEMBLE
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_TMOV_INPUTS
+                 : "memory");
+  }
+#undef PTO_REGION_TMOV_INPUTS
+#undef PTO_REGION_TMOV_ASSEMBLE
+#undef PTO_REGION_TMOV_PREFIX
+}
+
+template <int ParentSize, typename SubTile, unsigned ParticipantMask>
+PTO_REGION_ALWAYS_INLINE void pto_region_tmov_phase(
+    region::TileArrayOutputRef<SubTile, ParticipantMask> &dst,
+    const SubTile &src) {
+  if (dst.slot_count() == 1)
+    pto_region_tmov_assemble<ParentSize, true, true>(dst, src);
+  else if (dst.ordinal() == 0)
+    pto_region_tmov_assemble<ParentSize, true, false>(dst, src);
+  else if (dst.ordinal() == dst.slot_count() - 1)
+    pto_region_tmov_assemble<ParentSize, false, true>(dst, src);
+  else
+    pto_region_tmov_assemble<ParentSize, false, false>(dst, src);
+}
+
+template <typename SubTile, unsigned ParticipantMask>
+  requires(is_element_assembly_fragment_v<SubTile>)
+PTO_REGION_ALWAYS_INLINE void TMOV(
+    region::TileArrayOutputRef<SubTile, ParticipantMask> dst,
+    const SubTile &src) {
+  switch (dst.parent_size_code()) {
+#define PTO_REGION_TMOV_PARENT_CASE(N)                                      \
+  case N: pto_region_tmov_phase<N>(dst, src); break
+    PTO_REGION_TMOV_PARENT_CASE(1);
+    PTO_REGION_TMOV_PARENT_CASE(2);
+    PTO_REGION_TMOV_PARENT_CASE(3);
+    PTO_REGION_TMOV_PARENT_CASE(4);
+    PTO_REGION_TMOV_PARENT_CASE(5);
+    PTO_REGION_TMOV_PARENT_CASE(6);
+    PTO_REGION_TMOV_PARENT_CASE(7);
+    PTO_REGION_TMOV_PARENT_CASE(8);
+    PTO_REGION_TMOV_PARENT_CASE(9);
+    PTO_REGION_TMOV_PARENT_CASE(10);
+#undef PTO_REGION_TMOV_PARENT_CASE
+  default: __builtin_trap();
+  }
+}
+
 // B.DATR rounding-mode selector for the TileArray TCVT assembly path. The
 // ISA B.DATR RMode field (bits[17:15]) matches the LinxRMode enumeration
 // one-to-one; this mirrors the ordinary TCVT_T emitter (jcore/template_asm.hpp)

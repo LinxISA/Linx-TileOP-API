@@ -23,6 +23,7 @@ check:
 	python3 test/test_version_header.py
 	python3 test/test_layout_header_link.py
 	python3 test/test_element_tile_api.py
+	python3 test/test_tile_array_participant_mask.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
 		-fsyntax-only -Iinclude test/ptoas_linx_type_compat.cpp
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
@@ -54,6 +55,7 @@ install:
 		echo '#define PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS 1'; \
 		echo '#define PTO_TILEOP_API_HAS_SYNC_CORE 1'; \
 		echo '#define PTO_TILEOP_API_HAS_GROUP_RUNTIME_ABI 1'; \
+		echo '#define PTO_TILEOP_API_HAS_TILE_ARRAY_PARTICIPANT_MASK 1'; \
 		echo ''; \
 		echo '#endif'; \
 	} > $(INSTALL_DIR)/common/pto_tileop_api_revision.hpp
