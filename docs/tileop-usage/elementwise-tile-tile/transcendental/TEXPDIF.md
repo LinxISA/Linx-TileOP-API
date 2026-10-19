@@ -1,6 +1,6 @@
 # TEXPDIF
 
-`TEXPDIF` 是 PTO ISA 0.58.7 的 SFU 直接操作，对两个同形状 Local Tile
+`TEXPDIF` 是 PTO ISA 0.59.0 的 SFU 直接操作，对两个同形状 Local Tile
 逐元素计算 `dst = exp(src0 - src1)`。它不是 broadcast expansion，也不能用
 `TSUB` 后接 `TEXP` 替代。
 
