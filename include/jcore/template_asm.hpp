@@ -13561,6 +13561,126 @@ void TCVT(tile_shape_out &dst, tile_shape_in &src) {
 //===--- TEPL Mode 1: tile-scalar elementwise ops (BSTART.TEPL) ---===//
 // opcode = Mode(1) * 32 + Function = 32 + Function.
 
+// TLEA: extend logical element indices to 64 bits and scale them to byte
+// offsets. dst[i] = extend64(src[i]) * (element_bits / 8), keeping the low
+// 64 bits (signed src sign-extends, unsigned src zero-extends; no saturation
+// or overflow fault). `src` holds persistent Local S32/U32/S64/U64 element
+// indices; `dst` is a new Local S64/U64 byte-offset tile with the same logical
+// valid shape; `element_bits` is the per-PE element width in bits (8/16/32/64).
+// PTO ISA: TEPL Mode 1 Function 14 (selector 0x02E, BSTART.TEPL on the source
+// DataType). RowMajor or CUBE_M32 only; Shared and CUBE_N8/CUBE_M16 reject.
+// Generates byte offsets only -- no BaseGPR add, no memory access, no
+// numeric-status update. (spec: asl/tile/tile-scalar-and-immediate/arithmetic/
+// TLEA.asl, PTO-TILE-TLEA.)
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void TLEA(tile_shape_out &dst, tile_shape_in &src, unsigned element_bits) {
+  constexpr int SrcType = type_traits<typename tile_shape_in::DType>::TypeCode;
+  constexpr int DstType = type_traits<typename tile_shape_out::DType>::TypeCode;
+  static_assert(SrcType == __type_int32 || SrcType == __type_uint32 ||
+                    SrcType == __type_int64 || SrcType == __type_uint64,
+                "TLEA source index tile must use S32, U32, S64, or U64");
+  static_assert(DstType == __type_int64 || DstType == __type_uint64,
+                "TLEA destination must be an S64 or U64 byte-offset tile");
+  static_assert(tile_shape_out::BFractal == BLayout::RowMajor ||
+                    tile_shape_out::BFractal == BLayout::CubeM32,
+                "TLEA destination layout must be RowMajor or CUBE_M32 "
+                "(Shared, CUBE_N8, and CUBE_M16 reject)");
+  static_assert(tile_shape_in::BFractal == tile_shape_out::BFractal,
+                "TLEA source and destination must share the RowMajor/CUBE_M32 "
+                "layout");
+  static_assert((tile_shape_in::ValidCol == DYNAMIC ||
+                 tile_shape_out::ValidCol == DYNAMIC ||
+                 tile_shape_in::ValidCol == tile_shape_out::ValidCol) &&
+                    (tile_shape_in::ValidRow == DYNAMIC ||
+                     tile_shape_out::ValidRow == DYNAMIC ||
+                     tile_shape_in::ValidRow == tile_shape_out::ValidRow),
+                "TLEA source and destination must share one logical valid "
+                "shape (ValidRow x ValidCol)");
+  // Anti-fold: keep a compile-time-constant width (e.g. 8) off the zero
+  // register so B.IOR [width],[] still matches an instruction. The zero
+  // register is an illegal (zero) element width for an active block.
+  unsigned ebits = element_bits;
+  asm("" : "+r"(ebits));
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
+  if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
+asm volatile(
+    "BSTART.TEPL 46, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOR [%7],[]\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+      "i"(tile_shape_in::ValidCol), "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_out::Cols),
+      "Tr"(src.data()),
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      "r"(ebits),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
+  );  }
+  else if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow < 0) {
+asm volatile(
+    "BSTART.TEPL 46, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM zero, %c2, ->lb0\n"
+    "B.DIM %[dyn_row], 0, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOR [%7],[]\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+      "i"(tile_shape_in::ValidCol), [dyn_row] "r"(valid_row),
+      "i"(tile_shape_out::Cols),
+      "Tr"(src.data()),
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      "r"(ebits),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
+  );  }
+  else if constexpr (tile_shape_in::ValidCol < 0 && tile_shape_in::ValidRow > 0) {
+asm volatile(
+    "BSTART.TEPL 46, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM %[dyn_col], 0, ->lb0\n"
+    "B.DIM zero, %c3, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOR [%7],[]\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+      [dyn_col] "r"(valid_col), "i"(tile_shape_in::ValidRow),
+      "i"(tile_shape_out::Cols),
+      "Tr"(src.data()),
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      "r"(ebits),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
+  );  }
+  else {
+asm volatile(
+    "BSTART.TEPL 46, %D1\n"
+    PTO_ELEMENTWISE_LAYOUT_ASM
+    "B.DIM %[dyn_col], 0, ->lb0\n"
+    "B.DIM %[dyn_row], 0, ->lb1\n"
+    "B.DIM zero, %c4, ->lb2\n"
+    "B.IOT %5.reuse, mask=1111, last, ->%0<%Z6>\n"
+    "B.IOR [%7],[]\n"
+    ""
+    : "=Tr"(dst.data())
+    : "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+      [dyn_col] "r"(valid_col), [dyn_row] "r"(valid_row),
+      "i"(tile_shape_out::Cols),
+      "Tr"(src.data()),
+      "i"(tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+      "r"(ebits),
+      [ElemLayout] "i"(local_layout_code_v<tile_shape_out>)
+  );  }
+}
+
 // TADDS: dst = src + scalar
 template <is_tile_data_v tile_shape>
 void TADDS(tile_shape &dst, tile_shape &src, typename tile_shape::DType s) {
