@@ -1050,9 +1050,12 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
     def test_deleted_tile_operations_are_migration_stubs(self) -> None:
         # Every deleted tile operation either has no wrapper (truly absent)
         # or is an instance-time static_assert stub; in no case is a
-        # retired TEPL selector emitted by an asm block. TFMOD (5), TLRELU
-        # (46), TRANDOM (105) etc. must not appear next to BSTART.TEPL.
-        for sel in (5, 14, 24, 25, 37, 46, 47, 56, 57, 96, 97, 105, 110):
+        # retired TEPL selector emitted by an asm block. TFMOD (5),
+        # TRANDOM (105) etc. must not appear next to BSTART.TEPL.
+        # NB: selector 46 (0x2E) was the deleted TLRELU but the current
+        # catalog reassigns it to the accepted TLEA (TEPL Mode 1 Function 14),
+        # so 46 is intentionally not in this list.
+        for sel in (5, 14, 24, 25, 37, 47, 56, 57, 96, 97, 105, 110):
             self.assertNotRegex(
                 self.header,
                 rf'BSTART\.TEPL\s+{sel},',
