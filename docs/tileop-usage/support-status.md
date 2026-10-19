@@ -1,4 +1,4 @@
-# PTO ISA 0.58.7 wrapper 支持状态
+# PTO ISA 0.59.0 wrapper 支持状态
 
 本表以 `contracts/pto-isa-0.58.7-tile-operations.json` 的 119 个
 `accepted-direct-operation` 为操作清单。它描述 Linx TileOP C++ wrapper 的
@@ -10,7 +10,7 @@ rollback、definedness 或 memory-order 语义。
 | **已实现** | 当前 `include/` 有可调用 wrapper；本地测试覆盖其至少一个有效路径。 |
 | **仅部分 layout 支持** | wrapper 存在，但只覆盖 catalog 合法 layout/shape/属性组合的子集；其他组合必须以编译期约束拒绝，不能推断为缺陷或自动支持。 |
 | **尚无 wrapper** | PTO catalog 有操作，但本仓库没有公开的 C++ wrapper；不能通过拼接汇编或复用相近 API 冒充支持。 |
-| **仅历史参考** | 名称来自旧版本或已删除清单；保留页面/禁用 stub 只用于迁移，不能生成当前 PTO 0.58.7 指令。 |
+| **仅历史参考** | 名称来自旧版本或已删除清单；保留页面/禁用 stub 只用于迁移，不能生成当前 PTO 0.59.0 指令。 |
 
 ## 当前覆盖
 
@@ -18,18 +18,18 @@ rollback、definedness 或 memory-order 语义。
 | --- | --- | --- |
 | TEPL elementwise、scalar、reduce/expand、irregular（除 `TLEA`） | 已实现 | 逐操作页面和 `jcore/template_asm.hpp` 为 wrapper 权威；dtype、valid region、padding 和 selector 仍受 ASL 约束。 |
 | `TLEA` | 尚无 wrapper | PTO development golden 已分配 SFU selector 31；本仓库尚无公开 C++ wrapper，不以相近操作代替。 |
-| `TEXPDIF` | CPU simulator、JCORE inline-asm 已实现；LLVM MC catalog 已实现；LLVM compiler lowering 尚未完成；AArch64/SME 不支持 | PTO 0.58.7 selector 29。已有 wrapper 不等于 LLVM compiler 已具备从 IR/builtin 到 TEXPDIF 的端到端 lowering。 |
+| `TEXPDIF` | CPU simulator、JCORE inline-asm 已实现；LLVM MC catalog 已实现；LLVM compiler lowering 尚未完成；AArch64/SME 不支持 | PTO 0.59.0 selector 29。已有 wrapper 不等于 LLVM compiler 已具备从 IR/builtin 到 TEXPDIF 的端到端 lowering。 |
 | TLSU `TLOAD`/`TSTORE`/`TMOV`/`TPREFETCH`/`GMOV` | 已实现 | 传输、peer move 和 prefetch 有独立 C++ 入口；layout conversion 仅对页面列出的组合开放。 |
 | TLSU `MGATHER`/`MSCATTER` 及 atomic/reduction variants | 仅部分 layout 支持 | wrapper 覆盖当前公开 selector；ColumnMajor selector、mask/索引 dtype 和不同 atomic 组合不得由普通 gather/scatter 重载推断。 |
 | CUBE TMATMUL/TGEMV 及 bias/acc/MX variants | 仅部分 layout 支持 | CUBE_M16/CUBE_M32、Shared physical shape、scale layout 和 InternalAcc 由具体 wrapper/操作页限制。 |
 | TEPL layout/rearrangement（`TPERMUTE`、`TSHUF`、`TPACK`、`TUNPACK`、`TGPR2T`） | 仅部分 layout 支持 | 只覆盖已实现的 CUBE/Local 路径和控制字段；未列出的组合保持拒绝。 |
-| 0.58.7 `MGATHER`/`MSCATTER` family | 已适配 | 0.58.7 removes the GM row-stride operand and interprets index tiles as explicit byte displacements；wrapper 与 contract test 已改为 base-only `B.IOR`。 |
-| 0.58.7 `TROWEXPAND*`/`TCOLEXPAND*` roles | 已适配 | Source roles 使用 row-broadcast/column-broadcast operation view；wrapper 约束、注释及操作文档已同步。 |
+| 0.59.0 `MGATHER`/`MSCATTER` family | 已适配 | 0.59.0 removes the GM row-stride operand and interprets index tiles as explicit byte displacements；wrapper 与 contract test 已改为 base-only `B.IOR`。 |
+| 0.59.0 `TROWEXPAND*`/`TCOLEXPAND*` roles | 已适配 | Source roles 使用 row-broadcast/column-broadcast operation view；wrapper 约束、注释及操作文档已同步。 |
 | `deleted_names`、`rejected_names`，以及 `TTRANS`/`TFILLPAD` 等历史页面 | 仅历史参考 | 不属于 active catalog；页面必须保留明确的 retired 标识。 |
 
 ## 版本边界
 
-- 当前 API/spec 基线：PTO ISA development golden `0.58.7`，状态
+- 当前 API/spec 基线：PTO ISA development golden `0.59.0`，状态
   `development-not-published`，publication 为空，ABI
   `pto-isa-0.58.7-mode-function-v1`。
 - backend 能力必须分别判断：CPU simulator/JCORE wrapper、LLVM MC

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the wrapper engine compatibility view from the pinned projection.
 
-The output mirrors the reviewed PTO ISA 0.58.7 development catalog
+The output mirrors the reviewed PTO ISA 0.59.0 development catalog
 (spec/catalog/tile-operations.json) for the four architectural engine
 classes: **VEC**, **SFU**, **TLSU**, and **CUBE**.  Engine and
 classification are decoupled (per ADR 0057): TEXP/TLOG/... are SFU-executed
@@ -47,7 +47,7 @@ def render() -> str:
     source_referenced = sum(wrapper_status(name).startswith("源码有引用")
                             for name in operation_names)
     lines = [
-        "# LinxISA / PTO ISA v0.58.7 wrapper engine compatibility view",
+        "# LinxISA / PTO ISA v0.59.0 wrapper engine compatibility view",
         "",
         "架构定义的引擎类别只有 **VEC**, **TLSU**, **CUBE**, and **SFU**。",
         "VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。",
@@ -103,7 +103,7 @@ def render() -> str:
         [
             "## 分类语义",
             "",
-            "PTO ISA 0.58.7 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；",
+            "PTO ISA 0.59.0 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；",
             "其底层投影记录当前 development golden selector 数据。`elementwise-tile-tile`",
             "和 `tile-scalar-and-immediate` 类别在 VEC 上执行逐元素操作，但其中的",
             "`TEXP`、`TLOG`、`TRECIP`、`TSQRT`、`TRSQRT` 由 SFU 执行。",
@@ -120,7 +120,7 @@ def render() -> str:
             [
                 "## 早期版本中移除的操作",
                 "",
-                "历史版本还提供了一些已从 PTO 0.58.7 active catalog 移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。",
+                "历史版本还提供了一些已从 PTO 0.59.0 active catalog 移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。",
                 "本库不会把已退役的操作生成到当前目录；退役名称的规范列表记录在 contract 的 `deleted_tile_names` 字段中。",
                 "",
             ]
