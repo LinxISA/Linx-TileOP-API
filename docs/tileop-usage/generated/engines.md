@@ -7,8 +7,8 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 
 下表根据本仓库固定的 LinxISA/PTO development golden 投影生成，数据记录在
 [`contracts/linxisa-v0.58-engine-ops.json`](../../../contracts/linxisa-v0.58-engine-ops.json) 中。
-Golden 共 119 项；其中 118 项在 `include/` 有名称引用，
-1 项明确没有 wrapper。名称引用不证明 ASL/NDF 语义完整实现。
+Golden 共 119 项；其中 119 项在 `include/` 有名称引用，
+0 项明确没有 wrapper。名称引用不证明 ASL/NDF 语义完整实现。
 
 ## VEC
 
@@ -45,7 +45,7 @@ Golden 共 119 项；其中 118 项在 `include/` 有名称引用，
 | `TCMPS` | `BSTART.VEC TCMPS` | 45 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
 | `TSELS` | `BSTART.VEC TSELS` | 58 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
 | `TEXPANDS` | `BSTART.VEC TEXPANDS` | 59 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
-| `TLEA` | `BSTART.VEC TLEA` | 46 | tile-scalar-and-immediate | 尚无 wrapper |
+| `TLEA` | `BSTART.VEC TLEA` | 46 | tile-scalar-and-immediate | 源码有引用；不代表完整语义一致 |
 
 ## SFU
 
