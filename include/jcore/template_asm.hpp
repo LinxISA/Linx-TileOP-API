@@ -13,27 +13,6 @@ using namespace pto;
 // the caller (they must never cross the ordinary C++ ABI as integer/stack).
 #define PTO_SHARED_INLINE __attribute__((always_inline)) inline
 
-// B.IOT/B.IOS mask syntax is a four-digit binary token, while public APIs use
-// the compact numeric PEMask template argument.  Select one canonical token
-// at assembly time without emitting a decimal mask spelling.
-#define PTO_PE_MASK_ASM(PREFIX, SUFFIX)                                        \
-  ".if %c[PEMask] == 1\n" PREFIX "0001" SUFFIX                             \
-  ".elseif %c[PEMask] == 2\n" PREFIX "0010" SUFFIX                         \
-  ".elseif %c[PEMask] == 3\n" PREFIX "0011" SUFFIX                         \
-  ".elseif %c[PEMask] == 4\n" PREFIX "0100" SUFFIX                         \
-  ".elseif %c[PEMask] == 5\n" PREFIX "0101" SUFFIX                         \
-  ".elseif %c[PEMask] == 6\n" PREFIX "0110" SUFFIX                         \
-  ".elseif %c[PEMask] == 7\n" PREFIX "0111" SUFFIX                         \
-  ".elseif %c[PEMask] == 8\n" PREFIX "1000" SUFFIX                         \
-  ".elseif %c[PEMask] == 9\n" PREFIX "1001" SUFFIX                         \
-  ".elseif %c[PEMask] == 10\n" PREFIX "1010" SUFFIX                       \
-  ".elseif %c[PEMask] == 11\n" PREFIX "1011" SUFFIX                       \
-  ".elseif %c[PEMask] == 12\n" PREFIX "1100" SUFFIX                        \
-  ".elseif %c[PEMask] == 13\n" PREFIX "1101" SUFFIX                       \
-  ".elseif %c[PEMask] == 14\n" PREFIX "1110" SUFFIX                        \
-  ".elseif %c[PEMask] == 15\n" PREFIX "1111" SUFFIX                        \
-  ".endif\n"
-
 #define PTO_RMODE_DATR_ASM(SUFFIX)                                             \
   ".if %c[RMode] == 2\nB.DATR %D[__pto_DstType], RTZ" SUFFIX                    \
   ".elseif %c[RMode] == 3\nB.DATR %D[__pto_DstType], RTM" SUFFIX                \

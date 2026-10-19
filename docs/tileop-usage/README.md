@@ -83,6 +83,8 @@ dense M32 profile，U32/S32 另提供匹配的 logical64 part。
   storage profile 的 pointer `TLOAD` 只接受完整容量，避免为 partial load 分配
   大块 scalar scratch；既有 F16 2048 profile 的行为保持不变。
   消费方用 `PTO_TILEOP_API_HAS_HIERARCHICAL_ELEMENT_STORAGE` 检查该能力。
+  raw `TMOV` assembly 还可通过 `TileArray` 第四个模板参数选择原生合法的参与
+  PE mask；消费方用 `PTO_TILEOP_API_HAS_TILE_ARRAY_PARTICIPANT_MASK` 检查该能力。
 - `TLOAD(parent, input, valid_elements)` 和对应的 pointer `TSTORE` 要求 pointer dtype
   与 `ElementTile` 完全一致，并复用现有统一 transport；最后一个不完整 block
   先复制有效输入到暂存区域，因此输入不需要额外 padding。有效数不能超过 parent 容量。

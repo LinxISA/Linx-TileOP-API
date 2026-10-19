@@ -695,9 +695,11 @@ PTO_REGION_SCALAR_SUBVIEW_DEST_WRAPPER(TMINS, 44)
 // Raw assembly transport: preserve floating payloads (including NaNs) without
 // routing a copy through numeric conversion. The fragment owns the descriptor;
 // INIT alone allocates the parent and later slots retain its exact ParentRef.
-template <int ParentSize, bool Init, bool Last, typename SubTile>
+template <int ParentSize, bool Init, bool Last, typename SubTile,
+          unsigned ParticipantMask>
 PTO_REGION_ALWAYS_INLINE void pto_region_tmov_assemble(
-    region::TileArrayOutputRef<SubTile> &dst, const SubTile &src) {
+    region::TileArrayOutputRef<SubTile, ParticipantMask> &dst,
+    const SubTile &src) {
   static_assert(is_element_tile_v<SubTile>,
                 "TMOV assembly currently requires an ElementTile fragment");
   static_assert(is_element_assembly_fragment_v<SubTile>,
@@ -719,18 +721,21 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tmov_assemble(
   [PhysicalCol] "i"(SubTile::Cols), [ParentSize] "i"(ParentSize),             \
   [WriterSize] "i"(SubTile::TilesizeCode), [Offset] "r"(offset),              \
   [Init] "i"(Init), [Last] "i"(Last),                                        \
+  [PEMask] "i"(ParticipantMask),                                              \
   [ElemLayout] "i"(local_layout_code_v<SubTile>)
   if constexpr (Init) {
     asm volatile(PTO_REGION_TMOV_PREFIX
-                 "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[ParentSize]>\n"
+                 PTO_PE_MASK_ASM(
+                     "B.IOT %[Src].reuse, mask=",
+                     ", last, ->%[Dst]<%Z[ParentSize]>\n")
                  PTO_REGION_TMOV_ASSEMBLE
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
                  : PTO_REGION_TMOV_INPUTS
                  : "memory");
   } else {
     asm volatile(PTO_REGION_TMOV_PREFIX
-                 "B.IOT %[Src].reuse, mask=1111, last\n"
-                 "B.IOT %[Dst].reuse, mask=1111\n"
+                 PTO_PE_MASK_ASM("B.IOT %[Src].reuse, mask=", ", last\n")
+                 PTO_PE_MASK_ASM("B.IOT %[Dst].reuse, mask=", "\n")
                  PTO_REGION_TMOV_ASSEMBLE
                  :
                  : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -742,9 +747,10 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tmov_assemble(
 #undef PTO_REGION_TMOV_PREFIX
 }
 
-template <int ParentSize, typename SubTile>
+template <int ParentSize, typename SubTile, unsigned ParticipantMask>
 PTO_REGION_ALWAYS_INLINE void pto_region_tmov_phase(
-    region::TileArrayOutputRef<SubTile> &dst, const SubTile &src) {
+    region::TileArrayOutputRef<SubTile, ParticipantMask> &dst,
+    const SubTile &src) {
   if (dst.slot_count() == 1)
     pto_region_tmov_assemble<ParentSize, true, true>(dst, src);
   else if (dst.ordinal() == 0)
@@ -755,10 +761,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tmov_phase(
     pto_region_tmov_assemble<ParentSize, false, false>(dst, src);
 }
 
-template <typename SubTile>
+template <typename SubTile, unsigned ParticipantMask>
   requires(is_element_assembly_fragment_v<SubTile>)
-PTO_REGION_ALWAYS_INLINE void TMOV(region::TileArrayOutputRef<SubTile> dst,
-                                  const SubTile &src) {
+PTO_REGION_ALWAYS_INLINE void TMOV(
+    region::TileArrayOutputRef<SubTile, ParticipantMask> dst,
+    const SubTile &src) {
   switch (dst.parent_size_code()) {
 #define PTO_REGION_TMOV_PARENT_CASE(N)                                      \
   case N: pto_region_tmov_phase<N>(dst, src); break

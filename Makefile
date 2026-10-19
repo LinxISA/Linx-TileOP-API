@@ -34,6 +34,7 @@ check:
 	python3 test/test_integer_element_storage.py
 	python3 test/test_dense_f16_element_tile_api.py
 	python3 test/test_hierarchical_element_storage_api.py
+	python3 test/test_tile_array_participant_mask.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
 		-fsyntax-only -Iinclude test/ptoas_linx_type_compat.cpp
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
@@ -67,6 +68,7 @@ install:
 		echo '#define PTO_TILEOP_API_HAS_I64_ELEMENT_TILE_LEAF32 1'; \
 		echo '#define PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE 1'; \
 		echo '#define PTO_TILEOP_API_HAS_HIERARCHICAL_ELEMENT_STORAGE 1'; \
+		echo '#define PTO_TILEOP_API_HAS_TILE_ARRAY_PARTICIPANT_MASK 1'; \
 		echo ''; \
 		echo '#endif'; \
 	} > $(INSTALL_DIR)/common/pto_tileop_api_revision.hpp

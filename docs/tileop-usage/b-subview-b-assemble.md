@@ -41,6 +41,37 @@ source、兼容代码和编码回归测试；`*_at_reg` 接口只出现在固定
 的 TileOP 会自动发出对应 `INIT → MIDDLE* → LAST` 生命周期的
 `B.ASSEMBLE`；`TASSEMBLY` 本身不发独立指令，只返回组装好的 parent。
 
+`TileArray<Fragment, Rows, Cols, ParticipantMask>` 的第四个模板参数指定
+Local generation 的原始架构 PE mask，默认值是 `15`。原始 `15` 在函数域内
+表示继承当前 `PTO_PE_DOMAIN`；无函数域时才是默认四 PE 集合。显式非 `15`
+mask 会由每一个 raw `TMOV` writer 的 INIT、MIDDLE 和 LAST `B.IOT` 共同携带，
+且必须是函数域的子集。架构 mask 的位序是 `bit = 3 - PE`，因此
+PE0-only 写成 `8`（`1000`），不是 `1`。公共类型只接受原生合法的非零集合
+`1, 2, 4, 8, 12, 14, 15`。
+
+当前非默认 participant mask 只开放给 raw `TMOV` TileArray writer。其他
+TileArray destination 操作仍只接受默认 mask；把 selected-mask slot 传给这些
+操作会在编译期拒绝，避免源码声明一个参与集合而机器码静默使用 `1111`。
+执行非默认域 writer 的函数必须用 `PTO_PE_DOMAIN(mask)` 声明函数执行域，
+并由调用方在进入该函数前完成实际 PE 身份门控。该宏要求编译器预定义
+`__LINX_PTO_PE_DOMAIN__`；旧编译器调用带标记函数时会直接诊断 unavailable，
+不会忽略执行域。函数边界只允许 scalar 和 Global Memory pointer 参数；Tile
+引用、vector、aggregate、byval/sret 不得跨域。该能力当前仅覆盖可证明闭合的
+Local Tile 调用图；Shared、GMOV 和未证明的 cooperative 形式会被拒绝。
+函数域不改变 element-for 的逐元素 execution mask。
+
+多层 assembly 可以每一级使用默认 `15` 继承函数域，也可以显式写出同一子集：
+
+```cpp
+TileArray<ElementTile<uint32_t, 32>, 1, 4, 8> leaves;    // PE0 only
+// ... TMOV 写满四个 leaf slot ...
+auto child = TASSEMBLY<ElementTile<uint32_t, 128>>(std::move(leaves));
+
+TileArray<ElementTile<uint32_t, 128>, 1, 16, 8> children;
+// ... TMOV 写满十六个 child slot ...
+auto parent = TASSEMBLY<ElementTile<uint32_t, 2048>>(std::move(children));
+```
+
 同一规则可以逐级组成更大的闭合 parent。每一级先完成自己的
 `INIT -> MIDDLE* -> LAST`，`TASSEMBLY` 返回的完整 `ElementTile` 才能作为下一
 级 raw `TMOV` writer 的 source。例如 F32 使用 `32 -> 128 -> 2048 -> 16384`
