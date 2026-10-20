@@ -48,6 +48,11 @@ static_assert(PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX,
 
 ## 逻辑元素 Tile 接口
 
+Model #925 冻结组合的 element-if 语法、能力边界和复现版本见
+[Element-if 开发者使用手册（冻结 TopK 组合）](element-if.md)。该页固定
+SuperNPUBench、LLVM、TileOP API 和 SuperScalarModel commit；不要用当前分支
+HEAD 替换历史 gfrun/gfsim 证据。
+
 `ElementTile<T, Elements>` 是正式 API 的逻辑元素入口。应用指定元素类型与容量，
 当前 jcore profile 在 API 内选择已有的 Local VEC 存储，kernel 无需写物理 layout。
 首版接受 U32、S32、F32 与 32/128 个元素；不表示任意 dtype、容量或 backend 都已实现。
