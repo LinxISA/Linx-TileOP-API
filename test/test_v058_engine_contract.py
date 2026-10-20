@@ -233,6 +233,40 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn('CubeTileM16', fixture)
         self.assertIn('CubeTileM32', fixture)
 
+    def test_tcvt_ass_omits_lb2_only_for_cube_m(self) -> None:
+        convert = re.search(
+            r'(?s)template <int Opcode, is_tile_data_v D, is_tile_data_v S>\n'
+            r'PTO_SHARED_INLINE void convert\(D &dst, S &src\) \{.*?\n\}',
+            self.header,
+        )
+        self.assertIsNotNone(convert)
+        carrier = convert.group(0)
+        self.assertIn('constexpr bool IsCubeMSource', carrier)
+        cube_branch, ordinary_branch = carrier.split(
+            'if constexpr (IsCubeMSource) {', 1)[1].split('} else {', 1)
+        self.assertNotIn('->lb2', cube_branch)
+        self.assertIn('->lb2', ordinary_branch)
+
+    def test_tcvt_subview_assembly_preserves_cube_and_omits_lb2(self) -> None:
+        region_header = (ROOT / 'include' / 'common' /
+                         'pto_tile_region_inline_asm.hpp').read_text(
+                             encoding='utf-8')
+        carrier = re.search(
+            r'(?s)void pto_region_tcvt_subview_assemble\(.*?\n\}',
+            region_header,
+        )
+        self.assertIsNotNone(carrier)
+        body = carrier.group(0)
+        self.assertIn('SubTile::BFractal == SourceSubTile::BFractal', body)
+        self.assertIn('SourceSubTile::BFractal == BLayout::CubeM16', body)
+        self.assertIn('SourceSubTile::BFractal == BLayout::CubeM32', body)
+        self.assertNotIn('->lb2', body)
+
+        fixture = (ROOT / 'test' / 'tileop_api' / 'src' /
+                   'TileRegionTCVTSubviewAssembly.cpp').read_text(
+                       encoding='utf-8')
+        self.assertIn('CubeTileM32<__bf16', fixture)
+
     def test_range_modifiers_expose_simple_factories(self) -> None:
         tile_header = PTO_TILE.read_text(encoding="utf-8")
         tile = (ROOT / "test" / "tileop_api" / "src" /
@@ -814,6 +848,16 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_cube_accumulator_is_explicit_and_destination_is_distinct(self) -> None:
         self.assertIn('"B.IOT %[C], mask=1111\\n"', self.header)
         self.assertIn('[Dst] "=&Tr"(dst.data())', self.header)
+
+    def test_tprefetch_uses_element_stride(self) -> None:
+        tprefetch = self.header[self.header.index("void TPREFETCH"):]
+        tprefetch = tprefetch[: tprefetch.index("\n}")]
+        self.assertIn("src.GetStride(3)", tprefetch)
+        self.assertNotIn("src.GetStrideBytes(3)", tprefetch)
+
+    def test_rowarg_destinations_are_u32(self) -> None:
+        self.assertIn("TROWARGMAX destination must use U32 indices", self.header)
+        self.assertIn("TROWARGMIN destination must use U32 indices", self.header)
 
     def test_tgemv_uses_a_then_b_source_and_type_order(self) -> None:
         self.assertIn('"B.IOT %[Vec], %[Mtx], mask=1111\\n"', self.header)

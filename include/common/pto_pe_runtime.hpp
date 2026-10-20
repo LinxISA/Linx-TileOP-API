@@ -7,10 +7,35 @@
 
 #include <stdint.h>
 
-// Optional worker callbacks supplied by the application/launcher.  The
-// carrier is linked only with -mlinx-group-runtime and is independent of
-// musl's _start/_start_c path.  The worker entry calls the image's ordinary
-// main(), then parks; main owns any shared-memory completion protocol.
+// The launcher passes the same entry address and descriptor to all
+// participating PEs. PE-local stack/TLS setup is complete before entry. This
+// data-only ABI is shared by compiler-rt, musl and bare launchers without
+// re-entering libc on secondary PEs.
+struct pto_runtime_group_context {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t participant_count;
+  // Both point to four-element arrays indexed by architectural PE id.
+  volatile uint32_t *state;
+  volatile int32_t *result;
+  volatile uint32_t *error;
+};
+
+enum : uint32_t {
+  PTO_RUNTIME_GROUP_CONTEXT_MAGIC = 0x50544f47u, // "PTOG"
+  PTO_RUNTIME_GROUP_CONTEXT_VERSION = 1u,
+  PTO_RUNTIME_GROUP_STATE_READY = 0u,
+  PTO_RUNTIME_GROUP_STATE_RUNNING = 1u,
+  PTO_RUNTIME_GROUP_STATE_DONE = 2u,
+  PTO_RUNTIME_GROUP_STATE_ABORT = 3u,
+};
+
+extern "C" void __linx_group_entry(const pto_runtime_group_context *)
+    __attribute__((weak, noreturn));
+extern "C" int __linx_group_pe_main(
+    unsigned, const pto_runtime_group_context *) __attribute__((weak));
+extern "C" void __pto_runtime_group_complete(
+    const pto_runtime_group_context *, int) __attribute__((weak, noreturn));
 extern "C" void __linx_group_worker_start(void)
     __attribute__((weak, noreturn));
 

@@ -4035,12 +4035,12 @@ asm volatile(
 // participation 1111, no B.IOT/B.IOS members. Omitted LB0/LB1 default to one
 // and omitted LB2 to the resolved ValidCol; we pass the caller's valid shape
 // and the GM row length (logical elements) through B.DIM, and the GM base +
-// the byte row stride (SuperScalarModel 2d467114 contract) through B.IOR.
+// logical element row stride through B.IOR. PTO TPREFETCH does not use bytes.
 template <is_global_data_v gm_shape>
 void TPREFETCH(const gm_shape &src, uint32_t valid_col, uint32_t valid_row) {
-  const size_t rowStride = src.GetStrideBytes(3);
+  const size_t rowStride = static_cast<size_t>(src.GetStride(3));
   const size_t physicalCol =
-      gm_shape::Cols == DYNAMIC ? rowStride : gm_shape::Cols;
+      gm_shape::Cols == DYNAMIC ? rowStride : static_cast<size_t>(gm_shape::Cols);
   // LB2 carries the GM row length. When the GM shape is statically known it
   // lowers to an immediate (C.B.DIMI); only dynamic GM shapes keep the
   // register form. LB0/LB1 are runtime function arguments by contract.
@@ -16958,6 +16958,8 @@ void TROWEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
+  static_assert(std::is_same_v<typename tile_shape_out::DType, uint32_t>,
+                "TROWARGMAX destination must use U32 indices");
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
@@ -17041,6 +17043,8 @@ void TROWARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TROWARGMIN(tile_shape_out &dst, tile_shape_in &src) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
+  static_assert(std::is_same_v<typename tile_shape_out::DType, uint32_t>,
+                "TROWARGMIN destination must use U32 indices");
   // ASL (row reduction): B.DIM describes the SOURCE geometry
   // (ValidCol/ValidRow/Col); the destination is rule-derived: one
   // column, ValidRow = source.ValidRow.
@@ -20235,27 +20239,60 @@ PTO_SHARED_INLINE void convert(D &dst, S &src) {
                 "the _ASS emission does not attach B.SUBVIEW, so the "
                 "subview offset would be silently dropped; consume a "
                 "TPARTVIEW SubTileView through the region wrappers instead");
-  static_assert(D::Rows == S::Rows && D::Cols == S::Cols,
-                "TCVT_ASS source and destination physical shapes must match");
+  constexpr bool IsCubeMSource =
+      S::BFractal == BLayout::CubeM16 || S::BFractal == BLayout::CubeM32;
+  static_assert(IsCubeMSource
+                    ? (D::BFractal == S::BFractal &&
+                       D::ValidRow == S::ValidRow &&
+                       D::ValidCol == S::ValidCol)
+                    : (D::Rows == S::Rows && D::Cols == S::Cols),
+                "TCVT_ASS must preserve ordinary physical shape or CUBE-M "
+                "layout and valid shape");
   constexpr unsigned WriterSizeCode = D::WriterSizeCode;
-  asm volatile(
-      "BSTART.TEPL %c[Opcode], %D[SType]\n"
-      "B.DATR %D[__pto_DstType], RNONE\n"
-      "B.DIM %[Col], 0, ->lb0\n"
-      "B.DIM %[Row], 0, ->lb1\n"
-      "B.DIM zero, %c[Cols], ->lb2\n"
-      "B.IOT %[Src], %[Dst], mask=1111, last\n"
-      "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
-      :
-      : [Opcode] "i"(Opcode),
-        [SType] "i"(type_traits<typename S::DType>::TypeCode),
-        [__pto_DstType] "i"(type_traits<typename D::DType>::TypeCode),
-        [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
-        [Cols] "i"(S::Cols), [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
-        [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
-        [Init] "i"(static_cast<int>(D::INIT)), [Last] "i"(static_cast<int>(D::LAST)),
-        [Off] "i"(D::OffsetUnits), [WriterSize] "i"(WriterSizeCode)
-      : "memory");
+  if constexpr (IsCubeMSource) {
+    // PTO-TCVT-CONTRACT-001: CUBE_M16/M32 binds only the logical valid
+    // shape in LB0/LB1. LB2 must be absent because physical geometry is
+    // independently derived from the destination type.
+    asm volatile(
+        "BSTART.TEPL %c[Opcode], %D[SType]\n"
+        "B.DATR %D[__pto_DstType], RNONE\n"
+        "B.DIM %[Col], 0, ->lb0\n"
+        "B.DIM %[Row], 0, ->lb1\n"
+        "B.IOT %[Src], %[Dst], mask=1111, last\n"
+        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
+        :
+        : [Opcode] "i"(Opcode),
+          [SType] "i"(type_traits<typename S::DType>::TypeCode),
+          [__pto_DstType] "i"(type_traits<typename D::DType>::TypeCode),
+          [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
+          [Src] "Tr"(src.data()), [Dst] "Tr"(dst.data()),
+          [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
+          [Init] "i"(static_cast<int>(D::INIT)),
+          [Last] "i"(static_cast<int>(D::LAST)), [Off] "i"(D::OffsetUnits),
+          [WriterSize] "i"(WriterSizeCode)
+        : "memory");
+  } else {
+    asm volatile(
+        "BSTART.TEPL %c[Opcode], %D[SType]\n"
+        "B.DATR %D[__pto_DstType], RNONE\n"
+        "B.DIM %[Col], 0, ->lb0\n"
+        "B.DIM %[Row], 0, ->lb1\n"
+        "B.DIM zero, %c[Cols], ->lb2\n"
+        "B.IOT %[Src], %[Dst], mask=1111, last\n"
+        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
+        :
+        : [Opcode] "i"(Opcode),
+          [SType] "i"(type_traits<typename S::DType>::TypeCode),
+          [__pto_DstType] "i"(type_traits<typename D::DType>::TypeCode),
+          [Col] "r"(src.GetValidCol()), [Row] "r"(src.GetValidRow()),
+          [Cols] "i"(S::Cols), [Src] "Tr"(src.data()),
+          [Dst] "Tr"(dst.data()),
+          [RegSrc] "r"(static_cast<uintptr_t>(dst.GetRangeBase())),
+          [Init] "i"(static_cast<int>(D::INIT)),
+          [Last] "i"(static_cast<int>(D::LAST)), [Off] "i"(D::OffsetUnits),
+          [WriterSize] "i"(WriterSizeCode)
+        : "memory");
+  }
 }
 
 template <int Opcode, is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>

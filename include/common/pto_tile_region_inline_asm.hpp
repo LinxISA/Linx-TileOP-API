@@ -867,19 +867,21 @@ template <int ParentSize, bool Init, bool Last, typename SubTile,
 PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
     region::TileArrayOutputRef<SubTile> &dst,
     region::SubTileView<Parent, SourceSubTile> &src) {
-  static_assert(SubTile::BFractal == BLayout::RowMajor &&
-                    SourceSubTile::IsCubeLayout,
-                "B.ASSEMBLE destination must be RowMajor and B.SUBVIEW "
-                "source must use a CUBE layout");
+  static_assert((SourceSubTile::BFractal == BLayout::CubeM16 ||
+                 SourceSubTile::BFractal == BLayout::CubeM32) &&
+                    SubTile::BFractal == SourceSubTile::BFractal,
+                "TCVT B.SUBVIEW/B.ASSEMBLE must preserve the CUBE_M16/M32 "
+                "source layout");
   static_assert(SubTile::SFractal == SLayout::NoneBox &&
                     SourceSubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
-  static_assert(SubTile::Rows == SourceSubTile::Rows &&
-                    SubTile::Cols == SourceSubTile::Cols,
-                "TCVT TileArray slot requires matching physical shape");
   static_assert(SubTile::ValidRow == SourceSubTile::ValidRow &&
                     SubTile::ValidCol == SourceSubTile::ValidCol,
                 "TCVT TileArray slot requires matching valid shape");
+  static_assert(is_legal_tcvt_datatype_pair(
+                    type_traits<typename SourceSubTile::DType>::TypeCode,
+                    type_traits<typename SubTile::DType>::TypeCode),
+                "Illegal TCVT datatype pair");
   // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase.
   constexpr int writer_size =
       tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
@@ -894,28 +896,25 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_BODY                               \
   "BSTART.TEPL 27, %D1\n"                                                  \
   "B.DATR %D2, RNONE\n"                                                    \
-  "B.DIM zero, %c4, ->lb0\n"                                                   \
-  "B.DIM zero, %c5, ->lb1\n"                                                   \
-  "B.DIM zero, %c6, ->lb2\n"                                               \
-  "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"                                 \
-  "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
-  "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
+  "B.DIM zero, %c4, ->lb0\n"                                               \
+  "B.DIM zero, %c5, ->lb1\n"                                               \
+  "B.IOT %3, mask=1111, last, ->%0<%Z6>\n"                                 \
+  "B.SUBVIEW 0, %7, 0, %c8\n"                                             \
+  "B.ASSEMBLE %c11, %c12, %9, 0, %c10\n"
 #define PTO_REGION_TCVT_SUBVIEW_CONT_BODY                                   \
   "BSTART.TEPL 27, %D1\n"                                                  \
   "B.DATR %D2, RNONE\n"                                                    \
-  "B.DIM zero, %c4, ->lb0\n"                                                   \
-  "B.DIM zero, %c5, ->lb1\n"                                                   \
-  "B.DIM zero, %c6, ->lb2\n"                                               \
+  "B.DIM zero, %c4, ->lb0\n"                                               \
+  "B.DIM zero, %c5, ->lb1\n"                                               \
   "B.IOT %3, mask=1111, last\n"                                           \
-  "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
+  "B.SUBVIEW 0, %7, 0, %c8\n"                                             \
   "B.IOT %0, mask=1111\n"                                                 \
-  "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
+  "B.ASSEMBLE %c11, %c12, %9, 0, %c10\n"
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS                            \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
   "i"(type_traits<typename SubTile::DType>::TypeCode), "Tr"(src.data()),  \
   "i"(std::remove_reference_t<decltype(src)>::ValidCol),                    \
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                    \
-  "i"(SourceSubTile::Cols),                                                 \
   "i"(ParentSize),                                                           \
   "r"(source_base_units),                                                   \
   "i"(tile_type_traits<typename SourceSubTile::TileDType>::TilesizeCode),   \

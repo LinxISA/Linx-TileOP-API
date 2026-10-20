@@ -253,11 +253,15 @@ for name in ("tor_ass_subview", "tor_ass_explicit_range"):
 PY
 
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TileRegionTCVTSubviewAssembly.cpp" \
+  -o "$OUT/TileRegionTCVTSubviewAssembly.ll"
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/TileRegionTCVTSubview.cpp" \
   -o "$OUT/TileRegionTCVTSubview.ll"
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/TileRegionShift.cpp" -o "$OUT/TileRegionShift.ll"
-python3 - "$OUT/TileRegionTCVTSubview.ll" "$OUT/TileRegionShift.ll" <<'PY'
+python3 - "$OUT/TileRegionTCVTSubview.ll" \
+  "$OUT/TileRegionTCVTSubviewAssembly.ll" "$OUT/TileRegionShift.ll" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -270,7 +274,19 @@ if "BSTART.TEPL 27" not in body or body.count("B.SUBVIEW") != 1:
 if "B.ASSEMBLE" in body or "B.DIM zero, $2, ->lb2" in body:
     raise SystemExit("convert_subview: ordinary CUBE TCVT emitted assembly/LB2")
 
-shift = Path(sys.argv[2]).read_text(encoding="utf-8")
+assembled_tcvt = Path(sys.argv[2]).read_text(encoding="utf-8")
+assembled_body = next(
+    part for part in re.split(r"(?=^define )", assembled_tcvt,
+                              flags=re.MULTILINE)
+    if "convert_subviews" in part)
+if assembled_body.count("B.SUBVIEW") != 4 or assembled_body.count("B.ASSEMBLE") != 4:
+    raise SystemExit("convert_subviews: invalid TCVT modifier counts")
+for line in (line for line in assembled_body.splitlines()
+             if "asm sideeffect" in line and "BSTART.TEPL 27" in line):
+    if "->lb2" in line:
+        raise SystemExit("convert_subviews: CUBE TCVT emitted forbidden LB2")
+
+shift = Path(sys.argv[3]).read_text(encoding="utf-8")
 functions = re.split(r"(?=^define )", shift, flags=re.MULTILINE)
 ordinary = next(part for part in functions if "shift_subview" in part and
                 "assemble_shift_subviews" not in part)
