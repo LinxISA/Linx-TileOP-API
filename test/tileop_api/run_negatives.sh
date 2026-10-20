@@ -50,6 +50,7 @@ TEXPDIF_CASES="type narrow n8 mixed_layout shape"
 TCI2D_CASES="layout location dtype shape steps m16_rows"
 I64_CASES="fp64_element unsupported_parent m16 short_m32 subview_pair assemble_pair writer_limit"
 TCOLSUM_CASES="dest_rows dest_cols dtype"
+TLEA_CASES="bad_dtype dest_32bit signed_to_u64 unsigned_to_s64 shape_col shape_row cube_m32 location"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -110,6 +111,25 @@ for c in $TCOLSUM_CASES; do
 done
 expect_rejected "thistogram_retired" "SHOULD_FAIL_THISTOGRAM_RETIRED" \
   TColSumNegatives.cpp "THISTOGRAM is retired"
+# TLEA (PTO-TILE-TLEA): index/signedness/shape/layout/location legality is
+# carried as compile-time constraints; each case must hit its static_assert.
+if ! "$CXX" "${FLAGS[@]}" src/Tlea.cpp -o "$OUT/Tlea.o" >/dev/null 2>&1; then
+  echo "BLOCKED: TLEA positive negative-suite preflight failed" >&2
+  exit 2
+fi
+for c in $TLEA_CASES; do
+  define=SHOULD_FAIL_TLEA_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  case "$c" in
+    bad_dtype) pattern='TLEA source operation type must be exactly' ;;
+    dest_32bit|signed_to_u64|unsigned_to_s64)
+      pattern='S64 for signed indices and U64' ;;
+    shape_col) pattern='equal ValidCol' ;;
+    shape_row) pattern='equal ValidRow' ;;
+    cube_m32) pattern='RowMajor form only' ;;
+    location) pattern='persistent Local \(Vec\)' ;;
+  esac
+  expect_rejected "tlea_$c" "$define" TleaNegatives.cpp "$pattern"
+done
 for c in $TS_CASES; do
   if "$CXX" "${FLAGS[@]}" -DSHOULD_FAIL_$c src/TStoreSharedNegatives.cpp \
        -o "$OUT/neg_ts_$c.o" >/dev/null 2>&1; then

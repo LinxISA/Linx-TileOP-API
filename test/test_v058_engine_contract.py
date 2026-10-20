@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-# PTO ISA 0.58.7 development engine-contract tests for the jcore inline-asm surface.
+# Engine-contract tests for the jcore inline-asm surface. The semantic engine
+# inventory is the LinxISA v0.58 authority projection; the active PTO encoding
+# identity is the published PTO ISA 0.59.0.0 release (see
+# test_contract_carries_release_provenance).
 #
 # Rebuilt per handoff Work Package B6: the assertions reflect the current
 # real toolchain ABI (Tr Tile constraints + %Z TileSize printer; the %q/%D
@@ -54,9 +57,9 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             if path.is_file()
         )
 
-    # --- catalog/development-golden provenance ---
+    # --- catalog/release provenance ---
 
-    def test_contract_carries_development_golden_provenance(self) -> None:
+    def test_contract_carries_release_provenance(self) -> None:
         self.assertEqual(self.contract["profile"], "v0.58")
         self.assertEqual(
             self.contract["semantic_engine_counts"],
@@ -74,21 +77,45 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             src.get("sha256"),
             "51ca9be275518d29ec48bed570b7a9bd441a65b9c5e6d4f79072f650ee732925",
         )
+        # The active PTO encoding identity is the published 0.59.0.0 release.
         pto = self.contract.get("pto_source", {})
-        self.assertEqual(pto.get("release"), "0.58.7")
-        self.assertEqual(pto.get("status"), "development-not-published")
-        self.assertIsNone(pto.get("publication"))
+        self.assertEqual(pto.get("release"), "0.59.0")
+        self.assertEqual(pto.get("publication_version"), "0.59.0.0")
+        self.assertEqual(pto.get("release_tag"), "v0.59.0.0")
+        # The release manifest is itself still a draft specification; record
+        # that faithfully rather than claiming a finalized specification.
+        self.assertEqual(pto.get("specification_status"), "draft")
         self.assertEqual(
-            pto.get("commit"), "f0a876e449a95d26841c5ee7affb4c905ebc5f5b"
+            pto.get("commit"), "b0165320a4b575b18d2f4d93faf40178f661ab49"
         )
         self.assertEqual(
-            pto.get("tree"), "fe9e8e050375fbce3f526d08acca13c37cd15830"
+            pto.get("tree"), "31ff0c2d39cbed714baf5be7929bfd06887be9fb"
+        )
+        self.assertEqual(
+            pto.get("encoding_abi"), "pto-isa-0.59.0-mode-function-v1"
         )
         self.assertEqual(
             pto.get("encoding_projection_sha256"),
-            "a5f78ecd707bde4a014542158ea257c783796b95fa4fbcce37742e41fee6a881",
+            "91509080ca656eb124f47830dcb09c50389dc177266b3b8df9d2d11dc37d5697",
+        )
+        self.assertEqual(
+            pto.get("release_manifest", {}).get("sha256"),
+            "3c6b20623e73822c0bd26021c10beb233b8809328b5515f57609eadad1749dc4",
         )
         self.assertEqual(pto.get("tile_catalog", {}).get("count"), 119)
+        self.assertEqual(
+            pto.get("tile_catalog", {}).get("sha256"),
+            "533db9b8f31f118af5978de813cfaa3fa738de820ee24655faa2ee71f343a706",
+        )
+        # The LinxISA v0.58 authority locked the PTO development golden; its
+        # Tile catalog bytes equal the release catalog, which is why this v0.58
+        # engine projection is valid against the 0.59.0.0 release.
+        lock = pto.get("development_lock", {})
+        self.assertEqual(lock.get("release"), "0.58.7")
+        self.assertEqual(
+            lock.get("commit"), "f0a876e449a95d26841c5ee7affb4c905ebc5f5b"
+        )
+        self.assertTrue(lock.get("catalog_sha256_matches_release"))
 
     def test_0587_engine_mapping_is_exact(self) -> None:
         engines = {row["name"]: row["engine"] for row in self.contract["tepl_ops"]}
@@ -103,7 +130,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_engine_projection_covers_the_exact_pto_catalog(self) -> None:
         catalog = json.loads(
-            (ROOT / "contracts" / "pto-isa-0.58.7-tile-operations.json").read_text(
+            (ROOT / "contracts" / "pto-isa-0.59.0-tile-operations.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -1050,9 +1077,11 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
     def test_deleted_tile_operations_are_migration_stubs(self) -> None:
         # Every deleted tile operation either has no wrapper (truly absent)
         # or is an instance-time static_assert stub; in no case is a
-        # retired TEPL selector emitted by an asm block. TFMOD (5), TLRELU
-        # (46), TRANDOM (105) etc. must not appear next to BSTART.TEPL.
-        for sel in (5, 14, 24, 25, 37, 46, 47, 56, 57, 96, 97, 105, 110):
+        # retired TEPL selector emitted by an asm block. TFMOD (5), TRANDOM
+        # (105) etc. must not appear next to BSTART.TEPL. Selector 46 (0x2E) is
+        # deliberately NOT in this list: the current catalog reassigns it from
+        # the retired TLRELU to the active TLEA (see the dedicated TLEA test).
+        for sel in (5, 14, 24, 25, 37, 47, 56, 57, 96, 97, 105, 110):
             self.assertNotRegex(
                 self.header,
                 rf'BSTART\.TEPL\s+{sel},',
@@ -1072,6 +1101,80 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
                 self._active_impl(),
                 rf'"BSTART\.(?:VEC|SFU)\s+{name}\b',
                 f"stale named TEPL alias {name} must not be emitted",
+            )
+
+    def test_tlea_wrapper_matches_release_catalog_and_asl(self) -> None:
+        # TLEA is an active 0.59.0.0 catalog operation (TEPL Mode 1 Function 14,
+        # selector 0x02E = 46, VEC engine) that extends Local index Tiles to
+        # 64-bit byte offsets. The JCORE inline-asm wrapper must exist, carry
+        # the ASL legality constraints, and emit the selector-46 byte-offset
+        # bundle; catalog existence alone is not wrapper support.
+        catalog = json.loads(
+            (ROOT / "contracts" / "pto-isa-0.59.0-tile-operations.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        tlea = next(op for op in catalog["operations"] if op["name"] == "TLEA")
+        self.assertEqual(tlea["selector"], "0x02E")
+        self.assertEqual(tlea["mode"], 1)
+        self.assertEqual(tlea["function"], 14)
+        self.assertEqual(tlea["engine"], "VEC")
+        self.assertEqual(tlea["disposition"], "accepted-direct-operation")
+        projected = next(
+            row for row in self.contract["tepl_ops"] if row["name"] == "TLEA"
+        )
+        self.assertEqual(projected["logical_selector"], 46)
+        self.assertEqual(projected["mode"], 1)
+        self.assertEqual(projected["function"], 14)
+        self.assertEqual(projected["engine"], "VEC")
+
+        match = re.search(r"void TLEA\(.*?\n}\n", self.header, re.S)
+        self.assertIsNotNone(match, "TLEA JCORE wrapper is missing")
+        body = match.group(0)
+        # Selector-46 byte-offset bundle with the required per-PE element-width
+        # B.IOR; the index source is an explicit-reuse terminating binder and
+        # the destination is a new allocating Tile (never written .reuse).
+        self.assertIn('"BSTART.TEPL 46, %D[Type]\\n"', body)
+        self.assertIn("B.IOR [%[ElementBits]],[]", body)
+        self.assertRegex(
+            body, r'B\.IOT %\[Src\]\.reuse, mask=1111, last, ->%\[Dst\]<%Z\[TileSize\]>'
+        )
+        # ASL legality carried as compile-time constraints.
+        self.assertIn("Location::Vec", body)
+        self.assertIn("__type_int32", body)
+        self.assertIn("__type_uint32", body)
+        self.assertIn("__type_int64", body)
+        self.assertIn("__type_uint64", body)
+        self.assertIn("S64 for signed indices and U64 for", body)
+        self.assertIn("BLayout::RowMajor", body)
+        self.assertIn("equal ValidCol", body)
+        self.assertIn("equal ValidRow", body)
+        # TLEA produces byte offsets only: no GM base-address B.IOR binder.
+        self.assertNotRegex(body, r'B\.IOR \[%\[Base')
+
+    def test_tlea_backend_capability_is_not_overclaimed(self) -> None:
+        # The JCORE inline-asm wrapper exists, but the TileOP repository has no
+        # TLEA CPU simulator semantics. The support-status page must keep those
+        # backend dimensions separate and must not silently widen the wrapper
+        # into full-backend support.
+        status = (ROOT / "docs" / "tileop-usage" / "support-status.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(status, r"`TLEA`")
+        self.assertIn("JCORE inline-asm", status)
+        self.assertIn("CPU simulator", status)
+        # No TLEA implementation may masquerade inside the CPU simulator headers.
+        cpu_sim = ROOT / "include" / "cpu_sim"
+        if cpu_sim.is_dir():
+            cpu_text = "\n".join(
+                p.read_text(encoding="utf-8", errors="ignore")
+                for p in cpu_sim.rglob("*")
+                if p.is_file()
+            )
+            self.assertNotRegex(
+                cpu_text,
+                r"\bTLEA\b",
+                "TLEA must not claim a CPU simulator implementation it lacks",
             )
 
     def test_retired_block_spellings_are_not_emitted(self) -> None:
@@ -1213,10 +1316,10 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
     def test_pto_identity_verifier_rejects_hostile_elf_notes(self) -> None:
         verifier = ROOT / "test" / "tileop_api" / "verify_pto_identity.py"
         expected = (
-            b'{"encoding_abi":"pto-isa-0.58.7-mode-function-v1",'
+            b'{"encoding_abi":"pto-isa-0.59.0-mode-function-v1",'
             b'"encoding_projection_sha256":'
-            b'"a5f78ecd707bde4a014542158ea257c783796b95fa4fbcce37742e41fee6a881",'
-            b'"release":"0.58.7"}'
+            b'"91509080ca656eb124f47830dcb09c50389dc177266b3b8df9d2d11dc37d5697",'
+            b'"release":"0.59.0"}'
         )
 
         def make_elf(desc: bytes = expected, owner: bytes = b"PTO\0",
@@ -1273,11 +1376,11 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
                 "missing": make_elf(owner=b"GNU\0"),
                 "corrupt": make_elf(magic=b"BAD!"),
                 "wrong-machine": make_elf(machine=0x3E),
-                "wrong-identity": make_elf(desc=expected.replace(b"0.58.7", b"0.58.6")),
+                "wrong-identity": make_elf(desc=expected.replace(b"0.59.0", b"0.59.1")),
                 "trailing-nul": make_elf(desc=expected + b"\0"),
                 "duplicate-segment": make_elf(extra_desc=expected),
                 "conflicting-segment": make_elf(
-                    extra_desc=expected.replace(b"0.58.7", b"0.58.6")),
+                    extra_desc=expected.replace(b"0.59.0", b"0.59.1")),
             }
             for name, contents in variants.items():
                 path = temporary_path / f"{name}.elf"

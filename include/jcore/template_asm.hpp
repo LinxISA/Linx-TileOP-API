@@ -593,6 +593,138 @@ PTO_SHARED_INLINE void TMOV(Tile &dst,
         [ElemLayout] "i"(local_layout_code_v<Tile>));
 }
 
+// TLEA: extend Local element indices to 64-bit byte offsets.
+//
+// PTO-TILE-TLEA (asl/tile/tile-scalar-and-immediate/arithmetic/TLEA.asl,
+// asl/tile/model/legality/lea-operands.asl): TEPL Mode 1 Function 14, selector
+// 0x02E (=46), VEC engine. The source is a persistent Local S32/U32/S64/U64
+// element-index Tile; the required per-PE private-GPR scalar is the element
+// width in bits (8/16/32/64, checked at instruction legality, not here); the
+// destination is a NEW Local S64 (signed source) or U64 (unsigned source)
+// byte-offset Tile with the same logical valid shape but independent physical
+// geometry. Signed indices sign-extend to S64 and unsigned indices zero-extend
+// to U64 before scaling by element_bits/8, retaining the low 64 bits. TLEA
+// produces byte offsets only: no BaseGPR add, no memory access, no memory
+// event and no numeric-status update. Shared/CUBE_N8/CUBE_M16 reject; RowMajor
+// and CUBE_M32 are the legal layouts. This wrapper emits the RowMajor form and
+// fails closed on CUBE_M32, whose issue #371 double-CELL b64 mapping is not yet
+// implemented here (use the RowMajor form until it is verified against the
+// release ASL on the Linx toolchain).
+template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
+void TLEA(tile_shape_out &dst, tile_shape_in &src, unsigned element_bits) {
+  using InT = typename tile_shape_in::DType;
+  using OutT = typename tile_shape_out::DType;
+  constexpr int in_code = type_traits<InT>::TypeCode;
+  constexpr int out_code = type_traits<OutT>::TypeCode;
+  static_assert(tile_shape_in::Loc == Location::Vec &&
+                    tile_shape_out::Loc == Location::Vec,
+                "TLEA source and destination must be persistent Local (Vec) "
+                "Tiles");
+  static_assert(in_code == __type_int32 || in_code == __type_uint32 ||
+                    in_code == __type_int64 || in_code == __type_uint64,
+                "TLEA source operation type must be exactly S32, U32, S64 or "
+                "U64 element indices");
+  constexpr bool in_signed =
+      (in_code == __type_int32 || in_code == __type_int64);
+  static_assert((in_signed && out_code == __type_int64) ||
+                    (!in_signed && out_code == __type_uint64),
+                "TLEA destination must be S64 for signed indices and U64 for "
+                "unsigned indices; a bare 64-bit integer is not sufficient");
+  static_assert(tile_shape_in::BFractal == tile_shape_out::BFractal,
+                "TLEA source and destination must share one Local layout");
+  static_assert(tile_shape_in::BFractal == BLayout::RowMajor,
+                "TLEA wrapper currently emits the RowMajor form only; CUBE_M32 "
+                "is specified but not yet implemented, and Shared/CUBE_N8/"
+                "CUBE_M16 reject per PTO-TILE-TLEA");
+  // Matching logical valid shape with independent physical geometry/capacity.
+  static_assert((tile_shape_in::ValidCol < 0) == (tile_shape_out::ValidCol < 0) &&
+                    (tile_shape_in::ValidRow < 0) == (tile_shape_out::ValidRow < 0),
+                "TLEA source and destination must share a static-or-dynamic "
+                "valid shape");
+  if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_out::ValidCol > 0) {
+    static_assert(tile_shape_in::ValidCol == tile_shape_out::ValidCol,
+                  "TLEA source and destination must have equal ValidCol");
+  }
+  if constexpr (tile_shape_in::ValidRow > 0 && tile_shape_out::ValidRow > 0) {
+    static_assert(tile_shape_in::ValidRow == tile_shape_out::ValidRow,
+                  "TLEA source and destination must have equal ValidRow");
+  }
+  static_assert((tile_shape_out::ValidRow < 0 ||
+                 tile_shape_out::Rows >= tile_shape_out::ValidRow) &&
+                    (tile_shape_out::ValidCol < 0 ||
+                     tile_shape_out::Cols >= tile_shape_out::ValidCol),
+                "TLEA destination physical shape must contain its valid region "
+                "(valid_rows <= rows, valid_columns <= columns)");
+  // The element width is a per-PE private GPR; force it into a register so a
+  // compile-time constant is never folded onto the hardwired zero register,
+  // which is an illegal element width for an active block.
+  unsigned element_bits_value = element_bits;
+  asm("" : "+r"(element_bits_value));
+  if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
+    asm volatile(
+        "BSTART.TEPL 46, %D[Type]\n"
+        "B.DIM zero, %c[Col], ->lb0\n"
+        "B.DIM zero, %c[Row], ->lb1\n"
+        "B.DIM zero, %c[DstCols], ->lb2\n"
+        "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOR [%[ElementBits]],[]\n"
+        : [Dst] "=Tr"(dst.data())
+        : [Type] "i"(in_code), [Src] "Tr"(src.data()),
+          [TileSize] "i"(tile_shape_out::TilesizeCode),
+          [Col] "i"(tile_shape_in::ValidCol),
+          [Row] "i"(tile_shape_in::ValidRow),
+          [DstCols] "i"(tile_shape_out::Cols),
+          [ElementBits] "r"(element_bits_value));
+  } else if constexpr (tile_shape_in::ValidCol > 0 &&
+                       tile_shape_in::ValidRow < 0) {
+    asm volatile(
+        "BSTART.TEPL 46, %D[Type]\n"
+        "B.DIM zero, %c[Col], ->lb0\n"
+        "B.DIM %[Row], 0, ->lb1\n"
+        "B.DIM zero, %c[DstCols], ->lb2\n"
+        "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOR [%[ElementBits]],[]\n"
+        : [Dst] "=Tr"(dst.data())
+        : [Type] "i"(in_code), [Src] "Tr"(src.data()),
+          [TileSize] "i"(tile_shape_out::TilesizeCode),
+          [Col] "i"(tile_shape_in::ValidCol),
+          [Row] "r"(src.GetValidRow()),
+          [DstCols] "i"(tile_shape_out::Cols),
+          [ElementBits] "r"(element_bits_value));
+  } else if constexpr (tile_shape_in::ValidCol < 0 &&
+                       tile_shape_in::ValidRow > 0) {
+    asm volatile(
+        "BSTART.TEPL 46, %D[Type]\n"
+        "B.DIM %[Col], 0, ->lb0\n"
+        "B.DIM zero, %c[Row], ->lb1\n"
+        "B.DIM zero, %c[DstCols], ->lb2\n"
+        "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOR [%[ElementBits]],[]\n"
+        : [Dst] "=Tr"(dst.data())
+        : [Type] "i"(in_code), [Src] "Tr"(src.data()),
+          [TileSize] "i"(tile_shape_out::TilesizeCode),
+          [Col] "r"(src.GetValidCol()),
+          [Row] "i"(tile_shape_in::ValidRow),
+          [DstCols] "i"(tile_shape_out::Cols),
+          [ElementBits] "r"(element_bits_value));
+  } else {
+    asm volatile(
+        "BSTART.TEPL 46, %D[Type]\n"
+        "B.DIM %[Col], 0, ->lb0\n"
+        "B.DIM %[Row], 0, ->lb1\n"
+        "B.DIM zero, %c[DstCols], ->lb2\n"
+        "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+        "B.IOR [%[ElementBits]],[]\n"
+        : [Dst] "=Tr"(dst.data())
+        : [Type] "i"(in_code), [Src] "Tr"(src.data()),
+          [TileSize] "i"(tile_shape_out::TilesizeCode),
+          [Col] "r"(src.GetValidCol()),
+          [Row] "r"(src.GetValidRow()),
+          [DstCols] "i"(tile_shape_out::Cols),
+          [ElementBits] "r"(element_bits_value));
+  }
+}
+
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void THISTOGRAM(tile_shape_out &dst, tile_shape_in &src, tile_shape_in &Idx, int ByteId) {
   static_assert(pto_dependent_false_v<decltype(dst), decltype(src)>,

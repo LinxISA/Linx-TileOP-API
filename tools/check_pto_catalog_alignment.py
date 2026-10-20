@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Fail-closed checks for the pinned PTO ISA 0.58.7 Tile catalog.
+"""Fail-closed checks for the pinned PTO ISA 0.59.0 Tile catalog.
 
 This check deliberately verifies inventory and provenance, not the full ASL/NDF
-semantics. The latter remains owned by PTO-ISA/pto-spec.
+semantics. The latter remains owned by PTO-ISA/pto-spec. The 119-operation Tile
+catalog is byte-identical between the PTO 0.58.7 development golden and the
+published PTO ISA 0.59.0.0 release (both SHA-256 533db9b8...), so the pinned
+bytes did not change when the active encoding identity moved to the release.
 """
 
 from __future__ import annotations
@@ -14,7 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG = ROOT / "contracts" / "pto-isa-0.58.7-tile-operations.json"
+CATALOG = ROOT / "contracts" / "pto-isa-0.59.0-tile-operations.json"
 INCLUDE = ROOT / "include"
 DOCS = ROOT / "docs" / "tileop-usage"
 EXPECTED_TILE_CATALOG_SHA256 = "533db9b8f31f118af5978de813cfaa3fa738de820ee24655faa2ee71f343a706"
@@ -28,7 +31,7 @@ def main() -> int:
     catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
     failures: list[str] = []
     if hashlib.sha256(CATALOG.read_bytes()).hexdigest() != EXPECTED_TILE_CATALOG_SHA256:
-        failures.append("catalog bytes do not match the reviewed PTO development golden")
+        failures.append("catalog bytes do not match the reviewed PTO 0.59.0.0 release Tile catalog")
     if catalog.get("operation_count") != 119:
         failures.append("catalog operation_count is not 119")
     operations = catalog.get("operations", [])
@@ -92,13 +95,13 @@ def main() -> int:
                 failures.append(f"TEXPDIF support status is missing backend dimension: {marker}")
 
     if failures:
-        print("FAIL: PTO 0.58.7 catalog alignment", file=sys.stderr)
+        print("FAIL: PTO 0.59.0 catalog alignment", file=sys.stderr)
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         return 1
     print(
-        "PASS: PTO 0.58.7 development catalog alignment "
-        f"({len(names)} golden operations; {len(source_referenced)} source-referenced; "
+        "PASS: PTO 0.59.0.0 release catalog alignment "
+        f"({len(names)} release operations; {len(source_referenced)} source-referenced; "
         f"{len(explicitly_unsupported)} explicitly unsupported)"
     )
     return 0
