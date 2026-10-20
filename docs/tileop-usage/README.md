@@ -6,16 +6,20 @@
 
 ## 版本与兼容性
 
-本目录当前以 PTO-ISA/pto-spec 的 **0.59.0** 架构规范为对照基线：
+本目录当前以 PTO-ISA/pto-spec 的 **0.59.0.0** 发布规范为对照基线：
 
 - architecture version：`0.59.0`
 - publication version：`0.59.0.0`
-- stable release commit：`de57af400cf607f03730aa522a4e9bfb160596de`
 - release tag：`v0.59.0.0`
-- encoding ABI：`pto-isa-0.58.7-mode-function-v1`
+- release commit：`b0165320a4b575b18d2f4d93faf40178f661ab49`
+- encoding ABI：`pto-isa-0.59.0-mode-function-v1`
+- specification status：`draft`（发布 manifest 自身记为 draft，实现 conformance 限定为
+  `b-fpatr-and-tcvt-e8m0-asl-proven-other-numeric-domains-unproven`）
 
-PTO `main` 是开发分支；需要可复现构建时应锁定上面的 release commit。本文档描述
-的是架构规范和本仓库 wrapper 的交集，并不表示 wrapper 已实现 0.59.0 的全部操作。
+PTO `main` 是开发分支；需要可复现构建时应锁定上面的 release commit。119 个操作的
+Tile catalog 与 PTO 0.58.7 development golden 逐字节一致，只是 encoding identity 移到了
+发布版本。本文档描述的是架构规范和本仓库 wrapper 的交集，并不表示 wrapper 已实现
+0.59.0 的全部操作，也不表示该发布规范已最终定稿或数值 conformance 已全部证明。
 每个操作页中的 C++ 签名以本仓库头文件为准，PTO ASL/NDF 是架构合法性的权威来源。
 
 [0.58.3 迁移说明](migration/pto-0583-migration.md)是历史文档，保留用于迁移旧
@@ -153,7 +157,7 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
   也在该页面说明。
 - 常规逐元素算子从 [TADD](elementwise-tile-tile/arithmetic/TADD.md) 开始；按目录选择
   算术、逻辑、转换、归约、布局和不规则操作。
-- PTO ISA v0.59.0 的 CUBE layout 重排操作从
+- PTO ISA 0.59.0 的 CUBE layout 重排操作从
   [TPERMUTE](layout-and-rearrangement/layout/TPERMUTE.md) 开始；
   [TSHUF](layout-and-rearrangement/layout/TSHUF.md)、
   [TPACK](layout-and-rearrangement/layout/TPACK.md)、

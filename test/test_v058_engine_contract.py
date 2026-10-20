@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-# PTO ISA 0.58.7 development engine-contract tests for the jcore inline-asm surface.
+# Engine-contract tests for the jcore inline-asm surface. The semantic engine
+# inventory is the LinxISA v0.58 authority projection; the active PTO encoding
+# identity is the published PTO ISA 0.59.0.0 release (see
+# test_contract_carries_release_provenance).
 #
 # Rebuilt per handoff Work Package B6: the assertions reflect the current
 # real toolchain ABI (Tr Tile constraints + %Z TileSize printer; the %q/%D
@@ -54,9 +57,9 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             if path.is_file()
         )
 
-    # --- catalog/development-golden provenance ---
+    # --- catalog/release provenance ---
 
-    def test_contract_carries_development_golden_provenance(self) -> None:
+    def test_contract_carries_release_provenance(self) -> None:
         self.assertEqual(self.contract["profile"], "v0.58")
         self.assertEqual(
             self.contract["semantic_engine_counts"],
@@ -74,21 +77,45 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             src.get("sha256"),
             "51ca9be275518d29ec48bed570b7a9bd441a65b9c5e6d4f79072f650ee732925",
         )
+        # The active PTO encoding identity is the published 0.59.0.0 release.
         pto = self.contract.get("pto_source", {})
-        self.assertEqual(pto.get("release"), "0.58.7")
-        self.assertEqual(pto.get("status"), "development-not-published")
-        self.assertIsNone(pto.get("publication"))
+        self.assertEqual(pto.get("release"), "0.59.0")
+        self.assertEqual(pto.get("publication_version"), "0.59.0.0")
+        self.assertEqual(pto.get("release_tag"), "v0.59.0.0")
+        # The release manifest is itself still a draft specification; record
+        # that faithfully rather than claiming a finalized specification.
+        self.assertEqual(pto.get("specification_status"), "draft")
         self.assertEqual(
-            pto.get("commit"), "f0a876e449a95d26841c5ee7affb4c905ebc5f5b"
+            pto.get("commit"), "b0165320a4b575b18d2f4d93faf40178f661ab49"
         )
         self.assertEqual(
-            pto.get("tree"), "fe9e8e050375fbce3f526d08acca13c37cd15830"
+            pto.get("tree"), "31ff0c2d39cbed714baf5be7929bfd06887be9fb"
+        )
+        self.assertEqual(
+            pto.get("encoding_abi"), "pto-isa-0.59.0-mode-function-v1"
         )
         self.assertEqual(
             pto.get("encoding_projection_sha256"),
-            "a5f78ecd707bde4a014542158ea257c783796b95fa4fbcce37742e41fee6a881",
+            "91509080ca656eb124f47830dcb09c50389dc177266b3b8df9d2d11dc37d5697",
+        )
+        self.assertEqual(
+            pto.get("release_manifest", {}).get("sha256"),
+            "3c6b20623e73822c0bd26021c10beb233b8809328b5515f57609eadad1749dc4",
         )
         self.assertEqual(pto.get("tile_catalog", {}).get("count"), 119)
+        self.assertEqual(
+            pto.get("tile_catalog", {}).get("sha256"),
+            "533db9b8f31f118af5978de813cfaa3fa738de820ee24655faa2ee71f343a706",
+        )
+        # The LinxISA v0.58 authority locked the PTO development golden; its
+        # Tile catalog bytes equal the release catalog, which is why this v0.58
+        # engine projection is valid against the 0.59.0.0 release.
+        lock = pto.get("development_lock", {})
+        self.assertEqual(lock.get("release"), "0.58.7")
+        self.assertEqual(
+            lock.get("commit"), "f0a876e449a95d26841c5ee7affb4c905ebc5f5b"
+        )
+        self.assertTrue(lock.get("catalog_sha256_matches_release"))
 
     def test_0587_engine_mapping_is_exact(self) -> None:
         engines = {row["name"]: row["engine"] for row in self.contract["tepl_ops"]}
@@ -103,7 +130,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
 
     def test_engine_projection_covers_the_exact_pto_catalog(self) -> None:
         catalog = json.loads(
-            (ROOT / "contracts" / "pto-isa-0.58.7-tile-operations.json").read_text(
+            (ROOT / "contracts" / "pto-isa-0.59.0-tile-operations.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -1216,10 +1243,10 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
     def test_pto_identity_verifier_rejects_hostile_elf_notes(self) -> None:
         verifier = ROOT / "test" / "tileop_api" / "verify_pto_identity.py"
         expected = (
-            b'{"encoding_abi":"pto-isa-0.58.7-mode-function-v1",'
+            b'{"encoding_abi":"pto-isa-0.59.0-mode-function-v1",'
             b'"encoding_projection_sha256":'
-            b'"a5f78ecd707bde4a014542158ea257c783796b95fa4fbcce37742e41fee6a881",'
-            b'"release":"0.58.7"}'
+            b'"91509080ca656eb124f47830dcb09c50389dc177266b3b8df9d2d11dc37d5697",'
+            b'"release":"0.59.0"}'
         )
 
         def make_elf(desc: bytes = expected, owner: bytes = b"PTO\0",
@@ -1276,11 +1303,11 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
                 "missing": make_elf(owner=b"GNU\0"),
                 "corrupt": make_elf(magic=b"BAD!"),
                 "wrong-machine": make_elf(machine=0x3E),
-                "wrong-identity": make_elf(desc=expected.replace(b"0.58.7", b"0.58.6")),
+                "wrong-identity": make_elf(desc=expected.replace(b"0.59.0", b"0.59.1")),
                 "trailing-nul": make_elf(desc=expected + b"\0"),
                 "duplicate-segment": make_elf(extra_desc=expected),
                 "conflicting-segment": make_elf(
-                    extra_desc=expected.replace(b"0.58.7", b"0.58.6")),
+                    extra_desc=expected.replace(b"0.59.0", b"0.59.1")),
             }
             for name, contents in variants.items():
                 path = temporary_path / f"{name}.elf"

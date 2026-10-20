@@ -1,13 +1,14 @@
-# LinxISA / PTO ISA v0.59.0 wrapper engine compatibility view
+# LinxISA v0.58 / PTO ISA 0.59.0.0 wrapper engine compatibility view
 
 架构定义的引擎类别只有 **VEC**, **TLSU**, **CUBE**, and **SFU**。
 VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。
 TEPL 仍是唯一的编译 carrier 标识。`BSTART.VEC` 和 `BSTART.SFU` 是特定引擎的汇编别名；
 inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 
-下表根据本仓库固定的 LinxISA/PTO development golden 投影生成，数据记录在
+下表根据本仓库固定的 LinxISA v0.58 authority 投影生成（其操作清单与 PTO ISA 0.59.0.0
+发布 catalog 逐字节一致），数据记录在
 [`contracts/linxisa-v0.58-engine-ops.json`](../../../contracts/linxisa-v0.58-engine-ops.json) 中。
-Golden 共 119 项；其中 119 项在 `include/` 有名称引用，
+投影共 119 项；其中 119 项在 `include/` 有名称引用，
 0 项明确没有 wrapper。名称引用不证明 ASL/NDF 语义完整实现。
 
 ## VEC
@@ -152,7 +153,8 @@ Golden 共 119 项；其中 119 项在 `include/` 有名称引用，
 ## 分类语义
 
 PTO ISA 0.59.0 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；
-其底层投影记录当前 development golden selector 数据。`elementwise-tile-tile`
+其底层投影记录 LinxISA v0.58 authority 的 selector 数据（与 0.59.0.0 发布 catalog 一致）。
+`elementwise-tile-tile`
 和 `tile-scalar-and-immediate` 类别在 VEC 上执行逐元素操作，但其中的
 `TEXP`、`TLOG`、`TRECIP`、`TSQRT`、`TRSQRT` 由 SFU 执行。
 `reduce-and-expand`、`layout-and-rearrangement` 和 `irregular-and-complex` 类别由 SFU 执行。

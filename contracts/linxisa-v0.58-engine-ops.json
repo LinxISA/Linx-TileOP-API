@@ -110,23 +110,36 @@
   ],
   "profile": "v0.58",
   "pto_source": {
-    "commit": "f0a876e449a95d26841c5ee7affb4c905ebc5f5b",
-    "development_manifest": {
-      "path": "spec/development-manifest.json",
-      "sha256": "0c6d0b2a1ec0b49e32e13971e751a5ea19946351a3880bfdfcef0f50351944f7"
+    "commit": "b0165320a4b575b18d2f4d93faf40178f661ab49",
+    "content_sha256": "a3e71975e7f753864f7ec09c57515e60f5a6e3e72dfdbce8e444c815a20b2835",
+    "development_lock": {
+      "catalog_sha256_matches_release": true,
+      "commit": "f0a876e449a95d26841c5ee7affb4c905ebc5f5b",
+      "development_manifest": {
+        "path": "spec/development-manifest.json",
+        "sha256": "0c6d0b2a1ec0b49e32e13971e751a5ea19946351a3880bfdfcef0f50351944f7"
+      },
+      "note": "The LinxISA v0.58 authority locked the PTO development golden; its Tile catalog bytes equal the 0.59.0.0 release Tile catalog (both SHA-256 533db9b8...), so the v0.58 engine projection remains valid against the published release.",
+      "release": "0.58.7",
+      "tree": "fe9e8e050375fbce3f526d08acca13c37cd15830"
     },
-    "encoding_abi": "pto-isa-0.58.7-mode-function-v1",
-    "encoding_projection_sha256": "a5f78ecd707bde4a014542158ea257c783796b95fa4fbcce37742e41fee6a881",
-    "publication": null,
-    "release": "0.58.7",
+    "encoding_abi": "pto-isa-0.59.0-mode-function-v1",
+    "encoding_projection_sha256": "91509080ca656eb124f47830dcb09c50389dc177266b3b8df9d2d11dc37d5697",
+    "publication_version": "0.59.0.0",
+    "release": "0.59.0",
+    "release_manifest": {
+      "path": "spec/release-manifest.json",
+      "sha256": "3c6b20623e73822c0bd26021c10beb233b8809328b5515f57609eadad1749dc4"
+    },
+    "release_tag": "v0.59.0.0",
     "repo": "https://github.com/PTO-ISA/pto-spec.git",
-    "status": "development-not-published",
+    "specification_status": "draft",
     "tile_catalog": {
       "count": 119,
       "path": "spec/catalog/tile-operations.json",
       "sha256": "533db9b8f31f118af5978de813cfaa3fa738de820ee24655faa2ee71f343a706"
     },
-    "tree": "fe9e8e050375fbce3f526d08acca13c37cd15830"
+    "tree": "31ff0c2d39cbed714baf5be7929bfd06887be9fb"
   },
   "schema": "linx-tileop-api.engine-ops-projection.v2",
   "semantic_engine_counts": {
