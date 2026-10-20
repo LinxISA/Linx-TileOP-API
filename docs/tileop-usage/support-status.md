@@ -17,7 +17,7 @@ rollback、definedness 或 memory-order 语义。
 | PTO catalog 范围 | 状态 | 说明 |
 | --- | --- | --- |
 | TEPL elementwise、scalar、reduce/expand、irregular（除 `TLEA`） | 已实现 | 逐操作页面和 `jcore/template_asm.hpp` 为 wrapper 权威；dtype、valid region、padding 和 selector 仍受 ASL 约束。 |
-| `TLEA` | JCORE inline-asm wrapper 已实现（仅 RowMajor）；CPU simulator 未实现；AArch64/SME 未实现；LLVM MC / compiler lowering 分别判断 | PTO catalog 将 TLEA 列为 `accepted-direct-operation`（`BSTART.TEPL`，**VEC** 引擎，selector `0x2E`=46，function 14/mode 1）；操作数为 S32/U32/S64/U64 element index、per-PE element-width 标量与 S64/U64 byte-offset 目标。`include/jcore/template_asm.hpp` 现有 RowMajor wrapper，按 ASL 以编译期约束限定 location/dtype/signedness/layout/logical-shape；CUBE_M32 虽为合法 layout 但本仓库尚未实现（issue #371 double-CELL b64 映射待在 Linx 工具链上对照发布 ASL 验证）。element-width 的运行时合法性（8/16/32/64）由指令 legality 检查，不是编译期静态拒绝。wrapper 存在不代表 CPU simulator、AArch64 或 LLVM 端到端已具备 TLEA 支持。 |
+| `TLEA` | JCORE inline-asm wrapper 已实现（RowMajor 与 CUBE_M32）；CPU simulator 未实现；AArch64/SME 未实现；LLVM MC / compiler lowering 分别判断 | PTO catalog 将 TLEA 列为 `accepted-direct-operation`（`BSTART.TEPL`，**VEC** 引擎，selector `0x2E`=46，function 14/mode 1）；操作数为 S32/U32/S64/U64 element index、per-PE element-width 标量与 S64/U64 byte-offset 目标。`include/jcore/template_asm.hpp` 的 wrapper 以编译期约束限定 dtype/layout/logical-shape（RowMajor/CUBE_M32，Shared/CUBE_N8/CUBE_M16 拒绝）；signed→S64/unsigned→U64 的严格配对由 ASL `lea-operands.asl` 要求，当前 wrapper 仅校验目标为 S64/U64，配对以指令 legality 为准。element-width 的运行时合法性（8/16/32/64）由指令 legality 检查，不是编译期静态拒绝。wrapper 存在不代表 CPU simulator、AArch64 或 LLVM 端到端已具备 TLEA 支持。 |
 | `TEXPDIF` | CPU simulator、JCORE inline-asm 已实现；LLVM MC catalog 已实现；LLVM compiler lowering 尚未完成；AArch64/SME 不支持 | PTO selector 29。已有 wrapper 不等于 LLVM compiler 已具备从 IR/builtin 到 TEXPDIF 的端到端 lowering。 |
 | TLSU `TLOAD`/`TSTORE`/`TMOV`/`TPREFETCH`/`GMOV` | 已实现 | 传输、peer move 和 prefetch 有独立 C++ 入口；layout conversion 仅对页面列出的组合开放。 |
 | TLSU `MGATHER`/`MSCATTER` 及 atomic/reduction variants | 仅部分 layout 支持 | wrapper 覆盖当前公开 selector；ColumnMajor selector、mask/索引 dtype 和不同 atomic 组合不得由普通 gather/scatter 重载推断。 |
@@ -44,7 +44,7 @@ rollback、definedness 或 memory-order 语义。
   记录其曾锁定的 PTO development golden，不把旧来源伪标为 v0.59。
 - backend 能力必须分别判断：CPU simulator/JCORE wrapper、LLVM MC
   assembler/parser、LLVM compiler lowering 以及 AArch64/SME 并不是同一个状态。
-  `TLEA` 目前只有 JCORE inline-asm RowMajor wrapper，没有 CPU simulator 语义。
+  `TLEA` 目前只有 JCORE inline-asm wrapper（RowMajor 与 CUBE_M32），没有 CPU simulator 语义。
 - `TEXPDIF` 当前已有 CPU simulator 实现、JCORE inline-asm wrapper 和 LLVM
   MC catalog 条目；LLVM compiler lowering 尚未完成，因此当前不能宣称 LLVM
   端到端支持。

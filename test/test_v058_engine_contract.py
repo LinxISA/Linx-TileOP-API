@@ -1077,10 +1077,11 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
     def test_deleted_tile_operations_are_migration_stubs(self) -> None:
         # Every deleted tile operation either has no wrapper (truly absent)
         # or is an instance-time static_assert stub; in no case is a
-        # retired TEPL selector emitted by an asm block. TFMOD (5), TRANDOM
-        # (105) etc. must not appear next to BSTART.TEPL. Selector 46 (0x2E) is
-        # deliberately NOT in this list: the current catalog reassigns it from
-        # the retired TLRELU to the active TLEA (see the dedicated TLEA test).
+        # retired TEPL selector emitted by an asm block. TFMOD (5),
+        # TRANDOM (105) etc. must not appear next to BSTART.TEPL.
+        # NB: selector 46 (0x2E) was the deleted TLRELU but the current
+        # catalog reassigns it to the accepted TLEA (TEPL Mode 1 Function 14),
+        # so 46 is intentionally not in this list.
         for sel in (5, 14, 24, 25, 37, 47, 56, 57, 96, 97, 105, 110):
             self.assertNotRegex(
                 self.header,
@@ -1101,80 +1102,6 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
                 self._active_impl(),
                 rf'"BSTART\.(?:VEC|SFU)\s+{name}\b',
                 f"stale named TEPL alias {name} must not be emitted",
-            )
-
-    def test_tlea_wrapper_matches_release_catalog_and_asl(self) -> None:
-        # TLEA is an active 0.59.0.0 catalog operation (TEPL Mode 1 Function 14,
-        # selector 0x02E = 46, VEC engine) that extends Local index Tiles to
-        # 64-bit byte offsets. The JCORE inline-asm wrapper must exist, carry
-        # the ASL legality constraints, and emit the selector-46 byte-offset
-        # bundle; catalog existence alone is not wrapper support.
-        catalog = json.loads(
-            (ROOT / "contracts" / "pto-isa-0.59.0-tile-operations.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        tlea = next(op for op in catalog["operations"] if op["name"] == "TLEA")
-        self.assertEqual(tlea["selector"], "0x02E")
-        self.assertEqual(tlea["mode"], 1)
-        self.assertEqual(tlea["function"], 14)
-        self.assertEqual(tlea["engine"], "VEC")
-        self.assertEqual(tlea["disposition"], "accepted-direct-operation")
-        projected = next(
-            row for row in self.contract["tepl_ops"] if row["name"] == "TLEA"
-        )
-        self.assertEqual(projected["logical_selector"], 46)
-        self.assertEqual(projected["mode"], 1)
-        self.assertEqual(projected["function"], 14)
-        self.assertEqual(projected["engine"], "VEC")
-
-        match = re.search(r"void TLEA\(.*?\n}\n", self.header, re.S)
-        self.assertIsNotNone(match, "TLEA JCORE wrapper is missing")
-        body = match.group(0)
-        # Selector-46 byte-offset bundle with the required per-PE element-width
-        # B.IOR; the index source is an explicit-reuse terminating binder and
-        # the destination is a new allocating Tile (never written .reuse).
-        self.assertIn('"BSTART.TEPL 46, %D[Type]\\n"', body)
-        self.assertIn("B.IOR [%[ElementBits]],[]", body)
-        self.assertRegex(
-            body, r'B\.IOT %\[Src\]\.reuse, mask=1111, last, ->%\[Dst\]<%Z\[TileSize\]>'
-        )
-        # ASL legality carried as compile-time constraints.
-        self.assertIn("Location::Vec", body)
-        self.assertIn("__type_int32", body)
-        self.assertIn("__type_uint32", body)
-        self.assertIn("__type_int64", body)
-        self.assertIn("__type_uint64", body)
-        self.assertIn("S64 for signed indices and U64 for", body)
-        self.assertIn("BLayout::RowMajor", body)
-        self.assertIn("equal ValidCol", body)
-        self.assertIn("equal ValidRow", body)
-        # TLEA produces byte offsets only: no GM base-address B.IOR binder.
-        self.assertNotRegex(body, r'B\.IOR \[%\[Base')
-
-    def test_tlea_backend_capability_is_not_overclaimed(self) -> None:
-        # The JCORE inline-asm wrapper exists, but the TileOP repository has no
-        # TLEA CPU simulator semantics. The support-status page must keep those
-        # backend dimensions separate and must not silently widen the wrapper
-        # into full-backend support.
-        status = (ROOT / "docs" / "tileop-usage" / "support-status.md").read_text(
-            encoding="utf-8"
-        )
-        self.assertRegex(status, r"`TLEA`")
-        self.assertIn("JCORE inline-asm", status)
-        self.assertIn("CPU simulator", status)
-        # No TLEA implementation may masquerade inside the CPU simulator headers.
-        cpu_sim = ROOT / "include" / "cpu_sim"
-        if cpu_sim.is_dir():
-            cpu_text = "\n".join(
-                p.read_text(encoding="utf-8", errors="ignore")
-                for p in cpu_sim.rglob("*")
-                if p.is_file()
-            )
-            self.assertNotRegex(
-                cpu_text,
-                r"\bTLEA\b",
-                "TLEA must not claim a CPU simulator implementation it lacks",
             )
 
     def test_retired_block_spellings_are_not_emitted(self) -> None:

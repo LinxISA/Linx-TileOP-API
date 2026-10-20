@@ -1,95 +1,90 @@
 # TLEA
 
-`TLEA` 将 Local 的逻辑元素索引扩展为 64 位，并按 `element_bits / 8` 显式缩放为字节偏移；
-它只生成字节偏移，不加 BaseGPR、不访存、不产生内存事件、也不更新 numeric status。
-
-> 规范权威：`PTO-ISA/pto-spec` 的
-> `asl/tile/tile-scalar-and-immediate/arithmetic/TLEA.asl` 与
-> `asl/tile/model/legality/lea-operands.asl`。本页是 wrapper 使用说明，不替代 ASL/NDF。
+`TLEA` 将 Local 源 Tile 中的逻辑元素索引扩展为 64 位,并按每 PE 的元素位宽显式缩放为字节偏移(`dst[i] = extend64(src[i]) * (element_bits / 8)`,保留低 64 位)。它只生成字节偏移,不做 BaseGPR 相加、访存或数值状态更新。
 
 ## C++ 接口
 
-当前 API 中可用的调用形式：
+当前 API 中可用的调用形式:
 
 ```cpp
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TLEA(tile_shape_out &dst, tile_shape_in &src, unsigned element_bits);
 ```
 
-- 编码：TEPL Mode 1 / Function 14，selector `0x02E`（46），执行引擎 **VEC**。
-- `src`：持久化 Local 索引 Tile，operation type 必须恰为 `S32`、`U32`、`S64` 或 `U64`，
-  且选定 operation type 等于其 backing type。
-- `dst`：新的 Local byte-offset Tile；有符号源对应 `S64`，无符号源对应 `U64`
-  （裸 64 位整型不足以满足该配对）。
-- `element_bits`：per-PE private-GPR 标量，表示元素宽度（bit 数，不是字节数）。
-  其运行时合法值为 `8/16/32/64`，由指令 legality 检查；`0`（硬件零寄存器）是非法宽度。
+参数顺序为 destination、source、element_bits。源有符号索引按符号扩展到 S64,无符号索引按零扩展到 U64,再乘以 `element_bits / 8`;结果保留低 64 位,不做饱和,也不产生溢出 fault。
 
 ### 支持的数据类型
 
-支持索引 Tile 类型 `S32`、`U32`、`S64`、`U64`；目标 Tile 类型为对应的 `S64`/`U64`。
+- `src`(元素索引):S32、U32、S64、U64。
+- `dst`(字节偏移):S64 或 U64。
+- `element_bits`(每 PE 元素位宽):8、16、32 或 64;四位 packed 宽度拒绝。
+- 源与目的共享同一 layout,只能是 RowMajor 或 CUBE_M32;Shared、CUBE_N8、CUBE_M16 拒绝。
 
-| 操作数角色 | 类型要求 |
+### 参数说明
+
+| 参数 | 说明 |
 | --- | --- |
-| `src`（索引） | `S32`/`U32`/`S64`/`U64`，operation type 等于 backing type。 |
-| `dst`（字节偏移） | 有符号源 → `S64`；无符号源 → `U64`。 |
-| `element_bits`（标量） | 每 PE 的元素位宽，运行时取值 `8/16/32/64`。 |
+| `dst` | 输出 Tile;成功调用后写入新的 S64/U64 字节偏移。物理 geometry 与容量独立于源。 |
+| `src` | 输入 Tile,持有 Local 元素索引(S32/U32/S64/U64)。 |
+| `element_bits` | 每 PE 元素位宽(bit),经 `B.IOR` 的私有 GPR 传入;无隐含宽度,零寄存器为非法宽度。 |
 
 ## 使用要求
 
-- `src` 与 `dst` 必须是 `Location::Vec`（持久化 Local）Tile；
-- `src` 与 `dst` 的逻辑 valid shape 必须相同，物理 geometry/capacity 可以独立；
-- 符号性配对（signed→S64，unsigned→U64）必须成立，不能只检查目标是任意 64 位整型；
-- 参数顺序必须与接口声明一致，不要添加接口未声明的操作数。
+- Tile 类型必须满足接口模板约束;
+- 数据类型、形状、有效区域、布局、容量和存储位置必须满足该操作要求;
+- 源与目的必须具有相同的逻辑 valid shape(ValidRow × ValidCol),物理容量与 geometry 可独立;
+- 输入 Tile 必须已初始化,输出 Tile 必须具有足够容量;
+- 参数顺序必须与接口声明一致,不要添加接口未声明的操作数。
 
 ## 约束
 
-- 仅 `RowMajor` 与 `CUBE_M32` 是合法 layout；`Shared`、`CUBE_N8`、`CUBE_M16` 一律拒绝。
-  本仓库 wrapper 目前只发射 `RowMajor` 形式，对 `CUBE_M32` 以编译期约束 fail closed
-  （issue #371 double-CELL b64 映射尚待在 Linx 工具链上对照发布 ASL 验证）。
-- 有符号索引 sign-extend 到 S64、无符号索引 zero-extend 到 U64，再乘以 `element_bits / 8`，
-  保留低 64 位，不做饱和、不产生 overflow fault。
-- `PE_MASK=0000` 在读取、分配和 fault 之前是严格 no-op。
-- bundle 必须是一条终结的 Local `B.IOT`（一个索引源加重命名目标）加一条必需的
-  `B.IOR`（在 `RegSrc0` 绑定 element width）；未使用的 selector/目标编码为零。
+输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的逐项规则;除非本页明确允许,不应假定可原地执行或允许 alias。直接 S64/U64 aliasing 读取的是旧的源负载。
+
+操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束;只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding
 
 | 项目 | 规则 |
 | --- | --- |
-| 有效元素 | 仅对 `src`/`dst` 共同的逻辑 valid shape 定义结果；物理 padding 不是有效数据。 |
-| 物理容量 / SizeCode | 只决定容量，不重新定义逻辑 shape；源与目标容量可独立。 |
-| 输出 padding | 目标物理区域中有效区以外的填充遵循 `B.DATR` 的 pad-value 约定，不可依赖未声明状态。 |
+| 有效元素 | 仅对源和目的共同的有效区域定义结果;未明确规定的 padding 不应读取或依赖。 |
+| 物理容量 / SizeCode | 只决定容量,不重新定义逻辑 shape;源与目的容量各自匹配自身 DataType。 |
+| 输出 padding | 由 `CurrentBundlePadValue` 数值 padding 决定;除非明确规定,否则不可依赖。 |
+
+## 默认值
+
+此页面列出的 C++ 形参没有默认实参;不要把省略某个操作数与传入零值视为等价。
+
+### 编码字段和省略值
+
+- 省略 `B.DATR` 时,PadValue 使用 `Null`,layout 使用 RowMajor;Layout 字段 29/31 分别选择 CUBE_M32/CUBE_M16(CUBE_M16 b64 输出未分配)。
+- `LB0` 给出 `ValidCol`,必须存在且非零;省略 `LB1` 时 `ValidRow=1`,省略 `LB2` 时目的物理列数等于 `ValidCol`。
+- `B.IOR` 必须存在,`RegSrc0` 提供元素位宽;没有隐含宽度或基址。其余字段编码为零。
+- `PE_MASK=0000` 在任何读取、分配和 fault 之前都是严格 no-op。
 
 ## 异常和边界行为
 
-非法索引类型、非法 element width、非法 layout、descriptor/schema 不匹配或逻辑 shape 不一致，
-会在效果发生前被拒绝；目标容量不足走 `Fault_TileAllocation`。TLEA 不引入 overflow、
-访存或 numeric-status fault。合法性/分配 preflight 和源快照先于目标的原子发布；直接
-`S64`/`U64` 别名会读取旧的源 payload。
+不支持的索引类型或元素宽度、非法 layout/descriptor/schema、逻辑 shape 不匹配,会在效果产生前被拒绝;目的容量不足走 `Fault_TileAllocation`。`TLEA` 不引入溢出、访存或数值状态 fault。`PE_MASK=0000` 时不产生状态或内存影响;非法调用不会发布部分输出或部分副作用。padding、alias 及 fault 行为以本页已经列出的约束为准,未明确声明的状态不可依赖。
 
-## 后端能力
+## 结果说明
 
-- JCORE inline-asm wrapper：本仓库已实现（仅 `RowMajor`）。
-- CPU simulator：未实现。
-- AArch64/SME：未实现。
-- LLVM MC / compiler lowering：分别判断，不因 wrapper 存在而推断端到端支持。
-
-详见[统一支持状态表](../../support-status.md)。
+成功调用后,`TLEA` 将源索引缩放为字节偏移并原子发布到目的 Tile 的有效区域;源 Tile 保持不变。完整的合法性/分配预检与源快照先于目的发布完成。输出 padding 和未明确声明的副作用不可依赖。
 
 ## Bundle 组成
 
-开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
+开发者通常直接调用 C++ 接口,无需手工编写 bundle。下面保留对应汇编结构供核对:
 
 ```asm
-BSTART.VEC TLEA, SrcDataType
-B.DATR     PadValue, Layout (optional)
-B.DIM      LB0=ValidCol
-B.DIM      LB1=ValidRow (optional)
-B.DIM      LB2=DstCol (optional)
-B.IOT      IndexTile, mask=PE_MASK, last, ->ByteOffsetTile<TSize>
-B.IOR      ElementBitsGPR, zero, zero, ->zero
+BSTART.VEC  TLEA, SrcDataType
+B.DATR      PadValue, Layout (optional)
+B.DIM       ValidCol, 0, ->LB0
+B.DIM       ValidRow, 0, ->LB1  ; (optional)
+B.DIM       DstCol, 0, ->LB2    ; (optional)
+B.IOT       IndexTile, mask=PE_MASK, last, ->ByteOffsetTile<TSize>
+B.IOR       ElementBitsGPR, zero, zero, ->zero
 BSTOP
 ```
+
+对应编码为 TEPL Mode 1 Function 14(selector `0x02E`)。
 
 ## 使用示例
 
@@ -97,13 +92,21 @@ BSTOP
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-// 源是 Local S32 元素索引；目标是对应的 Local S64 字节偏移（同一逻辑 valid shape）。
+// 逻辑元素索引(S32)缩放为 S64 字节偏移。
 using IndexTile = Tile<Location::Vec, int32_t, 8, 32>;
 using OffsetTile = Tile<Location::Vec, int64_t, 8, 32>;
+using IndexGM = global_tensor<int32_t, RowMajor<8, 32>>;
+using OffsetGM = global_tensor<int64_t, RowMajor<8, 32>>;
+
+int32_t index_data[8 * 32] = {};
+int64_t offset_data[8 * 32] = {};
+IndexGM index_global(index_data);
+OffsetGM offset_global(offset_data);
 IndexTile indices;
 OffsetTile offsets;
-// 每个张量元素 4 字节 (S32/FP32) 时，element_bits = 32。
-TLEA(offsets, indices, 32u);
-```
 
-无符号索引改用 `uint32_t`/`uint64_t` 源并配 `uint64_t` 目标；`element_bits` 按实际元素位宽取 `8/16/32/64`。
+TLOAD(indices, index_global);
+// 针对 16 位(2 字节)元素,将元素索引缩放为字节偏移。
+TLEA(offsets, indices, 16u);
+TSTORE(offset_global, offsets);
+```
