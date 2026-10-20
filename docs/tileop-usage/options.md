@@ -525,6 +525,16 @@ exact TileOP-API checkout through `PTO_TILEOP_API_REVISION`; consumers should
 use capability macros such as `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX` for
 compile-time requirements instead of ordering raw Git hashes.
 
+### Frozen element-if compiler configuration
+
+Model #925 使用的 `#pragma pto element for` generic pipeline 需要 `-O2`、
+`-mllvm -linxv5-enable-generic-element=true` 和配套 Tile register 配置
+`-mllvm -enable-all-vector-as-tilereg=true`。这是 compiler opt-in，不是
+`fixp::Options` 字段。类型/headers 存在不等于指定 compiler/model 组合支持执行。
+固定版本、typed producer、内存/atomic 合同和后续能力边界见
+[Element-if 冻结组合使用手册](element-if.md)；不要把主线 #131/#284 的新能力
+或诊断文本直接套用到旧 compiler。
+
 ## Shared-slot matrix operands
 
 For a CUBE pipeline whose Shared inputs are produced by separate TLSU or
