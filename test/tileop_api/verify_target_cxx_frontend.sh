@@ -12,7 +12,8 @@ trap 'rm -rf "$OUT"' EXIT
 # Use a copied resource tree whose tileop-api subtree is this checkout, so the
 # verification cannot accidentally exercise stale installed headers.
 RESOURCE_DIR="$OUT/clang-resource"
-cp -R "$("$TC_DIR/clang++" -print-resource-dir)" "$RESOURCE_DIR"
+BASE_RESOURCE_DIR=${CLANG_RESOURCE_DIR:-$("$TC_DIR/clang++" -print-resource-dir)}
+cp -R "$BASE_RESOURCE_DIR" "$RESOURCE_DIR"
 rm -rf "$RESOURCE_DIR/include/tileop-api"
 cp -R "$ROOT/include" "$RESOURCE_DIR/include/tileop-api"
 
@@ -51,10 +52,41 @@ for source in RangeSubview.cpp GMov.cpp TileRegionUnary.cpp \
               Issue268CooperativeRowMax.cpp \
               TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
-              SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp; do
+              SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp \
+              RuntimePhysicalCols.cpp; do
   "$TC_DIR/clang++" "${FLAGS[@]}" -fsyntax-only \
     "$ROOT/test/tileop_api/src/$source"
 done
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/RuntimePhysicalCols.cpp" \
+  -o "$OUT/RuntimePhysicalCols.ll"
+python3 - "$OUT/RuntimePhysicalCols.ll" <<'PY_RUNTIME_COLS'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+            if part.startswith("define ") and "runtime_physical_cols" in part)
+operations = [part for part in re.split(r"(?=BSTART\.TEPL)", body)
+              if "BSTART.TEPL" in part]
+runtime_operations = [operation for operation in operations
+                      if "B.DIM $" in operation and ", 0, ->lb2" in operation]
+if len(runtime_operations) != 4:
+    raise SystemExit(
+        f"expected four register-LB2 operations, got {len(runtime_operations)}")
+if sum("B.IOR" in operation for operation in runtime_operations) != 1:
+    raise SystemExit("runtime-geometry fixture lost scalar-fill binding")
+odd = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+           if part.startswith("define ") and "odd_runtime_physical_cols" in part)
+if "BSTART.TEPL" not in odd or "->lb2" not in odd:
+    raise SystemExit("odd runtime PhysicalCol fixture was not emitted")
+defaults = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+                if part.startswith("define ") and "runtime_valid_shape_defaults" in part)
+if defaults.count("BSTART.TEPL") != 2:
+    raise SystemExit("dynamic zero overrides must use instance dimensions, not DYNAMIC=-1")
+PY_RUNTIME_COLS
 
 for source in TileRegionUnary TileRegionCubeSubview Issue166RmsNormB128; do
   "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
@@ -65,7 +97,18 @@ done
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/RangeAssemble.cpp" -o "$OUT/RangeAssemble.ll"
 "$TC_DIR/clang++" "${FLAGS[@]}" -c \
-  "$ROOT/test/tileop_api/src/RangeAssemble.cpp" -o "$OUT/RangeAssemble.o"
+  "$ROOT/test/tileop_api/src/AssemblyLifetime.cpp" -o "$OUT/AssemblyLifetime.o"
+# RangeAssemble contains isolated INIT/MIDDLE syntax probes; only complete
+# sessions are legal object-level programs. Keep escaping OPEN parents negative.
+for mode in TEST_OPEN_ESCAPE TEST_OPEN_STORE; do
+  if "$TC_DIR/clang++" "${FLAGS[@]}" -D"$mode" -c \
+      "$ROOT/test/tileop_api/src/AssemblyLifetime.cpp" \
+      -o "$OUT/$mode.o" >"$OUT/$mode.log" 2>&1; then
+    echo "FAIL: $mode accepted an OPEN assembly parent escape" >&2
+    exit 1
+  fi
+  grep -Fq "cannot use an OPEN B.ASSEMBLE parent" "$OUT/$mode.log"
+done
 python3 - "$OUT/TileRegionUnary.ll" "$OUT/TileRegionCubeSubview.ll" \
           "$OUT/Issue166RmsNormB128.ll" "$OUT/RangeAssemble.ll" <<'PY'
 import re
@@ -115,13 +158,13 @@ operations = [line for line in body.splitlines()
               if "asm sideeffect" in line and "BSTART.TEPL" in line]
 if len(operations) != 3:
     raise SystemExit(f"RangeAssemble: expected 3 TADD operations, got {len(operations)}")
-if "B.IOT $5, $6, mask=1111, last, ->$0" not in operations[0]:
+if "B.IOT $5.reuse, $6.reuse, mask=1111, last, ->$0" not in operations[0]:
     raise SystemExit("RangeAssemble: INIT TADD must allocate its destination")
 if "B.ASSEMBLE ${8:c}, ${9:c}" not in operations[0]:
     raise SystemExit("RangeAssemble: INIT TADD is missing B.ASSEMBLE")
 for operation in operations[1:]:
-    if "B.IOT $4, $5, mask=1111" not in operation or \
-       "B.IOT $7, mask=1111, last" not in operation:
+    if "B.IOT $4.reuse, $5.reuse, mask=1111" not in operation or \
+       "B.IOT $7.reuse, mask=1111, last" not in operation:
         raise SystemExit("RangeAssemble: continuation TADD has invalid binders")
     if "B.ASSEMBLE" not in operation:
         raise SystemExit("RangeAssemble: continuation TADD is missing B.ASSEMBLE")
@@ -461,6 +504,6 @@ PY
 grep -Eiq 'BSTART\.CUBE[[:space:]]+TMATMULMX,[[:space:]]+FP16' "$OUT/MXScaleVariants.dis"
 grep -Eiq 'BSTART\.CUBE[[:space:]]+TMATMULMX\.ACC,[[:space:]]+E4M3' "$OUT/MXScaleVariants.dis"
 grep -Eiq 'BSTART\.CUBE[[:space:]]+TGEMVMX\.BIAS,[[:space:]]+BF16' "$OUT/MXScaleVariants.dis"
-grep -Eq 'B\.IOT[[:space:]]+t#[1-8], t#[1-8], mask=1111' "$OUT/MXScaleVariants.dis"
+grep -Eq 'B\.IOT[[:space:]]+t#[1-8]\.reuse, t#[1-8]\.reuse, mask=1111' "$OUT/MXScaleVariants.dis"
 
 echo "Linx target C++ frontend MX/effective-shape contract: PASS"

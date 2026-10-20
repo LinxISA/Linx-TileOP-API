@@ -795,20 +795,17 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             self.assertIn(spelling, header)
         # A register must never land in the immediate slot of B.DIM.
         self.assertNotIn("B.DIM zero, %[", header)
-        # lb2 must always stay the static immediate form; the only allowed
-        # dynamic lb2 is TPREFETCH's dynamic-GM fallback branch.
+        # lb2 stays immediate unless the public call explicitly supplies a
+        # runtime physical column, or TPREFETCH uses its dynamic-GM fallback.
         dyn_lb2 = [
             line for line in header.split("\n")
             if "->lb2" in line and "B.DIM" in line and "%c" not in line
         ]
-        tprefetch = header[header.index("void TPREFETCH"):]
-        tprefetch = tprefetch[: tprefetch.index("\n}")]
-        self.assertEqual(
-            len(dyn_lb2),
-            tprefetch.count('"B.DIM %[Col], 0, ->lb2\\n"'),
-            "lb2 must be immediate-form everywhere except TPREFETCH's "
-            "dynamic-GM fallback",
-        )
+        self.assertEqual(len(dyn_lb2), 4)
+        self.assertTrue(any('%[pcol], 0, ->lb2' in line for line in dyn_lb2))
+        self.assertTrue(any('%[PhysicalCol], 0, ->lb2' in line
+                            for line in dyn_lb2))
+        self.assertTrue(any('%[Col], 0, ->lb2' in line for line in dyn_lb2))
         # TMATMUL: M stays a runtime register (group_M), N/K are compile-time
         # immediates per resolve_matmul_shape.
         self.assertIn('"B.DIM %[M], 0, ->lb0\\n"', header)
