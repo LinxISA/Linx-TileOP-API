@@ -16,6 +16,9 @@ inline unsigned __builtin_linx_get_thread_idx() { return test_pe_id; }
 #define PTO_TILEOP_SYNC_CORE_EMIT() (++test_sync_calls)
 #include <common/pto_pe_runtime.hpp>
 
+static_assert(sizeof(pto_runtime_group_context) == 32);
+static_assert(PTO_RUNTIME_GROUP_PARTICIPANTS == 4);
+
 static void reset(unsigned contexts, unsigned pe_id) {
   test_context_count = contexts;
   test_pe_id = pe_id;

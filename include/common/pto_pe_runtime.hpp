@@ -6,6 +6,7 @@
 // does not describe a ready/done mailbox or an exit ABI.
 
 #include <stdint.h>
+#include <stddef.h>
 
 // The launcher passes the same entry address and descriptor to all
 // participating PEs. PE-local stack/TLS setup is complete before entry. This
@@ -15,7 +16,8 @@ struct pto_runtime_group_context {
   uint32_t magic;
   uint16_t version;
   uint16_t participant_count;
-  // Both point to four-element arrays indexed by architectural PE id.
+  // Both point to four-element arrays indexed by architectural PE id. State
+  // publication is ordered around the runtime rendezvous.
   volatile uint32_t *state;
   volatile int32_t *result;
   volatile uint32_t *error;
@@ -28,7 +30,17 @@ enum : uint32_t {
   PTO_RUNTIME_GROUP_STATE_RUNNING = 1u,
   PTO_RUNTIME_GROUP_STATE_DONE = 2u,
   PTO_RUNTIME_GROUP_STATE_ABORT = 3u,
+  PTO_RUNTIME_GROUP_PARTICIPANTS = 4u,
 };
+
+static_assert(sizeof(pto_runtime_group_context) == 32,
+              "PTO runtime context ABI drift");
+static_assert(offsetof(pto_runtime_group_context, state) == 8,
+              "PTO runtime context pointer layout drift");
+static_assert(offsetof(pto_runtime_group_context, result) == 16,
+              "PTO runtime context pointer layout drift");
+static_assert(offsetof(pto_runtime_group_context, error) == 24,
+              "PTO runtime context pointer layout drift");
 
 extern "C" void __linx_group_entry(const pto_runtime_group_context *)
     __attribute__((weak, noreturn));
