@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed validation of the exact PTO 0.59.0 release ELF note."""
+"""Fail-closed validation of the exact PTO 0.58.3 ELF note."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ ELF_MACHINE_LINX = 0xE9
 PT_NOTE = 4
 SHT_NOTE = 7
 EXPECTED_DESC = (
-    b'{"encoding_abi":"pto-isa-0.59.0-mode-function-v1",'
+    b'{"encoding_abi":"pto-isa-0.58.3-mode-function-v1",'
     b'"encoding_projection_sha256":'
-    b'"91509080ca656eb124f47830dcb09c50389dc177266b3b8df9d2d11dc37d5697",'
-    b'"release":"0.59.0"}'
+    b'"8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172",'
+    b'"release":"0.58.3"}'
 )
 
 
@@ -138,7 +138,7 @@ def validate(path: Path) -> None:
         require(not identity_desc.endswith(b"\0"),
                 "PTO JSON must not have a trailing NUL")
         require(identity_desc == EXPECTED_DESC,
-                "PTO identity JSON is not the exact 0.59.0 release identity")
+                "PTO identity JSON is not exact 0.58.3")
     require(len(identities) == 1,
             "PTO identity must have exactly one note range")
 
@@ -157,7 +157,7 @@ def main(argv: list[str]) -> int:
     except (OSError, IdentityError, struct.error) as error:
         print(f"FAIL PTO identity: {error}", file=sys.stderr)
         return 1
-    print("PTO ISA 0.59.0 release ELF identity: PASS")
+    print("PTO ISA 0.58.3 ELF identity: PASS")
     return 0
 
 

@@ -444,7 +444,7 @@ Matrix 使用或完整组合不合法，会在 operand consumption、allocation 
 C++ 调用者无需手写汇编；生成代码可按以下结构核对：
 
 ```asm
-BSTART.TMATMUL AType
+BSTART.CUBE TMATMUL, AType
 B.DATR      BType, RMode, Sat
 B.FPATR     PreQuant, Relu, GroupNCode,
             RowMaxEn, GroupMaxEn, RowMaxInit, MaxAbsEn,
@@ -524,20 +524,6 @@ void options_example(D &d, Ds8 &d8, D &c, A &a, B &b,
 exact TileOP-API checkout through `PTO_TILEOP_API_REVISION`; consumers should
 use capability macros such as `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX` for
 compile-time requirements instead of ordering raw Git hashes.
-
-### Element-if compiler options
-
-`#pragma pto element for` 的 generic masked lowering 需要 `-O2` 和
-`-mllvm -linxv5-enable-generic-element=true`；该 opt-in 同时适用于 logical32
-与 logical64，不仅是 F16/U16 的开关。生成 Tile object 时还需配套的
-`-mllvm -enable-all-vector-as-tilereg=true` 配置。带 region 的 `-O0`/`optnone`
-不支持 masked native lowering，缺少 opt-in 时也不会退回旧的 recognizer 或标量循环。
-这些是编译器开关，不是 CUBE `fixp::Options` 字段。
-
-LLVM #131 的 `__LINX_PTO_PE_DOMAIN__` 表示编译器理解 PE-domain 函数注解，
-不表示本仓已经发布同名公共 wrapper。当前头文件尚无 `PTO_PE_DOMAIN(mask)`；
-调用者 PE 选择、Local Tile 边界与完整示例见
-[Element-if 开发者使用手册](element-if.md)。
 
 ## Shared-slot matrix operands
 

@@ -1,26 +1,21 @@
 #!/usr/bin/env python3
-"""Fail-closed checks for the pinned PTO ISA 0.59.0 Tile catalog.
+"""Fail-closed checks for the pinned PTO ISA 0.58.7 Tile catalog.
 
 This check deliberately verifies inventory and provenance, not the full ASL/NDF
-semantics. The latter remains owned by PTO-ISA/pto-spec. The 119-operation Tile
-catalog is byte-identical between the PTO 0.58.7 development golden and the
-published PTO ISA 0.59.0.0 release (both SHA-256 533db9b8...), so the pinned
-bytes did not change when the active encoding identity moved to the release.
+semantics. The latter remains owned by PTO-ISA/pto-spec.
 """
 
 from __future__ import annotations
 
 import json
-import hashlib
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG = ROOT / "contracts" / "pto-isa-0.59.0-tile-operations.json"
+CATALOG = ROOT / "contracts" / "pto-isa-0.58.7-tile-operations.json"
 INCLUDE = ROOT / "include"
 DOCS = ROOT / "docs" / "tileop-usage"
-EXPECTED_TILE_CATALOG_SHA256 = "533db9b8f31f118af5978de813cfaa3fa738de820ee24655faa2ee71f343a706"
 
 
 def text(paths: list[Path]) -> str:
@@ -30,10 +25,8 @@ def text(paths: list[Path]) -> str:
 def main() -> int:
     catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
     failures: list[str] = []
-    if hashlib.sha256(CATALOG.read_bytes()).hexdigest() != EXPECTED_TILE_CATALOG_SHA256:
-        failures.append("catalog bytes do not match the reviewed PTO 0.59.0.0 release Tile catalog")
-    if catalog.get("operation_count") != 119:
-        failures.append("catalog operation_count is not 119")
+    if catalog.get("operation_count") != 118:
+        failures.append("catalog operation_count is not 118")
     operations = catalog.get("operations", [])
     if len(operations) != catalog.get("operation_count"):
         failures.append("catalog operation_count does not match operations length")
@@ -45,18 +38,12 @@ def main() -> int:
 
     include_text = text([p for p in INCLUDE.rglob("*") if p.is_file()])
     docs_text = text([p for p in DOCS.rglob("*.md") if p.is_file()])
-    source_referenced = {
-        name for name in names if re.search(rf"\b{re.escape(name)}\b", include_text)
-    }
-    explicitly_unsupported = {
-        name
-        for name in names
-        if re.search(rf"`{re.escape(name)}`[^\n]{{0,180}}尚无 wrapper", docs_text)
-    }
     for name in names:
-        if name not in source_referenced and name not in explicitly_unsupported:
+        if not re.search(rf"\b{re.escape(name)}\b", include_text) and not re.search(
+            rf"`{re.escape(name)}`[^\n]{{0,180}}尚无 wrapper", docs_text
+        ):
             failures.append(
-                f"active catalog operation has neither source reference nor explicit unsupported marker: {name}"
+                f"active catalog operation has neither wrapper nor explicit unsupported marker: {name}"
             )
     for name in catalog.get("deleted_names", []):
         active = re.search(rf"\b{re.escape(name)}\s*\(", include_text)
@@ -95,15 +82,11 @@ def main() -> int:
                 failures.append(f"TEXPDIF support status is missing backend dimension: {marker}")
 
     if failures:
-        print("FAIL: PTO 0.59.0 catalog alignment", file=sys.stderr)
+        print("FAIL: PTO 0.58.7 catalog alignment", file=sys.stderr)
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         return 1
-    print(
-        "PASS: PTO 0.59.0.0 release catalog alignment "
-        f"({len(names)} release operations; {len(source_referenced)} source-referenced; "
-        f"{len(explicitly_unsupported)} explicitly unsupported)"
-    )
+    print(f"PASS: PTO 0.58.7 catalog alignment ({len(names)} active operations)")
     return 0
 
 

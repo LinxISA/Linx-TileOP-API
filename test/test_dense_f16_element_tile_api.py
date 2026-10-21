@@ -282,7 +282,7 @@ int main() {
                       if body.startswith("define ") and "copy_dense_partI" in body]
             self.assertEqual(len(bodies), 4)
             for body in bodies:
-                self.assertIn("BSTART.TMOV", body)
+                self.assertIn("BSTART.TLSU TMOV", body)
                 self.assertIn("B.DATR CUBE_M32, Zero", body)
                 self.assertIn("B.SUBVIEW", body)
                 self.assertIn("B.DIM zero, ${6:c}, ->lb2", body)
@@ -293,7 +293,7 @@ int main() {
                       if body.startswith("define ") and "copy_dense_tileI" in body]
             self.assertEqual(len(direct), 4)
             for body in direct:
-                self.assertIn("BSTART.TMOV", body)
+                self.assertIn("BSTART.TLSU TMOV", body)
                 self.assertIn("B.DATR CUBE_M32, Zero", body)
                 self.assertIn("B.DIM zero, ${6:c}, ->lb2", body)
                 self.assertRegex(body, r"i32 2, i32 32, i32 2, i32 29\)")

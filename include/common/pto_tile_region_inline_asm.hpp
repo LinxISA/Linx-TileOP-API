@@ -25,7 +25,7 @@ pto_region_unary(Out &dst, region::SubTileView<Parent, SubTile> &src) {
         "B.DIM zero, %c3, ->lb0\n"
         "B.DIM zero, %c4, ->lb1\n"
         "B.DIM zero, %c5, ->lb2\n"
-        "B.IOT %2.reuse, mask=1111, last, ->%0<%Z6>\n"
+        "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"
         "B.SUBVIEW 0, %9, 0, %c7\n"
         : [Dst] "=Tr"(dst.data())
         : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -60,7 +60,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar(
         "B.DIM zero, %c3, ->lb0\n"
         "B.DIM zero, %c4, ->lb1\n"
         "B.DIM zero, %c5, ->lb2\n"
-        "B.IOT %2.reuse, mask=1111, last, ->%0<%Z6>\n"
+        "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"
         "B.SUBVIEW 0, %9, 0, %c7\n"
         "B.IOR [%8],[]\n"
         : [Dst] "=Tr"(dst.data())
@@ -149,7 +149,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
   "B.DIM zero, %c3, ->lb0\n"                                                    \
   "B.DIM zero, %c4, ->lb1\n"                                                    \
   "B.DIM zero, %c5, ->lb2\n"                                                \
-  "B.IOT %2.reuse, mask=1111, last, ->%0<%Z6>\n"                                   \
+  "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"                                   \
   "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
 #define PTO_REGION_UNARY_ASSEMBLY_INPUTS                                   \
   "i"(type_traits<typename In::DType>::TypeCode),                          \
@@ -174,7 +174,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_assemble(
                  "B.DIM zero, %c3, ->lb0\n"
                  "B.DIM zero, %c4, ->lb1\n"
                  "B.DIM zero, %c5, ->lb2\n"
-                 "B.IOT %2.reuse, %0.reuse, mask=1111, last\n"
+                 "B.IOT %2, %0, mask=1111, last\n"
                  "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                  :
                  : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -254,7 +254,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
   "B.DIM zero, %c3, ->lb0\n"                                                  \
   "B.DIM zero, %c4, ->lb1\n"                                                  \
   "B.DIM zero, %c5, ->lb2\n"                                              \
-  "B.IOT %2.reuse, mask=1111, last, ->%0<%Z6>\n"                                 \
+  "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"                                 \
   "B.IOR [%[Scalar]],[]\n"                                                 \
   "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
 #define PTO_REGION_SCALAR_ASSEMBLY_INPUTS                                  \
@@ -279,7 +279,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_assemble(
                  "B.DIM zero, %c3, ->lb0\n"
                  "B.DIM zero, %c4, ->lb1\n"
                  "B.DIM zero, %c5, ->lb2\n"
-                 "B.IOT %2.reuse, %0.reuse, mask=1111, last\n"
+                 "B.IOT %2, %0, mask=1111, last\n"
                  "B.IOR [%[Scalar]],[]\n"
                  "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                  :
@@ -375,7 +375,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
   "B.DIM zero, %c3, ->lb0\n"                                                  \
   "B.DIM zero, %c4, ->lb1\n"                                                  \
   "B.DIM zero, %c5, ->lb2\n"                                              \
-  "B.IOT %2.reuse, mask=1111, last, ->%0<%Z6>\n"                                 \
+  "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"                                 \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.IOR [%14],[]\n"                                                       \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
@@ -384,7 +384,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_scalar_subview_assemble(
   "B.DIM zero, %c3, ->lb0\n"                                                  \
   "B.DIM zero, %c4, ->lb1\n"                                                  \
   "B.DIM zero, %c5, ->lb2\n"                                              \
-  "B.IOT %2.reuse, %0.reuse, mask=1111, last\n"                                       \
+  "B.IOT %2, %0, mask=1111, last\n"                                       \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.IOR [%14],[]\n"                                                       \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
@@ -502,7 +502,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
   "B.DIM zero, %c3, ->lb0\n"                                                  \
   "B.DIM zero, %c4, ->lb1\n"                                                  \
   "B.DIM zero, %c5, ->lb2\n"                                              \
-  "B.IOT %2.reuse, mask=1111, last, ->%0<%Z6>\n"                                 \
+  "B.IOT %2, mask=1111, last, ->%0<%Z6>\n"                                 \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_UNARY_SUBVIEW_CONT_BODY                                  \
@@ -510,7 +510,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_unary_subview_assemble(
   "B.DIM zero, %c3, ->lb0\n"                                                  \
   "B.DIM zero, %c4, ->lb1\n"                                                  \
   "B.DIM zero, %c5, ->lb2\n"                                              \
-  "B.IOT %2.reuse, %0.reuse, mask=1111, last\n"                                       \
+  "B.IOT %2, %0, mask=1111, last\n"                                       \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_UNARY_SUBVIEW_ASSEMBLY_INPUTS                           \
@@ -705,7 +705,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tmov_assemble(
                 "fragment");
   const uintptr_t offset = dst.range_base_units();
 #define PTO_REGION_TMOV_PREFIX                                               \
-  "BSTART.TMOV %D[DataType]\n"                                      \
+  "BSTART.TLSU TMOV, %D[DataType]\n"                                      \
   PTO_TMOV_LAYOUT_ASM                                         \
   "B.DIM zero, %c[ValidCol], ->lb0\n"                                     \
   "B.DIM zero, %c[ValidRow], ->lb1\n"                                     \
@@ -722,15 +722,15 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tmov_assemble(
   [ElemLayout] "i"(local_layout_code_v<SubTile>)
   if constexpr (Init) {
     asm volatile(PTO_REGION_TMOV_PREFIX
-                 "B.IOT %[Src].reuse, mask=1111, last, ->%[Dst]<%Z[ParentSize]>\n"
+                 "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[ParentSize]>\n"
                  PTO_REGION_TMOV_ASSEMBLE
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
                  : PTO_REGION_TMOV_INPUTS
                  : "memory");
   } else {
     asm volatile(PTO_REGION_TMOV_PREFIX
-                 "B.IOT %[Src].reuse, mask=1111, last\n"
-                 "B.IOT %[Dst].reuse, mask=1111\n"
+                 "B.IOT %[Src], mask=1111, last\n"
+                 "B.IOT %[Dst], mask=1111\n"
                  PTO_REGION_TMOV_ASSEMBLE
                  :
                  : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -845,7 +845,7 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
   "B.DIM zero, %c4, ->lb0\n"                                               \
   "B.DIM zero, %c5, ->lb1\n"
 #define PTO_REGION_TCVT_ASSEMBLY_SUFFIX                                    \
-  "B.IOT %3.reuse, mask=1111, last, ->%0<%Z7>\n"                                 \
+  "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"                                 \
   "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
 #define PTO_REGION_TCVT_ASSEMBLY_INPUTS                                    \
   "i"(type_traits<typename In::DType>::TypeCode),                           \
@@ -878,7 +878,7 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
     // record has L=1). The math input shares the final record.
     if constexpr (SourceCubeM) {
       asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
-                   "B.IOT %3.reuse, %0.reuse, mask=1111, last\n"
+                   "B.IOT %3, %0, mask=1111, last\n"
                    "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                    :
                    : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -887,7 +887,7 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
     } else {
       asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
                    "B.DIM zero, %c6, ->lb2\n"
-                   "B.IOT %3.reuse, %0.reuse, mask=1111, last\n"
+                   "B.IOT %3, %0, mask=1111, last\n"
                    "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                    :
                    : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -979,7 +979,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
   "B.DIM zero, %c6, ->lb2\n"                                               \
-  "B.IOT %3.reuse, mask=1111, last, ->%0<%Z7>\n"                                 \
+  "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"                                 \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_TCVT_SUBVIEW_CONT_BODY                                   \
@@ -988,7 +988,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
   "B.DIM zero, %c6, ->lb2\n"                                               \
-  "B.IOT %3.reuse, %0.reuse, mask=1111, last\n"                                       \
+  "B.IOT %3, %0, mask=1111, last\n"                                       \
   "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
   "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS                            \
@@ -1087,7 +1087,7 @@ TCVT(Out &dst, region::SubTileView<Parent, SubTile> &src) {
         "B.DATR %D2, RNONE\n"
         "B.DIM zero, %c4, ->lb0\n"
         "B.DIM zero, %c5, ->lb1\n"
-        "B.IOT %3.reuse, mask=1111, last, ->%0<%Z6>\n"
+        "B.IOT %3, mask=1111, last, ->%0<%Z6>\n"
         "B.SUBVIEW 0, %7, 0, %c8\n"
         : [Dst] "=Tr"(dst.data())
         : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -1105,7 +1105,7 @@ TCVT(Out &dst, region::SubTileView<Parent, SubTile> &src) {
         "B.DIM zero, %c4, ->lb0\n"
         "B.DIM zero, %c5, ->lb1\n"
         "B.DIM zero, %c6, ->lb2\n"
-        "B.IOT %3.reuse, mask=1111, last, ->%0<%Z7>\n"
+        "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"
         "B.SUBVIEW 0, %8, 0, %c9\n"
         : [Dst] "=Tr"(dst.data())
         : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -1149,7 +1149,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary(
       "B.DIM zero, %c4, ->lb0\n"
       "B.DIM zero, %c5, ->lb1\n"
       "B.DIM zero, %c6, ->lb2\n"
-      "B.IOT %2.reuse, %3.reuse, mask=1111, last, ->%0<%Z7>\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
       "B.SUBVIEW 0, %8, 0, %c11\n"
       "B.SUBVIEW 1, %9, 0, %c11\n"
       : [Dst] "=Tr"(dst.data())
@@ -1185,7 +1185,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary(
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %2.reuse, %6.reuse, mask=1111, last, ->%0<%Z9>\n"
+      "B.IOT %2, %6, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 0, %7, 0, %c8\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -1218,7 +1218,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary(
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %6.reuse, %2.reuse, mask=1111, last, ->%0<%Z9>\n"
+      "B.IOT %6, %2, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 1, %7, 0, %c8\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),
@@ -1319,7 +1319,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_expand(
       "B.DIM zero, %c4, ->lb0\n"
       "B.DIM zero, %c5, ->lb1\n"
       "B.DIM zero, %c6, ->lb2\n"
-      "B.IOT %2.reuse, %3.reuse, mask=1111, last, ->%0<%Z7>\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
       "B.SUBVIEW 0, %8, 0, %c11\n"
       "B.SUBVIEW 1, %9, 0, %c14\n"
       ".if %c12 == 29\n"
@@ -1384,7 +1384,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %2.reuse, %6.reuse, mask=1111, last, ->%0<%Z9>\n"
+      "B.IOT %2, %6, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 0, %7, 0, %c8\n"
       ".if %c11 == 29\n"
       ".if %c12 == 0\n"
@@ -1447,7 +1447,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %6.reuse, %2.reuse, mask=1111, last, ->%0<%Z9>\n"
+      "B.IOT %6, %2, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 1, %7, 0, %c8\n"
       ".if %c11 == 29\n"
       ".if %c12 == 0\n"
@@ -1498,7 +1498,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %2.reuse, %6.reuse, mask=1111, last, ->%0<%Z9>\n"
+      "B.IOT %2, %6, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 0, %7, 0, %c8\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -1537,7 +1537,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %6.reuse, %2.reuse, mask=1111, last, ->%0<%Z9>\n"
+      "B.IOT %6, %2, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 1, %7, 0, %c8\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),
@@ -1645,7 +1645,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
       "B.DIM zero, %c4, ->lb0\n"
       "B.DIM %[DynValidRow], 0, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %2.reuse, %3.reuse, mask=1111, last, ->%0<%Z6>\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z6>\n"
       "B.SUBVIEW 1, %7, 0, %c9\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode),
@@ -1664,7 +1664,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
       "B.DIM zero, %c4, ->lb0\n"
       "B.DIM zero, %c5, ->lb1\n"
       "B.DIM zero, %c6, ->lb2\n"
-      "B.IOT %2.reuse, %3.reuse, mask=1111, last, ->%0<%Z7>\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
       "B.SUBVIEW 1, %8, 0, %c10\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode),
@@ -1704,7 +1704,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
       "B.DIM zero, %c4, ->lb0\n"
       "B.DIM %[DynValidRow], 0, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
-      "B.IOT %2.reuse, %3.reuse, mask=1111, last, ->%0<%Z6>\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z6>\n"
       "B.SUBVIEW 0, %7, 0, %c9\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -1723,7 +1723,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
       "B.DIM zero, %c4, ->lb0\n"
       "B.DIM zero, %c5, ->lb1\n"
       "B.DIM zero, %c6, ->lb2\n"
-      "B.IOT %2.reuse, %3.reuse, mask=1111, last, ->%0<%Z7>\n"
+      "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
       "B.SUBVIEW 0, %8, 0, %c10\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -1769,7 +1769,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
         "B.DIM zero, %c4, ->lb0\n"
         "B.DIM %[DynValidRow], 0, ->lb1\n"
         "B.DIM zero, %c5, ->lb2\n"
-        "B.IOT %2.reuse, %3.reuse, mask=1111, last, ->%0<%Z6>\n"
+        "B.IOT %2, %3, mask=1111, last, ->%0<%Z6>\n"
         "B.SUBVIEW 0, %7, 0, %c10\n"
         "B.SUBVIEW 1, %8, 0, %c10\n"
         : [Dst] "=Tr"(dst.data())
@@ -1789,7 +1789,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
         "B.DIM zero, %c4, ->lb0\n"
         "B.DIM zero, %c5, ->lb1\n"
         "B.DIM zero, %c6, ->lb2\n"
-        "B.IOT %2.reuse, %3.reuse, mask=1111, last, ->%0<%Z7>\n"
+        "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"
         "B.SUBVIEW 0, %8, 0, %c11\n"
         "B.SUBVIEW 1, %9, 0, %c11\n"
         : [Dst] "=Tr"(dst.data())
@@ -1889,7 +1889,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
   "B.DIM zero, %c6, ->lb2\n"                                               \
-  "B.IOT %2.reuse, %3.reuse, mask=1111, last, ->%0<%Z7>\n"                             \
+  "B.IOT %2, %3, mask=1111, last, ->%0<%Z7>\n"                             \
   "B.SUBVIEW 0, %8, 0, %c12\n"                                             \
   "B.SUBVIEW 1, %9, 0, %c12\n"                                             \
   "B.ASSEMBLE %c14, %c15, %10, 0, %c13\n"
@@ -1898,10 +1898,10 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble(
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
   "B.DIM zero, %c6, ->lb2\n"                                               \
-  "B.IOT %2.reuse, %3.reuse, mask=1111\n"                                             \
+  "B.IOT %2, %3, mask=1111\n"                                             \
   "B.SUBVIEW 0, %8, 0, %c12\n"                                             \
   "B.SUBVIEW 1, %9, 0, %c12\n"                                             \
-  "B.IOT %0.reuse, mask=1111, last\n"                                           \
+  "B.IOT %0, mask=1111, last\n"                                           \
   "B.ASSEMBLE %c14, %c15, %10, 0, %c13\n"
 #define PTO_REGION_BINARY_ASSEMBLY_INPUTS                                  \
   "i"(type_traits<typename SubTile0::DType>::TypeCode),                    \

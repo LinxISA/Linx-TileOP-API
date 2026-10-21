@@ -37,7 +37,7 @@ class WeightTLOADContractTest(unittest.TestCase):
         end = ASM.index("// TLOAD_ASS: GM -> an already-associated Shared Tile", start)
         block = ASM[start:end]
         for command in (
-            '"BSTART.TLOAD %D[SrcType]\\n"',
+            '"BSTART.TLSU TLOAD, %D[SrcType]\\n"',
             '"B.DATR layout%c[WeightLayout], DTYPE_NONE, Zero\\n"',
             '"B.DIM %[ValidK], 0, ->lb0\\n"',
             '"B.DIM %[ValidN], 0, ->lb1\\n"',

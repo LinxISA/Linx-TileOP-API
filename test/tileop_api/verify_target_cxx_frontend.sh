@@ -284,12 +284,12 @@ PY
 # zero-instruction and non-owning.
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/SharedRoleView.cpp" -o "$OUT/SharedRoleView.ll"
-grep -q 'BSTART.TMATMUL' "$OUT/SharedRoleView.ll"
+grep -q 'BSTART.CUBE TMATMUL' "$OUT/SharedRoleView.ll"
 if grep -Eq 'BSTART\.(TLOAD|TMOV)' "$OUT/SharedRoleView.ll"; then
   echo "FAIL: SharedRoleView emitted a load or Shared move" >&2
   exit 1
 fi
-if [[ $(grep -c 'BSTART.TMATMUL' "$OUT/SharedRoleView.ll") -ne 2 ]]; then
+if [[ $(grep -c 'BSTART.CUBE TMATMUL' "$OUT/SharedRoleView.ll") -ne 2 ]]; then
   echo "FAIL: SharedRoleView did not emit exactly two TMATMUL operations" >&2
   exit 1
 fi
@@ -439,7 +439,7 @@ for name, counts in expected.items():
         raise SystemExit(f"missing object-producing function {name}")
     calls = [line for line in body.splitlines()
              if "asm sideeffect" in line and
-             ("BSTART.TMATMULMX" in line or "BSTART.TGEMVMX" in line)]
+             ("BSTART.CUBE TMATMULMX" in line or "BSTART.CUBE TGEMVMX" in line)]
     if len(calls) != 3:
         raise SystemExit(f"{name}: expected 3 MX family calls, got {len(calls)}")
     constraints = [line.split('"', 4)[3] for line in calls]
@@ -450,7 +450,7 @@ for name, counts in expected.items():
 
 post = next(part for part in functions if "carrier_postprocess_all_sources" in part)
 post_calls = [line for line in post.splitlines()
-              if "asm sideeffect" in line and "BSTART.TMATMULMX" in line]
+              if "asm sideeffect" in line and "BSTART.CUBE TMATMULMX" in line]
 if len(post_calls) != 1:
     raise SystemExit("postprocess carrier must emit exactly one MX call")
 constraints = post_calls[0].split('"', 4)[3]
