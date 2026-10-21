@@ -3,73 +3,73 @@
     {
       "engine": "CUBE",
       "function": 0,
-      "mnemonic": "BSTART.TMATMUL",
+      "mnemonic": "BSTART.CUBE TMATMUL",
       "name": "TMATMUL"
     },
     {
       "engine": "CUBE",
       "function": 1,
-      "mnemonic": "BSTART.TMATMUL.BIAS",
+      "mnemonic": "BSTART.CUBE TMATMUL.BIAS",
       "name": "TMATMUL_BIAS"
     },
     {
       "engine": "CUBE",
       "function": 2,
-      "mnemonic": "BSTART.TMATMUL.ACC",
+      "mnemonic": "BSTART.CUBE TMATMUL.ACC",
       "name": "TMATMUL_ACC"
     },
     {
       "engine": "CUBE",
       "function": 4,
-      "mnemonic": "BSTART.TMATMULMX",
+      "mnemonic": "BSTART.CUBE TMATMULMX",
       "name": "TMATMUL_MX"
     },
     {
       "engine": "CUBE",
       "function": 5,
-      "mnemonic": "BSTART.TMATMULMX.BIAS",
+      "mnemonic": "BSTART.CUBE TMATMULMX.BIAS",
       "name": "TMATMUL_MX_BIAS"
     },
     {
       "engine": "CUBE",
       "function": 6,
-      "mnemonic": "BSTART.TMATMULMX.ACC",
+      "mnemonic": "BSTART.CUBE TMATMULMX.ACC",
       "name": "TMATMUL_MX_ACC"
     },
     {
       "engine": "CUBE",
       "function": 16,
-      "mnemonic": "BSTART.TGEMV",
+      "mnemonic": "BSTART.CUBE TGEMV",
       "name": "TGEMV"
     },
     {
       "engine": "CUBE",
       "function": 17,
-      "mnemonic": "BSTART.TGEMV.BIAS",
+      "mnemonic": "BSTART.CUBE TGEMV.BIAS",
       "name": "TGEMV_BIAS"
     },
     {
       "engine": "CUBE",
       "function": 18,
-      "mnemonic": "BSTART.TGEMV.ACC",
+      "mnemonic": "BSTART.CUBE TGEMV.ACC",
       "name": "TGEMV_ACC"
     },
     {
       "engine": "CUBE",
       "function": 20,
-      "mnemonic": "BSTART.TGEMVMX",
+      "mnemonic": "BSTART.CUBE TGEMVMX",
       "name": "TGEMV_MX"
     },
     {
       "engine": "CUBE",
       "function": 21,
-      "mnemonic": "BSTART.TGEMVMX.BIAS",
+      "mnemonic": "BSTART.CUBE TGEMVMX.BIAS",
       "name": "TGEMV_MX_BIAS"
     },
     {
       "engine": "CUBE",
       "function": 22,
-      "mnemonic": "BSTART.TGEMVMX.ACC",
+      "mnemonic": "BSTART.CUBE TGEMVMX.ACC",
       "name": "TGEMV_MX_ACC"
     }
   ],
@@ -79,17 +79,12 @@
     "TADDSC",
     "TALLOC",
     "TAXPY",
-    "TCONCAT",
     "TDEINTERLEAVE",
-    "TDEQUANT",
     "TFILLPAD",
     "TFMOD",
     "TFMODS",
     "TFREE",
-    "TEXTRACT",
     "TGATHERB",
-    "THISTOGRAM",
-    "TINSERT",
     "TINTERLEAVE",
     "TLRELU",
     "TPARTADD",
@@ -101,63 +96,40 @@
     "TPOP",
     "TPRELU",
     "TPUSH",
-    "TQUANT",
+    "TRANDOM",
     "TRESHAPE",
-    "TSORT",
     "TSORT32",
-    "TTRANS",
-    "TMRGSORT"
+    "TSUBC",
+    "TSUBSC",
+    "TTRANS"
   ],
   "profile": "v0.58",
   "pto_source": {
-    "commit": "b0165320a4b575b18d2f4d93faf40178f661ab49",
-    "content_sha256": "a3e71975e7f753864f7ec09c57515e60f5a6e3e72dfdbce8e444c815a20b2835",
-    "development_lock": {
-      "catalog_sha256_matches_release": true,
-      "commit": "f0a876e449a95d26841c5ee7affb4c905ebc5f5b",
-      "development_manifest": {
-        "path": "spec/development-manifest.json",
-        "sha256": "0c6d0b2a1ec0b49e32e13971e751a5ea19946351a3880bfdfcef0f50351944f7"
-      },
-      "note": "The LinxISA v0.58 authority locked the PTO development golden; its Tile catalog bytes equal the 0.59.0.0 release Tile catalog (both SHA-256 533db9b8...), so the v0.58 engine projection remains valid against the published release.",
-      "release": "0.58.7",
-      "tree": "fe9e8e050375fbce3f526d08acca13c37cd15830"
-    },
-    "encoding_abi": "pto-isa-0.59.0-mode-function-v1",
-    "encoding_projection_sha256": "91509080ca656eb124f47830dcb09c50389dc177266b3b8df9d2d11dc37d5697",
-    "publication_version": "0.59.0.0",
-    "release": "0.59.0",
-    "release_manifest": {
-      "path": "spec/release-manifest.json",
-      "sha256": "3c6b20623e73822c0bd26021c10beb233b8809328b5515f57609eadad1749dc4"
-    },
-    "release_tag": "v0.59.0.0",
+    "commit": "e599a3d36ebfad43362ff591ea5e128816c684c7",
+    "content_sha256": "f299fe3d256c5d071e57bb4aaa2be2de2e4a386ae090048df1f73ae92d392678",
+    "encoding_abi": "pto-isa-0.58.3-mode-function-v1",
+    "encoding_projection_sha256": "8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172",
+    "release": "0.58.3",
     "repo": "https://github.com/PTO-ISA/pto-spec.git",
-    "specification_status": "draft",
-    "tile_catalog": {
-      "count": 119,
-      "path": "spec/catalog/tile-operations.json",
-      "sha256": "533db9b8f31f118af5978de813cfaa3fa738de820ee24655faa2ee71f343a706"
-    },
-    "tree": "31ff0c2d39cbed714baf5be7929bfd06887be9fb"
+    "tree": "abb6899d2e664e378ac9c1b77062670daa4d31b4"
   },
-  "schema": "linx-tileop-api.engine-ops-projection.v2",
+  "schema": "linx-tileop-api.engine-ops-projection.v1",
   "semantic_engine_counts": {
     "CUBE": 12,
-    "SFU": 47,
-    "TLSU": 28,
-    "VEC": 32
+    "SFU": 57,
+    "TLSU": 10,
+    "VEC": 31
   },
   "source": {
-    "commit": "f77a8960f61f97c264a90b7aee757f99891b0943",
+    "commit": "dd52a2e579d8058c0d8e33043e705122b340e73f",
     "path": "isa/v0.58/linxisa-v0.58.json",
-    "release": "0.58.7",
+    "release": "0.58.3",
     "repo": "https://github.com/LinxISA/linx-isa",
-    "sha256": "51ca9be275518d29ec48bed570b7a9bd441a65b9c5e6d4f79072f650ee732925",
-    "tree": "da085d3f000a5b92031c9694024dc9a7f3cdaa89"
+    "sha256": "34ecbcfa075166490b622647eb53c13a9c360848d6c7acb2e034d3e47f8c9a8a",
+    "tree": "1cfc7343e714489f95f67592475e8b9f079241ee"
   },
   "tepl_carrier": {
-    "accepted_selector_count": 79,
+    "accepted_selector_count": 87,
     "canonical_aliases": [
       "BSTART.VEC",
       "BSTART.SFU"
@@ -365,6 +337,14 @@
       "logical_selector": 28,
       "mode": 0,
       "name": "TFMA"
+    },
+    {
+      "classification": "elementwise-tile-tile",
+      "engine": "SFU",
+      "function": 29,
+      "logical_selector": 29,
+      "mode": 0,
+      "name": "TEXPDIF"
     },
     {
       "classification": "tile-scalar-and-immediate",
@@ -711,6 +691,46 @@
       "name": "TCOLARGMIN"
     },
     {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 0,
+      "logical_selector": 96,
+      "mode": 3,
+      "name": "TCONCAT"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 2,
+      "logical_selector": 98,
+      "mode": 3,
+      "name": "TEXTRACT"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 3,
+      "logical_selector": 99,
+      "mode": 3,
+      "name": "TINSERT"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 4,
+      "logical_selector": 100,
+      "mode": 3,
+      "name": "TIMG2COL"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 5,
+      "logical_selector": 101,
+      "mode": 3,
+      "name": "TFILLPAD"
+    },
+    {
       "classification": "irregular-and-complex",
       "engine": "SFU",
       "function": 6,
@@ -729,6 +749,54 @@
     {
       "classification": "irregular-and-complex",
       "engine": "SFU",
+      "function": 8,
+      "logical_selector": 104,
+      "mode": 3,
+      "name": "THISTOGRAM"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 10,
+      "logical_selector": 106,
+      "mode": 3,
+      "name": "TQUANT"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 11,
+      "logical_selector": 107,
+      "mode": 3,
+      "name": "TDEQUANT"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 12,
+      "logical_selector": 108,
+      "mode": 3,
+      "name": "TSORT"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
+      "function": 13,
+      "logical_selector": 109,
+      "mode": 3,
+      "name": "TMRGSORT"
+    },
+    {
+      "classification": "layout-and-rearrangement",
+      "engine": "SFU",
+      "function": 14,
+      "logical_selector": 110,
+      "mode": 3,
+      "name": "TTRANS"
+    },
+    {
+      "classification": "irregular-and-complex",
+      "engine": "SFU",
       "function": 15,
       "logical_selector": 111,
       "mode": 3,
@@ -743,115 +811,91 @@
       "name": "TSCATTER"
     },
     {
-      "classification": "layout-and-rearrangement",
+      "classification": "irregular-and-complex",
       "engine": "SFU",
-      "function": 21,
-      "logical_selector": 117,
+      "function": 17,
+      "logical_selector": 113,
       "mode": 3,
-      "name": "TPERMUTE"
+      "name": "TPARTADD"
     },
     {
-      "classification": "layout-and-rearrangement",
+      "classification": "irregular-and-complex",
       "engine": "SFU",
-      "function": 22,
-      "logical_selector": 118,
+      "function": 18,
+      "logical_selector": 114,
       "mode": 3,
-      "name": "TSHUF"
+      "name": "TPARTMUL"
     },
     {
-      "classification": "layout-and-rearrangement",
+      "classification": "irregular-and-complex",
       "engine": "SFU",
-      "function": 23,
-      "logical_selector": 119,
+      "function": 19,
+      "logical_selector": 115,
       "mode": 3,
-      "name": "TPACK"
+      "name": "TPARTMAX"
     },
     {
-      "classification": "layout-and-rearrangement",
+      "classification": "irregular-and-complex",
       "engine": "SFU",
-      "function": 24,
-      "logical_selector": 120,
+      "function": 20,
+      "logical_selector": 116,
       "mode": 3,
-      "name": "TUNPACK"
-    },
-    {
-      "classification": "layout-and-rearrangement",
-      "engine": "SFU",
-      "function": 30,
-      "logical_selector": 126,
-      "mode": 3,
-      "name": "TGPR2T"
-    },
-    {
-      "classification": "elementwise-tile-tile",
-      "engine": "SFU",
-      "function": 29,
-      "logical_selector": 29,
-      "mode": 0,
-      "name": "TEXPDIF"
-    },
-    {
-      "classification": "tile-scalar-and-immediate",
-      "engine": "VEC",
-      "function": 14,
-      "logical_selector": 46,
-      "mode": 1,
-      "name": "TLEA"
+      "name": "TPARTMIN"
     }
   ],
   "tlsu_ops": [
     {
       "engine": "TLSU",
       "function": 0,
-      "mnemonic": "BSTART.TLOAD",
+      "mnemonic": "BSTART.TLSU TLOAD",
       "name": "TLOAD"
     },
     {
       "engine": "TLSU",
       "function": 1,
-      "mnemonic": "BSTART.TSTORE",
+      "mnemonic": "BSTART.TLSU TSTORE",
       "name": "TSTORE"
     },
     {
       "engine": "TLSU",
       "function": 2,
-      "mnemonic": "BSTART.TMOV",
+      "mnemonic": "BSTART.TLSU TMOV",
       "name": "TMOV"
     },
     {
       "engine": "TLSU",
       "function": 3,
-      "mnemonic": "BSTART.TPREFETCH",
+      "mnemonic": "BSTART.TLSU TPREFETCH",
       "name": "TPREFETCH"
     },
     {
       "engine": "TLSU",
       "function": 4,
-      "mnemonic": "BSTART.MGATHER",
+      "mnemonic": "BSTART.TLSU MGATHER",
       "name": "MGATHER"
     },
     {
       "engine": "TLSU",
       "function": 5,
-      "mnemonic": "BSTART.MSCATTER",
+      "mnemonic": "BSTART.TLSU MSCATTER",
       "name": "MSCATTER"
     },
     {
       "engine": "TLSU",
       "function": 6,
-      "mnemonic": "BSTART.MGATHER.MASK",
+      "mnemonic": "BSTART.TLSU MGATHER.MASK",
       "name": "MGATHER_MASK"
     },
     {
       "engine": "TLSU",
       "function": 7,
-      "mnemonic": "BSTART.MSCATTER.MASK",
+      "mnemonic": "BSTART.TLSU MSCATTER.MASK",
       "name": "MSCATTER_MASK"
     },
     {
       "engine": "TLSU",
       "function": 8,
-      "mnemonic": "BSTART.MGATHER.CAS",
+      "mnemonic": "BSTART.TLSU MGATHER.CAS",
       "name": "MGATHER_CAS"
     },
     {
@@ -859,114 +903,6 @@
       "function": 13,
       "mnemonic": "BSTART.GMOV",
       "name": "GMOV"
-    },
-    {
-      "engine": "TLSU",
-      "function": 9,
-      "mnemonic": "BSTART.MGATHER.EXCH",
-      "name": "MGATHER_EXCH"
-    },
-    {
-      "engine": "TLSU",
-      "function": 10,
-      "mnemonic": "BSTART.MGATHER.MAX",
-      "name": "MGATHER_MAX"
-    },
-    {
-      "engine": "TLSU",
-      "function": 11,
-      "mnemonic": "BSTART.MGATHER.MIN",
-      "name": "MGATHER_MIN"
-    },
-    {
-      "engine": "TLSU",
-      "function": 12,
-      "mnemonic": "BSTART.MGATHER.ADD",
-      "name": "MGATHER_ADD"
-    },
-    {
-      "engine": "TLSU",
-      "function": 14,
-      "mnemonic": "BSTART.MGATHER.INC",
-      "name": "MGATHER_INC"
-    },
-    {
-      "engine": "TLSU",
-      "function": 15,
-      "mnemonic": "BSTART.MGATHER.DEC",
-      "name": "MGATHER_DEC"
-    },
-    {
-      "engine": "TLSU",
-      "function": 16,
-      "mnemonic": "BSTART.MGATHER.AND",
-      "name": "MGATHER_AND"
-    },
-    {
-      "engine": "TLSU",
-      "function": 17,
-      "mnemonic": "BSTART.MGATHER.OR",
-      "name": "MGATHER_OR"
-    },
-    {
-      "engine": "TLSU",
-      "function": 18,
-      "mnemonic": "BSTART.MGATHER.XOR",
-      "name": "MGATHER_XOR"
-    },
-    {
-      "engine": "TLSU",
-      "function": 19,
-      "mnemonic": "BSTART.MSCATTER.MAX",
-      "name": "MSCATTER_MAX"
-    },
-    {
-      "engine": "TLSU",
-      "function": 20,
-      "mnemonic": "BSTART.MSCATTER.MIN",
-      "name": "MSCATTER_MIN"
-    },
-    {
-      "engine": "TLSU",
-      "function": 21,
-      "mnemonic": "BSTART.MSCATTER.ADD",
-      "name": "MSCATTER_ADD"
-    },
-    {
-      "engine": "TLSU",
-      "function": 22,
-      "mnemonic": "BSTART.MSCATTER.INC",
-      "name": "MSCATTER_INC"
-    },
-    {
-      "engine": "TLSU",
-      "function": 23,
-      "mnemonic": "BSTART.MSCATTER.DEC",
-      "name": "MSCATTER_DEC"
-    },
-    {
-      "engine": "TLSU",
-      "function": 24,
-      "mnemonic": "BSTART.MSCATTER.AND",
-      "name": "MSCATTER_AND"
-    },
-    {
-      "engine": "TLSU",
-      "function": 25,
-      "mnemonic": "BSTART.MSCATTER.OR",
-      "name": "MSCATTER_OR"
-    },
-    {
-      "engine": "TLSU",
-      "function": 26,
-      "mnemonic": "BSTART.MSCATTER.XOR",
-      "name": "MSCATTER_XOR"
-    },
-    {
-      "engine": "TLSU",
-      "function": 27,
-      "mnemonic": "BSTART.MSCATTER.POPC",
-      "name": "MSCATTER_POPC"
     }
   ]
 }

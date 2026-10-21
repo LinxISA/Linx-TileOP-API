@@ -83,7 +83,7 @@ Shared Tile 必须使用 `TMOV_L2S_INSERT` / `TMOV_L2S_PUBLISH` 或
 开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
 
 ```asm
-BSTART.TMOV DataType
+BSTART.TLSU TMOV, DataType
 B.DIM       LB0
 B.DIM       (LB1/LB2 for 2D)
 B.IOT

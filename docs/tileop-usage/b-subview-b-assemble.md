@@ -217,7 +217,7 @@ void store_runtime_base(Src &tile, GM &gm, uintptr_t base_units) {
 对应发射：
 
 ```asm
-BSTART.TSTORE F32
+BSTART.TLSU TSTORE, F32
 B.DIM <vcol>, 0, ->lb0
 B.DIM <vrow>, 0, ->lb1
 B.DIM zero, <cols>, ->lb2

@@ -22,9 +22,9 @@ class PTO0585LayoutInterfaceTest(unittest.TestCase):
             self.assertIn(f'"BSTART.TEPL {selector},', HEADER)
 
     def test_operand_schemas(self):
-        self.assertIn('"B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111\\n"', HEADER)
+        self.assertIn('"B.IOT %[Src0], %[Src1], mask=1111\\n"', HEADER)
         self.assertIn(
-            '"B.IOT %[Indices].reuse, mask=1111, last, ->%[Dst]<%Z[Size]>\\n"',
+            '"B.IOT %[Indices], mask=1111, last, ->%[Dst]<%Z[Size]>\\n"',
             HEADER,
         )
         # TPACK has three compile-time-distinct templates (plain, INIT, and

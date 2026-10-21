@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-# Engine-contract tests for the jcore inline-asm surface. The semantic engine
-# inventory is the LinxISA v0.58 authority projection; the active PTO encoding
-# identity is the published PTO ISA 0.59.0.0 release (see
-# test_contract_carries_release_provenance).
+# PTO ISA 0.58.3 engine-contract tests for the jcore inline-asm surface.
 #
 # Rebuilt per handoff Work Package B6: the assertions reflect the current
 # real toolchain ABI (Tr Tile constraints + %Z TileSize printer; the %q/%D
 # ABI is retired) and the actual block carriers used by LLVM
-# (`BSTART.TEPL` for VEC/SFU and canonical named TLSU/CUBE starts).
-# Deleted/reserved operations are
+# (BSTART.TEPL / BSTART.TLSU / BSTART.CUBE; canonical BSTART.VEC/SFU/TLOAD
+# aliases are not implemented in LLVM yet). Deleted/reserved operations are
 # checked as a negative inventory (they must not be emitted); the new
 # TSORT / MGATHER_CAS / TIMG2COL / TQUANT / TDEQUANT bundles are validated
 # directly from the header text.
@@ -63,87 +60,56 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertEqual(self.contract["profile"], "v0.58")
         self.assertEqual(
             self.contract["semantic_engine_counts"],
-            {"CUBE": 12, "SFU": 47, "TLSU": 28, "VEC": 32},
+            {"CUBE": 12, "SFU": 57, "TLSU": 10, "VEC": 31},
         )
         src = self.contract.get("source", {})
-        self.assertEqual(src.get("release"), "0.58.7")
+        self.assertEqual(src.get("release"), "0.58.3")
         self.assertEqual(
-            src.get("commit"), "f77a8960f61f97c264a90b7aee757f99891b0943"
+            src.get("commit"), "dd52a2e579d8058c0d8e33043e705122b340e73f"
         )
         self.assertEqual(
-            src.get("tree"), "da085d3f000a5b92031c9694024dc9a7f3cdaa89"
+            src.get("tree"), "1cfc7343e714489f95f67592475e8b9f079241ee"
         )
         self.assertEqual(
             src.get("sha256"),
-            "51ca9be275518d29ec48bed570b7a9bd441a65b9c5e6d4f79072f650ee732925",
+            "34ecbcfa075166490b622647eb53c13a9c360848d6c7acb2e034d3e47f8c9a8a",
         )
-        # The active PTO encoding identity is the published 0.59.0.0 release.
         pto = self.contract.get("pto_source", {})
-        self.assertEqual(pto.get("release"), "0.59.0")
-        self.assertEqual(pto.get("publication_version"), "0.59.0.0")
-        self.assertEqual(pto.get("release_tag"), "v0.59.0.0")
-        # The release manifest is itself still a draft specification; record
-        # that faithfully rather than claiming a finalized specification.
-        self.assertEqual(pto.get("specification_status"), "draft")
+        self.assertEqual(pto.get("release"), "0.58.3")
         self.assertEqual(
-            pto.get("commit"), "b0165320a4b575b18d2f4d93faf40178f661ab49"
+            pto.get("commit"), "e599a3d36ebfad43362ff591ea5e128816c684c7"
         )
         self.assertEqual(
-            pto.get("tree"), "31ff0c2d39cbed714baf5be7929bfd06887be9fb"
-        )
-        self.assertEqual(
-            pto.get("encoding_abi"), "pto-isa-0.59.0-mode-function-v1"
+            pto.get("tree"), "abb6899d2e664e378ac9c1b77062670daa4d31b4"
         )
         self.assertEqual(
             pto.get("encoding_projection_sha256"),
-            "91509080ca656eb124f47830dcb09c50389dc177266b3b8df9d2d11dc37d5697",
+            "8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172",
         )
-        self.assertEqual(
-            pto.get("release_manifest", {}).get("sha256"),
-            "3c6b20623e73822c0bd26021c10beb233b8809328b5515f57609eadad1749dc4",
-        )
-        self.assertEqual(pto.get("tile_catalog", {}).get("count"), 119)
-        self.assertEqual(
-            pto.get("tile_catalog", {}).get("sha256"),
-            "533db9b8f31f118af5978de813cfaa3fa738de820ee24655faa2ee71f343a706",
-        )
-        # The LinxISA v0.58 authority locked the PTO development golden; its
-        # Tile catalog bytes equal the release catalog, which is why this v0.58
-        # engine projection is valid against the 0.59.0.0 release.
-        lock = pto.get("development_lock", {})
-        self.assertEqual(lock.get("release"), "0.58.7")
-        self.assertEqual(
-            lock.get("commit"), "f0a876e449a95d26841c5ee7affb4c905ebc5f5b"
-        )
-        self.assertTrue(lock.get("catalog_sha256_matches_release"))
 
-    def test_0587_engine_mapping_is_exact(self) -> None:
+    def test_0583_vec_sfu_reclassification_is_exact(self) -> None:
         engines = {row["name"]: row["engine"] for row in self.contract["tepl_ops"]}
         for operation in ("TDIV", "TREM", "TEXP", "TLOG"):
             self.assertEqual(engines[operation], "SFU")
         self.assertEqual(
-            sum(op["engine"] == "VEC" for op in self.contract["tepl_ops"]), 32
+            sum(op["engine"] == "SFU" for op in self.contract["tepl_ops"]), 57
         )
         self.assertEqual(
-            sum(row["engine"] == "SFU" for row in self.contract["tepl_ops"]), 47
+            sum(row["engine"] == "SFU" for row in self.contract["tepl_ops"]), 57
         )
 
-    def test_engine_projection_covers_the_exact_pto_catalog(self) -> None:
-        catalog = json.loads(
-            (ROOT / "contracts" / "pto-isa-0.59.0-tile-operations.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        projected = {
-            row["name"]
-            for key in ("tepl_ops", "tlsu_ops", "cube_ops")
-            for row in self.contract[key]
-        }
-        golden = {row["name"] for row in catalog["operations"]}
-        self.assertEqual(projected, golden)
-        self.assertEqual(len(self.contract["tepl_ops"]), 79)
-        self.assertEqual(len(self.contract["tlsu_ops"]), 28)
-        self.assertEqual(len(self.contract["cube_ops"]), 12)
+    # 12 CUBE + 6 TGEMV functions are in the catalog; our surface should
+    # reference each active operation's carrier somewhere in the header.
+    def test_active_cube_and_tlsu_surface_is_referenced(self) -> None:
+        for row in self.contract.get("cube_ops", []):
+            if row["name"].startswith("TGEMV"):
+                continue
+            self.assertIn('"BSTART.CUBE " OPCODE', self.header, row["name"])
+            break
+        for row in self.contract.get("tlsu_ops", []):
+            if row["name"] in {"TPREFETCH", "MGATHER_CAS"}:
+                continue
+            self.assertIn(row["mnemonic"], self.header, row["name"])
 
     # --- inline-asm ABI: Tr + %Z + %D ---
 
@@ -169,13 +135,13 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("SharedE2M1X2::LogicalTileBytes == 8192", contract)
         self.assertIn("SharedFP8::LogicalTileBytes == 16384", contract)
 
-    # --- block carriers: TEPL plus named TLSU/CUBE starts ---
+    # --- block carriers: TEPL / TLSU / CUBE (current LLVM spelling) ---
 
     def test_jcore_uses_current_block_carriers(self) -> None:
-        # TEPL remains the raw VEC/SFU carrier; TLSU/CUBE use named starts.
+        # TEPL remains the raw VEC/SFU carrier; TLSU/CUBE use exact named starts.
         self.assertIn("BSTART.TEPL", self.header)
-        self.assertIn("BSTART.TLOAD", self.header)
-        self.assertIn('"BSTART." OPCODE', self.header)
+        self.assertIn("BSTART.TLSU TLOAD", self.header)
+        self.assertIn('"BSTART.CUBE " OPCODE', self.header)
         # TGEMV enters through the TLSU/CUBE surface too.
         self.assertIn("TGEMV", self.header)
 
@@ -195,7 +161,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
                 '"B.DIM zero, %c5, ->lb0\\n"',
                 '"B.DIM zero, %c6, ->lb1\\n"',
                 '"B.DIM zero, %c7, ->lb2\\n"',
-                '"B.IOT %3.reuse, mask=1111, last, ->%0<%Z4>\\n"'):
+                '"B.IOT %3, mask=1111, last, ->%0<%Z4>\\n"'):
             self.assertIn(instruction, ordinary_branch)
 
     def test_tcvt_same_type_rounding_scope_is_compile_time_checked(self) -> None:
@@ -625,31 +591,11 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         # the mask=15 form is only a legacy carrier not touched by B6.
         self.assertRegex(self.header, r"mask=1111")
 
-    def test_every_emitted_binder_source_is_explicit_reuse(self) -> None:
-        source_count = 0
-        for path in (ROOT / "include").rglob("*.hpp"):
-            text = path.read_text(encoding="utf-8", errors="ignore")
-            source_binders = re.finditer(
-                r'"B\.IO[TS]\s+(?!mask=)([^"\\]*?)mask=', text
-            )
-            for binder in source_binders:
-                source_count += 1
-                operands = [
-                    operand.strip()
-                    for operand in binder.group(1).rstrip(", ").split(",")
-                ]
-                self.assertTrue(
-                    all(operand.endswith(".reuse") for operand in operands),
-                    f"{path.relative_to(ROOT)}: {binder.group(0)}",
-                )
-            self.assertNotRegex(text, r'->[^"\n]*\.reuse', path.relative_to(ROOT))
-        self.assertGreater(source_count, 0)
-
     # --- Shared bindings use B.IOS ---
 
     def test_shared_tile_bindings_use_b_ios(self) -> None:
         self.assertNotIn("C.B.IOS", self.header)
-        self.assertRegex(self.header, r"B\.IOS %S\[Shared[AB]\]\.reuse, mask=1111")
+        self.assertRegex(self.header, r"B\.IOS %S\[Shared[AB]\], mask=1111")
 
     def test_tload_ass_binds_existing_shared_handle_as_input(self) -> None:
         local_start = self.header.index("// TLOAD_ASS:")
@@ -661,7 +607,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         shared = self.header[shared_start:shared_end]
         self.assertEqual(local.count("void TLOAD_ASS("), 2)
         self.assertEqual(shared.count("void TLOAD_ASS("), 2)
-        self.assertEqual(shared.count('"B.IOS %S[d0].reuse, mask=1111\\n"'), 2)
+        self.assertEqual(shared.count('"B.IOS %S[d0], mask=1111\\n"'), 2)
         self.assertEqual(shared.count('[d0] "Sr"(dst.handle_ref())'), 2)
         self.assertNotIn("->%S[d0]", shared)
         self.assertNotIn("<%Z[TileSize]>", shared)
@@ -678,7 +624,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         dispatch_end = self.header.index("// TSTORE: Shared Tile", unified)
         dispatch = self.header[unified:dispatch_end]
         self.assertIn("void TLOAD_CUBE_ASS(", cube)
-        self.assertIn('"B.IOT %[Dst].reuse, mask=1111, last\\n"', cube)
+        self.assertIn('"B.IOT %[Dst], mask=1111, last\\n"', cube)
         self.assertIn('[Dst] "Tr"(dst.data())', cube)
         self.assertNotIn("->%[Dst]", cube)
         self.assertIn("void TLOAD_ASS(cube_shape &dst, const gm_shape &src)", dispatch)
@@ -709,7 +655,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         ):
             self.assertRegex(block, rf"PTO_TEPL_ASS_[A-Z]+\({name},")
         packed_scalar = (
-            '"B.IOT %[Src].reuse, %[Dst].reuse, mask=1111, last\\n"'
+            '"B.IOT %[Src], %[Dst], mask=1111, last\\n"'
         )
         self.assertGreaterEqual(block.count(packed_scalar), 2)
         scalar = re.search(
@@ -739,8 +685,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             r'"B\.IOT %\[Dst\], mask=1111, last\\n"'
         )
         self.assertIsNone(old_scalar_split.search(block))
-        self.assertIn('"B.IOT %[Src0].reuse, %[Src1].reuse, mask=1111\\n"', block)
-        self.assertIn('"B.IOT %[Dst].reuse, mask=1111, last\\n"', block)
+        self.assertIn('"B.IOT %[Src0], %[Src1], mask=1111\\n"', block)
+        self.assertIn('"B.IOT %[Dst], mask=1111, last\\n"', block)
         # Keep the invalid legacy spelling out of actual instruction strings;
         # the explanatory comment above names it as a negative example.
         asm_block = block[block.index("namespace pto_tepl_ass_detail") :]
@@ -758,9 +704,9 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         for call in ("TCMP_ASS<CmpMode::LT>(f, a, b);",
                      "TCMPS_ASS<CmpMode::GE>(f, a, 0.0f);",
                      "TFMA_ASS(f, a, b, c);",
-                     "TSQRT_ASS(f, a);", "TCVT_ASS(d, a);"):
+                     "TSQRT_ASS(f, a);", "TCVT_ASS(d, a);", "TTRANS_ASS(f, a);"):
             self.assertIn(call, special)
-        self.assertIn('"B.IOT %[C].reuse, %[Dst].reuse, mask=1111, last\\n"', block)
+        self.assertIn('"B.IOT %[C], %[Dst], mask=1111, last\\n"', block)
         self.assertIn('"B.DATR %D[__pto_DstType], RNONE\\n"', block)
         self.assertNotIn("[DType]", block)
 
@@ -778,11 +724,11 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         # Per-dimension dispatch: four B.DIM combinations, each a full asm
         # statement with the same binder shape.
         self.assertEqual(
-            tsel.count('"B.IOT %6.reuse, %7.reuse, mask=1111\\n"'), 4
+            tsel.count('"B.IOT %6, %7, mask=1111\\n"'), 4
         )
         self.assertEqual(
             tsel.count(
-                '"B.IOT %1.reuse, mask=1111, last, ->%0<%Z8>\\n"'
+                '"B.IOT %1, mask=1111, last, ->%0<%Z8>\\n"'
             ),
             4,
         )
@@ -793,7 +739,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn('"B.DIM %[mask____dimrow], 0, ->lb1\\n"', tsel)
         self.assertIn("::ValidCol > 0 && ", tsel)
         self.assertNotIn(
-            '"B.IOT %5.reuse, %6.reuse, mask=1111, last, ->%0<%Z7>\\n"', tsel
+            '"B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\\n"', tsel
         )
 
     def test_valid_shape_immediate_fixture_separates_static_and_dynamic_paths(self) -> None:
@@ -866,21 +812,21 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("TSTORE_CUBE", self.header)
 
     def test_cube_shared_operands_use_common_nonzero_mask(self) -> None:
-        self.assertRegex(self.header, r"B\.IOS %S\[Shared[AB]\]\.reuse, mask=1111")
-        self.assertNotRegex(self.header, r"B\.IOS %S\[Shared[AB]\]\.reuse, mask=0000")
+        self.assertRegex(self.header, r"B\.IOS %S\[Shared[AB]\], mask=1111")
+        self.assertNotRegex(self.header, r"B\.IOS %S\[Shared[AB]\], mask=0000")
 
     def test_cube_accumulator_is_explicit_and_destination_is_distinct(self) -> None:
-        self.assertIn('"B.IOT %[C].reuse, mask=1111\\n"', self.header)
+        self.assertIn('"B.IOT %[C], mask=1111\\n"', self.header)
         self.assertIn('[Dst] "=&Tr"(dst.data())', self.header)
 
     def test_tgemv_uses_a_then_b_source_and_type_order(self) -> None:
-        self.assertIn('"B.IOT %[Vec].reuse, %[Mtx].reuse, mask=1111\\n"', self.header)
-        self.assertNotIn('"B.IOT %[Mtx].reuse, %[Vec].reuse, mask=1111\\n"', self.header)
+        self.assertIn('"B.IOT %[Vec], %[Mtx], mask=1111\\n"', self.header)
+        self.assertNotIn('"B.IOT %[Mtx], %[Vec], mask=1111\\n"', self.header)
         self.assertIn(
-            '"B.IOT %[Vec].reuse, mask=1111\\n" ".if %c[HasScaleA]\\n" '
-            '"B.IOT %[ScaleVec].reuse, mask=1111\\n" ".endif\\n" '
-            '"B.IOT %[Mtx].reuse, mask=1111\\n" ".if %c[HasScaleB]\\n" '
-            '"B.IOT %[ScaleMtx].reuse, mask=1111\\n"',
+            '"B.IOT %[Vec], mask=1111\\n" ".if %c[HasScaleA]\\n" '
+            '"B.IOT %[ScaleVec], mask=1111\\n" ".endif\\n" '
+            '"B.IOT %[Mtx], mask=1111\\n" ".if %c[HasScaleB]\\n" '
+            '"B.IOT %[ScaleMtx], mask=1111\\n"',
             self.header,
         )
         self.assertIn("PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx", self.header)
@@ -899,10 +845,10 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         # ScaleMask 3 has all scale operands at compile time, so every adjacent
         # Local primary/scale pair must use the architectural 2-source B.IOT.
         for packed_source in (
-            '"B.IOT %[A].reuse, %[ScaleA].reuse, mask=1111\\n"',
-            '"B.IOT %[B].reuse, %[ScaleB].reuse, mask=1111\\n"',
-            '"B.IOT %[Vec].reuse, %[ScaleVec].reuse, mask=1111\\n"',
-            '"B.IOT %[Mtx].reuse, %[ScaleMtx].reuse, mask=1111\\n"',
+            '"B.IOT %[A], %[ScaleA], mask=1111\\n"',
+            '"B.IOT %[B], %[ScaleB], mask=1111\\n"',
+            '"B.IOT %[Vec], %[ScaleVec], mask=1111\\n"',
+            '"B.IOT %[Mtx], %[ScaleMtx], mask=1111\\n"',
         ):
             self.assertIn(packed_source, self.header)
 
@@ -929,7 +875,7 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         # the ISA does not define a two-source B.IOS encoding.
         self.assertNotRegex(self.header, r'"B\.IOS[^"\\n]*,\s*%S\[')
         self.assertIn(
-            '"B.IOS %S[SharedB].reuse, mask=1111\\n" "B.IOS %S[ScaleB].reuse, mask=1111\\n"',
+            '"B.IOS %S[SharedB], mask=1111\\n" "B.IOS %S[ScaleB], mask=1111\\n"',
             self.header,
         )
         fixture = (ROOT / "test" / "tileop_api" / "src" /
@@ -997,15 +943,15 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
     def test_mc_gate_requires_canonical_cube_layout_names(self) -> None:
         gate = (ROOT / "test" / "tileop_api" /
                 "verify_pto0583_asm.sh").read_text()
-        self.assertIn(r"ND2M32, DTYPE_NONE, Zero", gate)
-        self.assertIn(r"N82ND, DTYPE_NONE, Null", gate)
+        self.assertIn(r"ND2M32\.normal", gate)
+        self.assertIn(r"N82ND\.normal", gate)
         self.assertIn("missing canonical $description", gate)
 
-    def test_active_inline_asm_uses_exact_pto0587_surface(self) -> None:
+    def test_active_inline_asm_uses_exact_pto0583_surface(self) -> None:
         # CUBE transport (TLOAD_CUBE/TSTORE_CUBE) legitimately uses the
-        # canonical named starts ("BSTART.TLOAD/TSTORE") and the
+        # canonical TLSU carrier ("BSTART.TLSU TLOAD/TSTORE") and the
         # ".normal" CUBE selectors (ND2M16/ND2M32/ND2N8/M162ND/M322ND/
-        # N82ND); ordinary non-CUBE code must keep the exact 0.58.7 surface.
+        # N82ND); ordinary non-CUBE code must keep the exact 0.58.3 surface.
         self.assertNotRegex(self.header, r'"[^"\n]*mask=15(?:\D|$)')
         self.assertNotIn("mask=%c[PEMask]", self.header)
         self.assertNotRegex(
@@ -1017,15 +963,15 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             self.header,
             r'"B\.DATR (?!ND2M(?:16|32)|ND2N8|M(?:16|32)2ND|N82ND)[^"\n]*\.normal',
         )
-        self.assertIn('"BSTART.TLOAD %D[DataType]\\n"', self.header)
-        self.assertIn('"BSTART.TSTORE %D[DataType]\\n"', self.header)
+        self.assertIn('"BSTART.TLSU TLOAD, %D[DataType]\\n"', self.header)
+        self.assertIn('"BSTART.TLSU TSTORE, %D[DataType]\\n"', self.header)
         # TLOAD_CUBE 的 CUBE selector+pad 已收进 PTO_CUBE_LOAD_DATR_ASM
         #（PTO-ISA TLOAD: Local CUBE 允许全部四种 PadValue；默认 Zero）。
         self.assertIn('PTO_CUBE_LOAD_DATR_ASM', self.header)
         self.assertNotIn(
             '"B.DATR %c[DataTypeB], byte0, Zero\\n"', self.header
         )
-        self.assertIn('"BSTART." OPCODE " %D[DataTypeA]\\n"', self.header)
+        self.assertIn('"BSTART.CUBE " OPCODE ", %D[DataTypeA]\\n"', self.header)
 
     def test_pe_mode_rejects_unassigned_masks(self) -> None:
         type_header = (ROOT / "include" / "jcore" / "type.hpp").read_text(
@@ -1063,10 +1009,10 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
 
     def test_shared_tmov_uses_unique_source_forms_and_shared_registers(self) -> None:
         for source_form in (
-            "BSTART.TMOV.L2S.INSERT",
-            "BSTART.TMOV.L2S.PUBLISH",
-            "BSTART.TMOV.S2L.BROADCAST",
-            "BSTART.TMOV.S2L.EXTRACT",
+            "BSTART.TLSU TMOV.L2S.INSERT",
+            "BSTART.TLSU TMOV.L2S.PUBLISH",
+            "BSTART.TLSU TMOV.S2L.BROADCAST",
+            "BSTART.TLSU TMOV.S2L.EXTRACT",
         ):
             self.assertIn(source_form, self.header, source_form)
         self.assertRegex(self.header, r'\[Shared\]\s+"=Sr"')
@@ -1077,31 +1023,13 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
     def test_deleted_tile_operations_are_migration_stubs(self) -> None:
         # Every deleted tile operation either has no wrapper (truly absent)
         # or is an instance-time static_assert stub; in no case is a
-        # retired TEPL selector emitted by an asm block. TFMOD (5),
-        # TRANDOM (105) etc. must not appear next to BSTART.TEPL.
-        # NB: selector 46 (0x2E) was the deleted TLRELU but the current
-        # catalog reassigns it to the accepted TLEA (TEPL Mode 1 Function 14),
-        # so 46 is intentionally not in this list.
-        for sel in (5, 14, 24, 25, 37, 47, 56, 57, 96, 97, 105, 110):
+        # retired TEPL selector emitted by an asm block. TFMOD (5), TLRELU
+        # (46), TRANDOM (105) etc. must not appear next to BSTART.TEPL.
+        for sel in (5, 14, 24, 25, 37, 46, 47, 56, 57, 97, 105):
             self.assertNotRegex(
                 self.header,
                 rf'BSTART\.TEPL\s+{sel},',
                 f"deleted selector {sel} must not be emitted",
-            )
-        for name in self.contract["deleted_tile_names"]:
-            self.assertNotRegex(
-                self.header,
-                rf"PTO_TEPL_ASS_[A-Z_]+\({re.escape(name)},",
-                f"deleted operation {name} must not use an associated emitter macro",
-            )
-        for name in (
-            "TCONCAT", "TDEQUANT", "TEXTRACT", "THISTOGRAM", "TIMG2COL",
-            "TINSERT", "TMRGSORT", "TQUANT", "TSORT",
-        ):
-            self.assertNotRegex(
-                self._active_impl(),
-                rf'"BSTART\.(?:VEC|SFU)\s+{name}\b',
-                f"stale named TEPL alias {name} must not be emitted",
             )
 
     def test_retired_block_spellings_are_not_emitted(self) -> None:
@@ -1137,12 +1065,8 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
         # ReplacementTile+last -> Dst; byte-displacement indices make B.IOR
         # base-only in PTO-ISA 0.58.7.
         body = self.header[self.header.index("void MGATHER_CAS"):]
-        self.assertRegex(
-            body, r"B\.IOT %\[Idx\]\.reuse, %\[Exp\]\.reuse, mask=1111\\n"
-        )
-        self.assertRegex(
-            body, r"B\.IOT %\[Rep\]\.reuse, mask=1111, last, ->%\[Dst\]"
-        )
+        self.assertRegex(body, r"B\.IOT %\[Idx\], %\[Exp\], mask=1111\\n")
+        self.assertRegex(body, r"B\.IOT %\[Rep\], mask=1111, last, ->%\[Dst\]")
         self.assertRegex(body, r"B\.IOR \[%\[Base\]\], \[\]")
         self.assertNotIn("%[Stride]", body)
 
@@ -1243,10 +1167,10 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
     def test_pto_identity_verifier_rejects_hostile_elf_notes(self) -> None:
         verifier = ROOT / "test" / "tileop_api" / "verify_pto_identity.py"
         expected = (
-            b'{"encoding_abi":"pto-isa-0.59.0-mode-function-v1",'
+            b'{"encoding_abi":"pto-isa-0.58.3-mode-function-v1",'
             b'"encoding_projection_sha256":'
-            b'"91509080ca656eb124f47830dcb09c50389dc177266b3b8df9d2d11dc37d5697",'
-            b'"release":"0.59.0"}'
+            b'"8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172",'
+            b'"release":"0.58.3"}'
         )
 
         def make_elf(desc: bytes = expected, owner: bytes = b"PTO\0",
@@ -1303,11 +1227,11 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
                 "missing": make_elf(owner=b"GNU\0"),
                 "corrupt": make_elf(magic=b"BAD!"),
                 "wrong-machine": make_elf(machine=0x3E),
-                "wrong-identity": make_elf(desc=expected.replace(b"0.59.0", b"0.59.1")),
+                "wrong-identity": make_elf(desc=expected.replace(b"0.58.3", b"0.58.2")),
                 "trailing-nul": make_elf(desc=expected + b"\0"),
                 "duplicate-segment": make_elf(extra_desc=expected),
                 "conflicting-segment": make_elf(
-                    extra_desc=expected.replace(b"0.59.0", b"0.59.1")),
+                    extra_desc=expected.replace(b"0.58.3", b"0.58.2")),
             }
             for name, contents in variants.items():
                 path = temporary_path / f"{name}.elf"

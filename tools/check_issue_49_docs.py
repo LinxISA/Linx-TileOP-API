@@ -25,9 +25,8 @@ def main() -> int:
          "offset examples must use uint32_t"),
         ("TSTORE_PART" in text and "TMOV_L2S_INSERT" in text,
          "Shared partial-store and Local-to-Shared contracts must be documented"),
-        ("TMRGSORT（仅历史参考）" in text and
-         "没有 PTO ISA 0.59.0 bundle 组成" in text,
-         "retired TMRGSORT must not retain an active physical-shape contract"),
+        ("TMRGSORT" in text and "physical columns" in text,
+         "TMRGSORT physical-shape contract must be documented"),
         ("TROWSUM" in text and "R x 1" in text and "TCOLSUM" in text and "1 x C" in text,
          "reduction output shapes must be documented"),
         (all(token in text for token in (

@@ -23,11 +23,13 @@ __attribute__((noinline)) void tepl_ass_special(F &a, F &b, F &c, F &fd,
   TRSQRT_ASS(f, a);
   TRELU_ASS(f, a);
   TCVT_ASS(d, a);
+  TTRANS_ASS(f, a);
   TROWSUM_ASS(r, a);
   TROWMAX_ASS(r, a);
   TCOLSUM_ASS(c0, a);
   TROWEXPAND_ASS(f, row);
   TCOLEXPAND_ASS(f, col);
+  TCONCAT_ASS(f, left, right);
 }
 
 int main() {
