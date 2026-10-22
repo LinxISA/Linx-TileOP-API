@@ -35,6 +35,7 @@ check:
 	python3 test/test_integer_element_storage.py
 	python3 test/test_dense_f16_element_tile_api.py
 	python3 test/test_hierarchical_element_storage_api.py
+	python3 test/test_runtime_adapter_contract.py
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
 		-fsyntax-only -Iinclude test/ptoas_linx_type_compat.cpp
 	$(CXX) -std=c++20 -D__linx -include test/linx_host_type_shim.hpp \
