@@ -41,7 +41,7 @@ if ! "$CXX" "${FLAGS[@]}" -H -fsyntax-only src/RangeSubview.cpp \
 fi
 CASES="dtype maxabs_no_max rowmax_shape groupmax_shape effective_d_aux_dtype lone_shared_a local_transpose old_rowmajor mismatched_m_layout local_k shared_cube_layout gemv_rows mixed_numeric_class unsigned_prequant bad_d_valid_shape bad_acc_dtype bad_bias_dtype bad_mx_scale_dtype bad_mx_scale_shape missing_mx_scale_a missing_mx_scale_b extra_mx_scale_a extra_mx_scale_b hif4_ordinary_matmul hif4_missing_scale_a hif4_missing_scale_b hif4_scale_dtype hif4_scale_shape bad_transpose_d group_shape group_k group_n group_dynamic"
 TS_CASES="dtype_full dtype_part layout_full layout_part mask0 mask16 mask3 size_large"
-RANGE_CASES="subview_dest assemble_source subview_length tadd_ass_init tadd_middle"
+RANGE_CASES="subview_dest assemble_source subview_length tadd_ass_init tadd_middle tadd_assemble_dtype tadd_assemble_shape tload_ass_typed_init tload_ass_shared_typed_init"
 ROLE_VIEW_CASES="same_role local rvalue layout"
 SUBVIEW_LEGALITY_CASES="subview_rowmajor tpartview_rowmajor tpartview_shared"
 GMOV_CASES="fp64 s64 u64 dtype shape valid_shape layout capacity location shared cube_n8"
@@ -49,6 +49,8 @@ TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape assemble_valid_shap
 TEXPDIF_CASES="type narrow n8 mixed_layout shape"
 TCI2D_CASES="layout location dtype shape steps m16_rows"
 ROWARG_CASES="max min"
+I64_CASES="fp64_element unsupported_parent m16 short_m32 subview_pair assemble_pair writer_limit"
+TCOLSUM_CASES="dest_rows dest_cols dtype"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -98,6 +100,23 @@ for c in $CASES; do
     echo "PASS (rejected): $c"; PASS=$((PASS+1))
   fi
 done
+if ! "$CXX" "${FLAGS[@]}" src/ElementI64Negatives.cpp \
+     -o "$OUT/ElementI64Negatives.o" >/dev/null 2>&1; then
+  echo "BLOCKED: native64 positive negative-suite preflight failed" >&2
+  exit 2
+fi
+for c in $I64_CASES; do
+  define=SHOULD_FAIL_I64_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "i64_$c" "$define" ElementI64Negatives.cpp \
+    'ElementTile|64-bit CUBE_M16|64-bit CUBE_M32|complete CELL pairs|profile|CUBE CELL layouts|at most 16 writers'
+done
+for c in $TCOLSUM_CASES; do
+  define=SHOULD_FAIL_TCOLSUM_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "tcolsum_$c" "$define" \
+    TColSumNegatives.cpp "TCOLSUM"
+done
+expect_rejected "thistogram_retired" "SHOULD_FAIL_THISTOGRAM_RETIRED" \
+  TColSumNegatives.cpp "THISTOGRAM is retired"
 for c in $TS_CASES; do
   if "$CXX" "${FLAGS[@]}" -DSHOULD_FAIL_$c src/TStoreSharedNegatives.cpp \
        -o "$OUT/neg_ts_$c.o" >/dev/null 2>&1; then
@@ -114,9 +133,22 @@ for c in $RANGE_CASES; do
     continue
   elif [[ "$c" == tadd_middle ]]; then
     define=SHOULD_FAIL_TADD_MIDDLE
-    pattern='plain TADD requires an INIT assemble carrier'
+    pattern='plain TADD only supports an INIT assemble carrier'
     expect_rejected "range_$c" "$define" RangeNegatives.cpp "$pattern"
     continue
+  elif [[ "$c" == tadd_assemble_dtype ]]; then
+    define=SHOULD_FAIL_TADD_ASSEMBLE_DTYPE
+    pattern='TADD sources must have matching dtypes'
+    expect_rejected "range_$c" "$define" RangeNegatives.cpp "$pattern"
+    continue
+  elif [[ "$c" == tadd_assemble_shape ]]; then
+    define=SHOULD_FAIL_TADD_ASSEMBLE_SHAPE
+    pattern='plain TADD assembly destination and sources must have matching descriptors'
+    expect_rejected "range_$c" "$define" RangeNegatives.cpp "$pattern"
+    continue
+  elif [[ "$c" == tload_ass_typed_init || "$c" == tload_ass_shared_typed_init ]]; then
+    define=SHOULD_FAIL_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+    pattern='TLOAD_ASS consumes an already-associated slot'
   elif [[ "$c" == subview_dest ]]; then
     define=SHOULD_FAIL_SUBVIEW_DEST
     pattern='B\.SUBVIEW is source-only'

@@ -16,21 +16,28 @@ struct global_iterator {
                 "global_iterator can only be use in 2D global_tensor");
   auto operator()(int i, int j) {
     using shape = Shape<1, 1, 1, 1, 1>;
-    using stride = std::conditional_t<glb_tensor::isRowMajor,
-          Stride<1, 1, glb_tensor::RowStride * glb_tensor::ColStride, glb_tensor::RowStride, 1>,
-          Stride<1, 1, glb_tensor::RowStride * glb_tensor::ColStride, 1, glb_tensor::ColStride>>;
+    using stride = Stride<1, 1, glb_tensor::RowStride * glb_tensor::ColStride,
+                          glb_tensor::RowStride, glb_tensor::ColStride>;
 
     using new_tile =
       std::conditional_t<glb_tensor::isRowMajor,
           GlobalTensor<DType, shape, stride, Layout::ND>,
           GlobalTensor<DType, shape, stride, Layout::DN>>;
 
-    int offset =
-        glb_tensor::isRowMajor
-            ? i * glb_tensor::RowStride * tl_tensor::Rows + j * tl_tensor::Cols
-            : i * tl_tensor::Rows + j * glb_tensor::Rows * tl_tensor::Cols;
-
-    new_tile tile(data_ + offset);
+    // Strides count logical lanes. Packed rows/columns restart at a byte
+    // boundary; rounding the whole linear offset would lose that boundary
+    // for an odd packed row pitch.
+    constexpr size_t Bits = pto::tile_element_bits_v<DType>;
+    constexpr size_t RowPitchBytes = (glb_tensor::RowStride * Bits + 7) / 8;
+    constexpr size_t ColPitchBytes = (glb_tensor::ColStride * Bits + 7) / 8;
+    static_assert(Bits >= 8 ||
+                      (glb_tensor::isRowMajor ? tl_tensor::Cols * glb_tensor::ColStride
+                                            : tl_tensor::Rows * glb_tensor::RowStride) * Bits % 8 == 0,
+                  "packed global_iterator parts must begin at byte boundaries");
+    const size_t offset_bytes = glb_tensor::isRowMajor
+        ? size_t(i) * tl_tensor::Rows * RowPitchBytes + size_t(j) * tl_tensor::Cols * glb_tensor::ColStride * Bits / 8
+        : size_t(i) * tl_tensor::Rows * glb_tensor::RowStride * Bits / 8 + size_t(j) * tl_tensor::Cols * ColPitchBytes;
+    new_tile tile(data_ + offset_bytes / sizeof(DType));
     return tile;
   };
 

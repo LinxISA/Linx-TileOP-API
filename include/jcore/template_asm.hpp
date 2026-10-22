@@ -456,9 +456,13 @@ asm volatile(
 // Copies the payload and definedness from src to dst; this is not a dtype
 // conversion, reshape, transpose, layout conversion or Local/Shared move.
 // The same exact C++ Tile type is required on both sides, which statically
-// guarantees matching rows/columns/valid-shape/layout/dtype. DATR layout is
-// NORM with zero padding (pad union must be zero).
+// guarantees matching rows/columns/valid-shape/layout/dtype. Preserve the
+// identity layout explicitly for CUBE; NORM is the RowMajor identity selector.
 template <is_local_tile_v Tile>
+  requires(!is_range_v<Tile> && Tile::SFractal == SLayout::NoneBox &&
+           (Tile::BFractal == BLayout::RowMajor ||
+            Tile::BFractal == BLayout::CubeM16 ||
+            Tile::BFractal == BLayout::CubeM32))
 inline void TMOV(Tile &dst, const Tile &src) {
   static_assert(
       tile_type_traits<typename Tile::TileDType>::IsValidActiveSize,
@@ -468,51 +472,104 @@ inline void TMOV(Tile &dst, const Tile &src) {
   if constexpr (Tile::ValidCol > 0 && Tile::ValidRow > 0) {
 asm volatile(
     "BSTART.TLSU TMOV, %D[DataType]\n"
+    PTO_TMOV_LAYOUT_ASM
     "B.DIM zero, %c[ValidCol], ->lb0\n"
     "B.DIM zero, %c[ValidRow], ->lb1\n"
+    "B.DIM zero, %c[PhysicalCol], ->lb2\n"
     "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=&Tr"(dst.data())
     : [Src] "Tr"(src.data()),
       [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
       [TileSize] "i"(
           tile_type_traits<typename Tile::TileDType>::TilesizeCode),
-      [ValidCol] "i"(Tile::ValidCol), [ValidRow] "i"(Tile::ValidRow));  }
+      [ValidCol] "i"(Tile::ValidCol), [ValidRow] "i"(Tile::ValidRow),
+      [PhysicalCol] "i"(Tile::Cols),
+      [ElemLayout] "i"(local_layout_code_v<Tile>));  }
   else if constexpr (Tile::ValidCol > 0 && Tile::ValidRow < 0) {
 asm volatile(
     "BSTART.TLSU TMOV, %D[DataType]\n"
+    PTO_TMOV_LAYOUT_ASM
     "B.DIM zero, %c[ValidCol], ->lb0\n"
     "B.DIM %[ValidRow], 0, ->lb1\n"
+    "B.DIM zero, %c[PhysicalCol], ->lb2\n"
     "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=&Tr"(dst.data())
     : [Src] "Tr"(src.data()),
       [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
       [TileSize] "i"(
           tile_type_traits<typename Tile::TileDType>::TilesizeCode),
-      [ValidCol] "i"(Tile::ValidCol), [ValidRow] "r"(src.GetValidRow()));  }
+      [ValidCol] "i"(Tile::ValidCol), [ValidRow] "r"(src.GetValidRow()),
+      [PhysicalCol] "i"(Tile::Cols),
+      [ElemLayout] "i"(local_layout_code_v<Tile>));  }
   else if constexpr (Tile::ValidCol < 0 && Tile::ValidRow > 0) {
 asm volatile(
     "BSTART.TLSU TMOV, %D[DataType]\n"
+    PTO_TMOV_LAYOUT_ASM
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM zero, %c[ValidRow], ->lb1\n"
+    "B.DIM zero, %c[PhysicalCol], ->lb2\n"
     "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=&Tr"(dst.data())
     : [Src] "Tr"(src.data()),
       [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
       [TileSize] "i"(
           tile_type_traits<typename Tile::TileDType>::TilesizeCode),
-      [ValidCol] "r"(src.GetValidCol()), [ValidRow] "i"(Tile::ValidRow));  }
+      [ValidCol] "r"(src.GetValidCol()), [ValidRow] "i"(Tile::ValidRow),
+      [PhysicalCol] "i"(Tile::Cols),
+      [ElemLayout] "i"(local_layout_code_v<Tile>));  }
   else {
 asm volatile(
     "BSTART.TLSU TMOV, %D[DataType]\n"
+    PTO_TMOV_LAYOUT_ASM
     "B.DIM %[ValidCol], 0, ->lb0\n"
     "B.DIM %[ValidRow], 0, ->lb1\n"
+    "B.DIM zero, %c[PhysicalCol], ->lb2\n"
     "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
     : [Dst] "=&Tr"(dst.data())
     : [Src] "Tr"(src.data()),
       [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
       [TileSize] "i"(
           tile_type_traits<typename Tile::TileDType>::TilesizeCode),
-      [ValidCol] "r"(src.GetValidCol()), [ValidRow] "r"(src.GetValidRow()));  }
+      [ValidCol] "r"(src.GetValidCol()), [ValidRow] "r"(src.GetValidRow()),
+      [PhysicalCol] "i"(Tile::Cols),
+      [ElemLayout] "i"(local_layout_code_v<Tile>));  }
+}
+
+// Materialize an exact logical element partition without numeric conversion. The
+// SubTileView's fragment type is the destination type, so shape, layout and
+// dtype agree while B.SUBVIEW selects its range in the persistent parent.
+template <is_local_tile_v Tile, typename Parent>
+  requires(is_element_tile_v<Tile> && is_element_tile_v<Parent> &&
+           (Tile::Numel == 32 || Tile::Numel == 64) &&
+           Tile::ValidRow > 0 && Tile::ValidCol > 0 &&
+           std::is_same_v<typename Parent::DType, typename Tile::DType> &&
+           Parent::Loc == Tile::Loc && Parent::BFractal == Tile::BFractal &&
+           Parent::SFractal == Tile::SFractal)
+PTO_SHARED_INLINE void TMOV(Tile &dst,
+                           region::SubTileView<Parent, Tile> &src) {
+  static_assert(Tile::IsValidActiveSize,
+                "TMOV partition must have an assigned Tile size");
+  static_assert(Tile::TilesizeCode <= 10,
+                "Local B.SUBVIEW size must fit SizeCode 1..10");
+  const uintptr_t range_base = src.GetRangeBase();
+  asm volatile(
+      "BSTART.TLSU TMOV, %D[DataType]\n"
+    PTO_TMOV_LAYOUT_ASM
+      "B.DIM zero, %c[ValidCol], ->lb0\n"
+      "B.DIM zero, %c[ValidRow], ->lb1\n"
+      "B.DIM zero, %c[PhysicalCol], ->lb2\n"
+      "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[TileSize]>\n"
+      "B.SUBVIEW 0, %[RangeBase], 0, %c[SubviewSize]\n"
+      : [Dst] "=&Tr"(dst.data())
+      : [Src] "Tr"(src.data()),
+        [DataType] "i"(type_traits<typename Tile::DType>::TypeCode),
+        [TileSize] "i"(
+            tile_type_traits<typename Tile::TileDType>::TilesizeCode),
+        [ValidCol] "i"(Tile::ValidCol), [ValidRow] "i"(Tile::ValidRow),
+        [PhysicalCol] "i"(Tile::Cols),
+        [RangeBase] "r"(range_base),
+        [SubviewSize] "i"(Tile::TilesizeCode),
+        [ElemLayout] "i"(local_layout_code_v<Tile>));
 }
 
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
@@ -2666,10 +2723,10 @@ void TLOAD(tile_shape &dst, gm_shape &src) {
 
 // TLOAD_ASS: GM -> an already-associated Local Tile.  Unlike TLOAD, the Tile
 // register is an input operand and no new destination generation is allocated.
-// An Assemble wrapper is accepted as a view of its existing Local parent; the
-// destination-only B.ASSEMBLE modifier is intentionally not emitted.
+// Assemble wrappers use the overload below so their continuation descriptor
+// cannot be silently dropped by this ordinary associated-load overload.
 template <is_local_tile_v tile_shape, is_global_data_v gm_shape>
-  requires(!tile_shape::IsCubeLayout)
+  requires(!tile_shape::IsCubeLayout && !is_assemble_v<tile_shape>)
 void TLOAD_ASS(tile_shape &dst, const gm_shape &src) {
   static_assert(
       tile_type_traits<typename tile_shape::TileDType>::IsValidActiveSize,
@@ -2692,12 +2749,13 @@ void TLOAD_ASS(tile_shape &dst, const gm_shape &src) {
     : "memory");
 }
 
-template <typename Parent, unsigned WriterSizeCode, bool INIT, bool LAST,
-          unsigned OffsetUnits, unsigned RegSrc, is_global_data_v gm_shape>
+template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+          unsigned OffsetUnits, unsigned RegSrc, unsigned WriterSizeCode,
+          is_global_data_v gm_shape>
   requires(is_local_tile_v<Parent> && !Parent::IsCubeLayout)
 void TLOAD_ASS(
-    range::Assemble<Parent, WriterSizeCode, INIT, LAST, OffsetUnits, RegSrc>
-        &dst,
+    range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc,
+                    WriterSizeCode> &dst,
     const gm_shape &src) {
   static_assert(!INIT,
                 "TLOAD_ASS consumes an already-associated slot: the INIT "
@@ -3071,12 +3129,13 @@ PTO_SHARED_INLINE void TLOAD_ASS(SharedTile<shp> &dst, const gm_shape &src) {
 // it must not turn the source B.IOS into a destination or emit a TileSize
 // modifier.  A destination-only B.ASSEMBLE is emitted so the MIDDLE/LAST
 // session state reaches the model.
-template <typename Parent, unsigned WriterSizeCode, bool INIT, bool LAST,
-          unsigned OffsetUnits, unsigned RegSrc, is_global_data_v gm_shape>
+template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+          unsigned OffsetUnits, unsigned RegSrc, unsigned WriterSizeCode,
+          is_global_data_v gm_shape>
   requires(is_shared_tile_v<Parent>)
 PTO_SHARED_INLINE void TLOAD_ASS(
-    range::Assemble<Parent, WriterSizeCode, INIT, LAST, OffsetUnits, RegSrc>
-        &dst,
+    range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc,
+                    WriterSizeCode> &dst,
     const gm_shape &src) {
   using shp_dtype = typename Parent::TileDType;
   static_assert(!INIT,
@@ -3085,6 +3144,8 @@ PTO_SHARED_INLINE void TLOAD_ASS(
                 "TLOAD producer, not by TLOAD_ASS");
   static_assert(tile_type_traits<shp_dtype>::IsValidSharedActiveSize,
                 "TLOAD_ASS Shared Tile size must be 128 B..256 KB");
+  // Shared valid extents are stored runtime metadata, even for a static
+  // backing shape. Bind them through GPR dimensions, never immediate constraints.
   const size_t valid_col = dst.GetValidCol();
   const size_t valid_row = dst.GetValidRow();
   // Destination-only B.ASSEMBLE carries the MIDDLE/LAST session state so
@@ -3095,8 +3156,8 @@ PTO_SHARED_INLINE void TLOAD_ASS(
   const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
   asm volatile(
     "BSTART.TLSU TLOAD, %D[SrcType]\n"
-    "B.DIM zero, %c[VCOL], ->lb0\n"
-    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
     "B.DIM zero, %c[COL], ->lb2\n"
     "B.IOS %S[d0], mask=1111\n"
     "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
@@ -3104,7 +3165,7 @@ PTO_SHARED_INLINE void TLOAD_ASS(
     :
     : [d0] "Sr"(dst.handle_ref()), [s0] "r"(src.data()),
       [SrcType] "i"(type_traits<typename gm_shape::DType>::TypeCode),
-      [VCOL] "i"(valid_col), [VROW] "i"(valid_row),
+      [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
       [COL] "i"(Parent::Cols), [GmStride] "r"(src.GetStrideBytes(3)),
       [RegSrc] "r"(range_base),
       [Init] "i"(static_cast<int>(INIT)), [Last] "i"(static_cast<int>(LAST)),
@@ -3815,36 +3876,129 @@ void TSTORE(gm_shape &dst, const cube_shape &src) {
 // layout-dispatched TLOAD/TSTORE; no instruction or scalar math implementation
 // is duplicated here. Pointer ranges are expressed in logical elements.
 template <is_tile_data_v TileType>
-  requires(pto::is_element_tile_v<TileType> && TileType::Rows * TileType::Cols == 128)
+  requires(pto::is_element_tile_v<TileType> &&
+           ((TileType::Numel == 32 &&
+             (std::is_same_v<typename TileType::DType, int64_t> ||
+              std::is_same_v<typename TileType::DType, uint64_t>)) ||
+            TileType::Numel == 64 || TileType::Numel == 128 ||
+            TileType::Numel == 256 || TileType::Numel == 512 ||
+            TileType::Numel == 1024 || TileType::Numel == 2048 ||
+            TileType::Numel == 16384))
 void TLOAD(TileType &dst, const typename TileType::DType *input,
            std::size_t valid_elements) {
-  if (valid_elements > 128)
+  constexpr std::size_t ParentNumel =
+      static_cast<std::size_t>(TileType::Numel);
+  constexpr int ParentCols = TileType::Numel / 32;
+  if (valid_elements > ParentNumel)
     __builtin_trap();
   using Element = typename TileType::DType;
-  alignas(128) Element tail[128];
-  const Element *source = input;
-  if (valid_elements != 128) {
-    for (std::size_t element = 0; element < 128; ++element)
-      tail[element] = element < valid_elements ? input[element] : Element{};
-    source = tail;
+  constexpr bool IsWholeStorage =
+      (std::is_same_v<Element, float> && ParentNumel >= 2048) ||
+      (TileType::IsElement64Type && ParentNumel > 32) ||
+      (TileType::IsElement32Type &&
+       (ParentNumel == 256 || ParentNumel == 1024 || ParentNumel == 2048));
+  if constexpr (IsWholeStorage) {
+    // Large storage profiles are assembly carriers.  Loading a partial
+    // pointer range would require a large scalar scratch allocation, so keep
+    // this convenience exact and let logical validity travel independently
+    // through TPARTVIEW.
+    if (valid_elements != ParentNumel)
+      __builtin_trap();
+    pto::global_tensor<Element, pto::RowMajor<32, ParentCols>> memory(input);
+    TLOAD(dst, memory);
+  } else {
+    alignas(128) Element tail[ParentNumel];
+    const Element *source = input;
+    if (valid_elements != ParentNumel) {
+      for (std::size_t element = 0; element < ParentNumel; ++element)
+        tail[element] = element < valid_elements ? input[element] : Element{};
+      source = tail;
+    }
+    pto::global_tensor<Element, pto::RowMajor<32, ParentCols>> memory(source);
+    TLOAD(dst, memory);
   }
-  pto::global_tensor<Element, pto::RowMajor<32, 4>> memory(source);
-  TLOAD(dst, memory);
+}
+
+template <is_tile_data_v TileType>
+  requires(pto::is_element_tile_v<TileType> &&
+           ((TileType::Numel == 32 &&
+             (std::is_same_v<typename TileType::DType, int64_t> ||
+              std::is_same_v<typename TileType::DType, uint64_t>)) ||
+            TileType::Numel == 64 || TileType::Numel == 128 ||
+            TileType::Numel == 256 || TileType::Numel == 512 ||
+            TileType::Numel == 1024 || TileType::Numel == 2048 ||
+            TileType::Numel == 16384))
+void TSTORE(typename TileType::DType *output, const TileType &src,
+            std::size_t valid_elements) {
+  constexpr std::size_t ParentNumel =
+      static_cast<std::size_t>(TileType::Numel);
+  constexpr int ParentCols = TileType::Numel / 32;
+  // Whole-parent stores are exact snapshots, so partial stores trap. The
+  // per-part overload below writes one complete profile part and requires
+  // an appropriately allocated parent extent.
+  if (valid_elements != ParentNumel)
+    __builtin_trap();
+  using Element = typename TileType::DType;
+  pto::global_tensor<Element, pto::RowMajor<32, ParentCols>> memory(output);
+  TSTORE(memory, src);
 }
 
 template <is_tile_data_v TileType, typename Parent, typename SubTile,
           int Rows, int Cols>
-  requires(pto::is_element_tile_v<TileType> && TileType::Rows * TileType::Cols == 32 &&
-           pto::is_element_tile_v<Parent> && Parent::Rows * Parent::Cols == 128 &&
+  requires(pto::is_element_tile_v<TileType> &&
+           pto::is_element_tile_v<Parent> &&
            pto::is_element_tile_v<SubTile> &&
+           TileType::Numel == SubTile::Numel &&
            std::is_same_v<typename TileType::DType, typename Parent::DType> &&
            std::is_same_v<typename TileType::DType, typename SubTile::DType> &&
-           Rows == 1 && Cols == 4)
+           Rows == 1 && Cols == Parent::Numel / SubTile::Numel)
 void TSTORE(typename TileType::DType *block_base, const TileType &src,
             const pto::region::BorrowedTileArray<Parent, SubTile, Rows, Cols> &parts,
             std::size_t part) {
   auto memory = parts.logical_region(block_base, part);
   TSTORE(memory, src);
+}
+
+// Exact dense F16/U16 tail store. A 64-element part is one complete M32 CELL
+// with a 32x2 descriptor. The packed mask follows the architectural M32 GPR
+// predicate mapping: bit = row + 32 * column. Inactive coordinates preserve
+// memory because PredInv=0 and Zero=0.
+template <is_tile_data_v TileType, typename Parent, typename SubTile,
+          int Rows, int Cols>
+  requires(pto::is_element_tile_v<TileType> && TileType::Numel == 64 &&
+           pto::is_element_tile_v<Parent> &&
+           pto::is_element_tile_v<SubTile> && SubTile::Numel == 64 &&
+           (std::is_same_v<typename TileType::DType, __half> ||
+            std::is_same_v<typename TileType::DType, uint16_t>) &&
+           std::is_same_v<typename TileType::DType, typename Parent::DType> &&
+           std::is_same_v<typename TileType::DType, typename SubTile::DType> &&
+           Rows == 1 && Cols == Parent::Numel / SubTile::Numel)
+void TSTORE(typename TileType::DType *block_base, const TileType &src,
+            const pto::region::BorrowedTileArray<Parent, SubTile, Rows, Cols> &parts,
+            std::size_t part, std::size_t count) {
+  const std::size_t available = parts.valid_size(part);
+  if (count > available || count > 64)
+    __builtin_trap();
+  // A zero-length tail must not form even an otherwise in-range offset
+  // pointer. This also permits callers to keep exact-size zero buffers
+  // unmapped while sharing one counted-store path.
+  if (count == 0)
+    return;
+  const uint64_t predicate = parts.store_predicate(count);
+  auto memory = parts.logical_region(block_base, part);
+  asm volatile(
+      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "B.DATR M322ND, DTYPE_NONE, Null, byte0, Eq, RNONE, nosat, 0, 0\n"
+      "B.DIM zero, 2, ->lb0\n"
+      "B.DIM zero, 32, ->lb1\n"
+      "B.IOT %[Src], mask=1111, last\n"
+      "B.IOR [%[Base],%[RowStrideBytes],%[Predicate]], ExecMaskPresent\n"
+      :
+      : [Base] "r"(memory.data()), [Src] "Tr"(src.data()),
+        [RowStrideBytes] "r"(memory.GetStrideBytes(3)),
+        [Predicate] "r"(predicate),
+        [DataType] "i"(type_traits<typename TileType::DType>::TypeCode)
+      : "memory");
 }
 
 // TSTORE: Shared Tile -> GM (PTO ISA 0.58.3 TLSU Function 1 Shared form).
@@ -5114,22 +5268,27 @@ constexpr void validate_matrix_scale_contract() {
     static_assert(type_traits<typename ScaleB::DType>::TypeCode == ScaleBType,
                   "MX ScaleB dtype must match its primary input type "
                   "(HiF4X2 uses U32; other scaled MX types use E8M0)");
-    static_assert(ScaleB::BFractal == BLayout::RowMajor &&
-                      ScaleB::SFractal == SLayout::NoneBox,
-                  "MX ScaleB must use ordinary RowMajor layout");
+    if constexpr (is_shared_tile_v<ScaleB>) {
+      static_assert(ScaleB::BFractal == BLayout::RowMajor &&
+                        ScaleB::SFractal == SLayout::NoneBox,
+                    "Shared MX ScaleB must use ordinary RowMajor layout");
+    } else {
+      static_assert(ScaleB::BFractal == BLayout::CubeM32 &&
+                        ScaleB::SFractal == SLayout::NoneBox,
+                    "Local MX ScaleB must use CUBE_M32 layout");
+    }
     static_assert(is_shared_tile_v<ScaleB> == is_shared_tile_v<B>,
                   "MX ScaleB storage must match B storage");
     // PTO spec #343: transpose controls apply only to the corresponding
-    // Shared primary operand. Shared ScaleB is always physically [N,
-    // KBlocksB], while Local ScaleB keeps its existing logical [KBlocksB,
-    // N] shape.
+    // Shared primary operand. Both Shared and Local ScaleB have valid
+    // shape [N, KBlocksB]; Local storage uses CUBE_M32 CELLs.
     if constexpr (is_shared_tile_v<ScaleB>) {
       static_assert(ScaleB::ValidRow == N && ScaleB::ValidCol == KBlocksB,
                     "Shared MX ScaleB physical shape must be "
                     "[N, ceil(K/groupB)] regardless of TransB");
     } else {
-      static_assert(ScaleB::ValidRow == KBlocksB && ScaleB::ValidCol == N,
-                    "MX ScaleB valid shape must be ceil(K/groupB) x N");
+      static_assert(ScaleB::ValidRow == N && ScaleB::ValidCol == KBlocksB,
+                    "Local MX ScaleB valid shape must be N x ceil(K/groupB)");
     }
   }
 }
@@ -5165,9 +5324,11 @@ constexpr void validate_matrix_postprocess_contract() {
   constexpr int N = matrix_b_effective_n<B, Attr.TransB>;
   // Reduction outputs reduce the per-PE D rows: ASL MatrixRowMaxResult
   // iterates input.valid_rows, the per-PE clamp of group_M for a
-  // cooperative TMATMUL, not the core-total group_M.
+  // cooperative Shared-A/Shared-B TMATMUL, not the core-total group_M.
+  // A Local-A/Shared-B operand already carries the per-PE shard in A::ValidRow;
+  // only Shared-A carries the core-total group_M in its valid rows.
   constexpr int PPRows =
-      (is_shared_tile_v<A> || is_shared_tile_v<B>)
+      is_shared_tile_v<A>
           ? pto_matmul_detail::cooperative_group_m_rows_per_pe(M)
           : M;
   static_assert(Dst::IsCubeLayout && is_cube_m_layout_v<Dst>,
@@ -5189,8 +5350,9 @@ constexpr void validate_matrix_postprocess_contract() {
                   "RowMaxIn requires final D dtype FP32, FP16, or BF16");
     static_assert(type_traits<typename RowIn::DType>::TypeCode == DCode,
                   "RowMaxIn dtype must match final D dtype");
-    static_assert(RowIn::ValidRow == M && RowIn::ValidCol == 1,
-                  "RowMaxIn valid shape must be M x 1");
+    static_assert(RowIn::ValidRow == PPRows && RowIn::ValidCol == 1,
+                  "RowMaxIn valid shape must be per-PE M rows x 1 "
+                  "(group_M block for cooperative, effective M otherwise)");
     static_assert(RowIn::BFractal == Dst::BFractal &&
                       RowIn::SFractal == SLayout::NoneBox,
                   "RowMaxIn must use the primary destination CUBE layout");
@@ -10906,6 +11068,13 @@ PTO_SHARED_INLINE void emit_binary_assemble_init(D &dst, A &src0, B &src1) {
                 "TADD sources must have matching dtypes");
   static_assert(std::is_same_v<typename D::DType, typename A::DType>,
                 "TADD destination and sources must have matching dtypes");
+  static_assert(!is_assemble_v<A> && !is_assemble_v<B>,
+                "plain TADD assembly sources must be ordinary Tiles");
+  static_assert(std::is_same_v<A, B>,
+                "plain TADD assembly sources must have matching descriptors");
+  static_assert(std::is_same_v<typename D::ParentTile, A>,
+                "plain TADD assembly destination and sources must have "
+                "matching descriptors");
   static_assert(D::RegSrc == 0 || D::RegSrc == range::AutoRegSrc,
                 "plain TADD with an explicit B.ASSEMBLE RegSrc selector is not supported");
 
@@ -11011,7 +11180,9 @@ PTO_SHARED_INLINE void emit_fill_user(
 }
 
 } // namespace pto_elementwise_user_dims
+
 template <is_tile_data_v tile_shape>
+  requires(!is_assemble_v<tile_shape>)
 void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
           unsigned UserValidCol = 0, unsigned UserValidRow = 0,
           unsigned UserPhysicalCol = 0) {
@@ -11106,6 +11277,23 @@ void TADD(tile_shape &dst, tile_shape &src0, tile_shape &src1,
       "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [ElemLayout] "i"(local_layout_code_v<tile_shape>)
   );  }
+}
+
+template <typename Parent, unsigned ParentSizeCode, bool INIT, bool LAST,
+          unsigned OffsetUnits, unsigned RegSrc, unsigned WriterSizeCode,
+          is_tile_data_v A, is_tile_data_v B>
+  requires(is_local_tile_v<Parent> && !is_assemble_v<A> &&
+           !is_assemble_v<B>)
+void TADD(range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits,
+                          RegSrc, WriterSizeCode> &dst,
+          A &src0, B &src1, unsigned UserValidCol = 0,
+          unsigned UserValidRow = 0) {
+  // UserValidCol/UserValidRow are function parameters, not constant
+  // expressions, so they cannot participate in static_assert. An assembled
+  // INIT destination uses the source descriptor geometry for its writer.
+  if (UserValidCol != 0 || UserValidRow != 0)
+    __builtin_trap();
+  pto_elementwise_user_dims::emit_binary_assemble_init(dst, src0, src1);
 }
 
 // User-overridable valid dims: ValidCol/ValidRow are compile-time template
@@ -17188,6 +17376,10 @@ void TCOLSUM(tile_shape_out &dst, tile_shape_in &src) {
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
                 "TCOLSUM destination layout must match the source "
                 "layout (B.DATR.Layout is shared by both operands)");
+  static_assert(std::is_same_v<typename tile_shape_out::DType,
+                               typename tile_shape_in::DType>,
+                "TCOLSUM destination dtype must match the selected source "
+                "operation dtype");
   if constexpr (tile_shape_in::ValidCol > 0 && tile_shape_in::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 80, %D1\n"
@@ -19828,11 +20020,16 @@ constexpr bool tunpack_control_legal_v(uint64_t control,
          offset + count <= 4;
 }
 
+// PTO-ISA #338 / pto-spec PR #350: TileCellRearrangementDataTypeLegal accepts
+// any CUBE-supported Numeric backing with 8/16/32-bit ELEMENTS, not only
+// U8/U16/U32 storage spelling. BF16/FP16 (16-bit) and FP32 (32-bit) carriers
+// are legal pack sources when the control-selected prefix bytes fall inside
+// the valid element region. The fresh destination must still be exactly
+// U8/U16/U32 (BSTART selects it).
 template <typename T>
 constexpr bool tpack_source_type_legal_v =
-    (type_traits<T>::TypeCode == __type_uint8 ||
-     type_traits<T>::TypeCode == __type_uint16 ||
-     type_traits<T>::TypeCode == __type_uint32);
+    type_traits<T>::bits == 8 || type_traits<T>::bits == 16 ||
+    type_traits<T>::bits == 32;
 
 template <typename T>
 constexpr bool tpack_destination_type_legal_v =
@@ -19853,13 +20050,26 @@ constexpr bool tpack_type_is_local_numeric_v =
 template <typename T>
 constexpr unsigned tpack_type_bytes_v = tpack_source_bytes(type_traits<T>::bits);
 
+// PTO-ISA TileCellRearrangementWordsPerRow: ceil(valid bytes / 4).  The last
+// raw word of a row may be partial; only control-selected prefix bytes must be
+// defined (checked at runtime below), so sources need not be word-aligned.
 template <typename T>
 constexpr unsigned tpack_raw_words_per_row_v =
-    T::ValidCol * tpack_type_bytes_v<typename T::DType> / 4;
+    (T::ValidCol * tpack_type_bytes_v<typename T::DType> + 3) / 4;
 
-template <typename T>
-constexpr bool tpack_source_row_is_word_aligned_v =
-    (T::ValidCol * tpack_type_bytes_v<typename T::DType>) % 4 == 0;
+// TileCellRearrangementSelectedBytesDefined, compile-time counterpart: byte b
+// of a row is defined iff its containing element is inside the valid region,
+// i.e. b < valid_col * element_bytes.  Prefix selection applies the same
+// low-byte count to every raw word; only the last (possibly partial) word
+// can exceed the valid region, so checking its end is sufficient.
+constexpr bool tpack_selected_prefix_defined(unsigned valid_col,
+                                           unsigned element_bytes,
+                                           unsigned selected_bytes) {
+  const unsigned valid_bytes = valid_col * element_bytes;
+  const unsigned words = (valid_bytes + 3) / 4;
+  return words != 0 && selected_bytes != 0 &&
+         (words - 1) * 4 + selected_bytes <= valid_bytes;
+}
 
 template <typename T, typename D>
 constexpr unsigned tpack_destination_cols_v =
@@ -19914,42 +20124,179 @@ constexpr bool tunpack_control_legal_v(uint64_t control) {
   return tunpack_control_legal_v(control, 4);
 }
 
-template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
-void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
+template <bool Associated = false, is_tile_data_v D, is_tile_data_v A,
+          is_tile_data_v B>
+void tpack_emit(D &dst, A &src0, B &src1, uint64_t control) {
   static_assert(tpack_operation_descriptor_legal_v<D>,
                 "TPACK destination must be Local U8/U16/U32 CUBE_M16/M32");
   static_assert(tpack_source_descriptor_legal_v<A> &&
                     tpack_source_descriptor_legal_v<B>,
                 "TPACK sources must be Local 8/16/32-bit numeric CUBE tiles");
+  constexpr unsigned WriterCols = tpack_destination_cols_v<A, D>;
   static_assert(D::BFractal == A::BFractal && D::BFractal == B::BFractal &&
                     D::ValidRow == A::ValidRow && D::ValidRow == B::ValidRow &&
-                    tpack_source_row_is_word_aligned_v<A> &&
-                    tpack_source_row_is_word_aligned_v<B> &&
                     tpack_raw_words_per_row_v<A> == tpack_raw_words_per_row_v<B> &&
-                    D::ValidCol == tpack_destination_cols_v<A, D>,
+                    (is_assemble_v<D> ? D::ValidCol >= WriterCols
+                                       : D::ValidCol == WriterCols),
                 "TPACK requires matching layout/rows and raw-word shape");
-  if (!tpack_control_legal_v(
-          control, tpack_type_bytes_v<typename A::DType>,
-          tpack_type_bytes_v<typename B::DType>,
-          4))
+  if constexpr (is_assemble_v<D> && !Associated) {
+    static_assert(D::INIT,
+                  "plain TPACK on an assemble carrier must open an INIT slot; "
+                  "use TPACK_ASS for MIDDLE/LAST slots");
+  }
+  if (!tpack_control_legal_v(control, 3, 3, 4) ||
+      !tpack_selected_prefix_defined(
+          A::ValidCol, tpack_type_bytes_v<typename A::DType>, control & 0xff) ||
+      !tpack_selected_prefix_defined(
+          B::ValidCol, tpack_type_bytes_v<typename B::DType>, (control >> 8) & 0xff))
     __builtin_trap();
   uint64_t controlValue = control;
+  const uintptr_t src0Base = [&] {
+    if constexpr (is_subtile_view_v<A> || is_subview_v<A>)
+      return src0.GetRangeBase();
+    return uintptr_t{0};
+  }();
+  const uintptr_t src1Base = [&] {
+    if constexpr (is_subtile_view_v<B> || is_subview_v<B>)
+      return src1.GetRangeBase();
+    return uintptr_t{0};
+  }();
+  constexpr unsigned Src0Size = [] {
+    if constexpr (is_subview_v<A>)
+      return A::SubviewSizeCode;
+    return A::TilesizeCode;
+  }();
+  constexpr unsigned Src1Size = [] {
+    if constexpr (is_subview_v<B>)
+      return B::SubviewSizeCode;
+    return B::TilesizeCode;
+  }();
+  constexpr unsigned Src0Offset = [] {
+    if constexpr (is_subview_v<A>)
+      return A::OffsetUnits;
+    return 0U;
+  }();
+  constexpr unsigned Src1Offset = [] {
+    if constexpr (is_subview_v<B>)
+      return B::OffsetUnits;
+    return 0U;
+  }();
   asm("" : "+r"(controlValue));
-  asm volatile(
-      "BSTART.TEPL 119, %D[Type]\n"
-      PTO_ZERO_PAD_LAYOUT_ASM
-      "B.DIM zero, %c[Cols], ->lb0\n"
-      "B.DIM zero, %c[Rows], ->lb1\n"
-      "B.DIM zero, %c[FullCols], ->lb2\n"
-      "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
-      "B.IOR [%[Control]],[]\n"
-      : [Dst] "=Tr"(dst.data())
-      : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
-        [Control] "r"(controlValue),
-        [Type] "i"(type_traits<typename D::DType>::TypeCode),
-        [Cols] "i"(D::ValidCol), [Rows] "i"(D::ValidRow),
-        [FullCols] "i"(D::Cols), [Size] "i"(D::TilesizeCode),
-        [ElemLayout] "i"(local_layout_code_v<D>));
+  if constexpr (Associated) {
+    // A Local MIDDLE/LAST writer has no destination binder. The existing
+    // parent is the final source-form B.IOT slot and must stay live for the
+    // remainder of the generation (PTO-B-IOT-STREAM-001).
+    const uintptr_t rangeBase = static_cast<uintptr_t>(dst.GetRangeBase());
+    asm volatile(
+        "BSTART.TEPL 119, %D[Type]\n"
+        PTO_ZERO_PAD_LAYOUT_ASM
+        "B.DIM zero, %c[Cols], ->lb0\n"
+        "B.DIM zero, %c[Rows], ->lb1\n"
+        "B.DIM zero, %c[FullCols], ->lb2\n"
+        "B.IOT %[Src0], %[Src1], mask=1111\n"
+        ".if %c[HasSrc0View]\n"
+        "B.SUBVIEW 0, %[Src0Base], %c[Src0Off], %c[Src0Size]\n"
+        ".endif\n"
+        ".if %c[HasSrc1View]\n"
+        "B.SUBVIEW 1, %[Src1Base], %c[Src1Off], %c[Src1Size]\n"
+        ".endif\n"
+        "B.IOT %[ParentRef], mask=1111, last\n"
+        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
+        "B.IOR [%[Control]],[]\n"
+        :
+        : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+          [ParentRef] "Tr"(dst.data()), [Src0Base] "r"(src0Base),
+          [Src1Base] "r"(src1Base), [Control] "r"(controlValue),
+          [Type] "i"(type_traits<typename D::DType>::TypeCode),
+          [Cols] "i"(WriterCols), [Rows] "i"(A::ValidRow),
+          [FullCols] "i"(D::Cols), [Src0Size] "i"(Src0Size),
+          [Src1Size] "i"(Src1Size), [Src0Off] "i"(Src0Offset),
+          [Src1Off] "i"(Src1Offset),
+          [HasSrc0View] "i"(static_cast<int>(is_subtile_view_v<A> || is_subview_v<A>)),
+          [HasSrc1View] "i"(static_cast<int>(is_subtile_view_v<B> || is_subview_v<B>)),
+          [Init] "i"(static_cast<int>(D::INIT)),
+          [Last] "i"(static_cast<int>(D::LAST)), [RegSrc] "r"(rangeBase),
+          [Off] "i"(D::OffsetUnits), [WriterSize] "i"(D::WriterSizeCode),
+          [ElemLayout] "i"(local_layout_code_v<D>)
+        : "memory");
+  } else if constexpr (is_assemble_v<D>) {
+    // INIT allocates the parent and therefore uses a real destination binder.
+    const uintptr_t rangeBase = static_cast<uintptr_t>(dst.GetRangeBase());
+    asm volatile(
+        "BSTART.TEPL 119, %D[Type]\n"
+        PTO_ZERO_PAD_LAYOUT_ASM
+        "B.DIM zero, %c[Cols], ->lb0\n"
+        "B.DIM zero, %c[Rows], ->lb1\n"
+        "B.DIM zero, %c[FullCols], ->lb2\n"
+        "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+        ".if %c[HasSrc0View]\n"
+        "B.SUBVIEW 0, %[Src0Base], %c[Src0Off], %c[Src0Size]\n"
+        ".endif\n"
+        ".if %c[HasSrc1View]\n"
+        "B.SUBVIEW 1, %[Src1Base], %c[Src1Off], %c[Src1Size]\n"
+        ".endif\n"
+        "B.ASSEMBLE %c[Init], %c[Last], %[RegSrc], %c[Off], %c[WriterSize]\n"
+        "B.IOR [%[Control]],[]\n"
+        : [Dst] "=Tr"(dst.data())
+        : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+          [Src0Base] "r"(src0Base), [Src1Base] "r"(src1Base),
+          [Control] "r"(controlValue),
+          [Type] "i"(type_traits<typename D::DType>::TypeCode),
+          [Cols] "i"(WriterCols), [Rows] "i"(A::ValidRow),
+          [FullCols] "i"(D::Cols), [Size] "i"(D::TilesizeCode),
+          [Src0Size] "i"(Src0Size), [Src1Size] "i"(Src1Size),
+          [Src0Off] "i"(Src0Offset), [Src1Off] "i"(Src1Offset),
+          [HasSrc0View] "i"(static_cast<int>(is_subtile_view_v<A> || is_subview_v<A>)),
+          [HasSrc1View] "i"(static_cast<int>(is_subtile_view_v<B> || is_subview_v<B>)),
+          [Init] "i"(static_cast<int>(D::INIT)),
+          [Last] "i"(static_cast<int>(D::LAST)), [RegSrc] "r"(rangeBase),
+          [Off] "i"(D::OffsetUnits), [WriterSize] "i"(D::WriterSizeCode),
+          [ElemLayout] "i"(local_layout_code_v<D>)
+        : "memory");
+  } else {
+    // Keep the plain form free of B.ASSEMBLE text. Backend metadata parses
+    // inline-asm templates before assembler-time .if elimination.
+    asm volatile(
+        "BSTART.TEPL 119, %D[Type]\n"
+        PTO_ZERO_PAD_LAYOUT_ASM
+        "B.DIM zero, %c[Cols], ->lb0\n"
+        "B.DIM zero, %c[Rows], ->lb1\n"
+        "B.DIM zero, %c[FullCols], ->lb2\n"
+        "B.IOT %[Src0], %[Src1], mask=1111, last, ->%[Dst]<%Z[Size]>\n"
+        ".if %c[HasSrc0View]\n"
+        "B.SUBVIEW 0, %[Src0Base], %c[Src0Off], %c[Src0Size]\n"
+        ".endif\n"
+        ".if %c[HasSrc1View]\n"
+        "B.SUBVIEW 1, %[Src1Base], %c[Src1Off], %c[Src1Size]\n"
+        ".endif\n"
+        "B.IOR [%[Control]],[]\n"
+        : [Dst] "=Tr"(dst.data())
+        : [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),
+          [Src0Base] "r"(src0Base), [Src1Base] "r"(src1Base),
+          [Control] "r"(controlValue),
+          [Type] "i"(type_traits<typename D::DType>::TypeCode),
+          [Cols] "i"(WriterCols), [Rows] "i"(A::ValidRow),
+          [FullCols] "i"(D::Cols), [Size] "i"(D::TilesizeCode),
+          [Src0Size] "i"(Src0Size), [Src1Size] "i"(Src1Size),
+          [Src0Off] "i"(Src0Offset), [Src1Off] "i"(Src1Offset),
+          [HasSrc0View] "i"(static_cast<int>(is_subtile_view_v<A> || is_subview_v<A>)),
+          [HasSrc1View] "i"(static_cast<int>(is_subtile_view_v<B> || is_subview_v<B>)),
+          [ElemLayout] "i"(local_layout_code_v<D>)
+        : "memory");
+  }
+}
+
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+void TPACK(D &dst, A &src0, B &src1, uint64_t control) {
+  tpack_emit<false>(dst, src0, src1, control);
+}
+
+template <is_tile_data_v D, is_tile_data_v A, is_tile_data_v B>
+  requires(is_assemble_v<D>)
+void TPACK_ASS(D &dst, A &src0, B &src1, uint64_t control) {
+  static_assert(!D::INIT,
+                "TPACK_ASS consumes an existing MIDDLE/LAST assemble slot");
+  tpack_emit<true>(dst, src0, src1, control);
 }
 
 template <is_tile_data_v D, is_tile_data_v S>

@@ -700,10 +700,11 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tmov_assemble(
     region::TileArrayOutputRef<SubTile, ParticipantMask> &dst,
     const SubTile &src) {
   static_assert(is_element_assembly_fragment_v<SubTile>,
-                "TMOV assembly requires a supported ElementTile fragment");
+                "TMOV assembly requires a supported full-storage element "
+                "fragment");
   const uintptr_t offset = dst.range_base_units();
 #define PTO_REGION_TMOV_PREFIX                                               \
-  "BSTART.TMOV %D[DataType]\n"                                             \
+  "BSTART.TLSU TMOV, %D[DataType]\n"                                      \
   PTO_TMOV_LAYOUT_ASM                                                       \
   "B.DIM zero, %c[ValidCol], ->lb0\n"                                      \
   "B.DIM zero, %c[ValidRow], ->lb1\n"                                      \
@@ -988,8 +989,8 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
 #define PTO_REGION_TCVT_SUBVIEW_CONT_BODY                                   \
   "BSTART.TEPL 27, %D1\n"                                                  \
   "B.DATR %D2, RNONE\n"                                                    \
-  "B.DIM zero, %c4, ->lb0\n"                                               \
-  "B.DIM zero, %c5, ->lb1\n"                                               \
+  "B.DIM zero, %c4, ->lb0\n"                                                   \
+  "B.DIM zero, %c5, ->lb1\n"                                                   \
   "B.IOT %3, %0, mask=1111, last\n"                                       \
   "B.SUBVIEW 0, %7, 0, %c8\n"                                             \
   "B.ASSEMBLE %c11, %c12, %9, 0, %c10\n"
@@ -1489,9 +1490,13 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
                 "column expansion broadcast cols must match the matrix");
   static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
                 "region expansion requires a static destination shape");
+  static_assert(Out::BFractal == SubTile::BFractal &&
+                    Out::BFractal == Tile::BFractal,
+                "column expansion sources must match the destination layout");
   const uintptr_t range_base0_units = src0.GetRangeBase();
   asm volatile(
       "BSTART.TEPL %c10, %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
@@ -1504,7 +1509,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
         "r"(range_base0_units),
         "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "i"(Opcode)
+        "i"(Opcode), [ElemLayout] "i"(local_layout_code_v<Out>)
       : "memory");
 }
 
@@ -1524,9 +1529,13 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
                 "column expansion broadcast cols must match the matrix");
   static_assert(Out::ValidCol > 0 && Out::ValidRow > 0,
                 "region expansion requires a static destination shape");
+  static_assert(Out::BFractal == SubTile::BFractal &&
+                    Out::BFractal == Tile::BFractal,
+                "column expansion sources must match the destination layout");
   const uintptr_t range_base1_units = src1.GetRangeBase();
   asm volatile(
       "BSTART.TEPL %c10, %D1\n"
+      PTO_REGION_ELEMENTWISE_LAYOUT_ASM
       "B.DIM zero, %c3, ->lb0\n"
       "B.DIM zero, %c4, ->lb1\n"
       "B.DIM zero, %c5, ->lb2\n"
@@ -1538,7 +1547,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_col_expand(
         "Tr"(src0.data()), "r"(range_base1_units),
         "i"(tile_type_traits<typename SubTile::TileDType>::TilesizeCode),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
-        "i"(Opcode)
+        "i"(Opcode), [ElemLayout] "i"(local_layout_code_v<Out>)
       : "memory");
 }
 

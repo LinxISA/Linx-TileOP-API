@@ -16,7 +16,10 @@ inline constexpr int tile_element_bits_v =
             type_traits<Element>::TypeCode == __type_int4x2 ||
             type_traits<Element>::TypeCode == __type_uint4x2
         ? 4
-        : type_traits<Element>::bits;
+        : (type_traits<Element>::TypeCode == __type_fp6_e3m2 ||
+           type_traits<Element>::TypeCode == __type_fp5_e2m3)
+              ? 8
+              : type_traits<Element>::bits;
 
 // PTO-ISA GMOVTypeLegal. Keep this based on architectural TypeCode values,
 // not C++ sizeof: several packed formats use an 8-bit carrier but have their
@@ -898,7 +901,7 @@ struct GlobalTensor {
 
   inline size_t GetStrideBytes(const int dim) const {
     const size_t elements = static_cast<size_t>(GetStride(dim));
-    return (elements * type_traits<DType>::bits + 7) / 8;
+    return (elements * tile_element_bits_v<DType> + 7) / 8;
   }
 
   DType *data() { return data_; }
@@ -984,6 +987,8 @@ public:
   static constexpr int CubeCellBytes = 128;
   static constexpr int CubeElementBits =
       tile_element_bits_v<DType>;
+  static constexpr bool IsCubeM32B64 =
+      BFractal_ == BLayout::CubeM32 && CubeElementBits == 64;
   static constexpr int CubeCellRows = [] {
     if constexpr (BFractal_ == BLayout::CubeM16) return 16;
     if constexpr (BFractal_ == BLayout::CubeM32) return 32;
@@ -999,7 +1004,7 @@ public:
     if constexpr (BFractal_ == BLayout::CubeM16)
       return 128 * 8 / (16 * CubeElementBits);
     if constexpr (BFractal_ == BLayout::CubeM32)
-      return 128 * 8 / (32 * CubeElementBits);
+      return IsCubeM32B64 ? 1 : 128 * 8 / (32 * CubeElementBits);
     return 0;
   }();
   static constexpr int CubeStorageRows = [] {
@@ -1010,8 +1015,12 @@ public:
   }();
   static constexpr int CubeStorageCols = IsCubeLayout
       ? ((Cols + CubeCellCols - 1) / CubeCellCols) * CubeCellCols : Cols;
-  static constexpr int CubeCellCount = IsCubeLayout
-      ? (CubeStorageRows / CubeCellRows) * (CubeStorageCols / CubeCellCols) : 0;
+  static constexpr int CubeCellCount = IsCubeM32B64
+      ? 2 * Cols
+      : IsCubeLayout
+            ? (CubeStorageRows / CubeCellRows) *
+                  (CubeStorageCols / CubeCellCols)
+            : 0;
   static constexpr int CubeRequiredBytes =
       IsCubeLayout ? CubeCellCount * CubeCellBytes : 0;
   static constexpr int CubeLoadLayout =
@@ -1032,6 +1041,8 @@ public:
                          ? CubeRequiredBytes
                          : (Rows * Cols * tile_element_bits_v<DType> + 7) / 8);
   static constexpr int CubeStorageIndex(int row, int column) {
+    if constexpr (IsCubeM32B64)
+      return column * 32 + row;
     const int cell_elements = CubeCellRows * CubeCellCols;
     if constexpr (BFractal_ == BLayout::CubeN8) {
       const int k_repeat = CubeStorageRows / CubeCellRows;
@@ -1055,6 +1066,28 @@ public:
     const int local = row * CubeCellCols + mapped_column;
     return cell_index * cell_elements + local;
   }
+  static constexpr int CubePhysicalCellsPerLogicalColumn =
+      IsCubeM32B64 ? 2 : 1;
+  static constexpr int CubePhysicalCellIndex(int column, bool high_plane) {
+    return IsCubeM32B64 ? 2 * column + (high_plane ? 1 : 0) : column;
+  }
+  static constexpr int CubePhysicalWordIndex(int row) { return row; }
+  static constexpr int CubePhysicalPlaneByteOffset(int row, int column,
+                                                   bool high_plane) {
+    return CubePhysicalCellIndex(column, high_plane) * CubeCellBytes +
+           CubePhysicalWordIndex(row) * 4;
+  }
+  static constexpr uint32_t CubePhysicalPlaneWord(uint64_t value,
+                                                  bool high_plane) {
+    return high_plane ? static_cast<uint32_t>(value >> 32)
+                      : static_cast<uint32_t>(value);
+  }
+  static constexpr bool CubePhysicalCellRangeComplete(int offset_cells,
+                                                       int cell_count) {
+    return !IsCubeM32B64 ||
+           (offset_cells >= 0 && cell_count > 0 &&
+            offset_cells % 2 == 0 && cell_count % 2 == 0);
+  }
 
   static constexpr int kBytes =
       (Rows_ * Cols_ * tile_element_bits_v<DType> + 7) / 8;
@@ -1075,11 +1108,17 @@ public:
   static_assert(!IsCubeLayout ||
                     (CubeElementBits == 4 || CubeElementBits == 8 ||
                      CubeElementBits == 16 || CubeElementBits == 32 ||
+                     (BFractal_ == BLayout::CubeM16 &&
+                      CubeElementBits == 64) ||
+                     (BFractal_ == BLayout::CubeM32 &&
+                      CubeElementBits == 64) ||
                      (BFractal_ == BLayout::CubeN8 && CubeElementBits == 64)),
-                "CUBE CELL layouts support only 4/8/16/32-bit widths, or U64 CUBE_N8");
-  static_assert(BFractal_ != BLayout::CubeM16 &&
-                    BFractal_ != BLayout::CubeM32 || CubeElementBits != 64,
-                "U64 CUBE_M16/CUBE_M32 layouts are not supported");
+                "CUBE CELL layouts support only 4/8/16/32-bit widths, "
+                "64-bit CUBE_M32, or the existing 64-bit CUBE_N8 form");
+  static_assert(BFractal_ != BLayout::CubeM16 || CubeElementBits != 64,
+                "64-bit CUBE_M16 layouts are not supported");
+  static_assert(!IsCubeM32B64 || Rows == 32,
+                "64-bit CUBE_M32 layouts require exactly 32 physical rows");
   static_assert(BFractal_ != BLayout::CubeM16 || Rows <= 16,
                 "CUBE_M16 supports at most 16 logical rows");
   static_assert(BFractal_ != BLayout::CubeM32 || Rows <= 32,
@@ -1094,17 +1133,33 @@ public:
   static constexpr PadValue PadVal = PadVal_;
   static constexpr CompactMode Compact = Compact_;
   static constexpr bool IsElementProfile = ElementProfile_;
+  static constexpr bool IsElement32Type =
+      std::is_same_v<DType, uint32_t> || std::is_same_v<DType, int32_t> ||
+      std::is_same_v<DType, float>;
+  static constexpr bool IsElement16Type =
+      std::is_same_v<DType, __half> || std::is_same_v<DType, uint16_t>;
+  static constexpr bool IsElement64Type =
+      std::is_same_v<DType, int64_t> || std::is_same_v<DType, uint64_t>;
+  static constexpr bool IsElementProfileShape =
+      (std::is_same_v<DType, float> &&
+       (Cols == 1 || Cols == 4 || Cols == 64 || Cols == 512)) ||
+      ((std::is_same_v<DType, uint32_t> || std::is_same_v<DType, int32_t>) &&
+       (Cols == 1 || Cols == 2 || Cols == 4 || Cols == 8 ||
+        Cols == 16 || Cols == 32 || Cols == 64)) ||
+      (IsElement16Type &&
+       (Cols == 2 || Cols == 4 || Cols == 16 || Cols == 64)) ||
+      (IsElement64Type &&
+       (Cols == 1 || Cols == 2 || Cols == 4 || Cols == 8 ||
+        Cols == 16 || Cols == 32));
   static_assert(
       !IsElementProfile ||
           (Loc_ == Location::Vec && BFractal_ == BLayout::CubeM32 &&
-           Rows == 32 && (Cols == 1 || Cols == 4) && ValidRow == Rows &&
+           Rows == 32 && IsElementProfileShape && ValidRow == Rows &&
            ValidCol == Cols && SFractal_ == SLayout::NoneBox &&
            SFractalSize_ == 512 && PadVal_ == PadValue::Null &&
            Compact_ == CompactMode::Null &&
-           (std::is_same_v<DType, uint32_t> ||
-            std::is_same_v<DType, int32_t> ||
-            std::is_same_v<DType, float>)),
-      "element Tile profiles require full U32/S32/F32 CUBE_M32 32x1 or 32x4 storage");
+           (IsElement32Type || IsElement16Type || IsElement64Type)),
+      "element Tile profile has an unsupported dtype or M32 shape");
   static constexpr int LogicalTileBytes = StorageBytes;
   static constexpr int TilesizeCode =
       LogicalTileBytes == 128  ? __tilesize_128B :
@@ -1262,18 +1317,39 @@ using VecTileM32 =
   Tile<Location::Vec, Element_, Rows_, Cols_, BLayout::CubeM32,
        RowValid_, ColValid_>;
 
-// Logical element tiles keep the current CUBE_M32 carrier private to the API.
-// The initial typed profile covers one 32-element part and its four-part
-// 128-element parent for U32, S32, and F32.
+// Logical element tiles keep the CUBE_M32 carrier private to the API. Existing
+// 32-bit profiles retain their 32-element CELL parts. Dense F16/U16 profiles
+// use complete 64-element 32x2 CELL parts; matching U32/S32 logical64 tiles
+// provide index and predicate-compatible element carriers.
 namespace detail {
 template <typename Element_, int Elements_>
 struct element_tile_profile {
-  static_assert(std::is_same_v<Element_, uint32_t> ||
-                    std::is_same_v<Element_, int32_t> ||
-                    std::is_same_v<Element_, float>,
-                "ElementTile currently supports only U32, S32, or F32 elements");
-  static_assert(Elements_ == 32 || Elements_ == 128,
-                "ElementTile currently supports 32 or 128 elements");
+  static constexpr bool IsInteger32 =
+      std::is_same_v<Element_, uint32_t> ||
+      std::is_same_v<Element_, int32_t>;
+  static constexpr bool IsFloat32 = std::is_same_v<Element_, float>;
+  static constexpr bool IsDense16 =
+      std::is_same_v<Element_, __half> ||
+      std::is_same_v<Element_, uint16_t>;
+  static constexpr bool IsInteger64 =
+      std::is_same_v<Element_, uint64_t> ||
+      std::is_same_v<Element_, int64_t>;
+  static_assert(IsInteger32 || IsFloat32 || IsDense16 || IsInteger64,
+                "ElementTile supports U64, S64, U32, S32, F32, F16, or U16 elements");
+  static constexpr bool IsSupportedShape =
+      (IsFloat32 && (Elements_ == 32 || Elements_ == 128 ||
+                     Elements_ == 2048 || Elements_ == 16384)) ||
+      (IsInteger32 && (Elements_ == 32 || Elements_ == 64 ||
+                       Elements_ == 128 || Elements_ == 256 ||
+                       Elements_ == 512 || Elements_ == 1024 ||
+                       Elements_ == 2048)) ||
+      (IsDense16 && (Elements_ == 64 || Elements_ == 128 ||
+                     Elements_ == 512 || Elements_ == 2048)) ||
+      (IsInteger64 && (Elements_ == 32 || Elements_ == 64 ||
+                       Elements_ == 128 || Elements_ == 256 ||
+                       Elements_ == 512 || Elements_ == 1024));
+  static_assert(IsSupportedShape,
+                "ElementTile dtype/count combination is not supported");
   using type = Tile<Location::Vec, Element_, 32, Elements_ / 32,
                     BLayout::CubeM32, 32, Elements_ / 32,
                     SLayout::NoneBox, 512, PadValue::Null,
@@ -1387,7 +1463,12 @@ public:
   static constexpr bool isRowMajor = kType == LayoutEnum::kRowMajor;
 
   using shape_t = Shape<1, 1, 1, 1, 1>;
-  using stride_t = typename stride_selector<Rows, Cols, isRowMajor>::type;
+  // Static MatrixLayout can describe a submatrix with a larger parent pitch.
+  // Preserve its declared logical strides rather than replacing them with
+  // dense Rows/Cols. Dynamic layouts keep the existing runtime constructors.
+  using stride_t = std::conditional_t<Rows != DYNAMIC && Cols != DYNAMIC,
+      Stride<1, 1, Rows * Cols, RowStride, ColStride>,
+      typename stride_selector<Rows, Cols, isRowMajor>::type>;
   static constexpr Layout layout_t = isRowMajor ? Layout::ND : Layout::DN;
 
   using Impl = GlobalTensor<DType, shape_t, stride_t, layout_t>;
@@ -2502,6 +2583,12 @@ class Subview {
           Parent::LogicalTileBytes,
       "B.SUBVIEW length cannot exceed the parent Tile capacity");
   static_assert(
+      subview_parent_tile_t<Parent>::CubePhysicalCellRangeComplete(
+          OffsetUnits_,
+          subview_bytes_for_size_code(SubviewSizeCode_) /
+              RangeAddressUnitBytes),
+      "B.SUBVIEW CUBE_M32 64-bit range must cover complete CELL pairs");
+  static_assert(
       RegSrc_ <= 23 || RegSrc_ == AutoRegSrc,
       "B.SUBVIEW RegSrc must be an absolute GPR selector 0..23 or AutoRegSrc");
 public:
@@ -2582,6 +2669,15 @@ class Assemble {
       !INIT_ || subview_bytes_for_size_code(ParentSizeCode_) <=
                     Parent::LogicalTileBytes,
       "B.ASSEMBLE length cannot exceed the parent Tile capacity");
+  static constexpr unsigned EffectiveWriterSizeCode =
+      WriterSizeCode_ != 0 ? WriterSizeCode_
+                           : (INIT_ ? ParentSizeCode_ : Parent::TilesizeCode);
+  static_assert(
+      subview_parent_tile_t<Parent>::CubePhysicalCellRangeComplete(
+          OffsetUnits_,
+          subview_bytes_for_size_code(EffectiveWriterSizeCode) /
+              RangeAddressUnitBytes),
+      "B.ASSEMBLE CUBE_M32 64-bit range must cover complete CELL pairs");
   static_assert(
       RegSrc_ <= 23 || RegSrc_ == AutoRegSrc,
       "B.ASSEMBLE RegSrc must be an absolute GPR selector 0..23 or AutoRegSrc");

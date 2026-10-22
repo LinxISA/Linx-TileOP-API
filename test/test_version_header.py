@@ -26,6 +26,12 @@ class TileOpApiVersionHeaderTest(unittest.TestCase):
             '#define PTO_TILEOP_API_HAS_TILE_ARRAY_PARTICIPANT_MASK 1', header
         )
         self.assertIn(
+            '#define PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE 1', header
+        )
+        self.assertIn(
+            '#define PTO_TILEOP_API_HAS_HIERARCHICAL_ELEMENT_STORAGE 1', header
+        )
+        self.assertIn(
             '#include "common/pto_tileop_api_revision.hpp"',
             UMBRELLA_HEADER.read_text(encoding="utf-8"),
         )
@@ -73,6 +79,14 @@ class TileOpApiVersionHeaderTest(unittest.TestCase):
             self.assertIn('#define PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS 1', installed)
             self.assertIn(
                 '#define PTO_TILEOP_API_HAS_TILE_ARRAY_PARTICIPANT_MASK 1',
+                installed,
+            )
+            self.assertIn(
+                '#define PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE 1',
+                installed,
+            )
+            self.assertIn(
+                '#define PTO_TILEOP_API_HAS_HIERARCHICAL_ELEMENT_STORAGE 1',
                 installed,
             )
 

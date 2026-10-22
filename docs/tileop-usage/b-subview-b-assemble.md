@@ -63,6 +63,13 @@ void assemble_pe0(ElementTile<uint32_t, 32> (&parts)[4]) {
 }
 ```
 
+同一规则可以逐级组成更大的闭合 parent。每一级先完成自己的
+`INIT -> MIDDLE* -> LAST`，`TASSEMBLY` 返回的完整 `ElementTile` 才能作为下一
+级 raw `TMOV` writer 的 source。例如 F32 使用 `32 -> 128 -> 2048 -> 16384`
+三个闭合层级；各层 writer 数分别是 4、16、8，没有一层超过 16-writer 限制，
+最终 storage 是 64 KiB。中间层不写回 Global Memory，也不把仍处于 OPEN 状态
+的 `TileArray` slot 暴露为 source。
+
 ```cpp
 #include <common/pto_tileop.hpp>
 

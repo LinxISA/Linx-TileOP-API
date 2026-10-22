@@ -52,40 +52,67 @@ static_assert(PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX,
 
 `ElementTile<T, Elements>` 是正式 API 的逻辑元素入口。应用指定元素类型与容量，
 当前 jcore profile 在 API 内选择已有的 Local VEC 存储，kernel 无需写物理 layout。
-首版接受 U32、S32、F32 与 32/128 个元素；不表示任意 dtype、容量或 backend 都已实现。
+U32/S32/F32 保留既有 logical32 profile；F16/U16 提供 64/128/512/2048 个元素的
+dense M32 profile，U32/S32 另提供匹配的 logical64 part。
 
 - `TPARTVIEW<32>(parent, valid_elements)` 复用 `BorrowedTileArray`，提供 `size()`、
   `part(index)` 和 `valid_size(index)`；view 借用 parent，不能超过 parent 的生命周期。
-- `TPARTELEMENT(part_tile)` 仅接受 32-element profile，并返回同一 carrier 的强类型元素引用。
-  128-element parent、其他 CUBE shape 和 b64 不得用它直接索引。
-  U32、S32、F32 分别携带 `dtype=u32`、`dtype=s32`、`dtype=f32`，不会把 signed
+- `TPARTELEMENT(part_tile)` 接受 logical32 或 logical64 part profile，并返回同一
+  carrier 的强类型元素引用。超过 part 容量的 parent、其他 CUBE shape 和 b64 不得直接索引。
+  U32、S32、F32、F16、U16 携带各自 dtype 与精确 shape，不会把 signed
   或浮点元素伪装成 U32。正式接口携带元素 view 的类型、shape 和布局合同；普通 indexed gather 的前端
   必须检查该合同，不能把同大小的原始 vector 自动当作此 view。已安装版本用
   `PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查强类型 view 能力。
+- F16/U16 及匹配的 U32/S32 索引使用 `TPARTVIEW<64>`。F16/U16 part 占 128 bytes，
+  匹配的 U32/S32 part 占 256 bytes；API 保持同一逻辑元素与 predicate 映射。
+  分片内 element 顺序跨两列交错，`logical_index`、`valid_size` 和
+  `store_predicate` 统一实现该映射。`TSTORE(output, tile, parts, part, count)`
+  用 packed GPR predicate 精确写回 0..64 个元素；`count==0` 不构造目标地址。
+  原四参数 `TSTORE` 仍写完整 part。消费方可用
+  `PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE` 检查这组接口。
+  `TileArray` 的单次 assembly 最多包含 16 个 writer；2048 元素的 F16/U16
+  parent 可以加载并借用 32 个 part，但不能用 32 个 writer 打开同一 assembly。
+  该 capability 表示公共类型和 transport 接口可用；logical64 的 pragma lowering
+  和 gfrun 功能执行需要对应编译器、模型版本通过原始用例验收；gfsim 在后续 PR 单独验收。
+- 多层闭合 assembly 用完整 storage fragment 逐级组装：F16 可按
+  `64 -> 128 -> 2048`，F32 可按 `32 -> 128 -> 2048 -> 16384`。每一级
+  `TileArray` 仍最多 16 个 writer，最大 parent 是 64 KiB；上一级只接受已经
+  `TASSEMBLY` 闭合的完整 `ElementTile`，用 raw `TMOV` 保留 payload。F32 的
+  2048/16384 元素 profile 是 storage carrier，逻辑有效元素数由
+  `TPARTVIEW<32>(parent, valid_elements)` 独立携带，映射为
+  `element * ParentCols + part`。F16 logical64 映射保持
+  `(element / 2) * ParentCols + 2 * part + element % 2`。新增的 F32 2048/16384
+  storage profile 的 pointer `TLOAD` 只接受完整容量，避免为 partial load 分配
+  大块 scalar scratch；既有 F16 2048 profile 的行为保持不变。
+  消费方用 `PTO_TILEOP_API_HAS_HIERARCHICAL_ELEMENT_STORAGE` 检查该能力。
 - `TLOAD(parent, input, valid_elements)` 和对应的 pointer `TSTORE` 要求 pointer dtype
   与 `ElementTile` 完全一致，并复用现有统一 transport；最后一个不完整 block
-  先复制有效输入到暂存区域，因此输入不需要额外 padding。有效数必须在 0..128。
+  先复制有效输入到暂存区域，因此输入不需要额外 padding。有效数不能超过 parent 容量。
 - `TSTORE(output_block, tile, parts, part_index)` 复用已有 `TSTORE`，由 API 根据 view
-  投影写回原逻辑位置，保证 `output[element]` 对应 `input[element]`。每次调用写完整
-  32-element part；四个 part 合起来覆盖完整的 128-element padded block。`valid_size`
-  提供 kernel 内 element 条件的边界，不会缩短 TSTORE；tail 中由补零输入计算出的值
-  也会写到 padded output，调用方应只消费原始有效范围或显式处理这些位置。
+  投影写回原逻辑位置，保证 `output[element]` 对应 `input[element]`。logical32 每次调用
+  写完整 32-element part；四个 part 合起来覆盖完整的 128-element padded block。
+  `valid_size` 提供 kernel 内 element 条件的边界，不会缩短该四参数 TSTORE；tail 中由
+  补零输入计算出的值也会写到 padded output，调用方应只消费原始有效范围或显式处理。
 
 这些接口定义在既有 `pto_tile.hpp`、`pto_tile_region.hpp` 和 `jcore/template_asm.hpp`
 中。它们没有新 ISA 编码，不复制 TADDS/TSHRS/TANDS，也不引入另一套 Tile 实现。
 消费方使用 `PTO_TILEOP_API_HAS_ELEMENT_TILE` 检查逻辑 Tile 接口，并使用
-`PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查 U32/S32/F32 typed view。
+`PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查 typed view，并使用
+`PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE` 检查 dense logical64 profile。
+多层闭合 storage assembly 另用
+`PTO_TILEOP_API_HAS_HIERARCHICAL_ELEMENT_STORAGE` 检查。
 为使 `ElementTile` 与同 shape 的原始 `VecTileM32` 在类型系统中可区分，现有 `Tile`
 模板追加了默认 profile 参数；默认 Tile 的存储、大小、对齐和 data carrier 不变，
 但跨二进制边界传递 C++ Tile 类型的使用方需要随本版本重新编译。
 
-完整、实际编译并运行的 Tile/element-wise kernel 及逐例 gfrun/gfsim 检查见
+完整、实际编译并运行的 Tile/element-wise kernel 及逐例 gfrun 检查见
 [SuperNPUBench PR #202](https://github.com/PTO-ISA/SuperNPUBench/pull/202)。
 `#pragma pto element for` 的条件/atomic lowering 需要匹配的 Linx compiler，当前
 可执行模型的 atomic profile 是 U32 32-element MGATHER.ADD。纯 U32 表达式支持
 十种二元运算以及一元负号/补码，局部变量进入 Tile SSA；这不能用于宣称任意 C++
 循环都已支持自动并行。API metadata/拒绝边界由 `test/test_element_tile_api.py` 检查，执行语义
-由 benchmark 的独立 golden 和两模型结果检查。
+由 benchmark 的独立 golden 和 gfrun 实际内存结果检查。当前整数、FP16、FP32
+统一采用此功能验收标准；历史双模型结果保留其原始版本，gfsim 改动另行提交。
 
 ## 快速开始
 
@@ -121,6 +148,8 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
 ## 阅读路径
 
 - 先了解 [Tile 约束、location、shape 和 bundle](concepts/README.md)。
+- 需要在 typed Tile 元素上编写普通 C++ 条件、tail、gather 或 atomic 时，阅读
+  [Element-if 开发者使用手册](element-if.md)。
 - 需要从 GM 传输数据时，阅读 [TLSU load/store/move](tlsu/load-store-move/TLOAD.md)。
   其中卷积权重 GM 到 Shared NK 的 `OHWI2NK`/`OIHW2NK` 专用 `TLOAD` overload
   也在该页面说明。

@@ -4,19 +4,19 @@ using namespace pto;
 
 using D = CubeAccumulatorM16<float, 16, 16>;
 using Bias = CubeBias<float, 16>;
-using SA = Tile<Location::Scaling, __fp8_e8m0, 16, 8,
+using SA = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
                 BLayout::CubeM32, 16, 1>;
-using SB = Tile<Location::Scaling, __fp8_e8m0, 8, 16,
-                BLayout::RowMajor, 1, 16>;
+using SB = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
+                BLayout::CubeM32, 16, 1>;
 
 template <typename T> using MA = CubeTileM16<T, 16, 32>;
 template <typename T> using MB = CubeTileN8<T, 32, 16>;
 
 using GV_D = CubeAccumulatorM16<float, 1, 16>;
-using GV_SA = Tile<Location::Scaling, __fp8_e8m0, 16, 8,
+using GV_SA = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
                    BLayout::CubeM32, 1, 1>;
-using GV_SB = Tile<Location::Scaling, __fp8_e8m0, 8, 16,
-                   BLayout::RowMajor, 1, 16>;
+using GV_SB = Tile<Location::Scaling, __fp8_e8m0, 32, 4,
+                   BLayout::CubeM32, 16, 1>;
 template <typename T> using GVA = CubeTileM16<T, 1, 32>;
 template <typename T> using GVB = CubeTileN8<T, 32, 16>;
 template <typename T> using M32A = CubeTileM32<T, 32, 32>;
@@ -83,7 +83,7 @@ __attribute__((noinline)) void carrier_scale_a(
   TLOAD_CUBE(c, gm_c);
   TLOAD(bias, gm_bias);
   TLOAD_CUBE(a, gm_a);
-  TLOAD(sa, gm_sa);
+  TLOAD_CUBE(sa, gm_sa);
   TLOAD_CUBE(b, gm_b);
   TMATMUL_MX(d, a, sa, b);
   TMATMUL_MX_ACC(d, c, a, sa, b);
@@ -100,7 +100,7 @@ __attribute__((noinline)) void carrier_scale_b(
   GM<float, 8, 16> gm_bias(bias_input);
   GM<__bf16, 16, 32> gm_a(a_input);
   GM<__fp8_e5m2, 16, 32> gm_b(b_input);
-  GM<__fp8_e8m0, 8, 16> gm_sb(scale_input);
+  global_tensor<__fp8_e8m0, MatrixLayout<16, 1, 1, 16>> gm_sb(scale_input);
   D d, c;
   Bias bias;
   BF16A a;
@@ -110,7 +110,7 @@ __attribute__((noinline)) void carrier_scale_b(
   TLOAD(bias, gm_bias);
   TLOAD_CUBE(a, gm_a);
   TLOAD_CUBE(b, gm_b);
-  TLOAD(sb, gm_sb);
+  TLOAD_CUBE(sb, gm_sb);
   TMATMUL_MX(d, a, b, sb);
   TMATMUL_MX_ACC(d, c, a, b, sb);
   TMATMUL_MX_BIAS(d, a, b, sb, bias);
@@ -143,7 +143,7 @@ __attribute__((noinline)) void carrier_both_scales(
   GM<__fp8_e4m3, 16, 32> gm_a(a_input);
   GM<__fp8_e8m0, 16, 8> gm_sa(scale_a_input);
   GM<__fp8_e5m2, 16, 32> gm_b(b_input);
-  GM<__fp8_e8m0, 8, 16> gm_sb(scale_b_input);
+  global_tensor<__fp8_e8m0, MatrixLayout<16, 1, 1, 16>> gm_sb(scale_b_input);
   D d, c;
   Bias bias;
   E4A a;
@@ -153,9 +153,9 @@ __attribute__((noinline)) void carrier_both_scales(
   TLOAD_CUBE(c, gm_c);
   TLOAD(bias, gm_bias);
   TLOAD_CUBE(a, gm_a);
-  TLOAD(sa, gm_sa);
+  TLOAD_CUBE(sa, gm_sa);
   TLOAD_CUBE(b, gm_b);
-  TLOAD(sb, gm_sb);
+  TLOAD_CUBE(sb, gm_sb);
   TMATMUL_MX(d, a, sa, b, sb);
   TMATMUL_MX_ACC(d, c, a, sa, b, sb);
   TMATMUL_MX_BIAS(d, a, sa, b, sb, bias);
@@ -253,7 +253,7 @@ __attribute__((noinline)) void carrier_gemv_scale_a(
   GM<__half, 32, 16> gm_mtx(mtx_input);
   GV_D d, c; Bias bias; GVA<__fp8_e4m3> vec; GV_SA scale; GVB<__half> mtx;
   TLOAD_CUBE(c, gm_c); TLOAD(bias, gm_bias);
-  TLOAD_CUBE(vec, gm_vec); TLOAD(scale, gm_scale); TLOAD_CUBE(mtx, gm_mtx);
+  TLOAD_CUBE(vec, gm_vec); TLOAD_CUBE(scale, gm_scale); TLOAD_CUBE(mtx, gm_mtx);
   TGEMV_MX(d, mtx, vec, scale);
   TGEMV_MX_ACC(d, c, mtx, vec, scale);
   TGEMV_MX_BIAS(d, mtx, vec, scale, bias);
@@ -268,10 +268,10 @@ __attribute__((noinline)) void carrier_gemv_scale_b(
   GM<float, 8, 16> gm_bias(bias_input);
   GM<__bf16, 1, 32> gm_vec(vec_input);
   GM<__fp8_e5m2, 32, 16> gm_mtx(mtx_input);
-  GM<__fp8_e8m0, 8, 16> gm_scale(scale_input);
+  global_tensor<__fp8_e8m0, MatrixLayout<16, 1, 1, 16>> gm_scale(scale_input);
   GV_D d, c; Bias bias; GVA<__bf16> vec; GVB<__fp8_e5m2> mtx; GV_SB scale;
   TLOAD_CUBE(c, gm_c); TLOAD(bias, gm_bias);
-  TLOAD_CUBE(vec, gm_vec); TLOAD_CUBE(mtx, gm_mtx); TLOAD(scale, gm_scale);
+  TLOAD_CUBE(vec, gm_vec); TLOAD_CUBE(mtx, gm_mtx); TLOAD_CUBE(scale, gm_scale);
   TGEMV_MX(d, mtx, scale, vec);
   TGEMV_MX_ACC(d, c, mtx, scale, vec);
   TGEMV_MX_BIAS(d, mtx, scale, vec, bias);
@@ -287,12 +287,12 @@ __attribute__((noinline)) void carrier_gemv_both_scales(
   GM<__fp8_e4m3, 1, 32> gm_vec(vec_input);
   GM<__fp8_e8m0, 16, 8> gm_sv(scale_vec_input);
   GM<__fp8_e5m2, 32, 16> gm_mtx(mtx_input);
-  GM<__fp8_e8m0, 8, 16> gm_sm(scale_mtx_input);
+  global_tensor<__fp8_e8m0, MatrixLayout<16, 1, 1, 16>> gm_sm(scale_mtx_input);
   GV_D d, c; Bias bias; GVA<__fp8_e4m3> vec; GV_SA sv;
   GVB<__fp8_e5m2> mtx; GV_SB sm;
   TLOAD_CUBE(c, gm_c); TLOAD(bias, gm_bias);
-  TLOAD_CUBE(vec, gm_vec); TLOAD(sv, gm_sv);
-  TLOAD_CUBE(mtx, gm_mtx); TLOAD(sm, gm_sm);
+  TLOAD_CUBE(vec, gm_vec); TLOAD_CUBE(sv, gm_sv);
+  TLOAD_CUBE(mtx, gm_mtx); TLOAD_CUBE(sm, gm_sm);
   TGEMV_MX(d, mtx, sm, vec, sv);
   TGEMV_MX_ACC(d, c, mtx, sm, vec, sv);
   TGEMV_MX_BIAS(d, mtx, sm, vec, sv, bias);
@@ -313,12 +313,12 @@ __attribute__((noinline)) void carrier_postprocess_all_sources(
   GM<__fp8_e4m3, 16, 32> gm_a(a_input);
   GM<__fp8_e8m0, 16, 8> gm_sa(scale_a_input);
   GM<__fp8_e5m2, 16, 32> gm_b(b_input);
-  GM<__fp8_e8m0, 8, 16> gm_sb(scale_b_input);
+  global_tensor<__fp8_e8m0, MatrixLayout<16, 1, 1, 16>> gm_sb(scale_b_input);
   GM<uint64_t, 2, 16> gm_q(quant_input), gm_p(prelu_input);
   GM<float, 16, 8> gm_ri(row_in_input), gm_ro(row_out_input);
   D8 d; E4A a; SA sa; E5B b; SB sb; Param q, p; RowMax ri, ro;
-  TLOAD_CUBE(a, gm_a); TLOAD(sa, gm_sa);
-  TLOAD_CUBE(b, gm_b); TLOAD(sb, gm_sb);
+  TLOAD_CUBE(a, gm_a); TLOAD_CUBE(sa, gm_sa);
+  TLOAD_CUBE(b, gm_b); TLOAD_CUBE(sb, gm_sb);
   TLOAD(q, gm_q); TLOAD(p, gm_p); TLOAD(ri, gm_ri); TLOAD(ro, gm_ro);
   TMATMUL_MX(d, a, sa, b, sb,
              fixp::keep_acc().prelu(p).row_max(ri, ro));
