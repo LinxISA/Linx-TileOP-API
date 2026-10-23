@@ -76,6 +76,35 @@ ScaleParent assemble_scales(ScaleBf16 (&scales)[4]) {
 }
 ```
 
+普通计算得到的 `CUBE_M32` fragment 也可以作为二元 producer 的输入，结果
+直接写入同布局的 slot。下面的八个 `TADD` 分别携带 INIT、六个 MIDDLE 和
+LAST；输入是普通 Tile，不会生成 source `B.SUBVIEW`，也不需要额外的
+`TCVT`/`TMOV` 搬运：
+
+```cpp
+#include <common/pto_tileop.hpp>
+
+#include <cstdint>
+#include <utility>
+
+using namespace pto;
+
+using Fragment = VecTileM32<int32_t, 32, 1>;
+using Parent = VecTileM32<int32_t, 32, 8>;
+
+Parent assemble_sums(Fragment &lhs, Fragment &rhs) {
+  TileArray<Fragment, 1, 8> slots;
+  for (int col = 0; col < 8; ++col)
+    TADD(slots[0][col], lhs, rhs);
+  return TASSEMBLY<Parent>(std::move(slots));
+}
+```
+
+该普通 Tile 二元路径要求 slot、`src0`、`src1` 都是 descriptor 匹配的
+unboxed `CUBE_M32` Local Tile；dtype、location、physical/valid shape 和
+fragment capacity 必须一致。`TADD`、`TSUB`、`TMUL`、`TDIV`、`TREM`、
+`TAND`、`TOR`、`TXOR`、`TSHL`、`TSHR`、`TMAX`、`TMIN` 共用此路径。
+
 source 侧对应物是 `TPARTVIEW`：`B.ASSEMBLE` 把 producer 的 destination 写进
 parent 的某个 slot，`B.SUBVIEW` 则把 parent 的某段借出为 source fragment，
 两者互为读写对偶。
