@@ -1984,14 +1984,157 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_assemble_dispatch(
   }
 }
 
-#define PTO_REGION_BINARY_DEST_WRAPPER(Name, Opcode)                         \
-  template <typename SubTile, typename Parent0, typename SubTile0,           \
-            typename Parent1, typename SubTile1>                             \
-  PTO_REGION_ALWAYS_INLINE void Name(                                       \
-      region::TileArrayOutputRef<SubTile> dst,                              \
-      region::SubTileView<Parent0, SubTile0> &src0,                         \
-      region::SubTileView<Parent1, SubTile1> &src1) {                       \
-    pto_region_binary_assemble_dispatch<Opcode>(dst, src0, src1);           \
+// Ordinary computed CUBE_M32 tiles can produce one fragment of a larger
+// CUBE_M32 TileArray parent directly.  Unlike the overload above, these
+// sources are complete tiles rather than B.SUBVIEW carriers, so the producer
+// binds them directly and attaches only the destination B.ASSEMBLE modifier.
+//
+// INIT allocates the full parent capacity.  MIDDLE/LAST bind the existing
+// ParentRef on the final L=1 record, while B.ASSEMBLE field 5 continues to
+// describe the individual fragment writer extent in every phase.
+template <int ParentSize, bool Init, bool Last, int Opcode, typename SubTile,
+          typename Src0, typename Src1>
+  requires(is_tile_data_v<Src0> && is_tile_data_v<Src1> &&
+           !is_subtile_view_v<Src0> && !is_subtile_view_v<Src1> &&
+           !is_range_v<Src0> && !is_range_v<Src1>)
+PTO_REGION_ALWAYS_INLINE void pto_region_binary_tile_assemble(
+    region::TileArrayOutputRef<SubTile> &dst, Src0 &src0, Src1 &src1) {
+  static_assert(SubTile::BFractal == BLayout::CubeM32 &&
+                    Src0::BFractal == BLayout::CubeM32 &&
+                    Src1::BFractal == BLayout::CubeM32,
+                "binary TileArray ordinary-tile assembly requires CUBE_M32 "
+                "destination and sources");
+  static_assert(SubTile::SFractal == SLayout::NoneBox &&
+                    Src0::SFractal == SLayout::NoneBox &&
+                    Src1::SFractal == SLayout::NoneBox,
+                "binary TileArray ordinary-tile assembly requires unboxed "
+                "fragments");
+  static_assert(SubTile::Loc == Src0::Loc && Src0::Loc == Src1::Loc,
+                "binary TileArray slot and sources must have matching "
+                "locations");
+  static_assert(SubTile::Rows == Src0::Rows && SubTile::Cols == Src0::Cols &&
+                    Src0::Rows == Src1::Rows && Src0::Cols == Src1::Cols,
+                "binary TileArray slot requires matching physical shapes");
+  static_assert(SubTile::ValidRow == Src0::ValidRow &&
+                    SubTile::ValidCol == Src0::ValidCol &&
+                    Src0::ValidRow == Src1::ValidRow &&
+                    Src0::ValidCol == Src1::ValidCol,
+                "binary TileArray slot requires matching valid shapes");
+  static_assert(std::is_same_v<typename SubTile::DType, typename Src0::DType> &&
+                    std::is_same_v<typename Src0::DType, typename Src1::DType>,
+                "binary TileArray slot requires matching element types");
+  static_assert(SubTile::LogicalTileBytes == Src0::LogicalTileBytes &&
+                    Src0::LogicalTileBytes == Src1::LogicalTileBytes,
+                "binary TileArray slot and sources must have matching "
+                "capacities");
+
+  constexpr int writer_size =
+      tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
+  static_assert(writer_size != 0,
+                "TileArray slot writer extent must be a nonzero size code");
+  const uintptr_t destination_base_units = dst.range_base_units();
+
+#define PTO_REGION_BINARY_TILE_ASSEMBLY_PREFIX                                 \
+  "BSTART.TEPL %c[Opcode], %D[Type]\n" PTO_REGION_ELEMENTWISE_LAYOUT_ASM       \
+  "B.DIM zero, %c[ValidCol], ->lb0\n"                                          \
+  "B.DIM zero, %c[ValidRow], ->lb1\n"                                          \
+  "B.DIM zero, %c[Cols], ->lb2\n"
+#define PTO_REGION_BINARY_TILE_ASSEMBLY_INPUTS                                 \
+  [Type] "i"(type_traits<typename Src0::DType>::TypeCode),                     \
+      [Src0] "Tr"(src0.data()), [Src1] "Tr"(src1.data()),                      \
+      [ValidCol] "i"(Src0::ValidCol), [ValidRow] "i"(Src0::ValidRow),          \
+      [Cols] "i"(Src0::Cols), [ParentSize] "i"(ParentSize),                    \
+      [Offset] "r"(destination_base_units), [Opcode] "i"(Opcode),              \
+      [WriterSize] "i"(writer_size), [Init] "i"(Init), [Last] "i"(Last),       \
+      [ElemLayout] "i"(local_layout_code_v<SubTile>)
+  if constexpr (Init) {
+    asm volatile(PTO_REGION_BINARY_TILE_ASSEMBLY_PREFIX
+                 "B.IOT %[Src0], %[Src1], mask=1111, last, "
+                 "->%[Dst]<%Z[ParentSize]>\n"
+                 "B.ASSEMBLE %c[Init], %c[Last], %[Offset], 0, %c[WriterSize]\n"
+                 : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
+                 : PTO_REGION_BINARY_TILE_ASSEMBLY_INPUTS
+                 : "memory");
+  } else {
+    asm volatile(PTO_REGION_BINARY_TILE_ASSEMBLY_PREFIX
+                 "B.IOT %[Src0], %[Src1], mask=1111\n"
+                 "B.IOT %[Dst], mask=1111, last\n"
+                 "B.ASSEMBLE %c[Init], %c[Last], %[Offset], 0, %c[WriterSize]\n"
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_BINARY_TILE_ASSEMBLY_INPUTS
+                 : "memory");
+  }
+#undef PTO_REGION_BINARY_TILE_ASSEMBLY_INPUTS
+#undef PTO_REGION_BINARY_TILE_ASSEMBLY_PREFIX
+}
+
+template <int ParentSize, int Opcode, typename SubTile, typename Src0,
+          typename Src1>
+  requires(is_tile_data_v<Src0> && is_tile_data_v<Src1> &&
+           !is_subtile_view_v<Src0> && !is_subtile_view_v<Src1> &&
+           !is_range_v<Src0> && !is_range_v<Src1>)
+PTO_REGION_ALWAYS_INLINE void pto_region_binary_tile_assemble_phase(
+    region::TileArrayOutputRef<SubTile> &dst, Src0 &src0, Src1 &src1) {
+  if (dst.slot_count() == 1)
+    pto_region_binary_tile_assemble<ParentSize, true, true, Opcode>(dst, src0,
+                                                                    src1);
+  else if (dst.ordinal() == 0)
+    pto_region_binary_tile_assemble<ParentSize, true, false, Opcode>(dst, src0,
+                                                                     src1);
+  else if (dst.ordinal() == dst.slot_count() - 1)
+    pto_region_binary_tile_assemble<ParentSize, false, true, Opcode>(dst, src0,
+                                                                     src1);
+  else
+    pto_region_binary_tile_assemble<ParentSize, false, false, Opcode>(dst, src0,
+                                                                      src1);
+}
+
+template <int Opcode, typename SubTile, typename Src0, typename Src1>
+  requires(is_tile_data_v<Src0> && is_tile_data_v<Src1> &&
+           !is_subtile_view_v<Src0> && !is_subtile_view_v<Src1> &&
+           !is_range_v<Src0> && !is_range_v<Src1>)
+PTO_REGION_ALWAYS_INLINE void pto_region_binary_tile_assemble_dispatch(
+    region::TileArrayOutputRef<SubTile> &dst, Src0 &src0, Src1 &src1) {
+  switch (dst.parent_size_code()) {
+#define PTO_REGION_BINARY_TILE_PARENT_CASE(N)                                  \
+  case N:                                                                      \
+    pto_region_binary_tile_assemble_phase<N, Opcode>(dst, src0, src1);         \
+    break
+    PTO_REGION_BINARY_TILE_PARENT_CASE(1);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(2);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(3);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(4);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(5);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(6);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(7);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(8);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(9);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(10);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(11);
+    PTO_REGION_BINARY_TILE_PARENT_CASE(12);
+#undef PTO_REGION_BINARY_TILE_PARENT_CASE
+  default:
+    __builtin_trap();
+  }
+}
+
+#define PTO_REGION_BINARY_DEST_WRAPPER(Name, Opcode)                           \
+  template <typename SubTile, typename Parent0, typename SubTile0,             \
+            typename Parent1, typename SubTile1>                               \
+  PTO_REGION_ALWAYS_INLINE void Name(                                          \
+      region::TileArrayOutputRef<SubTile> dst,                                 \
+      region::SubTileView<Parent0, SubTile0> &src0,                            \
+      region::SubTileView<Parent1, SubTile1> &src1) {                          \
+    pto_region_binary_assemble_dispatch<Opcode>(dst, src0, src1);              \
+  }                                                                            \
+  template <typename SubTile, typename Src0, typename Src1>                    \
+    requires(is_tile_data_v<Src0> && is_tile_data_v<Src1> &&                   \
+             !is_subtile_view_v<Src0> && !is_subtile_view_v<Src1> &&           \
+             !is_range_v<Src0> && !is_range_v<Src1>)                           \
+  PTO_REGION_ALWAYS_INLINE void Name(region::TileArrayOutputRef<SubTile> dst,  \
+                                     Src0 &src0, Src1 &src1) {                 \
+    pto_region_binary_tile_assemble_dispatch<Opcode>(dst, src0, src1);         \
   }
 
 PTO_REGION_BINARY_DEST_WRAPPER(TADD, 0)
