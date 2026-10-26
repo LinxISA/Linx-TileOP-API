@@ -12256,6 +12256,12 @@ void TCMP(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   static_assert(tile_shape_in0::Rows == tile_shape_out::Rows &&
                     tile_shape_in0::Cols == tile_shape_out::Cols,
                 "TCMP output shape must match input shape");
+  static_assert(tile_shape_in0::Rows == tile_shape_in1::Rows &&
+                    tile_shape_in0::Cols == tile_shape_in1::Cols &&
+                    tile_shape_in0::BFractal == tile_shape_in1::BFractal,
+                "TCMP source physical shapes and layouts must match");
+  static_assert(tile_shape_in0::BFractal == tile_shape_out::BFractal,
+                "TCMP predicate layout must match input layout");
   static_assert(tile_shape_in0::ValidRow == tile_shape_in1::ValidRow &&
                     tile_shape_in0::ValidCol == tile_shape_in1::ValidCol,
                 "TCMP source valid shapes must match");
@@ -12745,6 +12751,13 @@ void TSEL(tile_shape &dst, mask_shape &mask, true_shape &true_src) {
                     true_shape::ValidRow == tile_shape::ValidRow &&
                     true_shape::ValidCol == tile_shape::ValidCol,
                 "TSEL mask/true-source valid shapes must match the destination");
+  static_assert(mask_shape::Rows == tile_shape::Rows &&
+                    true_shape::Rows == tile_shape::Rows &&
+                    mask_shape::Cols == tile_shape::Cols &&
+                    true_shape::Cols == tile_shape::Cols &&
+                    mask_shape::BFractal == tile_shape::BFractal &&
+                    true_shape::BFractal == tile_shape::BFractal,
+                "TSEL physical shapes and layouts must match the destination");
   if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
   asm volatile(
     "BSTART.TEPL 26, %D2\n"
