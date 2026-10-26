@@ -47,6 +47,10 @@ src_true（数值源）可使用**等元素位宽、非打包 4-bit** 的异类�
 
 输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
 
+`dst`、`predicate` 和 `src_true` 必须具有相同的物理 `Rows x Cols` 与
+`BLayout`，并且 valid shape 也必须一致。`validCol < Cols` 不会把不同物理列
+布局的 Tile 变成可兼容的 compare/select 操作数。
+
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding

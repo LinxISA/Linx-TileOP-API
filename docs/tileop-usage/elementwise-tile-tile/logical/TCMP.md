@@ -62,6 +62,10 @@ void TCMP_ASS(D &assembled_dst, A &src0, B &src1); // Mode = EQ
 
 输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
 
+`src0`、`src1` 和 predicate `dst` 必须具有相同的物理 `Rows x Cols` 与
+`BLayout`，并且 valid shape 也必须一致。`validCol < Cols` 只表示尾部物理列
+不参与有效计算，不允许用不同物理列数的 Tile 作为 compare 链的另一输入。
+
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding
