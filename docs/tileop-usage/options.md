@@ -274,6 +274,13 @@ TMATMUL(d, a, b, fixp::f16().prelu(prelu));
 `U8` 可通过 `High=true` 选择高半 carrier。valid shape 必须满足一个 GPR
 carrier 的字段容量，跨多个 GPR 的结果需要由调用者拆分 source view 或分组处理。
 
+## 6.3 TCMP/TSEL partial-column shape
+
+`TCMP` 和 `TSEL` 可以处理 `ValidCol < Cols` 的 partial-column Tile，但参与同一
+compare/select 操作的操作数仍必须保持相同的物理 `Rows x Cols` 和 `BLayout`，并且
+valid shape 必须一致。不能用 `[M, N]`、`ValidCol=1` 的 Tile 与物理 `[M, 1]` Tile
+混用；这两种 Tile 的行距和 descriptor geometry 不同，应在 API 层编译期拒绝。
+
 PTO #311 row-reduction results may retain a wide physical CUBE carrier while
 publishing only `ValidCol=1`. Use `TREDUCEPREFIXVIEW<OneCellTile>(reduction)`
 to borrow the first 128-byte CELL without a `TCVT` copy. The view is accepted
