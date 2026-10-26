@@ -105,7 +105,7 @@ enum PadValueEnum : uint64_t {
   Null = 3
 };
 
-const char *layout_type_to_str(LayoutEnum type) {
+inline const char *layout_type_to_str(LayoutEnum type) {
   switch (type) {
   case LayoutEnum::kRowMajor:
     return "RowMajor";

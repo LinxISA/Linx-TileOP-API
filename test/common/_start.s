@@ -1,3 +1,5 @@
+# Legacy direct-entry fixture. It is intentionally not linked by the current
+# gfrun benchmark path; use gfrun_runtime_adapter.c for hosted completion.
 .global  _start
   .type   _start,@function
   .text

@@ -272,9 +272,55 @@ PRelu prelu;
 TMATMUL(d, a, b, fixp::f16().prelu(prelu));
 ```
 
-## 6.1 Reduction result prefix views
+## 6.1 动态有效区域与物理列数
 
-## 6.2 TCMPS predicate GPR carriers
+动态 shape 的 CUBE Tile 可以保留较大的静态容量，同时让一次操作使用较小的运行时
+descriptor。`Tile<..., Rows, Cols, ..., DYNAMIC, DYNAMIC>` 中的 `Rows` 和 `Cols`
+仍决定 Tile 的容量上限和 SizeCode；它们不要求每次操作都把 `Cols` 作为 `LB2`。
+
+以下接口在原有 `UserValidCol`、`UserValidRow` 参数之后接受可选的
+`UserPhysicalCol`：
+
+- 二元逐元素操作，如 `TADD`、`TSUB`、`TMUL`、`TDIV`、位运算和 min/max；
+- `TEXPANDS`；
+- 二元 `TROWEXPAND*` 操作。
+
+三个参数都为零时，接口保留原有行为。进入运行时 geometry 重载后，省略的
+valid 维度从对应 Tile 实例读取（静态 Tile 返回类型常量），省略的物理列数使用
+`Tile::Cols`。调用时建议同时给出三个值。API 在发出 inline asm
+之前检查 `0 < ValidCol <= PhysicalCol <= Tile::Cols` 和
+`0 < ValidRow <= Tile::Rows`；非法范围直接失败。对 CUBE layout，`PhysicalCol`
+是逻辑物理列数，实际存储列数继续由 layout 和 dtype 的 CELL geometry 对齐，因此
+奇数列（例如 FP32 CUBE_M32 的 5 列）本身是合法输入。
+
+下面的 Tile 仍保留 32 KiB 的 FP32 容量，但本次计算使用
+`ValidRow=2, ValidCol=6, PhysicalCol=6`：
+
+```cpp
+using Wide = Tile<Location::Vec, float, 32, 256,
+                  BLayout::CubeM32, DYNAMIC, DYNAMIC>;
+using Row = Tile<Location::Vec, float, 32, 1,
+                 BLayout::CubeM32, DYNAMIC, 1>;
+
+Wide ga(2, 6), ba(2, 6), bf(2, 6), tmp(2, 6);
+Row mean(2);
+
+TEXPANDS(ga, 0.0f, 6, 2, 6);
+TADD(ba, ba, bf, 6, 2, 6);
+TSUB(tmp, ga, bf, 6, 2, 6);
+TROWEXPANDMUL(tmp, bf, mean, 6, 2, 6);
+```
+
+这个重载不会缩小 Tile 的分配容量，也不会把有效区拆成多个幂次宽度片段。它只让
+当前 bundle 的 `LB0/LB1/LB2` 与实际 producer descriptor 一致。CUBE `TLOAD`
+和 CUBE `TCVT` 按 valid shape 派生持久 descriptor，CUBE `TSTORE` 使用绑定源的
+descriptor；后续逐元素操作必须传递与该来源一致的运行时物理列数。完整的 6 列、
+奇数 5 列和非法范围编译 fixture 见
+`test/tileop_api/src/RuntimePhysicalCols.cpp`。
+
+## 6.2 Reduction result prefix views
+
+## 6.3 TCMPS predicate GPR carriers
 
 `TCMPS` 的 CUBE GPR 输出重载使用 source-only `B.IOT` 和带 destination GPR
 的 `B.IOR`，不会分配 PredicateCell。非 `U8` 类型使用低半 predicate carrier；

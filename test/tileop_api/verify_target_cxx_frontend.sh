@@ -12,7 +12,8 @@ trap 'rm -rf "$OUT"' EXIT
 # Use a copied resource tree whose tileop-api subtree is this checkout, so the
 # verification cannot accidentally exercise stale installed headers.
 RESOURCE_DIR="$OUT/clang-resource"
-cp -R "$("$TC_DIR/clang++" -print-resource-dir)" "$RESOURCE_DIR"
+BASE_RESOURCE_DIR=${CLANG_RESOURCE_DIR:-$("$TC_DIR/clang++" -print-resource-dir)}
+cp -R "$BASE_RESOURCE_DIR" "$RESOURCE_DIR"
 rm -rf "$RESOURCE_DIR/include/tileop-api"
 cp -R "$ROOT/include" "$RESOURCE_DIR/include/tileop-api"
 
@@ -52,7 +53,8 @@ for source in RangeSubview.cpp GMov.cpp TileRegionUnary.cpp \
               Issue288CubeM32BinaryAssembly.cpp \
               TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
-              SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp; do
+              SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp \
+              RuntimePhysicalCols.cpp; do
   "$TC_DIR/clang++" "${FLAGS[@]}" -fsyntax-only \
     "$ROOT/test/tileop_api/src/$source"
 done
@@ -172,6 +174,155 @@ if "B.ASSEMBLE ${8:c}, ${9:c}" not in operations[0]:
 for operation in operations[1:]:
     if "B.IOT $4, $5, mask=1111" not in operation or \
        "B.IOT $7, mask=1111, last" not in operation:
+        raise SystemExit("RangeAssemble: continuation TADD has invalid binders")
+    if "B.ASSEMBLE" not in operation:
+        raise SystemExit("RangeAssemble: continuation TADD is missing B.ASSEMBLE")
+PY
+
+# Typed factories carry a seventh WriterSizeCode template argument. Verify
+# continuation overload selection and real object code for external parents.
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TileArrayWriterSize.cpp" -o "$OUT/TileArrayWriterSize.ll"
+"$TC_DIR/clang++" "${FLAGS[@]}" -c \
+  "$ROOT/test/tileop_api/src/TileArrayWriterSize.cpp" -o "$OUT/TileArrayWriterSize.o"
+# Shared references still have a separate backend handle-copy gap; verify
+# descriptor lowering in IR without claiming Shared object/runtime closure.
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/SharedTloadAssembly.cpp" -o "$OUT/SharedTloadAssembly.ll"
+python3 - "$OUT/TileArrayWriterSize.ll" "$OUT/SharedTloadAssembly.ll" <<'PY_ASSEMBLE'
+import re
+import sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text()
+body = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+            if part.startswith("define ") and "assemble_writer_size" in part)
+ops = [line for line in body.splitlines() if "asm sideeffect" in line]
+if len(ops) != 4 or any("B.ASSEMBLE" not in op for op in ops):
+    raise SystemExit("TileArrayWriterSize: an INIT/MIDDLE/LAST descriptor was lost")
+for op, offset, last in zip(ops[1:], (4, 8, 12), (0, 0, 1)):
+    if "->" in op.split("B.IOT", 1)[1].split("B.ASSEMBLE", 1)[0]:
+        raise SystemExit("TileArrayWriterSize: continuation allocated a new parent")
+    if f"i32 0, i32 {last}, i32 {offset}, i32 3)" not in op:
+        raise SystemExit("TileArrayWriterSize: incorrect continuation extent or state")
+text = Path(sys.argv[2]).read_text()
+body = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+            if part.startswith("define ") and "assemble_shared_continuations" in part)
+ops = [line for line in body.splitlines() if "asm sideeffect" in line]
+if len(ops) != 2 or any("B.ASSEMBLE" not in op or "B.IOS" not in op for op in ops):
+    raise SystemExit("TileArrayWriterSize: Shared continuation lost its descriptor")
+for op, offset, last in zip(ops, (4, 12), (0, 1)):
+    if "->" in op.split("B.IOS", 1)[1].split("B.ASSEMBLE", 1)[0] or \
+       f"i32 0, i32 {last}, i32 {offset}, i32 3)" not in op:
+        raise SystemExit("TileArrayWriterSize: Shared continuation rebound its parent")
+PY_ASSEMBLE
+
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/RuntimePhysicalCols.cpp" \
+  -o "$OUT/RuntimePhysicalCols.ll"
+python3 - "$OUT/RuntimePhysicalCols.ll" <<'PY_RUNTIME_COLS'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+            if part.startswith("define ") and "runtime_physical_cols" in part)
+operations = [part for part in re.split(r"(?=BSTART\.TEPL)", body)
+              if "BSTART.TEPL" in part]
+runtime_operations = [operation for operation in operations
+                      if "B.DIM $" in operation and ", 0, ->lb2" in operation]
+if len(runtime_operations) != 4:
+    raise SystemExit(
+        f"expected four register-LB2 operations, got {len(runtime_operations)}")
+if sum("B.IOR" in operation for operation in runtime_operations) != 1:
+    raise SystemExit("runtime-geometry fixture lost scalar-fill binding")
+odd = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+           if part.startswith("define ") and "odd_runtime_physical_cols" in part)
+if "BSTART.TEPL" not in odd or "->lb2" not in odd:
+    raise SystemExit("odd runtime PhysicalCol fixture was not emitted")
+defaults = next(part for part in re.split(r"(?=^define )", text, flags=re.MULTILINE)
+                if part.startswith("define ") and "runtime_valid_shape_defaults" in part)
+if defaults.count("BSTART.TEPL") != 2:
+    raise SystemExit("dynamic zero overrides must use instance dimensions, not DYNAMIC=-1")
+PY_RUNTIME_COLS
+
+for source in TileRegionUnary TileRegionCubeSubview Issue166RmsNormB128; do
+  "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+    "$ROOT/test/tileop_api/src/$source.cpp" -o "$OUT/$source.ll"
+  "$TC_DIR/clang++" "${FLAGS[@]}" -c \
+    "$ROOT/test/tileop_api/src/$source.cpp" -o "$OUT/$source.o"
+done
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/RangeAssemble.cpp" -o "$OUT/RangeAssemble.ll"
+"$TC_DIR/clang++" "${FLAGS[@]}" -c \
+  "$ROOT/test/tileop_api/src/AssemblyLifetime.cpp" -o "$OUT/AssemblyLifetime.o"
+# RangeAssemble contains isolated INIT/MIDDLE syntax probes; only complete
+# sessions are legal object-level programs. Keep escaping OPEN parents negative.
+for mode in TEST_OPEN_ESCAPE TEST_OPEN_STORE; do
+  if "$TC_DIR/clang++" "${FLAGS[@]}" -D"$mode" -c \
+      "$ROOT/test/tileop_api/src/AssemblyLifetime.cpp" \
+      -o "$OUT/$mode.o" >"$OUT/$mode.log" 2>&1; then
+    echo "FAIL: $mode accepted an OPEN assembly parent escape" >&2
+    exit 1
+  fi
+  grep -Fq "cannot use an OPEN B.ASSEMBLE parent" "$OUT/$mode.log"
+done
+python3 - "$OUT/TileRegionUnary.ll" "$OUT/TileRegionCubeSubview.ll" \
+          "$OUT/Issue166RmsNormB128.ll" "$OUT/RangeAssemble.ll" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+
+def region_operations(path):
+    return [line for line in Path(path).read_text(encoding="utf-8").splitlines()
+            if "asm sideeffect" in line and "BSTART.TEPL" in line
+            and "B.SUBVIEW" in line]
+
+
+unary = region_operations(sys.argv[1])
+if len(unary) != 9:
+    raise SystemExit(f"TileRegionUnary: expected 9 region operations, got {len(unary)}")
+for operation in unary:
+    if "i32 16, i32 32, i32 16, i32 5, i32 5" not in operation:
+        raise SystemExit("TileRegionUnary: LB2 does not use the 16-column fragment")
+
+cube = region_operations(sys.argv[2])
+if len(cube) != 1:
+    raise SystemExit(f"TileRegionCubeSubview: expected 1 region operation, got {len(cube)}")
+if "i32 16, i32 32, i32 16, i32 5, i32 5" not in cube[0]:
+    raise SystemExit("TileRegionCubeSubview: LB2 does not use the 16-column fragment")
+if "i32 16, i32 32, i32 64, i32 5, i32 5" in cube[0]:
+    raise SystemExit("TileRegionCubeSubview: LB2 leaked the 64-column parent geometry")
+
+rowsum = [line for line in region_operations(sys.argv[3]) if "i32 64, i64" in line]
+expected = (
+    "i32 8, i32 32, i32 8, i32 4, i32 4, i32 64, i64 0",
+    "i32 8, i32 8, i32 8, i32 2, i32 2, i32 64, i64 0",
+)
+if len(rowsum) != len(expected):
+    raise SystemExit(f"Issue166RmsNormB128: expected 2 TROWSUM regions, got {len(rowsum)}")
+for operands in expected:
+    if not any(operands in operation for operation in rowsum):
+        raise SystemExit(f"Issue166RmsNormB128: missing source geometry {operands}")
+
+range_assemble = Path(sys.argv[4]).read_text(encoding="utf-8")
+body = next((part for part in re.split(r"(?=^define )", range_assemble,
+                                       flags=re.MULTILINE)
+             if "assemble_tadd_session" in part), None)
+if body is None:
+    raise SystemExit("RangeAssemble: missing TADD assembly-session fixture")
+operations = [line for line in body.splitlines()
+              if "asm sideeffect" in line and "BSTART.TEPL" in line]
+if len(operations) != 3:
+    raise SystemExit(f"RangeAssemble: expected 3 TADD operations, got {len(operations)}")
+if "B.IOT $5.reuse, $6.reuse, mask=1111, last, ->$0" not in operations[0]:
+    raise SystemExit("RangeAssemble: INIT TADD must allocate its destination")
+if "B.ASSEMBLE ${8:c}, ${9:c}" not in operations[0]:
+    raise SystemExit("RangeAssemble: INIT TADD is missing B.ASSEMBLE")
+for operation in operations[1:]:
+    if "B.IOT $4.reuse, $5.reuse, mask=1111" not in operation or \
+       "B.IOT $7.reuse, mask=1111, last" not in operation:
         raise SystemExit("RangeAssemble: continuation TADD has invalid binders")
     if "B.ASSEMBLE" not in operation:
         raise SystemExit("RangeAssemble: continuation TADD is missing B.ASSEMBLE")
@@ -413,11 +564,15 @@ for name in ("tor_ass_subview", "tor_ass_explicit_range"):
 PY
 
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/TileRegionTCVTSubviewAssembly.cpp" \
+  -o "$OUT/TileRegionTCVTSubviewAssembly.ll"
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/TileRegionTCVTSubview.cpp" \
   -o "$OUT/TileRegionTCVTSubview.ll"
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/TileRegionShift.cpp" -o "$OUT/TileRegionShift.ll"
-python3 - "$OUT/TileRegionTCVTSubview.ll" "$OUT/TileRegionShift.ll" <<'PY'
+python3 - "$OUT/TileRegionTCVTSubview.ll" \
+  "$OUT/TileRegionTCVTSubviewAssembly.ll" "$OUT/TileRegionShift.ll" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -430,7 +585,19 @@ if "BSTART.TEPL 27" not in body or body.count("B.SUBVIEW") != 1:
 if "B.ASSEMBLE" in body or "B.DIM zero, $2, ->lb2" in body:
     raise SystemExit("convert_subview: ordinary CUBE TCVT emitted assembly/LB2")
 
-shift = Path(sys.argv[2]).read_text(encoding="utf-8")
+assembled_tcvt = Path(sys.argv[2]).read_text(encoding="utf-8")
+assembled_body = next(
+    part for part in re.split(r"(?=^define )", assembled_tcvt,
+                              flags=re.MULTILINE)
+    if "convert_subviews" in part)
+if assembled_body.count("B.SUBVIEW") != 4 or assembled_body.count("B.ASSEMBLE") != 4:
+    raise SystemExit("convert_subviews: invalid TCVT modifier counts")
+for line in (line for line in assembled_body.splitlines()
+             if "asm sideeffect" in line and "BSTART.TEPL 27" in line):
+    if "->lb2" in line:
+        raise SystemExit("convert_subviews: CUBE TCVT emitted forbidden LB2")
+
+shift = Path(sys.argv[3]).read_text(encoding="utf-8")
 functions = re.split(r"(?=^define )", shift, flags=re.MULTILINE)
 ordinary = next(part for part in functions if "shift_subview" in part and
                 "assemble_shift_subviews" not in part)
@@ -511,6 +678,6 @@ PY
 grep -Eiq 'BSTART\.CUBE[[:space:]]+TMATMULMX,[[:space:]]+FP16' "$OUT/MXScaleVariants.dis"
 grep -Eiq 'BSTART\.CUBE[[:space:]]+TMATMULMX\.ACC,[[:space:]]+E4M3' "$OUT/MXScaleVariants.dis"
 grep -Eiq 'BSTART\.CUBE[[:space:]]+TGEMVMX\.BIAS,[[:space:]]+BF16' "$OUT/MXScaleVariants.dis"
-grep -Eq 'B\.IOT[[:space:]]+t#[1-8], t#[1-8], mask=1111' "$OUT/MXScaleVariants.dis"
+grep -Eq 'B\.IOT[[:space:]]+t#[1-8]\.reuse, t#[1-8]\.reuse, mask=1111' "$OUT/MXScaleVariants.dis"
 
 echo "Linx target C++ frontend MX/effective-shape contract: PASS"

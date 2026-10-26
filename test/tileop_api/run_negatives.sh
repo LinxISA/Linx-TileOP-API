@@ -48,6 +48,7 @@ GMOV_CASES="fp64 s64 u64 dtype shape valid_shape layout capacity location shared
 TCVT_CASES="cube_layout cube_valid_shape cube_n8 valid_shape assemble_valid_shape same_type_rto_fp16 same_type_rto_bf16 same_type_rto_fp32 same_type_rto_fp64 same_type_rto_reinterpreted same_type_rto_prefix same_type_rto_tilearray"
 TEXPDIF_CASES="type narrow n8 mixed_layout shape"
 TCI2D_CASES="layout location dtype shape steps m16_rows"
+ROWARG_CASES="max min"
 I64_CASES="fp64_element unsupported_parent m16 short_m32 subview_pair assemble_pair writer_limit"
 TCOLSUM_CASES="dest_rows dest_cols dtype"
 ISSUE288_CASES="layout dtype shape valid_shape"
@@ -85,6 +86,12 @@ expect_rejected() {
     FAIL=$((FAIL+1))
   fi
 }
+
+for c in $ROWARG_CASES; do
+  define=SHOULD_FAIL_TROWARG$(echo "$c" | tr '[:lower:]' '[:upper:]')_NON_U32
+  expect_rejected "trowarg_$c" "$define" RowArgNegatives.cpp \
+    'TROWARG(MAX|MIN) destination must use U32 indices'
+done
 
 for c in $CASES; do
   if "$CXX" "${FLAGS[@]}" -DSHOULD_FAIL_$c src/PostProcessNegatives.cpp \
