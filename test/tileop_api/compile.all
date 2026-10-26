@@ -78,10 +78,18 @@ run_link_smoke() {
   "$MAKE_CMD" --no-print-directory TESTCASE=TCI all
   local elf="$(cd "$(dirname "$0")/../.." && pwd)/output/tileop_api/elf/tileop_api_TCI_${PLAT}.elf"
   test -s "$elf"
-  "$COMPILER_DIR/llvm-readobj" --file-headers --symbols "$elf" >"${elf}.readobj"
+  "$COMPILER_DIR/llvm-readobj" --file-headers --sections --symbols "$elf" >"${elf}.readobj"
   grep -Eq 'Entry|Name: _start' "${elf}.readobj"
+  grep -q 'Name: __linx_group_worker_start' "${elf}.readobj"
+  grep -q 'Name: __linx_group_pe_main' "${elf}.readobj"
+  grep -q '.note.ssm.pto' "${elf}.readobj"
   "$COMPILER_DIR/llvm-objdump" -dr "$elf" >"${elf}.diss"
   grep -q 'BSTART.STD' "${elf}.diss"
+  # LLVM's canonical disassembly name for the architectural SYS/AUX block
+  # encoding is BSTART.AUX; the source contract separately requires the
+  # explicit BSTART.SYS spelling in the runtime adapter.
+  grep -Eq 'BSTART\.(SYS|AUX)' "${elf}.diss"
+  grep -q 'acrc 0' "${elf}.diss"
   echo "PASS link-smoke: $elf"
 }
 

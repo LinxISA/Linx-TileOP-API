@@ -170,6 +170,8 @@ template <int VR,int VC> using T =
   Tile<Location::Vec, float, 32, 32, BLayout::RowMajor, VR, VC>;
 template <int VR,int VC> using C1 =
   Tile<Location::Vec, float, 32, 1, BLayout::RowMajor, VR, VC>;
+template <int VR,int VC> using U1 =
+  Tile<Location::Vec, uint32_t, 32, 1, BLayout::RowMajor, VR, VC>;
 
 // EXPAND (dst=T, src=C1 单列)
 #define SWEX(FN) \
@@ -188,10 +190,10 @@ SWEX3(TROWEXPANDMAX) SWEX3(TROWEXPANDMIN) SWEX3(TROWEXPANDEXPDIF)
 
 // ARGMAX/ARGMIN (dst=C1, src=T)
 #define SWAR(FN) \
-  __attribute__((noinline)) void FN##_ss(C1<16,1> &d,T<16,32> &s){FN(d,s);} \
-  __attribute__((noinline)) void FN##_sd(C1<16,-1> &d,T<16,-1> &s){FN(d,s);} \
-  __attribute__((noinline)) void FN##_ds(C1<-1,1> &d,T<-1,32> &s){FN(d,s);} \
-  __attribute__((noinline)) void FN##_dd(C1<-1,-1> &d,T<-1,-1> &s){FN(d,s);}
+  __attribute__((noinline)) void FN##_ss(U1<16,1> &d,T<16,32> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_sd(U1<16,-1> &d,T<16,-1> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_ds(U1<-1,1> &d,T<-1,32> &s){FN(d,s);} \
+  __attribute__((noinline)) void FN##_dd(U1<-1,-1> &d,T<-1,-1> &s){FN(d,s);}
 SWAR(TROWARGMAX) SWAR(TROWARGMIN)
 
 
