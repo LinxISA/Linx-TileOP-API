@@ -51,6 +51,7 @@ TCI2D_CASES="layout location dtype shape steps m16_rows"
 ROWARG_CASES="max min"
 I64_CASES="fp64_element unsupported_parent m16 short_m32 subview_pair assemble_pair writer_limit"
 TCOLSUM_CASES="dest_rows dest_cols dtype"
+ISSUE288_CASES="layout dtype shape valid_shape"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -114,6 +115,16 @@ for c in $TCOLSUM_CASES; do
   define=SHOULD_FAIL_TCOLSUM_$(echo "$c" | tr '[:lower:]' '[:upper:]')
   expect_rejected "tcolsum_$c" "$define" \
     TColSumNegatives.cpp "TCOLSUM"
+done
+for c in $ISSUE288_CASES; do
+  define=SHOULD_FAIL_ISSUE288_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  case "$c" in
+    layout) pattern='requires CUBE_M32 destination and sources' ;;
+    dtype) pattern='requires matching element types' ;;
+    shape) pattern='requires matching physical shapes' ;;
+    valid_shape) pattern='requires matching valid shapes' ;;
+  esac
+  expect_rejected "issue288_$c" "$define" Issue288Negatives.cpp "$pattern"
 done
 expect_rejected "thistogram_retired" "SHOULD_FAIL_THISTOGRAM_RETIRED" \
   TColSumNegatives.cpp "THISTOGRAM is retired"
