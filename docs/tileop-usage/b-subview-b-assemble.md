@@ -41,28 +41,6 @@ source、兼容代码和编码回归测试；`*_at_reg` 接口只出现在固定
 的 TileOP 会自动发出对应 `INIT → MIDDLE* → LAST` 生命周期的
 `B.ASSEMBLE`；`TASSEMBLY` 本身不发独立指令，只返回组装好的 parent。
 
-`TileArray<Fragment, Rows, Cols, ParticipantMask>` 的第四个模板参数指定
-raw `TMOV` assembly writer 的参与 PE 集合，默认值为 `15`。合法的非零原生
-mask 是 `1, 2, 4, 8, 12, 14, 15`；位序为 `bit = 3 - PE`，所以 PE0-only
-写作 `8`（`1000`）。同一次 INIT/MIDDLE/LAST assembly 生命周期中的所有
-`B.IOT` 都携带相同 mask。
-
-显式非默认 mask 的 writer 应放在 `PTO_PE_DOMAIN(mask)` 标记的函数中。该宏
-要求编译器提供 `__LINX_PTO_PE_DOMAIN__`；旧编译器会把调用诊断为 unavailable，
-不会静默忽略域信息。当前非默认 mask 只开放给 raw `TMOV` writer，其他仍按
-默认 mask 定义的 TileArray destination overload 会在类型检查时拒绝该 slot。
-
-```cpp
-PTO_PE_DOMAIN(8)
-void assemble_pe0(ElementTile<uint32_t, 32> (&parts)[4]) {
-  TileArray<ElementTile<uint32_t, 32>, 1, 4, 8> outputs;
-  for (int i = 0; i < 4; ++i)
-    TMOV(outputs[0][i], parts[i]);
-  auto parent = TASSEMBLY<ElementTile<uint32_t, 128>>(std::move(outputs));
-  // 在本函数域内继续消费或写回 parent。
-}
-```
-
 同一规则可以逐级组成更大的闭合 parent。每一级先完成自己的
 `INIT -> MIDDLE* -> LAST`，`TASSEMBLY` 返回的完整 `ElementTile` 才能作为下一
 级 raw `TMOV` writer 的 source。例如 F32 使用 `32 -> 128 -> 2048 -> 16384`
@@ -398,30 +376,20 @@ void session(GM &gm_lo, GM &gm_hi, Src &a, Src &b) {
 ### 完整会话示例（多 fragment 拼装一个 parent）
 
 ```cpp
-using Parent = Tile<Location::Vec, float, 32, 16, BLayout::RowMajor>;
-using GM = global_tensor<float, RowMajor<32, 4>>;
+using Dst = Tile<Location::Vec, float, 4, 8, BLayout::RowMajor>;
+using GM  = global_tensor<float, RowMajor<4, 8>>;
 
-void load_four(GM &gm0, GM &gm1, GM &gm2, GM &gm3, Parent &out) {
-  Parent tile;  // 2 KiB parent，四个 512 B writer 覆盖不同范围
-  auto first = range::assemble<4, 0>(tile);
+void load_three(GM &gm0, GM &gm1, GM &gm2, Dst &tile) {
+  auto first  = range::assemble(tile);            // INIT
   TLOAD(first, gm0);
 
-  auto middle0 = range::assemble_middle<4, 4>(tile);
-  TLOAD_ASS(middle0, gm1);
-  auto middle1 = range::assemble_middle<4, 8>(tile);
-  TLOAD_ASS(middle1, gm2);
+  auto middle = range::assemble_middle(tile);     // MIDDLE
+  TLOAD_ASS(middle, gm1);                        // 非 INIT slot 用 _ASS
 
-  auto last = range::assemble_last<4, 12>(tile);
-  TLOAD_ASS(last, gm3);
-  out = tile;  // LAST 后才发布完整 parent
+  auto last   = range::assemble_last(tile);       // LAST
+  TLOAD_ASS(last, gm2);
 }
 ```
-
-LAST 之前的 parent 处于 OPEN 状态，只能由后续 assembly slot 消费。不能
-提前 `TSTORE`、普通 `TMOV` 或通过输出引用把它写回内存；函数只发出 INIT
-后返回也不合法。使用局部 parent 完成整个 session，再向外发布。
-`AssemblyLifetime.cpp` 验证完整 session 可生成对象，并要求两种提前发布路径
-被编译器拒绝。`RangeAssemble.cpp` 中的孤立 slot 仅用于语法与 IR 检查。
 
 ## `*_ASS`：TEPL 计算直接写入 assembled destination
 

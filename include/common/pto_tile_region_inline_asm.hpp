@@ -692,46 +692,45 @@ PTO_REGION_SCALAR_SUBVIEW_DEST_WRAPPER(TMINS, 44)
 #undef PTO_REGION_SCALAR_DEST_WRAPPER
 #undef PTO_REGION_SCALAR_SUBVIEW_DEST_WRAPPER
 
-// Raw TileArray assembly transport. INIT allocates the parent; continuation
-// writers retain that ParentRef and use the same participant mask.
-template <int ParentSize, bool Init, bool Last, typename SubTile,
-          unsigned ParticipantMask>
+// Raw assembly transport: preserve floating payloads (including NaNs) without
+// routing a copy through numeric conversion. The fragment owns the descriptor;
+// INIT alone allocates the parent and later slots retain its exact ParentRef.
+template <int ParentSize, bool Init, bool Last, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void pto_region_tmov_assemble(
-    region::TileArrayOutputRef<SubTile, ParticipantMask> &dst,
-    const SubTile &src) {
+    region::TileArrayOutputRef<SubTile> &dst, const SubTile &src) {
+  static_assert(is_element_tile_v<SubTile>,
+                "TMOV assembly currently requires an ElementTile fragment");
   static_assert(is_element_assembly_fragment_v<SubTile>,
                 "TMOV assembly requires a supported full-storage element "
                 "fragment");
   const uintptr_t offset = dst.range_base_units();
 #define PTO_REGION_TMOV_PREFIX                                               \
   "BSTART.TLSU TMOV, %D[DataType]\n"                                      \
-  PTO_TMOV_LAYOUT_ASM                                                       \
-  "B.DIM zero, %c[ValidCol], ->lb0\n"                                      \
-  "B.DIM zero, %c[ValidRow], ->lb1\n"                                      \
+  PTO_TMOV_LAYOUT_ASM                                         \
+  "B.DIM zero, %c[ValidCol], ->lb0\n"                                     \
+  "B.DIM zero, %c[ValidRow], ->lb1\n"                                     \
   "B.DIM zero, %c[PhysicalCol], ->lb2\n"
-#define PTO_REGION_TMOV_ASSEMBLE                                            \
+#define PTO_REGION_TMOV_ASSEMBLE                                             \
   "B.ASSEMBLE %c[Init], %c[Last], %[Offset], 0, %c[WriterSize]\n"
-#define PTO_REGION_TMOV_INPUTS                                              \
+#define PTO_REGION_TMOV_INPUTS                                               \
   [Src] "Tr"(src.data()),                                                   \
-  [DataType] "i"(type_traits<typename SubTile::DType>::TypeCode),           \
-  [ValidCol] "i"(SubTile::ValidCol), [ValidRow] "i"(SubTile::ValidRow),    \
-  [PhysicalCol] "i"(SubTile::Cols), [ParentSize] "i"(ParentSize),          \
-  [WriterSize] "i"(SubTile::TilesizeCode), [Offset] "r"(offset),           \
-  [Init] "i"(Init), [Last] "i"(Last), [PEMask] "i"(ParticipantMask),      \
+  [DataType] "i"(type_traits<typename SubTile::DType>::TypeCode),             \
+  [ValidCol] "i"(SubTile::ValidCol), [ValidRow] "i"(SubTile::ValidRow),        \
+  [PhysicalCol] "i"(SubTile::Cols), [ParentSize] "i"(ParentSize),             \
+  [WriterSize] "i"(SubTile::TilesizeCode), [Offset] "r"(offset),              \
+  [Init] "i"(Init), [Last] "i"(Last),                                        \
   [ElemLayout] "i"(local_layout_code_v<SubTile>)
   if constexpr (Init) {
     asm volatile(PTO_REGION_TMOV_PREFIX
-                 PTO_PE_MASK_ASM(
-                     "B.IOT %[Src].reuse, mask=",
-                     ", last, ->%[Dst]<%Z[ParentSize]>\n")
+                 "B.IOT %[Src], mask=1111, last, ->%[Dst]<%Z[ParentSize]>\n"
                  PTO_REGION_TMOV_ASSEMBLE
                  : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
                  : PTO_REGION_TMOV_INPUTS
                  : "memory");
   } else {
     asm volatile(PTO_REGION_TMOV_PREFIX
-                 PTO_PE_MASK_ASM("B.IOT %[Src].reuse, mask=", ", last\n")
-                 PTO_PE_MASK_ASM("B.IOT %[Dst].reuse, mask=", "\n")
+                 "B.IOT %[Src], mask=1111, last\n"
+                 "B.IOT %[Dst], mask=1111\n"
                  PTO_REGION_TMOV_ASSEMBLE
                  :
                  : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -743,10 +742,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tmov_assemble(
 #undef PTO_REGION_TMOV_PREFIX
 }
 
-template <int ParentSize, typename SubTile, unsigned ParticipantMask>
+template <int ParentSize, typename SubTile>
 PTO_REGION_ALWAYS_INLINE void pto_region_tmov_phase(
-    region::TileArrayOutputRef<SubTile, ParticipantMask> &dst,
-    const SubTile &src) {
+    region::TileArrayOutputRef<SubTile> &dst, const SubTile &src) {
   if (dst.slot_count() == 1)
     pto_region_tmov_assemble<ParentSize, true, true>(dst, src);
   else if (dst.ordinal() == 0)
@@ -757,11 +755,10 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tmov_phase(
     pto_region_tmov_assemble<ParentSize, false, false>(dst, src);
 }
 
-template <typename SubTile, unsigned ParticipantMask>
+template <typename SubTile>
   requires(is_element_assembly_fragment_v<SubTile>)
-PTO_REGION_ALWAYS_INLINE void TMOV(
-    region::TileArrayOutputRef<SubTile, ParticipantMask> dst,
-    const SubTile &src) {
+PTO_REGION_ALWAYS_INLINE void TMOV(region::TileArrayOutputRef<SubTile> dst,
+                                  const SubTile &src) {
   switch (dst.parent_size_code()) {
 #define PTO_REGION_TMOV_PARENT_CASE(N)                                      \
   case N: pto_region_tmov_phase<N>(dst, src); break
@@ -952,21 +949,19 @@ template <int ParentSize, bool Init, bool Last, typename SubTile,
 PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
     region::TileArrayOutputRef<SubTile> &dst,
     region::SubTileView<Parent, SourceSubTile> &src) {
-  static_assert((SourceSubTile::BFractal == BLayout::CubeM16 ||
-                 SourceSubTile::BFractal == BLayout::CubeM32) &&
-                    SubTile::BFractal == SourceSubTile::BFractal,
-                "TCVT B.SUBVIEW/B.ASSEMBLE must preserve the CUBE_M16/M32 "
-                "source layout");
+  static_assert(SubTile::BFractal == BLayout::RowMajor &&
+                    SourceSubTile::IsCubeLayout,
+                "B.ASSEMBLE destination must be RowMajor and B.SUBVIEW "
+                "source must use a CUBE layout");
   static_assert(SubTile::SFractal == SLayout::NoneBox &&
                     SourceSubTile::SFractal == SLayout::NoneBox,
                 "inline Tile region path requires unboxed fragments");
+  static_assert(SubTile::Rows == SourceSubTile::Rows &&
+                    SubTile::Cols == SourceSubTile::Cols,
+                "TCVT TileArray slot requires matching physical shape");
   static_assert(SubTile::ValidRow == SourceSubTile::ValidRow &&
                     SubTile::ValidCol == SourceSubTile::ValidCol,
                 "TCVT TileArray slot requires matching valid shape");
-  static_assert(is_legal_tcvt_datatype_pair(
-                    type_traits<typename SourceSubTile::DType>::TypeCode,
-                    type_traits<typename SubTile::DType>::TypeCode),
-                "Illegal TCVT datatype pair");
   // PTO-ISA #265 (issue #702): field 5 is the writer extent in every phase.
   constexpr int writer_size =
       tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
@@ -981,24 +976,27 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_BODY                               \
   "BSTART.TEPL 27, %D1\n"                                                  \
   "B.DATR %D2, RNONE\n"                                                    \
-  "B.DIM zero, %c4, ->lb0\n"                                               \
-  "B.DIM zero, %c5, ->lb1\n"                                               \
-  "B.IOT %3, mask=1111, last, ->%0<%Z6>\n"                                 \
-  "B.SUBVIEW 0, %7, 0, %c8\n"                                             \
-  "B.ASSEMBLE %c11, %c12, %9, 0, %c10\n"
+  "B.DIM zero, %c4, ->lb0\n"                                                   \
+  "B.DIM zero, %c5, ->lb1\n"                                                   \
+  "B.DIM zero, %c6, ->lb2\n"                                               \
+  "B.IOT %3, mask=1111, last, ->%0<%Z7>\n"                                 \
+  "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
+  "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_TCVT_SUBVIEW_CONT_BODY                                   \
   "BSTART.TEPL 27, %D1\n"                                                  \
   "B.DATR %D2, RNONE\n"                                                    \
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
+  "B.DIM zero, %c6, ->lb2\n"                                               \
   "B.IOT %3, %0, mask=1111, last\n"                                       \
-  "B.SUBVIEW 0, %7, 0, %c8\n"                                             \
-  "B.ASSEMBLE %c11, %c12, %9, 0, %c10\n"
+  "B.SUBVIEW 0, %8, 0, %c9\n"                                             \
+  "B.ASSEMBLE %c12, %c13, %10, 0, %c11\n"
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS                            \
   "i"(type_traits<typename SourceSubTile::DType>::TypeCode),               \
   "i"(type_traits<typename SubTile::DType>::TypeCode), "Tr"(src.data()),  \
   "i"(std::remove_reference_t<decltype(src)>::ValidCol),                    \
   "i"(std::remove_reference_t<decltype(src)>::ValidRow),                    \
+  "i"(SourceSubTile::Cols),                                                 \
   "i"(ParentSize),                                                           \
   "r"(source_base_units),                                                   \
   "i"(tile_type_traits<typename SourceSubTile::TileDType>::TilesizeCode),   \

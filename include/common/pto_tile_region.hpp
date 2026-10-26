@@ -47,28 +47,11 @@ inline constexpr int local_layout_code_v =
 
 // TMOV permits only the Layout attribute; its pad union is reserved-zero.
 // Zero here is an encoding requirement, not a request to fill copied padding.
-#define PTO_TMOV_LAYOUT_ASM                                                   \
-  ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32, Zero\n"                        \
-  ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Zero\n"                    \
+#define PTO_TMOV_LAYOUT_ASM                                                  \
+  ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32, Zero\n"                       \
+  ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Zero\n"                   \
   ".endif\n"
 
-#define PTO_PE_MASK_ASM(PREFIX, SUFFIX)                                      \
-  ".if %c[PEMask] == 1\n" PREFIX "0001" SUFFIX                              \
-  ".elseif %c[PEMask] == 2\n" PREFIX "0010" SUFFIX                          \
-  ".elseif %c[PEMask] == 4\n" PREFIX "0100" SUFFIX                          \
-  ".elseif %c[PEMask] == 8\n" PREFIX "1000" SUFFIX                          \
-  ".elseif %c[PEMask] == 12\n" PREFIX "1100" SUFFIX                        \
-  ".elseif %c[PEMask] == 14\n" PREFIX "1110" SUFFIX                        \
-  ".elseif %c[PEMask] == 15\n" PREFIX "1111" SUFFIX                        \
-  ".endif\n"
-
-#if defined(__LINX_PTO_PE_DOMAIN__)
-#define PTO_PE_DOMAIN(Mask) \
-  __attribute__((annotate("pto.pe_domain", Mask), noinline))
-#else
-#define PTO_PE_DOMAIN(Mask) \
-  __attribute__((unavailable("PTO_PE_DOMAIN requires compiler support for __LINX_PTO_PE_DOMAIN__")))
-#endif
 namespace region {
 
 template <typename...>
@@ -394,17 +377,14 @@ private:
 };
 
 
-template <typename SubTile, unsigned ParticipantMask = 15>
+template <typename SubTile>
 class TileArrayOutputRef;
 
-template <typename SubTile, int Rows, int Cols, unsigned ParticipantMask = 15>
+template <typename SubTile, int Rows, int Cols>
 class TileArray {
 public:
   static_assert(Rows > 0 && Cols > 0,
                 "TileArray extents must be positive");
-  static_assert(is_valid_pe_mask(ParticipantMask) && ParticipantMask != 0,
-                "TileArray ParticipantMask must be a nonzero native PE mask");
-  static constexpr unsigned participant_mask = ParticipantMask;
   using SubTileType = SubTile;
   static constexpr int rows = Rows;
   static constexpr int cols = Cols;
@@ -454,7 +434,7 @@ public:
   public:
     Row(TileArray &array, int row) : array_(&array), row_(row) {}
 
-    TileArrayOutputRef<SubTile, ParticipantMask> operator[](int col) {
+    TileArrayOutputRef<SubTile> operator[](int col) {
       return array_->makeOutputRef(row_, col);
     }
 
@@ -467,20 +447,19 @@ public:
   Row row(int row) { return Row(*this, row); }
 
 private:
-  TileArrayOutputRef<SubTile, ParticipantMask> makeOutputRef(int row, int col) {
-    return TileArrayOutputRef<SubTile, ParticipantMask>(data_, row, col, Cols,
+  TileArrayOutputRef<SubTile> makeOutputRef(int row, int col) {
+    return TileArrayOutputRef<SubTile>(data_, row, col, Cols,
                                        Rows * Cols, ParentSizeCode);
   }
   ParentCarrier data_;
 };
 
-template <typename SubTile, unsigned ParticipantMask>
+template <typename SubTile>
 class TileArrayOutputRef {
 public:
   using SubTileType = SubTile;
-  static constexpr unsigned participant_mask = ParticipantMask;
 
-  template <typename, int, int, unsigned>
+  template <typename, int, int>
   friend class TileArray;
 
   int row() const { return row_; }
@@ -537,7 +516,7 @@ public:
   int parent_size_code() const { return parent_size_code_; }
 
 private:
-  template <typename, int, int, unsigned>
+  template <typename, int, int>
   friend class TileArray;
   template <typename Carrier>
   TileArrayOutputRef(Carrier &array, int row, int col, int array_cols,
@@ -561,11 +540,11 @@ template <typename Parent, typename SubTile, int Rows, int Cols>
 using BorrowedTileArray =
     region::BorrowedTileArray<Parent, SubTile, Rows, Cols>;
 
-template <typename SubTile, int Rows, int Cols, unsigned ParticipantMask = 15>
-using TileArray = region::TileArray<SubTile, Rows, Cols, ParticipantMask>;
+template <typename SubTile, int Rows, int Cols>
+using TileArray = region::TileArray<SubTile, Rows, Cols>;
 
-template <typename SubTile, unsigned ParticipantMask = 15>
-using TileArrayOutputRef = region::TileArrayOutputRef<SubTile, ParticipantMask>;
+template <typename SubTile>
+using TileArrayOutputRef = region::TileArrayOutputRef<SubTile>;
 
 template <typename T>
 struct is_subtile_view : std::false_type {};
@@ -602,8 +581,8 @@ concept is_reduction_prefix_view_v = is_reduction_prefix_view<T>::value;
 
 template <typename T>
 struct is_tile_array_output_ref : std::false_type {};
-template <typename SubTile, unsigned ParticipantMask>
-struct is_tile_array_output_ref<region::TileArrayOutputRef<SubTile, ParticipantMask>>
+template <typename SubTile>
+struct is_tile_array_output_ref<region::TileArrayOutputRef<SubTile>>
     : std::true_type {};
 template <typename T>
 inline constexpr bool is_tile_array_output_ref_v =
@@ -943,9 +922,8 @@ decltype(auto) TPARTELEMENT(const TileType &tile) {
 
 
 
-template <typename Parent, typename SubTile, int Rows, int Cols,
-          unsigned ParticipantMask>
-auto TASSEMBLY(region::TileArray<SubTile, Rows, Cols, ParticipantMask> &&array) -> Parent {
+template <typename Parent, typename SubTile, int Rows, int Cols>
+auto TASSEMBLY(region::TileArray<SubTile, Rows, Cols> &&array) -> Parent {
   static_assert(std::is_same_v<typename Parent::DType,
                                typename SubTile::DType>,
                 "TASSEMBLY parent and fragment dtypes must match");
@@ -968,7 +946,7 @@ auto TASSEMBLY(region::TileArray<SubTile, Rows, Cols, ParticipantMask> &&array) 
 #ifdef __linx
   static_assert(std::is_same_v<typename Parent::TileDType,
                                typename region::TileArray<SubTile, Rows,
-                                                          Cols, ParticipantMask>::ParentCarrier>,
+                                                          Cols>::ParentCarrier>,
                 "TASSEMBLY parent and TileArray carriers must match");
   result.assignData(array.carrier());
 #endif

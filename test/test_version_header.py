@@ -23,9 +23,6 @@ class TileOpApiVersionHeaderTest(unittest.TestCase):
         self.assertIn('#define PTO_TILEOP_API_HAS_ELEMENT_VIEW_METADATA 1', header)
         self.assertIn('#define PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS 1', header)
         self.assertIn(
-            '#define PTO_TILEOP_API_HAS_TILE_ARRAY_PARTICIPANT_MASK 1', header
-        )
-        self.assertIn(
             '#define PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE 1', header
         )
         self.assertIn(
@@ -77,10 +74,6 @@ class TileOpApiVersionHeaderTest(unittest.TestCase):
             self.assertIn('#define PTO_TILEOP_API_HAS_ELEMENT_TILE 1', installed)
             self.assertIn('#define PTO_TILEOP_API_HAS_ELEMENT_VIEW_METADATA 1', installed)
             self.assertIn('#define PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS 1', installed)
-            self.assertIn(
-                '#define PTO_TILEOP_API_HAS_TILE_ARRAY_PARTICIPANT_MASK 1',
-                installed,
-            )
             self.assertIn(
                 '#define PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE 1',
                 installed,

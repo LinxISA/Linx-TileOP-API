@@ -10,8 +10,7 @@ using Fragment = global_tensor<float, RowMajor<32, 4>>;
 
 __attribute__((noinline)) void assemble_writer_size(
     Fragment &gm0, Fragment &gm1, Fragment &gm2, Fragment &gm3,
-    Parent &out) {
-  Parent parent;
+    Parent &parent) {
   auto first = range::assemble<4, 0>(parent);
   TLOAD(first, gm0);
 
@@ -23,7 +22,6 @@ __attribute__((noinline)) void assemble_writer_size(
 
   auto last = range::assemble_last<4, 12>(parent);
   TLOAD_ASS(last, gm3);
-  out = parent; // Publish the complete parent only after LAST.
 }
 
 __attribute__((noinline)) void assemble_single_writer(

@@ -90,7 +90,6 @@ __attribute__((noinline)) void gmov_cube_m32(CubeM32Vec &d, CubeM32Vec &s) {
 
 // --- 3a. reduce/expand (SFU) selects the operand layout too ---
 using Red32 = VecTileM32<float, 32, 1>;
-using ArgRed32 = VecTileM32<uint32_t, 32, 1>;
 using Red16 = VecTileM16<float, 16, 1>;
 using RedRowMajor = Tile<Location::Vec, float, 32, 1, BLayout::RowMajor>;
 using RedCol32 = VecTileM32<float, 1, 32>;   // 1 x N for TCOL*
@@ -103,7 +102,7 @@ __attribute__((noinline)) void rowsum_cube_m16(Red16 &d, CubeM16Vec &s) {
   TROWSUM(d, s);
 }
 
-__attribute__((noinline)) void rowargmax_cube_m32(ArgRed32 &d, CubeM32Vec &s) {
+__attribute__((noinline)) void rowargmax_cube_m32(Red32 &d, CubeM32Vec &s) {
   TROWARGMAX(d, s);
 }
 
