@@ -66,6 +66,14 @@ void TCMP_ASS(D &assembled_dst, A &src0, B &src1); // Mode = EQ
 `BLayout`，并且 valid shape 也必须一致。`validCol < Cols` 只表示尾部物理列
 不参与有效计算，不允许用不同物理列数的 Tile 作为 compare 链的另一输入。
 
+窄列 `[32,1]` / `[64,1]` 的双动态 valid-region 类型可用 `Tile(rows, 1)`
+构造；列 valid-region 模板参数固定为 `1` 的类型使用 `Tile(rows)`。两种构造
+只设置有效区域，不改变类型声明的物理 `Rows/Cols`；对应 `TCMP` 的 `LB2`
+均来自物理 `Cols=1`。`[2,16]` packed 类型不能通过 `validCol=1` 变成
+`[32,1]`，与 one-column source 混用会在编译期被拒绝。
+source 的 valid-region 模板参数仍须一致；动态有效区域的实际值一致且未越界
+由调用方保证。此约束不添加运行时转换或 trap。
+
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding

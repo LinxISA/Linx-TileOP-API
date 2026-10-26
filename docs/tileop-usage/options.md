@@ -6,6 +6,13 @@
 本文中的 API、字段和合法组合以当前仓库为准；具体矩阵操作是否支持某个属性，还必须同时
 满足对应的 `TMATMUL*`、`TGEMV*` 操作页约束。
 
+## TCMP 窄列 carrier
+
+`fixp::Options` 不改变 `TCMP` 的 source carrier。构造参数 `(rows, 1)`
+只设置有效区域；物理 `Rows/Cols` 与 layout 仍取自 Tile 类型。不同物理 shape
+的 packed / one-column source 不能混用，编译期诊断见
+[TCMP 约束](elementwise-tile-tile/logical/TCMP.md)。
+
 ## 1. 快速开始
 
 普通计算直接使用基础重载；需要后处理时，在对应的 `TMATMUL*` 或 `TGEMV*` 调用中传入
