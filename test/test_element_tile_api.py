@@ -446,7 +446,7 @@ template void copy_part<uint32_t>(const uint32_t*,uint32_t*,unsigned);
                     run=True, release=True, runtime_reject=True)
 
     def test_reject_unsupported_dtype(self):
-        self.compile('pto::ElementTile<unsigned long,32> supported;\n')
+        self.compile('pto::ElementTile<unsigned long,32> unsupported;\n', accepts=False)
         self.compile('pto::ElementTile<int16_t,32> unsupported;\n', accepts=False)
 
     def test_reject_unsupported_capacity(self):
