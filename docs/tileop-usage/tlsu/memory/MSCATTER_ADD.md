@@ -4,6 +4,15 @@
 
 ## C++ 接口
 
+### 实验性 ExecutionMask 消费者
+
+开发分支提供 `predicate::atomic_add<Invert>(destination, byte_offsets, values, active)`。
+它通过配套 compiler builtin 生成 PredicateCell ExecutionMask，而非为原始
+MSCATTER_ADD 增加普通 source 操作数。`Invert` 默认为 false；inactive lane
+不计算索引地址、不 probe、不发起 atomic RMW，结构合法性检查仍保留。
+零 addend 不等价于屏蔽。该接口尚未发布，不改变下列既有重载；详见
+[PredicateCell adapters](../../predicate-adapters.md)。
+
 当前 API 中可用的调用形式：
 
 ```cpp

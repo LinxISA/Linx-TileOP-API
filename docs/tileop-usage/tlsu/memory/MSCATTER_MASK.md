@@ -4,6 +4,15 @@
 
 ## C++ 接口
 
+### 实验性 PredicateCell 消费者
+
+开发分支提供 `predicate::scatter(destination, byte_offsets, values, active)`，
+可直接消费 `predicate::compare_scalar` 返回的强类型 CUBE PredicateCell，
+不插入 TCVT。它不是把普通 U8 Tile 强制转换成 PredicateCell，也不改变
+下列既有重载。当前 executable ASL helper 接受这一 carrier，但指令页文字
+仍有待 owner 对齐的差异；支持边界与说明见
+[PredicateCell adapters](../../predicate-adapters.md)。该接口尚未发布。
+
 当前 API 中可用的调用形式：
 
 ```cpp

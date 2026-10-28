@@ -2,6 +2,14 @@
 
 `TCMPS` 按照 CMode 将每个有效 Tile 元素与每 PE 标量比较，并将谓词结果编码为 0 或 1。
 
+### 实验性强类型生产者
+
+开发分支新增 `predicate::compare_scalar<Mode>(source, scalar)`，返回私有
+carrier 的 `Predicate<Basis>`，避免将 CUBE PredicateCell、普通 Numeric U8
+和 packed GPR 混为同一类型。它是独立封装，不改变本页既有 `TCMPS` 重载。
+直接 scatter、ExecutionMask atomic-add 及当前支持边界见
+[PredicateCell adapters](../../predicate-adapters.md)。该接口尚未发布。
+
 ## C++ 接口
 
 当前 API 中可用的调用形式：

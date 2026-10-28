@@ -151,6 +151,9 @@ clang++ --target=linx64v5-unknown-linux-musl -mlxbc -fenable-matrix \
 - 需要从 GM 传输数据时，阅读 [TLSU load/store/move](tlsu/load-store-move/TLOAD.md)。
   其中卷积权重 GM 到 Shared NK 的 `OHWI2NK`/`OIHW2NK` 专用 `TLOAD` overload
   也在该页面说明。
+- 需要将 CUBE comparison predicate 交给 scatter 或 masked atomic-add 时，阅读
+  [实验性 PredicateCell adapters](predicate-adapters.md)。该接口仍在开发分支，
+  需要配套 compiler builtin，不代表当前发布工具链已经支持。
 - 常规逐元素算子从 [TADD](elementwise-tile-tile/arithmetic/TADD.md) 开始；按目录选择
   算术、逻辑、转换、归约、布局和不规则操作。
 - PTO ISA v0.58.7 的 CUBE layout 重排操作从
