@@ -83,6 +83,37 @@ void scalar_style(tile &out, const tile &lhs, const tile &rhs) {
 if (ready) { }                      // 错误：下一条语句不是 for
 ```
 
+### 1.3 与显式 PredicateCell API 的区别
+
+Element-if 是编译器驱动的路径：开发者在 pragma 循环内写普通条件表达式，
+由编译器构造、组合 predicate 并选择受支持的 masked 指令。通常不需要手工
+创建或传递 predicate carrier。
+
+开发分支另有独立的、尚未发布的
+[PredicateCell adapters](predicate-adapters.md)，供显式 TileOP 数据流使用：
+
+```cpp
+auto active = predicate::compare_scalar<CmpMode::GE>(values, threshold);
+predicate::scatter(destination, byte_offsets, values, active);
+predicate::atomic_add(destination, byte_offsets, values, active);
+```
+
+这条路径不要求 `#pragma pto element for`、`#pragma linx elementwise` 或
+`TPARTELEMENT`，也不是供 pragma loop body 调用的入口。目前没有将
+`Predicate<Basis>` 导入/导出 element-if 隐式 mask 的桥接接口，不能假设
+把这些调用放进循环就能编译。
+
+两条路径使用相同架构中的 predicate/ExecutionMask 概念，但公开支持边界
+不同。显式 adapters 首版只覆盖 Local VEC CUBE_M32、静态有效区域和
+FP32/S32/U32，尚无 predicate 逻辑组合；本页 element-if 已支持的组合条件
+不能据此推广到 `Predicate<Basis>`。显式 `atomic_add` 使用 MSCATTER_ADD
+ExecutionMask，本页 histogram 示例的已验收 profile 则使用 MGATHER.ADD，
+不能互相替代其 dtype、memory-order、返回值或验证结论。
+
+写普通逐元素条件时优先使用本页的 element-if；已有显式 Tile comparison、
+需要把结果直接交给 scatter/atomic consumer 时，再选择实验性 adapters，
+并满足其配套 compiler builtin 和独立类型约束。
+
 ## 2. 基本语法规则
 
 推荐使用编译器容易证明的 canonical loop：

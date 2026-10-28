@@ -28,6 +28,19 @@ rollback、definedness 或 memory-order 语义。
 
 ## 版本边界
 
+### 开发分支中的 PredicateCell adapters（未发布）
+
+`predicate::compare_scalar`、`predicate::scatter` 和
+`predicate::atomic_add<Invert>` 的首版封装仅覆盖 Local VEC CUBE_M32、
+静态有效区域、FP32/S32/U32 和 S64/U64 byte offsets。
+atomic-add 依赖配套 LLVM 的 `ew_mscatter_add_predicate` builtin；
+不能由 MC 已支持 ExecutionMask 推断已安装 compiler 也支持该 API。
+目前验证包含对象生成、汇编 roundtrip 与负例，不包含完整 TopK 模型数值验收。
+Predicate 逻辑组合、GPR 自动适配、M16 和跨调用/spill 不在首版支持范围。
+示例、语义及依赖见 [PredicateCell adapters](predicate-adapters.md)。
+
+### 已发布基线
+
 - 当前 API/spec 基线：PTO ISA `0.58.7`，publication `0.58.7.0`，ABI
   `pto-isa-0.58.7-mode-function-v1`。
 - backend 能力必须分别判断：CPU simulator/JCORE wrapper、LLVM MC

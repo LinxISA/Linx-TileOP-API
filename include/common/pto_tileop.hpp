@@ -11,6 +11,7 @@
 
 #ifdef __linx
 #include "common/pto_tile_region_inline_asm.hpp"
+#include "common/pto_predicate.hpp"
 #endif
 
 // Returns the current PE ID (0..3).

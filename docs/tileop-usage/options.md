@@ -13,6 +13,14 @@
 的 packed / one-column source 不能混用，编译期诊断见
 [TCMP 约束](elementwise-tile-tile/logical/TCMP.md)。
 
+## 实验性 PredicateCell adapters
+
+`predicate::compare_scalar` 的强类型结果可以直接供给
+`predicate::scatter`，或作为 `predicate::atomic_add<Invert>` 的
+ExecutionMask。`Invert` 是编译期布尔参数，默认 false，不属于
+`fixp::Options`。当前支持边界、byte-offset 单位和未支持的逻辑组合见
+[PredicateCell adapters](predicate-adapters.md)。
+
 ## 1. 快速开始
 
 普通计算直接使用基础重载；需要后处理时，在对应的 `TMATMUL*` 或 `TGEMV*` 调用中传入

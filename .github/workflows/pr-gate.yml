@@ -240,6 +240,13 @@ jobs:
           LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
         run: python3 test/test_llvm138_narrow_tcmp.py -v
 
+      - name: Check typed PredicateCell producer and consumers
+        working-directory: tileop-api
+        env:
+          LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
+          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
+        run: python3 test/test_predicate_adapters.py -v
+
       - name: Run DType macro regression with associated APIs
         working-directory: tileop-api
         env:
