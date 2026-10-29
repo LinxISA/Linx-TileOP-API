@@ -18,7 +18,10 @@
 `predicate::compare_scalar` 的强类型结果可以直接供给
 `predicate::scatter`，或作为 `predicate::atomic_add<Invert>` 的
 ExecutionMask。`Invert` 是编译期布尔参数，默认 false，不属于
-`fixp::Options`。当前支持边界、byte-offset 单位和未支持的逻辑组合见
+`fixp::Options`。显式 `logical_and/or/xor` 组合产生 U8-basis PredicateCell，
+`select/select_scalar` 可选择不同 basis 的 Numeric payload；`subview` 保留
+basis，`concatenate` 只返回已封闭 parent。混合逻辑 `logical_numeric<6/7/8>`
+返回 Numeric U8 而非谓词。当前支持边界和 CELL/byte-offset 单位见
 [PredicateCell adapters](predicate-adapters.md)。
 
 ## 1. 快速开始
