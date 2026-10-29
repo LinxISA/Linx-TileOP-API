@@ -104,9 +104,10 @@ predicate::atomic_add(destination, byte_offsets, values, active);
 把这些调用放进循环就能编译。
 
 两条路径使用相同架构中的 predicate/ExecutionMask 概念，但公开支持边界
-不同。显式 adapters 首版只覆盖 Local VEC CUBE_M32、静态有效区域和
-FP32/S32/U32，尚无 predicate 逻辑组合；本页 element-if 已支持的组合条件
-不能据此推广到 `Predicate<Basis>`。显式 `atomic_add` 使用 MSCATTER_ADD
+不同。显式 adapters 支持 Local VEC CUBE_M16/M32 的静态比较、谓词逻辑
+组合、选择与受限 typed views/拼接；indexed memory 仍仅覆盖 M32，
+FP32/S32/U32。详细类型与形状边界见独立 adapters 文档，不能将本页
+pragma 支持范围与 `Predicate<Basis>` 混为一谈。显式 `atomic_add` 使用 MSCATTER_ADD
 ExecutionMask，本页 histogram 示例的已验收 profile 则使用 MGATHER.ADD，
 不能互相替代其 dtype、memory-order、返回值或验证结论。
 
