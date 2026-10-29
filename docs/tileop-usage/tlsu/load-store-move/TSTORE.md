@@ -37,6 +37,25 @@ TSTORE_ATOMIC_INC(dst, src);
 TSTORE_ATOMIC_DEC(dst, src);
 ```
 
+所有八个接口都可用模板参数选择参与 PE：
+
+```cpp
+TSTORE_ATOMIC_ADD<12>(dst, src); // PE mask 1100
+TSTORE_ATOMIC_ADD<0>(dst, src);  // 架构严格空操作
+```
+
+`PEMask` 可为 `0, 1, 2, 4, 8, 12, 14, 15`。Local `CUBE_M16/M32`
+还可以使用 Predicate Tile execution mask；第二个模板参数控制反选：
+
+```cpp
+TSTORE_ATOMIC_ADD<15, false>(dst, local_cube, predicate);
+TSTORE_ATOMIC_ADD<15, true>(dst, local_cube, predicate); // PredInv=1
+```
+
+Predicate 的 CUBE layout 和 valid shape 必须与 Local 源一致。该重载固定
+`Zero=0`，不提供 zero-fill 形式。RowMajor Local 和 Shared 源不接受 Predicate
+参数；Shared Atomic TSTORE 仅支持 PE participation mask。
+
 `src` 可为 Local RowMajor、Shared RowMajor，或 Local `CUBE_M16/M32`；不接受
 `CUBE_N8`。GM 与源 dtype 必须相同。支持的 dtype 如下：
 

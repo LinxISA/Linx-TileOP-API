@@ -17,6 +17,38 @@ using GM = global_tensor<uint32_t, RowMajor<4, 8>>;
 using Source = Tile<Location::Vec, uint32_t, 4, 8, BLayout::CubeN8>;
 void test(GM &gm, Source &source) { TSTORE_ATOMIC_ADD(gm, source); }
 
+#elif defined(SHOULD_FAIL_ATOMIC_MASK_ROWMAJOR)
+using GM = global_tensor<uint32_t, RowMajor<8, 32>>;
+using Source = Tile<Location::Vec, uint32_t, 8, 32>;
+using Basis = VecTileM32<uint32_t, 32, 8>;
+void test(GM &gm, Source &source, Basis &basis) {
+  auto active = predicate::compare_scalar<CmpMode::GT>(basis, 0u);
+  TSTORE_ATOMIC_ADD(gm, source, active);
+}
+
+#elif defined(SHOULD_FAIL_ATOMIC_MASK_SHAPE)
+using GM = global_tensor<uint32_t, RowMajor<32, 8>>;
+using Source = VecTileM32<uint32_t, 32, 8>;
+using Basis = VecTileM32<uint32_t, 16, 8>;
+void test(GM &gm, Source &source, Basis &basis) {
+  auto active = predicate::compare_scalar<CmpMode::GT>(basis, 0u);
+  TSTORE_ATOMIC_ADD(gm, source, active);
+}
+
+#elif defined(SHOULD_FAIL_ATOMIC_MASK_SHARED)
+using GM = global_tensor<uint32_t, RowMajor<32, 8>>;
+using Local = Tile<Location::Left, uint32_t, 32, 8>;
+using Basis = VecTileM32<uint32_t, 32, 8>;
+void test(GM &gm, SharedTile<Local> &source, Basis &basis) {
+  auto active = predicate::compare_scalar<CmpMode::GT>(basis, 0u);
+  TSTORE_ATOMIC_ADD(gm, source, active);
+}
+
+#elif defined(SHOULD_FAIL_ATOMIC_PE_MASK)
+using GM = global_tensor<uint32_t, RowMajor<32, 8>>;
+using Source = VecTileM32<uint32_t, 32, 8>;
+void test(GM &gm, Source &source) { TSTORE_ATOMIC_ADD<3>(gm, source); }
+
 #elif defined(SHOULD_FAIL_CUBE_SHARED_DTYPE)
 using Cube = CubeTileM32<uint32_t, 32, 8>;
 using ND = Tile<Location::Left, uint16_t, 32, 16, BLayout::RowMajor>;

@@ -61,9 +61,13 @@ TADD(local_dst, local_lhs, local_rhs);
   覆盖整个分配容量，不能只描述最小 valid CELL envelope。
 - Local CUBE 到 Shared ND 使用 `TMOV_CUBE_TO_SHARED_ND`。单 PE 可一次发布完整
   parent；多 PE 必须通过 `range::assemble*` 写入不越界的显式 range，并由
-  `LAST` 原子发布。同一 generation 不得混用 NORM、M322ND 和 M162ND。
+  `LAST` 原子发布。同一 generation 的有效区先保存在 pending metadata 中，按
+  writer offset 映射并合并，`LAST` 时才替换消费者可见的 valid rows/columns。
+  同一 generation 不得混用 NORM、M322ND 和 M162ND。
 - Shared full store 使用 `TSTORE(gm, shared)` 和固定 mask `1111`；部分 store 使用
   `TSTORE_PART<PEMask>(gm, shared)`，且 `PEMask` 必须是公开接口接受的非零集合。
+- Atomic TSTORE 的 Local CUBE 形式可使用 Predicate execution mask、`PredInv`
+  和 PE mask；Shared Atomic TSTORE 只接受 PE mask，禁止逐元素 Predicate。
 
 ### Shared operand-role view
 

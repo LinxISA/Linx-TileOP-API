@@ -35,6 +35,10 @@ class Issue398399ContractTest(unittest.TestCase):
         self.assertIn("M322ND.canon", ASM)
         self.assertIn("M162ND.canon", ASM)
         self.assertIn('RNONE, nosat, 0, 0', ASM)
+        self.assertIn('RNONE, nosat, %c[PredInv], 0', ASM)
+        self.assertIn('B.IOT %[Src], %[Predicate], mask=', ASM)
+        self.assertIn('B.IOS %S[Shared], mask=', ASM)
+        self.assertIn('atomic TSTORE PEMask must be 0,1,2,4,8,12,14,or 15', ASM)
         self.assertNotRegex(ASM, r'BSTART\.TLSU\s+TSTORE\.ATOMIC_')
 
     def test_cube_to_shared_nd_uses_canonical_tmov(self):
@@ -46,6 +50,12 @@ class Issue398399ContractTest(unittest.TestCase):
         self.assertIn('[Init] "i"(1)', ASM)
         self.assertIn('[Init] "i"(0)', ASM)
         self.assertIn('PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\\n")', ASM)
+        self.assertIn("UpdateAssembledValidShape", ASM)
+        self.assertIn("BeginAssembledValidShape", TILE)
+        self.assertIn("PublishAssembledValidShape", TILE)
+        fixture = (ROOT / "test/tileop_api/src/CubeToSharedND.cpp").read_text()
+        self.assertIn("PartialCube::PhysicalCols == 4", fixture)
+        self.assertIn("TSTORE_ATOMIC_ADD<1>(gm, parent)", fixture)
 
     def test_negative_compile_cases_are_registered(self):
         driver = (ROOT / "test/tileop_api/run_negatives.sh").read_text()
@@ -54,6 +64,10 @@ class Issue398399ContractTest(unittest.TestCase):
             "atomic_add_dtype",
             "atomic_inc_dtype",
             "atomic_cube_n8",
+            "atomic_mask_rowmajor",
+            "atomic_mask_shape",
+            "atomic_mask_shared",
+            "atomic_pe_mask",
             "cube_shared_dtype",
             "cube_shared_cols",
             "cube_shared_capacity",

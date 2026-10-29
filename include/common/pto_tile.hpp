@@ -1773,11 +1773,13 @@ public:
 
   SharedTile()
       : RowMaskInternal(ValidRow == DYNAMIC ? 0 : ValidRow),
-        ColMaskInternal(ValidCol == DYNAMIC ? 0 : ValidCol) {}
+        ColMaskInternal(ValidCol == DYNAMIC ? 0 : ValidCol),
+        PendingRowMaskInternal(0), PendingColMaskInternal(0) {}
 
   explicit SharedTile(const LocalTile &local)
       : RowMaskInternal(local.GetValidRow()),
-        ColMaskInternal(local.GetValidCol()) {}
+        ColMaskInternal(local.GetValidCol()), PendingRowMaskInternal(0),
+        PendingColMaskInternal(0) {}
 
   int GetValidRow() const { return RowMaskInternal; }
   int GetValidCol() const { return ColMaskInternal; }
@@ -1786,6 +1788,23 @@ public:
   void SetValidShape(const TileLike &local) {
     RowMaskInternal = local.GetValidRow();
     ColMaskInternal = local.GetValidCol();
+  }
+
+  void BeginAssembledValidShape(int rows, int columns) {
+    PendingRowMaskInternal = rows;
+    PendingColMaskInternal = columns;
+  }
+
+  void MergeAssembledValidShape(int rows, int columns) {
+    if (rows > PendingRowMaskInternal)
+      PendingRowMaskInternal = rows;
+    if (columns > PendingColMaskInternal)
+      PendingColMaskInternal = columns;
+  }
+
+  void PublishAssembledValidShape() {
+    RowMaskInternal = PendingRowMaskInternal;
+    ColMaskInternal = PendingColMaskInternal;
   }
 
   unsigned long &handle_ref() { return Handle; }
@@ -1799,6 +1818,8 @@ private:
   unsigned long Handle;
   int RowMaskInternal;
   int ColMaskInternal;
+  int PendingRowMaskInternal;
+  int PendingColMaskInternal;
 };
 
 // v5 SharedTile traits. is_tile_data_v stays scoped to ordinary Local Tiles
@@ -2804,6 +2825,16 @@ public:
   int GetValidRow() const { return ParentValue.GetValidRow(); }
   int GetValidCol() const { return ParentValue.GetValidCol(); }
   uintptr_t GetRangeBase() const { return RangeBaseValue; }
+
+  void UpdateAssembledValidShape(int rows, int columns)
+      requires(is_shared_tile_v<Parent>) {
+    if constexpr (INIT)
+      ParentValue.BeginAssembledValidShape(rows, columns);
+    else
+      ParentValue.MergeAssembledValidShape(rows, columns);
+    if constexpr (LAST)
+      ParentValue.PublishAssembledValidShape();
+  }
 
 private:
   Parent &ParentValue;

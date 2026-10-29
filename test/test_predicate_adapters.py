@@ -73,6 +73,52 @@ predicate::atomic_add<true>(destination, offsets, values, active);'''
                     self.assertIn("ND2M32", text)
                     self.assertIn("nosat, 1, 0", text)
 
+    def test_atomic_tstore_execution_and_pe_masks(self):
+        body = '''auto active = predicate::compare_scalar<CmpMode::GE>(values, threshold);
+TSTORE_ATOMIC_ADD<1>(destination, values, active);
+TSTORE_ATOMIC_MAX<4, true>(destination, values, active);
+TSTORE_ATOMIC_DEC<0>(destination, values, active);'''
+        obj = self.output / "atomic-tstore.o"
+        result = self.compile(body, "-c", "-o", str(obj))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = subprocess.check_output([
+            str(CXX.parent / "llvm-objdump"), "-d",
+            "--disassembler-options=no-tile-macros", str(obj)], text=True)
+        self.assertEqual(text.count("BSTART.TLSU\tTSTORE"), 3, text)
+        self.assertIn("mask=0001", text)
+        self.assertIn("mask=0100", text)
+        self.assertIn("mask=0000", text)
+        self.assertIn("nosat, 1, 0", text)
+        self.assertNotIn("nosat, 1, 1", text)
+
+    def test_cooperative_cube_shared_publishes_valid_shape(self):
+        source = self.output / "cube-shared-valid.cpp"
+        source.write_text('''#include <common/pto_tileop.hpp>
+using namespace pto;
+using Cube = VecTileM32<uint32_t, 32, 3>;
+using ParentLocal = Tile<Location::Left, uint32_t, 64, 4, BLayout::RowMajor>;
+using Parent = SharedTile<ParentLocal>;
+using Global = global_tensor<uint32_t, RowMajor<64, 4>>;
+void test(Global &destination, Cube &source) {
+  Parent parent;
+  auto init = range::assemble<4, 0>(parent);
+  TMOV_CUBE_TO_SHARED_ND<1>(init, source);
+  auto last = range::assemble_last<4, 4>(parent);
+  TMOV_CUBE_TO_SHARED_ND<1>(last, source);
+  TSTORE_ATOMIC_ADD<1>(destination, parent);
+}
+''')
+        obj = self.output / "cube-shared-valid.o"
+        result = subprocess.run(self.flags + ["-c", str(source), "-o", str(obj)],
+                                text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = subprocess.check_output([
+            str(CXX.parent / "llvm-objdump"), "-d",
+            "--disassembler-options=no-tile-macros", str(obj)], text=True)
+        self.assertRegex(text, r"C\.B\.DIMI\s+3,\s+->lb0")
+        self.assertRegex(text, r"C\.B\.DIMI\s+64,\s+->lb1")
+        self.assertRegex(text, r"C\.B\.DIMI\s+4,\s+->lb2")
+
     def test_no_uninitialized_predicate(self):
         result = self.compile("predicate::Predicate<Values> active;", "-fsyntax-only")
         self.assertNotEqual(result.returncode, 0)
