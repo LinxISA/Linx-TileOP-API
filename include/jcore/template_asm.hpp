@@ -504,7 +504,7 @@ asm volatile(
       [TileSize] "i"(
           tile_type_traits<typename Tile::TileDType>::TilesizeCode),
       [ValidCol] "i"(Tile::ValidCol), [ValidRow] "i"(Tile::ValidRow),
-      [PhysicalCol] "i"(Tile::Cols),
+      [PhysicalCol] "i"(Tile::PhysicalCols),
       [ElemLayout] "i"(local_layout_code_v<Tile>));  }
   else if constexpr (Tile::ValidCol > 0 && Tile::ValidRow < 0) {
 asm volatile(
@@ -520,7 +520,7 @@ asm volatile(
       [TileSize] "i"(
           tile_type_traits<typename Tile::TileDType>::TilesizeCode),
       [ValidCol] "i"(Tile::ValidCol), [ValidRow] "r"(src.GetValidRow()),
-      [PhysicalCol] "i"(Tile::Cols),
+      [PhysicalCol] "i"(Tile::PhysicalCols),
       [ElemLayout] "i"(local_layout_code_v<Tile>));  }
   else if constexpr (Tile::ValidCol < 0 && Tile::ValidRow > 0) {
 asm volatile(
@@ -536,7 +536,7 @@ asm volatile(
       [TileSize] "i"(
           tile_type_traits<typename Tile::TileDType>::TilesizeCode),
       [ValidCol] "r"(src.GetValidCol()), [ValidRow] "i"(Tile::ValidRow),
-      [PhysicalCol] "i"(Tile::Cols),
+      [PhysicalCol] "i"(Tile::PhysicalCols),
       [ElemLayout] "i"(local_layout_code_v<Tile>));  }
   else {
 asm volatile(
@@ -552,7 +552,7 @@ asm volatile(
       [TileSize] "i"(
           tile_type_traits<typename Tile::TileDType>::TilesizeCode),
       [ValidCol] "r"(src.GetValidCol()), [ValidRow] "r"(src.GetValidRow()),
-      [PhysicalCol] "i"(Tile::Cols),
+      [PhysicalCol] "i"(Tile::PhysicalCols),
       [ElemLayout] "i"(local_layout_code_v<Tile>));  }
 }
 
@@ -587,7 +587,7 @@ PTO_SHARED_INLINE void TMOV(Tile &dst,
         [TileSize] "i"(
             tile_type_traits<typename Tile::TileDType>::TilesizeCode),
         [ValidCol] "i"(Tile::ValidCol), [ValidRow] "i"(Tile::ValidRow),
-        [PhysicalCol] "i"(Tile::Cols),
+        [PhysicalCol] "i"(Tile::PhysicalCols),
         [RangeBase] "r"(range_base),
         [SubviewSize] "i"(Tile::TilesizeCode),
         [ElemLayout] "i"(local_layout_code_v<Tile>));
@@ -4100,6 +4100,134 @@ asm volatile(
     : "memory");  }
 }
 
+// PTO #398 regular-address atomic TSTORE virtual aliases.  These C++ names
+// map TSTORE_ATOMIC_* to the specification spellings TSTORE.ATOMIC_*; all
+// forms retain TLSU Function 1 and select atomic reduction through
+// B.DATR.Canonicalize=1 plus CMode=0..7.
+namespace pto_tstore_atomic_detail {
+
+template <int Mode, int TypeCode>
+inline constexpr bool type_legal_v = [] {
+  static_assert(Mode >= 0 && Mode <= 7,
+                "atomic TSTORE CMode must be in the assigned range 0..7");
+  if constexpr (Mode == 0)
+    return TypeCode == __type_fp16 || TypeCode == __type_bf16 ||
+           TypeCode == __type_fp32 || TypeCode == __type_fp64 ||
+           TypeCode == __type_int32 || TypeCode == __type_uint32 ||
+           TypeCode == __type_uint64;
+  if constexpr (Mode == 1 || Mode == 2)
+    return TypeCode == __type_int32 || TypeCode == __type_int64 ||
+           TypeCode == __type_uint32 || TypeCode == __type_uint64;
+  if constexpr (Mode >= 3 && Mode <= 5)
+    return TypeCode == __type_uint32 || TypeCode == __type_uint64;
+  return TypeCode == __type_uint32;
+}();
+
+template <int Mode, is_global_data_v GM, is_local_tile_v Tile>
+  requires(!is_range_v<Tile>)
+PTO_SHARED_INLINE void emit(GM &dst, const Tile &src) {
+  constexpr int TypeCode = type_traits<typename Tile::DType>::TypeCode;
+  static_assert(Tile::BFractal == BLayout::RowMajor ||
+                    Tile::BFractal == BLayout::CubeM16 ||
+                    Tile::BFractal == BLayout::CubeM32,
+                "atomic TSTORE supports RowMajor, CUBE_M16, or CUBE_M32; "
+                "CUBE_N8 is not supported");
+  static_assert(std::is_same_v<typename GM::DType, typename Tile::DType>,
+                "atomic TSTORE requires matching GM and source dtypes");
+  static_assert(type_legal_v<Mode, TypeCode>,
+                "atomic TSTORE mode does not support this DataType");
+  static_assert(Tile::IsValidActiveSize,
+                "atomic TSTORE source capacity must be 128 B..256 KiB");
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
+  if constexpr (Tile::IsCubeLayout) {
+    asm volatile(
+        "BSTART.TLSU TSTORE, %D[DataType]\n"
+        ".if %c[Layout] == 24\n"
+        "B.DATR M322ND.canon, DTYPE_NONE, Null, byte0, %c[Mode], RNONE, nosat, 0, 0\n"
+        ".else\n"
+        "B.DATR M162ND.canon, DTYPE_NONE, Null, byte0, %c[Mode], RNONE, nosat, 0, 0\n"
+        ".endif\n"
+        "B.DIM %[VCOL], 0, ->lb0\n"
+        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.IOT %[Src], mask=1111, last\n"
+        "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+        :
+        : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
+          [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
+          [DataType] "i"(TypeCode), [Layout] "i"(Tile::CubeStoreLayout),
+          [Mode] "i"(Mode), [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
+        : "memory");
+  } else {
+    asm volatile(
+        "BSTART.TLSU TSTORE, %D[DataType]\n"
+        "B.DATR NORM.canon, DTYPE_NONE, Zero, byte0, %c[Mode], RNONE, nosat, 0, 0\n"
+        "B.DIM %[VCOL], 0, ->lb0\n"
+        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[COL], ->lb2\n"
+        "B.IOT %[Src], mask=1111, last\n"
+        "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+        :
+        : [Base] "r"(dst.data()), [Src] "Tr"(src.data()),
+          [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
+          [DataType] "i"(TypeCode), [Mode] "i"(Mode),
+          [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+          [COL] "i"(Tile::PhysicalCols)
+        : "memory");
+  }
+}
+
+template <int Mode, is_global_data_v GM, is_shared_tile_v Shared>
+PTO_SHARED_INLINE void emit(GM &dst, const Shared &src) {
+  using Local = typename Shared::LocalTileType;
+  constexpr int TypeCode = type_traits<typename Local::DType>::TypeCode;
+  static_assert(std::is_same_v<typename GM::DType, typename Local::DType>,
+                "atomic Shared TSTORE requires matching GM and source dtypes");
+  static_assert(Local::isRowMajor && !Local::isBoxedLayout,
+                "atomic Shared TSTORE requires RowMajor ND storage");
+  static_assert(type_legal_v<Mode, TypeCode>,
+                "atomic TSTORE mode does not support this DataType");
+  static_assert(Local::IsValidActiveSize,
+                "atomic Shared TSTORE capacity must be 128 B..256 KiB");
+  const size_t valid_col = src.GetValidCol();
+  const size_t valid_row = src.GetValidRow();
+  asm volatile(
+      "BSTART.TLSU TSTORE, %D[DataType]\n"
+      "B.DATR NORM.canon, DTYPE_NONE, Zero, byte0, %c[Mode], RNONE, nosat, 0, 0\n"
+      "B.DIM %[VCOL], 0, ->lb0\n"
+      "B.DIM %[VROW], 0, ->lb1\n"
+      "B.DIM zero, %c[COL], ->lb2\n"
+      "B.IOS %S[Shared], mask=1111\n"
+      "B.IOR [%[Base],%[RowStrideBytes]], []\n"
+      :
+      : [Base] "r"(dst.data()), [Shared] "Sr"(src.handle()),
+        [RowStrideBytes] "r"(dst.GetStrideBytes(3)),
+        [DataType] "i"(TypeCode), [Mode] "i"(Mode),
+        [VCOL] "r"(valid_col), [VROW] "r"(valid_row),
+        [COL] "i"(Local::PhysicalCols)
+      : "memory");
+}
+
+} // namespace pto_tstore_atomic_detail
+
+#define PTO_DEFINE_TSTORE_ATOMIC_API(Name, Mode)                              \
+  template <is_global_data_v GM, typename Source>                              \
+    requires(is_local_tile_v<Source> || is_shared_tile_v<Source>)              \
+  PTO_SHARED_INLINE void Name(GM &dst, const Source &src) {                    \
+    pto_tstore_atomic_detail::emit<Mode>(dst, src);                            \
+  }
+
+PTO_DEFINE_TSTORE_ATOMIC_API(TSTORE_ATOMIC_ADD, 0)
+PTO_DEFINE_TSTORE_ATOMIC_API(TSTORE_ATOMIC_MIN, 1)
+PTO_DEFINE_TSTORE_ATOMIC_API(TSTORE_ATOMIC_MAX, 2)
+PTO_DEFINE_TSTORE_ATOMIC_API(TSTORE_ATOMIC_AND, 3)
+PTO_DEFINE_TSTORE_ATOMIC_API(TSTORE_ATOMIC_OR, 4)
+PTO_DEFINE_TSTORE_ATOMIC_API(TSTORE_ATOMIC_XOR, 5)
+PTO_DEFINE_TSTORE_ATOMIC_API(TSTORE_ATOMIC_INC, 6)
+PTO_DEFINE_TSTORE_ATOMIC_API(TSTORE_ATOMIC_DEC, 7)
+
+#undef PTO_DEFINE_TSTORE_ATOMIC_API
+
 // TSTORE.SPART: Shared Tile -> GM on an explicit nonzero PE subset
 // (PTO ISA 0.58.3 TLSU Function 14). Exactly one source B.IOS with the caller's
 // PE mask (any nonzero subset), no B.IOT; B.IOR carries base + stride.
@@ -4824,6 +4952,116 @@ TMOV_L2S_PUBLISH(const tile_shape_src &src) {
   SharedTile<tile_shape_src> result(src);
   TMOV_L2S_PUBLISH<PEMask>(result, src);
   return result;
+}
+
+// PTO #399 Local CUBE_M16/M32 -> Shared RowMajor ND conversion on canonical
+// Function 2.  The destination type describes the Shared parent geometry;
+// B.DATR M162ND/M322ND with DTYPE_NONE preserves the source backing dtype and
+// normalizes logical elements.  Multi-PE destinations use range::Assemble so
+// every writer contributes an explicit 128-byte range before LAST publishes.
+template <int PEMask = 15, is_shared_tile_v SharedND,
+          is_local_tile_v Cube>
+PTO_SHARED_INLINE void TMOV_CUBE_TO_SHARED_ND(SharedND &dst,
+                                               const Cube &src) {
+  using ND = typename SharedND::LocalTileType;
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0 &&
+                    (PEMask & (PEMask - 1)) == 0,
+                "unassembled CUBE-to-Shared-ND TMOV requires one PE");
+  static_assert(Cube::BFractal == BLayout::CubeM16 ||
+                    Cube::BFractal == BLayout::CubeM32,
+                "CUBE-to-Shared-ND TMOV requires CUBE_M16 or CUBE_M32");
+  static_assert(ND::isRowMajor && !ND::isBoxedLayout && !ND::IsCubeLayout,
+                "CUBE-to-Shared-ND TMOV destination must be RowMajor Shared ND");
+  static_assert(std::is_same_v<typename ND::DType, typename Cube::DType>,
+                "CUBE-to-Shared-ND TMOV preserves the backing dtype");
+  static_assert(ND::LogicalTileBytes == Cube::LogicalTileBytes,
+                "unassembled CUBE-to-Shared-ND TMOV requires equal parent capacities");
+  static_assert(ND::Cols == Cube::PhysicalCols,
+                "Shared ND columns must match the CUBE exact-capacity physical columns");
+  static_assert(ND::Rows == Cube::PhysicalRows,
+                "Shared ND rows must match the CUBE exact-capacity physical rows");
+  static_assert(ND::Rows * ND::Cols * tile_element_bits_v<typename ND::DType> ==
+                    ND::LogicalTileBytes * 8,
+                "unassembled Shared ND parent geometry must exactly cover its capacity");
+  static_assert(type_traits<typename Cube::DType>::TypeCode != __type_rcpe6m2,
+                "CUBE-to-Shared-ND TMOV does not support RCPE6M2 backing");
+  dst.SetValidShape(src);
+  asm volatile(
+      "BSTART.TMOV DTYPE_NONE\n"
+      ".if %c[Layout] == 24\nB.DATR M322ND, DTYPE_NONE, Zero\n"
+      ".else\nB.DATR M162ND, DTYPE_NONE, Zero\n.endif\n"
+      PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[ParentSize]>\n")
+      PTO_PE_MASK_ASM("B.IOT %[Src], mask=", ", last\n")
+      : [Shared] "=Sr"(dst.handle_ref())
+      : [Src] "Tr"(src.data()), [PEMask] "i"(PEMask),
+        [Layout] "i"(Cube::CubeStoreLayout),
+        [ParentSize] "i"(ND::TilesizeCode)
+      : "memory");
+}
+
+template <int PEMask = 15, typename Parent, unsigned ParentSizeCode,
+          bool INIT, bool LAST, unsigned OffsetUnits, unsigned RegSrc,
+          unsigned WriterSizeCode, is_local_tile_v Cube>
+  requires(is_shared_tile_v<Parent>)
+PTO_SHARED_INLINE void TMOV_CUBE_TO_SHARED_ND(
+    range::Assemble<Parent, ParentSizeCode, INIT, LAST, OffsetUnits, RegSrc,
+                    WriterSizeCode> &dst,
+    const Cube &src) {
+  using ND = typename Parent::LocalTileType;
+  static_assert(is_valid_pe_mask(PEMask) && PEMask != 0,
+                "cooperative CUBE-to-Shared-ND TMOV requires a nonzero PE mask");
+  static_assert(Cube::BFractal == BLayout::CubeM16 ||
+                    Cube::BFractal == BLayout::CubeM32,
+                "CUBE-to-Shared-ND TMOV requires CUBE_M16 or CUBE_M32");
+  static_assert(ND::isRowMajor && !ND::isBoxedLayout && !ND::IsCubeLayout,
+                "CUBE-to-Shared-ND TMOV destination must be RowMajor Shared ND");
+  static_assert(std::is_same_v<typename ND::DType, typename Cube::DType>,
+                "CUBE-to-Shared-ND TMOV preserves the backing dtype");
+  static_assert(WriterSizeCode == Cube::TilesizeCode,
+                "B.ASSEMBLE WriterSizeCode must equal the CUBE writer capacity");
+  static_assert(ND::Cols == Cube::PhysicalCols,
+                "Shared ND columns must match the CUBE exact-capacity physical columns");
+  static_assert(ND::Rows * ND::Cols * tile_element_bits_v<typename ND::DType> ==
+                    ND::LogicalTileBytes * 8,
+                "Shared ND parent geometry must exactly cover its capacity");
+  static_assert(OffsetUnits * range::RangeAddressUnitBytes +
+                        Cube::LogicalTileBytes <=
+                    ND::LogicalTileBytes,
+                "CUBE writer range must fit the Shared ND parent capacity");
+  static_assert(type_traits<typename Cube::DType>::TypeCode != __type_rcpe6m2,
+                "CUBE-to-Shared-ND TMOV does not support RCPE6M2 backing");
+  const uintptr_t range_base = static_cast<uintptr_t>(dst.GetRangeBase());
+  if constexpr (INIT) {
+    asm volatile(
+        "BSTART.TMOV DTYPE_NONE\n"
+        ".if %c[Layout] == 24\nB.DATR M322ND, DTYPE_NONE, Zero\n"
+        ".else\nB.DATR M162ND, DTYPE_NONE, Zero\n.endif\n"
+        PTO_PE_MASK_ASM("B.IOS mask=", ", ->%S[Shared]<%Z[ParentSize]>\n")
+        "B.ASSEMBLE %c[Init], %c[Last], %[RangeBase], %c[Offset], %c[WriterSize]\n"
+        PTO_PE_MASK_ASM("B.IOT %[Src], mask=", ", last\n")
+        : [Shared] "=Sr"(dst.handle_ref())
+        : [Src] "Tr"(src.data()), [PEMask] "i"(PEMask),
+          [Layout] "i"(Cube::CubeStoreLayout),
+          [ParentSize] "i"(Parent::TilesizeCode), [Init] "i"(1),
+          [Last] "i"(static_cast<int>(LAST)), [RangeBase] "r"(range_base),
+          [Offset] "i"(OffsetUnits), [WriterSize] "i"(WriterSizeCode)
+        : "memory");
+  } else {
+    asm volatile(
+        "BSTART.TMOV DTYPE_NONE\n"
+        ".if %c[Layout] == 24\nB.DATR M322ND, DTYPE_NONE, Zero\n"
+        ".else\nB.DATR M162ND, DTYPE_NONE, Zero\n.endif\n"
+        PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
+        "B.ASSEMBLE %c[Init], %c[Last], %[RangeBase], %c[Offset], %c[WriterSize]\n"
+        PTO_PE_MASK_ASM("B.IOT %[Src], mask=", ", last\n")
+        :
+        : [Shared] "Sr"(dst.handle()), [Src] "Tr"(src.data()),
+          [PEMask] "i"(PEMask), [Layout] "i"(Cube::CubeStoreLayout),
+          [Init] "i"(0),
+          [Last] "i"(static_cast<int>(LAST)), [RangeBase] "r"(range_base),
+          [Offset] "i"(OffsetUnits), [WriterSize] "i"(WriterSizeCode)
+        : "memory");
+  }
 }
 
 template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
@@ -16251,7 +16489,7 @@ asm volatile(
     : [Dst] "=Tr"(dst.data())
     : [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
       [ValidCol] "i"(tile_shape::ValidCol),
-      [PhysicalCol] "i"(tile_shape::Cols),
+      [PhysicalCol] "i"(tile_shape::PhysicalCols),
       [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [Start] "r"(startValue),
       [Direction] "r"(directionValue)
@@ -16266,7 +16504,7 @@ asm volatile(
     : [Dst] "=Tr"(dst.data())
     : [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
       [ValidCol] "r"(dst.GetValidCol()),
-      [PhysicalCol] "i"(tile_shape::Cols),
+      [PhysicalCol] "i"(tile_shape::PhysicalCols),
       [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
       [Start] "r"(startValue),
       [Direction] "r"(directionValue)
@@ -16322,7 +16560,7 @@ void TCI_2D(tile_shape &dst, T s) {
         [Layout] "i"(tile_shape::BFractal == BLayout::CubeM32 ? 29 : 31),
         [ValidCol] "i"(tile_shape::ValidCol),
         [ValidRow] "i"(tile_shape::ValidRow),
-        [PhysicalCol] "i"(tile_shape::Cols),
+        [PhysicalCol] "i"(tile_shape::PhysicalCols),
         [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
         [Start] "r"(startValue), [Steps] "r"(stepValue)
       : "memory");

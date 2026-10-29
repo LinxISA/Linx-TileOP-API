@@ -51,6 +51,7 @@ TCI2D_CASES="layout location dtype shape steps m16_rows"
 I64_CASES="fp64_element unsupported_parent m16 short_m32 subview_pair assemble_pair writer_limit"
 TCOLSUM_CASES="dest_rows dest_cols dtype"
 ISSUE288_CASES="layout dtype shape valid_shape"
+ISSUE398399_CASES="atomic_add_dtype atomic_inc_dtype atomic_cube_n8 cube_shared_dtype cube_shared_cols cube_shared_capacity cube_shared_writer_size"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -118,6 +119,11 @@ for c in $ISSUE288_CASES; do
     valid_shape) pattern='requires matching valid shapes' ;;
   esac
   expect_rejected "issue288_$c" "$define" Issue288Negatives.cpp "$pattern"
+done
+for c in $ISSUE398399_CASES; do
+  define=SHOULD_FAIL_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "issue398399_$c" "$define" Issue398399Negatives.cpp \
+    'atomic TSTORE|CUBE_N8|CUBE-to-Shared-ND|Shared ND|B\.ASSEMBLE|writer range'
 done
 expect_rejected "thistogram_retired" "SHOULD_FAIL_THISTOGRAM_RETIRED" \
   TColSumNegatives.cpp "THISTOGRAM is retired"

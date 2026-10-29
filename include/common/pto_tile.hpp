@@ -1007,22 +1007,26 @@ public:
       return IsCubeM32B64 ? 1 : 128 * 8 / (32 * CubeElementBits);
     return 0;
   }();
-  static constexpr int CubeStorageRows = [] {
+  // Minimum CELL envelope required by the declared logical shape.  M16/M32
+  // descriptors do not use this envelope as their final physical geometry:
+  // their allocated SizeCode is a power-of-two capacity and the architectural
+  // physical column count must account for that complete capacity.
+  static constexpr int CubeMinimumStorageRows = [] {
     if constexpr (BFractal_ == BLayout::CubeN8)
       return ((Rows + CubeCellRows - 1) / CubeCellRows) * CubeCellRows;
     if constexpr (IsCubeLayout) return CubeCellRows;
     return Rows;
   }();
-  static constexpr int CubeStorageCols = IsCubeLayout
+  static constexpr int CubeMinimumStorageCols = IsCubeLayout
       ? ((Cols + CubeCellCols - 1) / CubeCellCols) * CubeCellCols : Cols;
-  static constexpr int CubeCellCount = IsCubeM32B64
+  static constexpr int CubeRequiredCellCount = IsCubeM32B64
       ? 2 * Cols
       : IsCubeLayout
-            ? (CubeStorageRows / CubeCellRows) *
-                  (CubeStorageCols / CubeCellCols)
+            ? (CubeMinimumStorageRows / CubeCellRows) *
+                  (CubeMinimumStorageCols / CubeCellCols)
             : 0;
   static constexpr int CubeRequiredBytes =
-      IsCubeLayout ? CubeCellCount * CubeCellBytes : 0;
+      IsCubeLayout ? CubeRequiredCellCount * CubeCellBytes : 0;
   static constexpr int CubeLoadLayout =
       BFractal_ == BLayout::CubeM32 ? LayoutCvtEnum::ND2M32 :
       BFractal_ == BLayout::CubeM16 ? LayoutCvtEnum::ND2M16 :
@@ -1040,12 +1044,40 @@ public:
       round_capacity(IsCubeLayout
                          ? CubeRequiredBytes
                          : (Rows * Cols * tile_element_bits_v<DType> + 7) / 8);
+  // PTO #399 exact-capacity CUBE geometry.  For M16/M32, every byte selected
+  // by SizeCode belongs to the physical descriptor, including capacity tail
+  // beyond the minimum logical CELL envelope.  N8 retains its valid-derived
+  // KxN geometry and may have unused carrier capacity.
+  static constexpr int CubePhysicalRows = [] {
+    if constexpr (BFractal_ == BLayout::CubeM16) return 16;
+    if constexpr (BFractal_ == BLayout::CubeM32) return 32;
+    if constexpr (BFractal_ == BLayout::CubeN8)
+      return CubeMinimumStorageRows;
+    return Rows;
+  }();
+  static constexpr int CubePhysicalCols = [] {
+    if constexpr (BFractal_ == BLayout::CubeM16 ||
+                  BFractal_ == BLayout::CubeM32)
+      return (StorageBytes * 8) / (CubePhysicalRows * CubeElementBits);
+    if constexpr (BFractal_ == BLayout::CubeN8)
+      return CubeMinimumStorageCols;
+    return Cols;
+  }();
+  static constexpr int CubeStorageRows = CubePhysicalRows;
+  static constexpr int CubeStorageCols = CubePhysicalCols;
+  static constexpr int PhysicalRows = CubePhysicalRows;
+  static constexpr int PhysicalCols = CubePhysicalCols;
+  static constexpr int CubeCellCount = IsCubeLayout
+      ? (BFractal_ == BLayout::CubeM16 || BFractal_ == BLayout::CubeM32
+             ? StorageBytes / CubeCellBytes
+             : CubeRequiredCellCount)
+      : 0;
   static constexpr int CubeStorageIndex(int row, int column) {
     if constexpr (IsCubeM32B64)
       return column * 32 + row;
     const int cell_elements = CubeCellRows * CubeCellCols;
     if constexpr (BFractal_ == BLayout::CubeN8) {
-      const int k_repeat = CubeStorageRows / CubeCellRows;
+      const int k_repeat = CubeMinimumStorageRows / CubeCellRows;
       const int cell_k = row / CubeCellRows;
       const int cell_n = column / CubeCellCols;
       const int inner_row = row % CubeCellRows;
@@ -1123,6 +1155,18 @@ public:
                 "CUBE_M16 supports at most 16 logical rows");
   static_assert(BFractal_ != BLayout::CubeM32 || Rows <= 32,
                 "CUBE_M32 supports at most 32 logical rows");
+  static_assert(!IsCubeLayout || CubeRequiredBytes <= StorageBytes,
+                "CUBE CELL envelope exceeds its allocated capacity");
+  static_assert(BFractal_ != BLayout::CubeM16 ||
+                    (CubePhysicalRows == 16 &&
+                     CubePhysicalCols * CubePhysicalRows * CubeElementBits ==
+                         StorageBytes * 8),
+                "CUBE_M16 physical geometry must exactly cover SizeCode capacity");
+  static_assert(BFractal_ != BLayout::CubeM32 ||
+                    (CubePhysicalRows == 32 &&
+                     CubePhysicalCols * CubePhysicalRows * CubeElementBits ==
+                         StorageBytes * 8),
+                "CUBE_M32 physical geometry must exactly cover SizeCode capacity");
 
   static constexpr BLayout BFractal = BFractal_;
   static constexpr SLayout SFractal = SFractal_;
@@ -1710,6 +1754,8 @@ public:
   static constexpr PadValue PadVal = LocalTile::PadVal;
   static constexpr CompactMode Compact = LocalTile::Compact;
   static constexpr bool IsCubeLayout = LocalTile::IsCubeLayout;
+  static constexpr int PhysicalRows = LocalTile::PhysicalRows;
+  static constexpr int PhysicalCols = LocalTile::PhysicalCols;
   using TileDType = typename LocalTile::TileDType;
   static constexpr int LogicalTileBytes = LocalTile::LogicalTileBytes;
   static constexpr int TilesizeCode = LocalTile::TilesizeCode;
@@ -1736,7 +1782,8 @@ public:
   int GetValidRow() const { return RowMaskInternal; }
   int GetValidCol() const { return ColMaskInternal; }
 
-  void SetValidShape(const LocalTile &local) {
+  template <typename TileLike>
+  void SetValidShape(const TileLike &local) {
     RowMaskInternal = local.GetValidRow();
     ColMaskInternal = local.GetValidCol();
   }
@@ -1794,6 +1841,8 @@ public:
   static constexpr PadValue PadVal = LocalTile::PadVal;
   static constexpr CompactMode Compact = LocalTile::Compact;
   static constexpr bool IsCubeLayout = LocalTile::IsCubeLayout;
+  static constexpr int PhysicalRows = LocalTile::PhysicalRows;
+  static constexpr int PhysicalCols = LocalTile::PhysicalCols;
   using TileDType = typename LocalTile::TileDType;
   static constexpr int LogicalTileBytes = LocalTile::LogicalTileBytes;
   static constexpr int TilesizeCode = LocalTile::TilesizeCode;
@@ -1860,6 +1909,8 @@ class SharedTileRoleView {
   static constexpr PadValue PadVal = SourceSharedTile::PadVal;
   static constexpr CompactMode Compact = SourceSharedTile::Compact;
   static constexpr bool IsCubeLayout = SourceSharedTile::IsCubeLayout;
+  static constexpr int PhysicalRows = SourceSharedTile::PhysicalRows;
+  static constexpr int PhysicalCols = SourceSharedTile::PhysicalCols;
   static constexpr int LogicalTileBytes = SourceSharedTile::LogicalTileBytes;
   static constexpr int TilesizeCode = SourceSharedTile::TilesizeCode;
   static constexpr bool IsValidActiveSize = SourceSharedTile::IsValidActiveSize;
@@ -2372,6 +2423,9 @@ public:
   static constexpr int LogicalTileBytes = SourceTile::LogicalTileBytes;
   static constexpr int TilesizeCode = SourceTile::TilesizeCode;
   static constexpr bool IsValidActiveSize = SourceTile::IsValidActiveSize;
+  static constexpr bool IsCubeLayout = SourceTile::IsCubeLayout;
+  static constexpr int PhysicalRows = SourceTile::PhysicalRows;
+  static constexpr int PhysicalCols = SourceTile::PhysicalCols;
 
   explicit constexpr ReinterpretedTileView(SourceTile &Source)
       : SourceValue(Source) {}
@@ -2618,6 +2672,8 @@ public:
   static constexpr int InnerCols = Parent::InnerCols;
   static constexpr int Numel = Parent::Numel;
   static constexpr bool IsCubeLayout = Parent::IsCubeLayout;
+  static constexpr int PhysicalRows = Parent::PhysicalRows;
+  static constexpr int PhysicalCols = Parent::PhysicalCols;
   static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
   static constexpr int TilesizeCode = Parent::TilesizeCode;
   static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
@@ -2714,6 +2770,8 @@ public:
   static constexpr int InnerCols = Parent::InnerCols;
   static constexpr int Numel = Parent::Numel;
   static constexpr bool IsCubeLayout = Parent::IsCubeLayout;
+  static constexpr int PhysicalRows = Parent::PhysicalRows;
+  static constexpr int PhysicalCols = Parent::PhysicalCols;
   static constexpr int LogicalTileBytes = Parent::LogicalTileBytes;
   static constexpr int TilesizeCode = Parent::TilesizeCode;
   static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
