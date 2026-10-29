@@ -48,10 +48,22 @@ __attribute__((noinline)) void atomic_cube(U32GM &gm, U32M32 &m32,
   TSTORE_ATOMIC_MAX(gm, m16);
 }
 
+__attribute__((noinline)) void atomic_cube_masked(U32GM &gm, U32M32 &source) {
+  auto active = predicate::compare_scalar<CmpMode::GT>(source, 0u);
+  TSTORE_ATOMIC_ADD<1>(gm, source, active);
+  TSTORE_ATOMIC_MIN<2>(gm, source, active);
+  TSTORE_ATOMIC_MAX<4, true>(gm, source, active);
+  TSTORE_ATOMIC_AND<8>(gm, source, active);
+  TSTORE_ATOMIC_OR<12, true>(gm, source, active);
+  TSTORE_ATOMIC_XOR<14>(gm, source, active);
+  TSTORE_ATOMIC_INC<15>(gm, source, active);
+  TSTORE_ATOMIC_DEC<0>(gm, source, active);
+}
+
 __attribute__((always_inline)) inline void atomic_shared(U32GM &gm,
                                                          U32Row &local) {
   auto shared = TMOV_L2S_INSERT(local);
-  TSTORE_ATOMIC_ADD(gm, shared);
+  TSTORE_ATOMIC_ADD<12>(gm, shared);
 }
 
 __attribute__((noinline)) void atomic_shared_form(U32GM &gm, U32Row &local) {

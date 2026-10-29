@@ -68,6 +68,10 @@ TMOV_CUBE_TO_SHARED_ND(assemble_writer, cube_fragment);
 Shared parent capacity。多 PE 生产者必须用 `range::assemble`、
 `range::assemble_middle`、`range::assemble_last` 描述明确的 128-byte range；
 writer SizeCode 必须等于源 CUBE capacity，最终 `LAST` 才发布完整 parent。
+每个 writer 的有效矩形会按其 `B.ASSEMBLE` 线性 offset 投影到父 RowMajor
+几何，并合并为 pending valid rows/columns；`INIT`/`MIDDLE` 不替换此前已发布的
+有效区，只有 `LAST` 才将完整 generation 的有效区和 payload 一起发布。因而
+物理列为 4、有效列为 3 的整行 fragment 拼接后，父对象有效列仍为 3。
 
 源、目标 backing dtype 必须相同，目标列数必须等于源 CUBE 的精确物理列数，
 目标 RowMajor 几何必须完整覆盖其 SizeCode capacity，且 writer range 必须落在
@@ -75,6 +79,9 @@ parent 内。RCPE6M2 backing、CUBE_N8，以及在同一 Shared generation 中�
 NORM/M322ND/M162ND 都不合法。编码使用 Function 2 `BSTART.TMOV DTYPE_NONE`、
 `B.DATR M322ND/M162ND, DTYPE_NONE, Zero`、Shared destination `B.IOS` 和 Local
 source `B.IOT`。
+
+参与同一 cooperative generation 的 PE 必须对有效区使用一致的 SPMD 元数据。
+当前 C++ carrier 不对各 PE 私有的动态 valid shape 执行额外标量归约。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 

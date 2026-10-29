@@ -8,6 +8,12 @@ namespace predicate {
 
 template <typename Basis> class Predicate;
 
+namespace detail {
+template <typename Basis>
+__attribute__((always_inline)) inline decltype(auto)
+atomic_tstore_carrier(const Predicate<Basis> &);
+} // namespace detail
+
 template <typename Basis, int Columns = Basis::ValidCol>
 using LogicalBasis = Tile<Location::Vec, uint8_t,
                           Basis::BFractal == BLayout::CubeM16 ? 16 : 32,
@@ -99,10 +105,21 @@ template <typename Basis> class Predicate {
             typename Global>
   friend __attribute__((always_inline)) inline void
   atomic_add(Global &, const Index &, const Value &, const Predicate<Source> &);
+  template <typename Source>
+  friend __attribute__((always_inline)) inline decltype(auto)
+  detail::atomic_tstore_carrier(const Predicate<Source> &);
 
 public:
   using BasisTile = Basis;
 };
+
+namespace detail {
+template <typename Basis>
+__attribute__((always_inline)) inline decltype(auto)
+atomic_tstore_carrier(const Predicate<Basis> &predicate) {
+  return (predicate.Carrier);
+}
+} // namespace detail
 
 #define PTO_PREDICATE_LAYOUT_ASM                                              \
   ".if %c[Layout] == 31\nB.DATR CUBE_M16, DTYPE_NONE, Zero\n"                 \
