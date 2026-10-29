@@ -112,7 +112,9 @@ public:
   // B.DIM's third operand is the physical source column extent.  Keep this
   // explicitly on the view rather than deriving it from Parent: a view is a
   // bounded source carrier and its geometry is the SubTile geometry.
-  static constexpr int PhysicalCol = SubTile::Cols;
+  static constexpr int PhysicalRows = SubTile::PhysicalRows;
+  static constexpr int PhysicalCols = SubTile::PhysicalCols;
+  static constexpr int PhysicalCol = PhysicalCols;
   static constexpr int RowStride = SubTile::RowStride;
   static constexpr int ColStride = SubTile::ColStride;
   static constexpr int ValidRow = SubTile::ValidRow;
@@ -188,6 +190,8 @@ public:
   static constexpr Location Loc = Parent::Loc;
   static constexpr int Rows = SubTile::Rows;
   static constexpr int Cols = SubTile::Cols;
+  static constexpr int PhysicalRows = SubTile::PhysicalRows;
+  static constexpr int PhysicalCols = SubTile::PhysicalCols;
   static constexpr int RowStride = SubTile::RowStride;
   static constexpr int ColStride = SubTile::ColStride;
   static constexpr int ValidRow = SubTile::ValidRow;
@@ -475,6 +479,8 @@ public:
   }
   static constexpr int Rows = SubTile::Rows;
   static constexpr int Cols = SubTile::Cols;
+  static constexpr int PhysicalRows = SubTile::PhysicalRows;
+  static constexpr int PhysicalCols = SubTile::PhysicalCols;
   static constexpr int ValidRow = SubTile::ValidRow;
   static constexpr int ValidCol = SubTile::ValidCol;
   static constexpr int RowStride = SubTile::RowStride;

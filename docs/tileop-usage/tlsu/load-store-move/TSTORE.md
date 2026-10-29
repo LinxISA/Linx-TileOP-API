@@ -19,6 +19,38 @@ template <is_global_data_v gm_shape, is_shared_tile_v SharedTileT>
 PTO_SHARED_INLINE void TSTORE(gm_shape &dst, const SharedTileT &src);
 ```
 
+### 规则地址 Atomic TSTORE
+
+规则地址原子归约使用下面八个无返回值接口。C++ 名称中的下划线对应规范的
+`TSTORE.ATOMIC_*` 虚拟别名；它们仍编码为 TLSU Function 1 `TSTORE`，通过
+`B.DATR Canonicalize=1` 和 `CMode=0..7` 选择操作，不增加新的 TileOp 或
+TLSU Function。
+
+```cpp
+TSTORE_ATOMIC_ADD(dst, src);
+TSTORE_ATOMIC_MIN(dst, src);
+TSTORE_ATOMIC_MAX(dst, src);
+TSTORE_ATOMIC_AND(dst, src);
+TSTORE_ATOMIC_OR(dst, src);
+TSTORE_ATOMIC_XOR(dst, src);
+TSTORE_ATOMIC_INC(dst, src);
+TSTORE_ATOMIC_DEC(dst, src);
+```
+
+`src` 可为 Local RowMajor、Shared RowMajor，或 Local `CUBE_M16/M32`；不接受
+`CUBE_N8`。GM 与源 dtype 必须相同。支持的 dtype 如下：
+
+| 操作 | dtype |
+| --- | --- |
+| `ADD` | FP16、BF16、FP32、FP64、S32、U32、U64 |
+| `MIN` / `MAX` | S32、S64、U32、U64 |
+| `AND` / `OR` / `XOR` | U32、U64 |
+| `INC` / `DEC` | U32 |
+
+地址仍由 `global_tensor` base 和字节行 stride 决定。Local CUBE 使用
+`M322ND/M162ND`、显式 LB0/LB1 且省略 LB2；普通 Local/Shared 使用 NORM 和
+LB2 物理列数。每个有效元素对对应 GM 地址执行一次原子读改写。
+
 ### 支持的数据类型
 
 支持FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、E2M1X2、E1M2X2、HiF4X2、S4X2、U4X2、S64、S32、S16、S8、U64、U32、U16、U8类型。

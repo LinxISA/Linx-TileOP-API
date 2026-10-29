@@ -48,6 +48,34 @@ Shared Tile 必须使用 `TMOV_L2S_INSERT` / `TMOV_L2S_PUBLISH` 或
 `TMOV_S2L_BROADCAST` / `TMOV_S2L_EXTRACT`，这些接口要求函数内或 inline SSA
 生命周期，不能把 Shared handle 当作普通对象跨非内联函数传递。
 
+### Local CUBE 到 Shared ND
+
+`TMOV_CUBE_TO_SHARED_ND` 是 #399 增加的单向布局转换接口，将 Local
+`CUBE_M16/M32` 的逻辑元素写入 RowMajor Shared ND；反向 Shared-to-CUBE
+转换不在此接口范围内。
+
+```cpp
+template <int PEMask = 15, is_shared_tile_v SharedND,
+          is_local_tile_v Cube>
+PTO_SHARED_INLINE void TMOV_CUBE_TO_SHARED_ND(SharedND &dst,
+                                               const Cube &src);
+
+// 多 PE cooperative 写入使用 range::assemble* destination carrier。
+TMOV_CUBE_TO_SHARED_ND(assemble_writer, cube_fragment);
+```
+
+未带 `B.ASSEMBLE` 的形式只允许单 bit `PEMask`，并要求源 capacity 等于完整
+Shared parent capacity。多 PE 生产者必须用 `range::assemble`、
+`range::assemble_middle`、`range::assemble_last` 描述明确的 128-byte range；
+writer SizeCode 必须等于源 CUBE capacity，最终 `LAST` 才发布完整 parent。
+
+源、目标 backing dtype 必须相同，目标列数必须等于源 CUBE 的精确物理列数，
+目标 RowMajor 几何必须完整覆盖其 SizeCode capacity，且 writer range 必须落在
+parent 内。RCPE6M2 backing、CUBE_N8，以及在同一 Shared generation 中混用
+NORM/M322ND/M162ND 都不合法。编码使用 Function 2 `BSTART.TMOV DTYPE_NONE`、
+`B.DATR M322ND/M162ND, DTYPE_NONE, Zero`、Shared destination `B.IOS` 和 Local
+source `B.IOT`。
+
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding
