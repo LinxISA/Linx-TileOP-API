@@ -105,6 +105,29 @@ unboxed `CUBE_M32` Local Tile；dtype、location、physical/valid shape 和
 fragment capacity 必须一致。`TADD`、`TSUB`、`TMUL`、`TDIV`、`TREM`、
 `TAND`、`TOR`、`TXOR`、`TSHL`、`TSHR`、`TMAX`、`TMIN` 共用此路径。
 
+二元 producer 也可以混用一个 `TPARTVIEW` fragment 和一个普通
+`CUBE_M32` Tile，两个源顺序都受支持。view 所在的 source binder 携带一个
+`B.SUBVIEW 0/1`，destination binder 同时携带 `B.ASSEMBLE`，不需要先用
+`TADDS(x, 0)`、`TCVT` 或 `TMOV` 把 view 物化：
+
+```cpp
+Parent assemble_mixed(Parent &parent, Fragment &tile) {
+  auto view = TPARTVIEW<Fragment, 1, 8>(parent)[0][7];
+  TileArray<Fragment, 1, 8> slots;
+  for (int col = 0; col < 8; ++col) {
+    if ((col & 1) == 0)
+      TADD(slots[0][col], view, tile); // source 0 携带 B.SUBVIEW
+    else
+      TADD(slots[0][col], tile, view); // source 1 携带 B.SUBVIEW
+  }
+  return TASSEMBLY<Parent>(std::move(slots));
+}
+```
+
+mixed 路径同样要求 slot、view fragment 和普通 Tile 的 CUBE_M32 layout、
+dtype、location、physical/valid shape 与 fragment capacity 全部一致，并适用于
+上述完整二元操作族。
+
 source 侧对应物是 `TPARTVIEW`：`B.ASSEMBLE` 把 producer 的 destination 写进
 parent 的某个 slot，`B.SUBVIEW` 则把 parent 的某段借出为 source fragment，
 两者互为读写对偶。

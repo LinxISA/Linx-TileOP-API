@@ -2119,6 +2119,181 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_tile_assemble_dispatch(
   }
 }
 
+// A mixed binary assembly producer binds one parent-backed CUBE_M32 fragment
+// through B.SUBVIEW and one ordinary CUBE_M32 Tile directly. The bool records
+// the mathematical source position of the view so B.SUBVIEW selects the same
+// source independently of the C++ parameter order used internally here.
+template <int ParentSize, bool Init, bool Last, int Opcode, bool ViewIsSrc0,
+          typename SubTile, typename SourceParent, typename SourceSubTile,
+          typename Tile>
+  requires(is_tile_data_v<Tile> && !is_subtile_view_v<Tile> &&
+           !is_range_v<Tile>)
+PTO_REGION_ALWAYS_INLINE void pto_region_binary_mixed_assemble(
+    region::TileArrayOutputRef<SubTile> &dst,
+    region::SubTileView<SourceParent, SourceSubTile> &view, Tile &tile) {
+  static_assert(SubTile::BFractal == BLayout::CubeM32 &&
+                    SourceSubTile::BFractal == BLayout::CubeM32 &&
+                    Tile::BFractal == BLayout::CubeM32,
+                "binary TileArray mixed-source assembly requires CUBE_M32 "
+                "destination and sources");
+  static_assert(SubTile::SFractal == SLayout::NoneBox &&
+                    SourceSubTile::SFractal == SLayout::NoneBox &&
+                    Tile::SFractal == SLayout::NoneBox,
+                "binary TileArray mixed-source assembly requires unboxed "
+                "fragments");
+  static_assert(SubTile::Loc == SourceSubTile::Loc &&
+                    SourceSubTile::Loc == Tile::Loc,
+                "binary TileArray slot and mixed sources must have matching "
+                "locations");
+  static_assert(SubTile::Rows == SourceSubTile::Rows &&
+                    SubTile::Cols == SourceSubTile::Cols &&
+                    SourceSubTile::Rows == Tile::Rows &&
+                    SourceSubTile::Cols == Tile::Cols,
+                "binary TileArray slot requires matching physical shapes");
+  static_assert(SubTile::ValidRow == SourceSubTile::ValidRow &&
+                    SubTile::ValidCol == SourceSubTile::ValidCol &&
+                    SourceSubTile::ValidRow == Tile::ValidRow &&
+                    SourceSubTile::ValidCol == Tile::ValidCol,
+                "binary TileArray slot requires matching valid shapes");
+  static_assert(
+      std::is_same_v<typename SubTile::DType,
+                     typename SourceSubTile::DType> &&
+          std::is_same_v<typename SourceSubTile::DType, typename Tile::DType>,
+      "binary TileArray slot requires matching element types");
+  static_assert(SubTile::LogicalTileBytes ==
+                        SourceSubTile::LogicalTileBytes &&
+                    SourceSubTile::LogicalTileBytes == Tile::LogicalTileBytes,
+                "binary TileArray slot and mixed sources must have matching "
+                "capacities");
+
+  constexpr int writer_size =
+      tile_type_traits<typename SubTile::TileDType>::TilesizeCode;
+  constexpr int subview_size =
+      tile_type_traits<typename SourceSubTile::TileDType>::TilesizeCode;
+  static_assert(writer_size != 0,
+                "TileArray slot writer extent must be a nonzero size code");
+  static_assert(subview_size != 0,
+                "mixed-source B.SUBVIEW extent must be a nonzero size code");
+  const uintptr_t source_base_units = view.GetRangeBase();
+  const uintptr_t destination_base_units = dst.range_base_units();
+
+#define PTO_REGION_BINARY_MIXED_ASSEMBLY_PREFIX                               \
+  "BSTART.TEPL %c[Opcode], %D[Type]\n" PTO_REGION_ELEMENTWISE_LAYOUT_ASM     \
+  "B.DIM zero, %c[ValidCol], ->lb0\n"                                        \
+  "B.DIM zero, %c[ValidRow], ->lb1\n"                                        \
+  "B.DIM zero, %c[Cols], ->lb2\n"
+#define PTO_REGION_BINARY_MIXED_ASSEMBLY_INPUTS                               \
+  [Type] "i"(type_traits<typename SourceSubTile::DType>::TypeCode),           \
+      [View] "Tr"(view.data()), [Tile] "Tr"(tile.data()),                     \
+      [ValidCol] "i"(SourceSubTile::ValidCol),                                \
+      [ValidRow] "i"(SourceSubTile::ValidRow),                                \
+      [Cols] "i"(SourceSubTile::Cols), [ParentSize] "i"(ParentSize),          \
+      [SourceOffset] "r"(source_base_units),                                  \
+      [DestinationOffset] "r"(destination_base_units), [Opcode] "i"(Opcode), \
+      [SubviewSize] "i"(subview_size), [WriterSize] "i"(writer_size),        \
+      [Init] "i"(Init), [Last] "i"(Last),                                    \
+      [ElemLayout] "i"(local_layout_code_v<SubTile>)
+  if constexpr (Init && ViewIsSrc0) {
+    asm volatile(
+        PTO_REGION_BINARY_MIXED_ASSEMBLY_PREFIX
+        "B.IOT %[View], %[Tile], mask=1111, last, "
+        "->%[Dst]<%Z[ParentSize]>\n"
+        "B.SUBVIEW 0, %[SourceOffset], 0, %c[SubviewSize]\n"
+        "B.ASSEMBLE %c[Init], %c[Last], %[DestinationOffset], 0, "
+        "%c[WriterSize]\n"
+        : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
+        : PTO_REGION_BINARY_MIXED_ASSEMBLY_INPUTS
+        : "memory");
+  } else if constexpr (Init) {
+    asm volatile(
+        PTO_REGION_BINARY_MIXED_ASSEMBLY_PREFIX
+        "B.IOT %[Tile], %[View], mask=1111, last, "
+        "->%[Dst]<%Z[ParentSize]>\n"
+        "B.SUBVIEW 1, %[SourceOffset], 0, %c[SubviewSize]\n"
+        "B.ASSEMBLE %c[Init], %c[Last], %[DestinationOffset], 0, "
+        "%c[WriterSize]\n"
+        : [Dst] "=Tr"(dst.template parent_data<ParentSize>())
+        : PTO_REGION_BINARY_MIXED_ASSEMBLY_INPUTS
+        : "memory");
+  } else if constexpr (ViewIsSrc0) {
+    asm volatile(PTO_REGION_BINARY_MIXED_ASSEMBLY_PREFIX
+                 "B.IOT %[View], %[Tile], mask=1111\n"
+                 "B.SUBVIEW 0, %[SourceOffset], 0, %c[SubviewSize]\n"
+                 "B.IOT %[Dst], mask=1111, last\n"
+                 "B.ASSEMBLE %c[Init], %c[Last], "
+                 "%[DestinationOffset], 0, %c[WriterSize]\n"
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_BINARY_MIXED_ASSEMBLY_INPUTS
+                 : "memory");
+  } else {
+    asm volatile(PTO_REGION_BINARY_MIXED_ASSEMBLY_PREFIX
+                 "B.IOT %[Tile], %[View], mask=1111\n"
+                 "B.SUBVIEW 1, %[SourceOffset], 0, %c[SubviewSize]\n"
+                 "B.IOT %[Dst], mask=1111, last\n"
+                 "B.ASSEMBLE %c[Init], %c[Last], "
+                 "%[DestinationOffset], 0, %c[WriterSize]\n"
+                 :
+                 : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
+                   PTO_REGION_BINARY_MIXED_ASSEMBLY_INPUTS
+                 : "memory");
+  }
+#undef PTO_REGION_BINARY_MIXED_ASSEMBLY_INPUTS
+#undef PTO_REGION_BINARY_MIXED_ASSEMBLY_PREFIX
+}
+
+template <int ParentSize, int Opcode, bool ViewIsSrc0, typename SubTile,
+          typename SourceParent, typename SourceSubTile, typename Tile>
+  requires(is_tile_data_v<Tile> && !is_subtile_view_v<Tile> &&
+           !is_range_v<Tile>)
+PTO_REGION_ALWAYS_INLINE void pto_region_binary_mixed_assemble_phase(
+    region::TileArrayOutputRef<SubTile> &dst,
+    region::SubTileView<SourceParent, SourceSubTile> &view, Tile &tile) {
+  if (dst.slot_count() == 1)
+    pto_region_binary_mixed_assemble<ParentSize, true, true, Opcode,
+                                     ViewIsSrc0>(dst, view, tile);
+  else if (dst.ordinal() == 0)
+    pto_region_binary_mixed_assemble<ParentSize, true, false, Opcode,
+                                     ViewIsSrc0>(dst, view, tile);
+  else if (dst.ordinal() == dst.slot_count() - 1)
+    pto_region_binary_mixed_assemble<ParentSize, false, true, Opcode,
+                                     ViewIsSrc0>(dst, view, tile);
+  else
+    pto_region_binary_mixed_assemble<ParentSize, false, false, Opcode,
+                                     ViewIsSrc0>(dst, view, tile);
+}
+
+template <int Opcode, bool ViewIsSrc0, typename SubTile, typename SourceParent,
+          typename SourceSubTile, typename Tile>
+  requires(is_tile_data_v<Tile> && !is_subtile_view_v<Tile> &&
+           !is_range_v<Tile>)
+PTO_REGION_ALWAYS_INLINE void pto_region_binary_mixed_assemble_dispatch(
+    region::TileArrayOutputRef<SubTile> &dst,
+    region::SubTileView<SourceParent, SourceSubTile> &view, Tile &tile) {
+  switch (dst.parent_size_code()) {
+#define PTO_REGION_BINARY_MIXED_PARENT_CASE(N)                                \
+  case N:                                                                     \
+    pto_region_binary_mixed_assemble_phase<N, Opcode, ViewIsSrc0>(dst, view,  \
+                                                                   tile);     \
+    break
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(1);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(2);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(3);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(4);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(5);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(6);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(7);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(8);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(9);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(10);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(11);
+    PTO_REGION_BINARY_MIXED_PARENT_CASE(12);
+#undef PTO_REGION_BINARY_MIXED_PARENT_CASE
+  default:
+    __builtin_trap();
+  }
+}
+
 #define PTO_REGION_BINARY_DEST_WRAPPER(Name, Opcode)                           \
   template <typename SubTile, typename Parent0, typename SubTile0,             \
             typename Parent1, typename SubTile1>                               \
@@ -2135,6 +2310,24 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_tile_assemble_dispatch(
   PTO_REGION_ALWAYS_INLINE void Name(region::TileArrayOutputRef<SubTile> dst,  \
                                      Src0 &src0, Src1 &src1) {                 \
     pto_region_binary_tile_assemble_dispatch<Opcode>(dst, src0, src1);         \
+  }                                                                            \
+  template <typename SubTile, typename SourceParent, typename SourceSubTile,   \
+            typename Tile>                                                     \
+    requires(is_tile_data_v<Tile> && !is_subtile_view_v<Tile> &&               \
+             !is_range_v<Tile>)                                                \
+  PTO_REGION_ALWAYS_INLINE void Name(                                          \
+      region::TileArrayOutputRef<SubTile> dst,                                 \
+      region::SubTileView<SourceParent, SourceSubTile> &src0, Tile &src1) {    \
+    pto_region_binary_mixed_assemble_dispatch<Opcode, true>(dst, src0, src1);  \
+  }                                                                            \
+  template <typename SubTile, typename Tile, typename SourceParent,            \
+            typename SourceSubTile>                                            \
+    requires(is_tile_data_v<Tile> && !is_subtile_view_v<Tile> &&               \
+             !is_range_v<Tile>)                                                \
+  PTO_REGION_ALWAYS_INLINE void Name(                                          \
+      region::TileArrayOutputRef<SubTile> dst, Tile &src0,                     \
+      region::SubTileView<SourceParent, SourceSubTile> &src1) {                \
+    pto_region_binary_mixed_assemble_dispatch<Opcode, false>(dst, src1, src0); \
   }
 
 PTO_REGION_BINARY_DEST_WRAPPER(TADD, 0)

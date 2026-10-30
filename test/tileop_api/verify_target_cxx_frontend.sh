@@ -50,6 +50,7 @@ for source in RangeSubview.cpp GMov.cpp TileRegionUnary.cpp \
               Issue253RowExpandDualSubview.cpp \
               Issue268CooperativeRowMax.cpp \
               Issue288CubeM32BinaryAssembly.cpp \
+              Issue299MixedBinaryAssembly.cpp \
               TOrAssSubview.cpp \
               TileArrayTCVTE8M0.cpp \
               SharedTransposeNonSquare.cpp TCI.cpp TRowExpandMul.cpp; do
@@ -112,6 +113,73 @@ expected += [(7, "false", "true")]
 if tails != expected:
     raise SystemExit(f"Issue288: incorrect offsets or lifecycle {tails}")
 PY_ISSUE288
+"$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
+  "$ROOT/test/tileop_api/src/Issue299MixedBinaryAssembly.cpp" \
+  -o "$OUT/Issue299MixedBinaryAssembly.ll"
+"$TC_DIR/clang++" "${FLAGS[@]}" -c \
+  "$ROOT/test/tileop_api/src/Issue299MixedBinaryAssembly.cpp" \
+  -o "$OUT/Issue299MixedBinaryAssembly.o"
+python3 - "$OUT/Issue299MixedBinaryAssembly.ll" <<'PY_ISSUE299'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+functions = re.split(r"(?=^define )", text, flags=re.MULTILINE)
+for name, selector, source_offset in (
+        ("assemble_view_tile", 0, 7),
+        ("assemble_tile_view", 1, 6)):
+    body = next((part for part in functions if name in part), None)
+    if body is None:
+        raise SystemExit(f"Issue299: missing mixed assembly fixture {name}")
+    ops = [line for line in body.splitlines()
+           if "asm sideeffect" in line and "BSTART.TEPL" in line]
+    if len(ops) != 8:
+        raise SystemExit(f"Issue299: {name} expected 8 producers, got {len(ops)}")
+    if any("B.DATR CUBE_M32" not in op for op in ops):
+        raise SystemExit(f"Issue299: {name} did not preserve CUBE_M32 layout")
+    if any(op.count("B.SUBVIEW") != 1 or
+           f"B.SUBVIEW {selector}," not in op for op in ops):
+        raise SystemExit(f"Issue299: {name} has an incorrect source selector")
+    if any("B.ASSEMBLE" not in op for op in ops):
+        raise SystemExit(f"Issue299: {name} is missing destination assembly")
+    if any(token in op for op in ops for token in ("TADDS", "TCVT", "TMOV")):
+        raise SystemExit(f"Issue299: {name} materialized a mixed source")
+    if "mask=1111, last, ->$0<${7:Z}>" not in ops[0]:
+        raise SystemExit(f"Issue299: {name} INIT did not allocate the parent")
+    for op in ops[1:]:
+        between = op.split("B.SUBVIEW", 1)[1].split("B.ASSEMBLE", 1)[0]
+        if between.count("B.IOT") != 1 or "mask=1111, last" not in between:
+            raise SystemExit(
+                f"Issue299: {name} continuation did not bind ParentRef last")
+    tails = []
+    for op in ops:
+        match = re.search(
+            rf"i32 4, i64 {source_offset}, i64 ([0-7]), i32 0, "
+            r"i32 1, i32 1, i1 (true|false), i1 (true|false), i32 29\)",
+            op)
+        if match is None:
+            raise SystemExit(
+                f"Issue299: {name} lost parent, subview, or writer capacity")
+        tails.append((int(match.group(1)), match.group(2), match.group(3)))
+    expected = [(0, "true", "false")]
+    expected += [(offset, "false", "false") for offset in range(1, 7)]
+    expected += [(7, "false", "true")]
+    if tails != expected:
+        raise SystemExit(f"Issue299: {name} lifecycle mismatch: {tails}")
+
+all_ops = next((part for part in functions
+                if "instantiate_all_mixed_binary" in part), None)
+if all_ops is None:
+    raise SystemExit("Issue299: missing all-opcode instantiation fixture")
+ops = [line for line in all_ops.splitlines()
+       if "asm sideeffect" in line and "BSTART.TEPL" in line]
+if len(ops) != 24:
+    raise SystemExit(f"Issue299: expected 24 mixed opcode instances, got {len(ops)}")
+if sum("B.SUBVIEW 0," in op for op in ops) != 12 or \
+        sum("B.SUBVIEW 1," in op for op in ops) != 12:
+    raise SystemExit("Issue299: all binary operations must support both mixed orders")
+PY_ISSUE299
 "$TC_DIR/clang++" "${FLAGS[@]}" -S -emit-llvm \
   "$ROOT/test/tileop_api/src/RangeAssemble.cpp" -o "$OUT/RangeAssemble.ll"
 "$TC_DIR/clang++" "${FLAGS[@]}" -c \
