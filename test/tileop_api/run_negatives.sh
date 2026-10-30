@@ -51,6 +51,7 @@ TCI2D_CASES="layout location dtype shape steps m16_rows"
 I64_CASES="fp64_element unsupported_parent m16 short_m32 subview_pair assemble_pair writer_limit"
 TCOLSUM_CASES="dest_rows dest_cols dtype"
 ISSUE288_CASES="layout dtype shape valid_shape"
+ISSUE299_CASES="layout dtype shape valid_shape location capacity"
 ISSUE398399_CASES="atomic_add_dtype atomic_inc_dtype atomic_cube_n8 atomic_mask_rowmajor atomic_mask_shape atomic_mask_shared atomic_pe_mask cube_shared_dtype cube_shared_cols cube_shared_capacity cube_shared_writer_size"
 PASS=0; FAIL=0
 
@@ -119,6 +120,18 @@ for c in $ISSUE288_CASES; do
     valid_shape) pattern='requires matching valid shapes' ;;
   esac
   expect_rejected "issue288_$c" "$define" Issue288Negatives.cpp "$pattern"
+done
+for c in $ISSUE299_CASES; do
+  define=SHOULD_FAIL_ISSUE299_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  case "$c" in
+    layout) pattern='mixed-source assembly requires CUBE_M32' ;;
+    dtype) pattern='requires matching element types' ;;
+    shape) pattern='requires matching physical shapes' ;;
+    valid_shape) pattern='requires matching valid shapes' ;;
+    location) pattern='mixed sources must have matching locations' ;;
+    capacity) pattern='mixed sources must have matching capacities' ;;
+  esac
+  expect_rejected "issue299_$c" "$define" Issue299Negatives.cpp "$pattern"
 done
 for c in $ISSUE398399_CASES; do
   define=SHOULD_FAIL_$(echo "$c" | tr '[:lower:]' '[:upper:]')
