@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -118,6 +119,12 @@ void test(Global &destination, Cube &source) {
         self.assertRegex(text, r"C\.B\.DIMI\s+3,\s+->lb0")
         self.assertRegex(text, r"C\.B\.DIMI\s+64,\s+->lb1")
         self.assertRegex(text, r"C\.B\.DIMI\s+4,\s+->lb2")
+        # LAST and the final store must consume the INIT's Shared identity,
+        # even when the source Local Tile is reloaded across memory clobbers.
+        bindings = re.findall(r"B\.IOS\s+mask=0001,\s+->(S\d+)<", text)
+        self.assertEqual(len(bindings), 1, text)
+        self.assertEqual(re.findall(r"B\.IOS\s+(S\d+),\s+mask=0001", text),
+                         bindings * 2, text)
 
     def test_no_uninitialized_predicate(self):
         result = self.compile("predicate::Predicate<Values> active;", "-fsyntax-only")

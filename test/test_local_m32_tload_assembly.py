@@ -206,8 +206,16 @@ class NativeLowering(unittest.TestCase):
                 # register is the stride field of B.IOR.
                 self.assertRegex(text, rf'(?:addi\s+zero, {stride},|c\.movi\s+{stride},)\s*->\w+')
         interleaved = sections['issue301_interleaved']
-        self.assertRegex(interleaved, r'B\.IOT\s+t#2, mask=1111, last')
-        self.assertEqual(len(re.findall(r'->t<', interleaved)), 2)
+        # Allocators may put the temporary in a different Local queue. Compute
+        # the parent's backward reference from the actual allocation history.
+        bindings = re.findall(r'->([tu])<(\w+)>', interleaved)
+        self.assertEqual([size for _, size in bindings], ['512B', '256B'])
+        parent_queue, temporary_queue = (queue for queue, _ in bindings)
+        parent_depth = 1 + int(temporary_queue == parent_queue)
+        references = re.findall(r'B\.IOT\s+([tu]#\d+), mask=1111, last', interleaved)
+        self.assertEqual(references, [f'{parent_queue}#{parent_depth}',
+                                      f'{parent_queue}#{parent_depth}',
+                                      f'{temporary_queue}#1'])
 
 
 if __name__ == '__main__':
