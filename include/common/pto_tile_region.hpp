@@ -826,6 +826,162 @@ decltype(auto) TPARTELEMENT(TileType &tile) {
   return tile.data();
 }
 
+// Whole M32 integer views for genuine 64/128-lane element regions.
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 64 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, uint64_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u64;rows=32;cols=2;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 128 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, uint64_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u64;rows=32;cols=4;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 64 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, int64_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=s64;rows=32;cols=2;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 128 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, int64_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=s64;rows=32;cols=4;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 128 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, uint32_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u32;rows=32;cols=4;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 128 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, int32_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=s32;rows=32;cols=4;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+// Whole M32 integer views with multi-CELL PredicateCell masks.
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 256 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, uint32_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u32;rows=32;cols=8;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 256 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, int32_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=s32;rows=32;cols=8;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 256 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, uint64_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u64;rows=32;cols=8;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 256 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, int64_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=s64;rows=32;cols=8;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 512 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, uint32_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u32;rows=32;cols=16;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 512 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, int32_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=s32;rows=32;cols=16;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 512 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, uint64_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=u64;rows=32;cols=16;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
+template <typename TileType>
+  requires(is_element_tile_v<TileType> &&
+           std::remove_cvref_t<TileType>::Numel == 512 &&
+           std::is_same_v<typename std::remove_cvref_t<TileType>::DType, int64_t>)
+#if defined(__clang__) && defined(__linx)
+__attribute__((always_inline, annotate("pto.element.view:v1;dtype=s64;rows=32;cols=16;layout=cube_m32")))
+#endif
+decltype(auto) TPARTELEMENT(TileType &tile) {
+  return tile.data();
+}
+
 // Exact FP32 NORM views used by scalar element loops over ordinary contiguous
 // RowMajor storage. The matrix profile exposes all 16x32 physical elements;
 // the row profile exposes one 1x32 Tile. Neither view changes layout or storage.
