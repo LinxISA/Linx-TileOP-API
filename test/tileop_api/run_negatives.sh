@@ -293,5 +293,22 @@ for c in $ROWEXPAND_VIEW_CASES; do
   expect_rejected "rowexpand_view_$c" "$define" \
     RowExpandDualSubviewNegatives.cpp "$pattern"
 done
+# Issue #301: typed Local M32 destination assembly. Offsets are derived from
+# the writer list, so holes/overlaps cannot be described by the public API.
+ISSUE301_CASES="CAPACITY PARENT_LIMIT DTYPE LAYOUT ROWS VALID_ROWS ENVELOPE OVERSIZED_ENVELOPE TAIL DYNAMIC WRITER_LIMIT INDEX INIT_ASS CONT_LOAD GM_DTYPE GM_SHAPE STORE_SHAPE LEGACY OPEN_SOURCE SLOT_SOURCE"
+if ! "$CXX" "${FLAGS[@]}" src/Issue301LocalM32Negatives.cpp \
+     -o "$OUT/Issue301LocalM32Negatives.o" >"$OUT/issue301-positive.log" 2>&1; then
+  echo "BLOCKED: Local M32 assembly positive preflight failed" >&2
+  cat "$OUT/issue301-positive.log" >&2
+  exit 2
+fi
+for c in $ISSUE301_CASES; do
+  case "$c" in
+    OPEN_SOURCE|SLOT_SOURCE) pattern='no matching function' ;;
+    *) pattern='Local M32 assembly|Local CUBE assembly' ;;
+  esac
+  expect_rejected "issue301_$c" "SHOULD_FAIL_301_$c" \
+    Issue301LocalM32Negatives.cpp "$pattern"
+done
 echo "== $PASS passed, $FAIL failed =="
 test "$FAIL" -eq 0

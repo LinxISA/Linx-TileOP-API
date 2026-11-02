@@ -25,6 +25,7 @@ if [[ "$PLAT" == "linx" ]]; then
 fi
 
 ACTIVE_FIXTURES=(
+  Issue301LocalM32TLoadAssembly
   DynamicShape DynamicTlsuStride CubeCellTransport VecCubeLoadStore CubeTCvt CubeToSharedND SharedTranspose SharedRoleView TCI
   SharedTransposeNonSquare MatrixIntegerDtypes MXScaleVariants HiF4X2MatmulMX SharedMatmul
   TMatmulAccFullOptions TMatmulAccCScale TMatmulAllOptions TGEMVAllOptions TGEMVOperandOrder

@@ -3211,6 +3211,10 @@ template <TmaPadValue Pad = TmaPadValue::Zero, is_local_tile_v cube_shape,
           is_global_data_v gm_shape>
   requires(cube_shape::IsCubeLayout)
 void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src) {
+  if constexpr (is_assemble_v<cube_shape>) {
+    static_assert(!is_assemble_v<cube_shape>,
+                  "Local CUBE assembly requires explicit writer geometry; use LocalCubeAssembly");
+  } else {
   static_assert(std::is_same_v<typename cube_shape::DType,
                                typename gm_shape::DType>,
                 "TLOAD_CUBE_ASS requires matching GM and CUBE dtypes");
@@ -3238,6 +3242,7 @@ void TLOAD_CUBE_ASS(cube_shape &dst, const gm_shape &src) {
       [Layout] "i"(cube_shape::CubeLoadLayout),
       [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
     : "memory");
+  }
 }
 
 // TSTORE: Tile -> GM (BSTART.TLSU TSTORE). dst[r0+i, c0+j] = src[i,j].
@@ -3460,6 +3465,10 @@ template <TmaPadValue Pad = TmaPadValue::Zero, is_local_tile_v cube_shape,
           is_global_data_v gm_shape>
   requires(cube_shape::IsCubeLayout)
 void TLOAD_CUBE(cube_shape &dst, gm_shape &src) {
+  if constexpr (is_assemble_v<cube_shape>) {
+    static_assert(!is_assemble_v<cube_shape>,
+                  "Local CUBE assembly requires explicit writer geometry; use LocalCubeAssembly");
+  } else {
   static_assert(!is_subview_v<cube_shape>,
                 "B.SUBVIEW is source-only and cannot wrap a TLOAD destination");
   static_assert(std::is_same_v<typename cube_shape::DType,
@@ -3683,6 +3692,7 @@ asm volatile(
         [Layout] "i"(cube_shape::CubeLoadLayout)
       : "memory");  }
   }
+  }
 }
 
 // PTO ISA 0.58.3 persistent Local CUBE CELL -> GM transport.  The source
@@ -3878,6 +3888,91 @@ asm volatile(
         [VCOL] "r"(valid_col), [VROW] "r"(valid_row)
       : "memory");  }
   }
+}
+
+// Dedicated Local M32 destination assembly: allocation, writer geometry and
+// finalized parent geometry are intentionally separate from ordinary Tiles.
+template <typename Assembly, std::size_t Index, is_global_data_v GM>
+PTO_SHARED_INLINE void pto_local_m32_load(
+    LocalCubeAssemblyWriter<Assembly, Index> &dst, const GM &src) {
+  using Slot = LocalCubeAssemblyWriter<Assembly, Index>;
+  using W = typename Slot::Writer;
+  static_assert(GM::isRowMajor && GM::ColStride == 1 &&
+                    GM::Rows >= W::ValidRow && GM::Cols >= W::ValidCol,
+                "Local M32 assembly TLOAD requires a static RowMajor GM region covering the writer");
+  static_assert(std::is_same_v<typename W::DType, typename GM::DType>,
+                "Local M32 assembly TLOAD requires matching GM dtype");
+#define PTO_LOCAL_M32_LOAD_PREFIX                                             \
+  "BSTART.TLSU TLOAD, %D[Type]\n"                                          \
+  "B.DATR ND2M32.normal, Zero\n"                                           \
+  "B.DIM zero, %c[Cols], ->lb0\n"                                          \
+  "B.DIM zero, %c[Rows], ->lb1\n"
+#define PTO_LOCAL_M32_LOAD_SUFFIX                                             \
+  "B.ASSEMBLE %c[Init], %c[Last], zero, %c[Offset], %c[WriterSize]\n"          \
+  "B.IOR [%[Base],%[Stride]], []\n"
+#define PTO_LOCAL_M32_LOAD_INPUTS                                             \
+  [Type] "i"(type_traits<typename W::DType>::TypeCode),                       \
+  [Cols] "i"(W::ValidCol), [Rows] "i"(W::ValidRow),                           \
+  [Init] "i"(Slot::INIT), [Last] "i"(Slot::LAST),                             \
+  [Offset] "i"(Slot::OffsetCells), [WriterSize] "i"(Slot::WriterSizeCode),     \
+  [Base] "r"(src.data()), [Stride] "r"(src.GetStrideBytes(3))
+  if constexpr (Slot::INIT) {
+    asm volatile(PTO_LOCAL_M32_LOAD_PREFIX
+                 "B.IOT mask=1111, last, ->%[Parent]<%Z[Capacity]>\n"
+                 PTO_LOCAL_M32_LOAD_SUFFIX
+                 : [Parent] "=Tr"(detail::LocalCubeAssemblyAccess::parent_data(dst))
+                 : [Capacity] "i"(Slot::ParentSizeCode), PTO_LOCAL_M32_LOAD_INPUTS
+                 : "memory");
+  } else {
+    // The final source-form B.IOT is a nonallocating ParentRef. No output
+    // constraint: LLVM's getAssembleParentRef recognizes this exact form.
+    asm volatile(PTO_LOCAL_M32_LOAD_PREFIX
+                 "B.IOT %[Parent], mask=1111, last\n"
+                 PTO_LOCAL_M32_LOAD_SUFFIX
+                 :
+                 : [Parent] "Tr"(detail::LocalCubeAssemblyAccess::parent_data(dst)), PTO_LOCAL_M32_LOAD_INPUTS
+                 : "memory");
+  }
+  detail::LocalCubeAssemblyAccess::complete(dst);
+#undef PTO_LOCAL_M32_LOAD_INPUTS
+#undef PTO_LOCAL_M32_LOAD_SUFFIX
+#undef PTO_LOCAL_M32_LOAD_PREFIX
+}
+
+template <typename Assembly, std::size_t Index, is_global_data_v GM>
+PTO_SHARED_INLINE void TLOAD(LocalCubeAssemblyWriter<Assembly, Index> &dst,
+                             const GM &src) {
+  static_assert(Index == 0, "Local M32 assembly TLOAD requires INIT; use TLOAD_ASS for continuation");
+  pto_local_m32_load(dst, src);
+}
+
+template <typename Assembly, std::size_t Index, is_global_data_v GM>
+PTO_SHARED_INLINE void TLOAD_ASS(LocalCubeAssemblyWriter<Assembly, Index> &dst,
+                                 const GM &src) {
+  static_assert(Index != 0, "Local M32 assembly TLOAD_ASS requires continuation; use TLOAD for INIT");
+  pto_local_m32_load(dst, src);
+}
+
+template <is_global_data_v GM, typename Parent, int Columns, int VR, int VC>
+PTO_SHARED_INLINE void TSTORE(
+    GM &dst, const LocalCubeAssemblyResult<Parent, Columns, VR, VC> &src) {
+  static_assert(GM::isRowMajor && GM::ColStride == 1 &&
+                    GM::Rows >= VR && GM::Cols >= VC,
+                "Local M32 assembly TSTORE requires a static RowMajor GM region covering the final shape");
+  static_assert(std::is_same_v<typename Parent::DType, typename GM::DType>,
+                "Local M32 assembly TSTORE requires matching GM dtype");
+  asm volatile(
+      "BSTART.TLSU TSTORE, %D[Type]\n"
+      "B.DATR M322ND.normal, Null\n"
+      "B.DIM zero, %c[Cols], ->lb0\n"
+      "B.DIM zero, %c[Rows], ->lb1\n"
+      "B.IOT %[Parent], mask=1111, last\n"
+      "B.IOR [%[Base],%[Stride]], []\n"
+      :
+      : [Type] "i"(type_traits<typename Parent::DType>::TypeCode),
+        [Cols] "i"(VC), [Rows] "i"(VR), [Parent] "Tr"(src.data()),
+        [Base] "r"(dst.data()), [Stride] "r"(dst.GetStrideBytes(3))
+      : "memory");
 }
 
 // Unified transport entry points. CUBE Tiles require the explicit ND<->CELL

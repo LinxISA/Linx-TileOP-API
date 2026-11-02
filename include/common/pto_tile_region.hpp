@@ -2,6 +2,7 @@
 #define PTO_TILE_REGION_HPP
 
 #include "common/pto_tile.hpp"
+#include "common/pto_local_cube_assembly.hpp"
 
 #include <cassert>
 #include <cstddef>

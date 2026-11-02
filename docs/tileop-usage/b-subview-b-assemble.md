@@ -24,6 +24,7 @@ TileOP 的对象，由 wrapper 在 binder 后发射 modifier。
 ```text
 把一个 parent Tile 切成多个 source fragment：      TPARTVIEW（优先）
 把多个 destination fragment 组装成一个 parent：    TileArray + TASSEMBLY（优先）
+Local M32 从 GM 直接写入同一 parent：              LocalCubeAssembly
 给一次 source TileOP 附加范围（Shared/兼容/测试）：range::subview
 给一次 destination TileOP 附加组装范围：           range::assemble
 固定 ABI / ISA 编码测试需要指定寄存器：            *_at_reg 专家接口
@@ -33,6 +34,70 @@ TileOP 的对象，由 wrapper 在 binder 后发射 modifier。
 source、兼容代码和编码回归测试；`*_at_reg` 接口只出现在固定 ABI 测试中。
 不要混用两层：不要把 `TPARTVIEW` 得到的 view 再包成 `range::Subview`，
 也不要把 `TileArray` 的 slot 当普通 Tile 使用。
+
+## Local M32：从 GM 直接组装 destination
+
+Local M32 `TLOAD` destination assembly 使用 `LocalCubeAssembly<Parent,
+Writers...>`。`Parent` 仅提供分配容量与 dtype/location；每个 `Writer` 类型独立
+提供静态形状、有效形状和精确的物理 CELL envelope。接口按 writer 列表累计
+CELL offset，固定使用 mask `1111`、ND2M32.normal 和 Zero padding；不接受
+运行时 offset，也不进行 dtype 转换。以下为两路完整示例：
+
+```cpp
+#include <common/pto_tileop.hpp>
+using namespace pto;
+
+void load_two(const float *a, const float *b, float *output) {
+  using Parent = VecTileM32<float, 32, 4>; // 512B allocation
+  using Writer = VecTileM32<float, 32, 2>; // each writer: 256B / 2 CELL
+  using Input = global_tensor<float, RowMajor<32, 2>>;
+  LocalCubeAssembly<Parent, Writer, Writer> assembly;
+  Input src0(a), src1(b);
+
+  auto first = assembly.writer<0>();
+  TLOAD(first, src0);             // INIT: allocate 512B, writer SizeCode=2
+  auto last = assembly.writer<1>();
+  TLOAD_ASS(last, src1);          // LAST: same ParentRef, CELL offset=2
+
+  auto parent = assembly.finish(); // owning result, final [32,4]; no instruction
+  global_tensor<float, RowMajor<32, 4>> dst(output); // row stride = 16B
+  TSTORE(dst, parent);
+}
+```
+
+`writer<I>()` 必须依序消费，每个 slot 恰好执行一次；只有 slot 0 使用
+`TLOAD`，后续 slot 使用 `TLOAD_ASS`。调用顺序错误、重复使用 slot、LAST 前
+调用 `finish()`、重复 `finish()` 均触发 trap，包括 `NDEBUG` 构建。assembly
+对象不可复制或移动；slot 只在其 assembly 生命周期内有效。OPEN assembly 和
+slot 均不能作为普通 source。`finish()` 返回拥有 carrier 的结果，不能在普通
+C++ 函数 ABI 中传递 Tile；生产和消费必须在同一内联 Tile 计算区域内。
+
+支持 1..16 个 writer，Local parent/writer SizeCode 限于固定合同允许的
+1..10（128B..64KiB）。不同 writer 可声明不同列宽，所有 writer 必须有相同
+的 dtype、Local location、M32 布局和有效行数，每个物理行数为 32。物理
+coverage 是从 CELL 0 开始的连续前缀，不允许孔洞或重叠；只有物理末端 writer
+可以带有效列尾部。FP32 writer 的合法列宽须形成精确的可编码 CELL envelope，
+例如 `[32,3]` 的 3 CELL 不能直接编码成 WriterSizeCode。64-bit M32 沿用完整
+CELL-pair 约束，每一逻辑列占 2 CELL，不放宽既有 dtype/transport 合法域。
+
+三路 `[32,2]` FP32 可以用 1024B parent，最终几何为 `[32,6]`；七路可声明
+`LocalCubeAssembly<VecTileM32<float,32,16>, W,W,W,W,W,W,W>`（`W` 为上述
+Writer），2048B/16CELL 分配中只有 14CELL 组成最终 `[32,14]` parent。
+结果的 `CapacityBytes`、`PhysicalBytes`、`PhysicalRows/PhysicalCols` 和
+`ValidRow/ValidCol` 分别表达分配、最终物理前缀和最终有效形状；容量空余不会
+扩展最终几何。七路输出使用 `RowMajor<32,14>`，行 stride=56B，发出
+7 TLOAD + 1 TSTORE；不需要额外 TMOV。不同 writer 列宽和完整目标编译示例见
+`test/tileop_api/src/Issue301LocalM32TLoadAssembly.cpp`。
+
+GM 输入/输出须为能覆盖 writer/最终有效形状的静态 RowMajor region，列 stride
+为 1；可以使用更大的行 pitch。现有 `range::Assemble` 缺少独立 writer 形状，
+Local CUBE TLOAD 对其给出显式诊断，业务代码改用上述专用接口。
+
+本接口依据 PTO-spec `4f5a0c23d676ee4612a2acd4635f7fed0e85b147` 的
+`PTO-B-ASSEMBLE-CUBE-PARENT-GEOMETRY-001`，测试覆盖编译与物理序列。
+模型 continuation preflight 的执行问题独立跟踪于
+[SuperScalarModel #1170](https://github.com/LinxISA/SuperScalarModel/issues/1170)；
+编译通过不代表模型数值验证已经通过。
 
 ## TileArray + TASSEMBLY：组装一个 parent（推荐）
 
