@@ -264,6 +264,12 @@ jobs:
             PTO0585LayoutInterfaceTest.test_selectors \
             PTO0585LayoutInterfaceTest.test_operand_schemas
 
+      - name: Validate Local M32 TLOAD assembly
+        working-directory: tileop-api
+        env:
+          COMPILER_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
+        run: python3 test/test_local_m32_tload_assembly.py
+
       - name: Parse template_asm.hpp with Linx Clang
         working-directory: toolchain/src/Linx-TileOP-API
         env:
