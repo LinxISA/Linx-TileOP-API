@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Exercise coverage diagnostics, case discovery and regression decisions."""
-import datetime as dt
 import importlib.util
 import json
 import os
@@ -21,11 +20,6 @@ publish_spec.loader.exec_module(publisher)
 
 
 class CoverageTest(unittest.TestCase):
-    def test_cadence_across_month_and_year(self):
-        start=dt.date(2026,11,3)
-        for day in range(400):
-            self.assertEqual(coverage.scheduled(start+dt.timedelta(days=day)),day%2==0)
-
     def test_clean_and_unfoldable_occurrences(self):
         physical='  10: BSTART.TEPL TADD, FP32\n  20: BSTART.TLSU TSTORE, FP32\n'
         macro='  10: TADD <Row=8, Col=64, FP32>, T#1, T#2, ->T<2KB>\n  20: BSTART.TLSU TSTORE, FP32\n'

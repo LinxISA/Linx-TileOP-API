@@ -2,8 +2,7 @@ name: SuperNPUBench macro coverage
 
 on:
   schedule:
-    # UTC 18:00 = Beijing 02:00 the following day. The calendar guard below
-    # selects every second day across month/year boundaries.
+    # Every 24 hours: UTC 18:00 = Beijing 02:00 the following day.
     - cron: '0 18 * * *'
   workflow_dispatch:
 
@@ -15,31 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  cadence:
-    runs-on: ubuntu-latest
-    outputs:
-      due: ${{ steps.schedule.outputs.due }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: linx
-      - name: Select alternate Beijing calendar days
-        id: schedule
-        shell: bash
-        env:
-          EVENT: ${{ github.event_name }}
-        run: |
-          set -euo pipefail
-          due=true
-          if [ "$EVENT" = schedule ]; then
-            due="$(python3 tools/macro_coverage/check.py --schedule-date "$(TZ=Asia/Shanghai date +%F)")"
-          fi
-          echo "due=$due" >> "$GITHUB_OUTPUT"
-          echo "48-hour coverage cadence: run=$due" >> "$GITHUB_STEP_SUMMARY"
-
   coverage:
-    needs: cadence
-    if: needs.cadence.outputs.due == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 330
     env:
