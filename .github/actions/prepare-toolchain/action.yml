@@ -1,0 +1,189 @@
+name: Prepare Linx toolchain
+description: Shared cached LLVM build and candidate TileOP header installation.
+outputs:
+  llvm-sha:
+    description: Resolved LLVM commit.
+    value: ${{ steps.llvm-source.outputs.sha }}
+  toolchain-dir:
+    description: Installed toolchain root.
+    value: ${{ steps.paths.outputs.toolchain-dir }}
+runs:
+  using: composite
+  steps:
+    - name: Checkout toolchain build repo
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ env.TOOLCHAIN_REPO }}
+        ref: ${{ env.TOOLCHAIN_REF }}
+        path: toolchain
+    - name: Install host build tools
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          git make cmake ninja-build gcc g++ python3 autoconf m4 \
+          pkg-config ccache rsync
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Configure git for component clones
+      shell: bash
+      run: git config --global --add safe.directory '*'
+    - name: Resolve latest LLVM branch SHA
+      id: llvm-source
+      shell: bash
+      run: |
+        set -euo pipefail
+        LLVM_SOURCE_SHA="$({ git ls-remote "${LLVM_REPO}" "refs/heads/${LLVM_REF}" || true; } | awk 'NR == 1 {print $1}')"
+        if [ -z "${LLVM_SOURCE_SHA}" ]; then
+          echo "ERROR: failed to resolve ${LLVM_REPO} refs/heads/${LLVM_REF}" >&2
+          exit 1
+        fi
+        echo "sha=${LLVM_SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+        echo "Resolved latest LLVM ${LLVM_REF} -> ${LLVM_SOURCE_SHA}"
+    - name: Restore complete v2 toolchain cache
+      id: cache-llvm-v2
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          toolchain/src
+          toolchain/build
+          toolchain/stamps
+          toolchain/output/linx_blockisa_llvm_musl
+        key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+        restore-keys: |
+          llvm-${{ runner.os }}-tileop-required-gate-v2-
+    - name: Restore legacy exact-SHA LLVM cache
+      id: cache-llvm-legacy
+      if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          toolchain/build/build-llvm-musl
+          toolchain/stamps/build-llvm-musl
+          toolchain/output/linx_blockisa_llvm_musl/bin
+          toolchain/output/linx_blockisa_llvm_musl/lib
+          toolchain/output/linx_blockisa_llvm_musl/include
+        key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-v1
+    - name: Initialize component sources
+      working-directory: toolchain
+      env:
+        LLVM_SOURCE_SHA: ${{ steps.llvm-source.outputs.sha }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Older v2 caches were saved after the candidate TileOP checkout was
+        # overlaid, so their embedded API repository can be dirty. Preserve
+        # that cached tree for diagnostics and let init-src create a clean
+        # checkout before it updates component branches.
+        TILEOP_SOURCE=src/Linx-TileOP-API
+        if [ -e "${TILEOP_SOURCE}" ] && \
+           { [ ! -d "${TILEOP_SOURCE}/.git" ] || \
+             [ -n "$(git -C "${TILEOP_SOURCE}" status --porcelain --untracked-files=all)" ]; }; then
+          CACHED_TILEOP_SOURCE="${RUNNER_TEMP}/cached-Linx-TileOP-API"
+          test ! -e "${CACHED_TILEOP_SOURCE}"
+          mv "${TILEOP_SOURCE}" "${CACHED_TILEOP_SOURCE}"
+        fi
+
+        make init-src
+        git -C src/llvm-project fetch origin "${LLVM_SOURCE_SHA}"
+        git -C src/llvm-project checkout --detach "${LLVM_SOURCE_SHA}"
+    - name: Restore, incrementally update, or build toolchain
+      working-directory: toolchain
+      env:
+        V2_CACHE_HIT: ${{ steps.cache-llvm-v2.outputs.cache-hit }}
+        V2_CACHE_MATCHED_KEY: ${{ steps.cache-llvm-v2.outputs.cache-matched-key }}
+        LEGACY_CACHE_HIT: ${{ steps.cache-llvm-legacy.outputs.cache-hit }}
+        EXACT_V2_KEY: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+        ENABLE_CCACHE: on
+        THREADS: '4'
+      shell: bash
+      run: |
+        set -euo pipefail
+        export PATH="/usr/lib/ccache:$PATH"
+
+        if [ "${V2_CACHE_HIT}" = "true" ]; then
+          echo "Exact complete toolchain cache hit: ${EXACT_V2_KEY}"
+          echo "Skipping toolchain build."
+          exit 0
+        fi
+
+        if [ "${LEGACY_CACHE_HIT}" = "true" ] && \
+           [ -x output/linx_blockisa_llvm_musl/bin/clang ]; then
+          echo "Reusing the legacy exact-SHA LLVM cache."
+          mkdir -p stamps
+          touch stamps/check-write-permission
+          touch stamps/build-llvm-musl
+        elif [[ "${V2_CACHE_MATCHED_KEY}" == llvm-${{ runner.os }}-tileop-required-gate-v2-* ]] && \
+             [ -f build/build-llvm-musl/CMakeCache.txt ]; then
+          echo "Updating the nearest v2 LLVM build tree incrementally."
+          if cmake -S src/llvm-project/llvm -B build/build-llvm-musl && \
+             cmake --build build/build-llvm-musl --parallel "${THREADS}" && \
+             cmake --install build/build-llvm-musl; then
+            cd output/linx_blockisa_llvm_musl/bin
+            ln -s -f clang linx64v5-linux-musl-clang
+            ln -s -f clang++ linx64v5-linux-musl-clang++
+            cd ../../..
+            mkdir -p stamps
+            touch stamps/build-llvm-musl
+          else
+            echo "Incremental LLVM update failed; falling back to a clean build."
+            rm -rf build/build-llvm-musl output/linx_blockisa_llvm_musl stamps
+          fi
+        else
+          echo "No reusable LLVM build tree found; performing a clean build."
+          rm -f stamps/build-llvm-musl
+        fi
+
+        if ! make WITH_TARGET=linx64v5-linux-musl; then
+          echo "Cached/incremental toolchain completion failed; retrying once cleanly."
+          rm -rf \
+            build/build-llvm-musl \
+            output/linx_blockisa_llvm_musl \
+            stamps
+          make WITH_TARGET=linx64v5-linux-musl
+        fi
+    - name: Save LLVM build cache
+      if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          toolchain/src
+          toolchain/build
+          toolchain/stamps
+          toolchain/output/linx_blockisa_llvm_musl
+        key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+    - name: Replace TileOP source with candidate content
+      shell: bash
+      run: |
+        set -euo pipefail
+        rsync -a --delete \
+          --exclude .git \
+          tileop-api/ toolchain/src/Linx-TileOP-API/
+    - name: Install candidate TileOP headers
+      shell: bash
+      run: |
+        set -euo pipefail
+        CANDIDATE_SHA="$(git -C tileop-api rev-parse HEAD)"
+        RESOURCE_DIR="$("${TOOLCHAIN_INSTALL_DIR}/bin/clang" -print-resource-dir)"
+        rm -rf "${RESOURCE_DIR}/include/tileop-api"
+        make -C toolchain/src/Linx-TileOP-API install \
+          CLANG_PREFIX="${TOOLCHAIN_INSTALL_DIR}" \
+          TILEOP_API_REVISION="${CANDIDATE_SHA}" \
+          TILEOP_API_REVISION_IS_EXACT=1
+        cmp \
+          toolchain/src/Linx-TileOP-API/include/common/pto_tile_region.hpp \
+          "${RESOURCE_DIR}/include/tileop-api/common/pto_tile_region.hpp"
+        cmp \
+          toolchain/src/Linx-TileOP-API/include/jcore/template_asm.hpp \
+          "${RESOURCE_DIR}/include/tileop-api/jcore/template_asm.hpp"
+        grep -Fq \
+          "#define PTO_TILEOP_API_REVISION \"${CANDIDATE_SHA}\"" \
+          "${RESOURCE_DIR}/include/tileop-api/common/pto_tileop_api_revision.hpp"
+
+    - name: Export toolchain path
+      id: paths
+      shell: bash
+      run: echo "toolchain-dir=${TOOLCHAIN_INSTALL_DIR}" >> "$GITHUB_OUTPUT"
