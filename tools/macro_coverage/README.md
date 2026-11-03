@@ -1,11 +1,11 @@
 # Scheduled SuperNPUBench macro coverage
 
-The `SuperNPUBench macro coverage` workflow runs at 02:00 Asia/Shanghai on
-alternate calendar days starting 2026-11-03. A daily UTC 18:00 trigger applies
-the parity guard, so month boundaries never shorten the 48-hour cadence.
-GitHub may delay scheduled runs. Manual dispatch always runs immediately and
-does not change the cadence. The workflow must be merged into default branch
-`linx` before scheduled execution is possible.
+The `SuperNPUBench macro coverage` workflow runs every day at 02:00
+Asia/Shanghai (UTC 18:00 the previous day), a 24-hour schedule. GitHub may
+delay scheduled runs, so actual start times may be more than 24 hours apart.
+Manual dispatch always runs immediately and does not change the daily
+schedule. The workflow must be merged into default branch `linx` before
+scheduled execution is possible.
 
 ## Shared compiler
 

@@ -35,11 +35,6 @@ def revision(path):
     return subprocess.check_output(['git', '-C', str(path), 'rev-parse', 'HEAD'], text=True).strip()
 
 
-def scheduled(date):
-    """Even days since a fixed Beijing calendar date: stable across months."""
-    return (date - dt.date(2026, 11, 3)).days % 2 == 0
-
-
 def run(command, cwd, env, log, timeout=600, memory_gib=3):
     command = ['/usr/bin/prlimit', f'--as={memory_gib * 1024**3}', '--core=0', '--', *command]
     with log.open('w') as output:
@@ -315,7 +310,6 @@ def self_check(tools, output):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--schedule-date', help='Print whether Beijing YYYY-MM-DD is on the 48-hour cadence')
     parser.add_argument('--source',type=Path)
     parser.add_argument('--toolchain',type=Path)
     parser.add_argument('--output',type=Path)
@@ -326,8 +320,6 @@ def main():
     parser.add_argument('--timeout',type=int,default=600)
     parser.add_argument('--memory-gib',type=int,default=3,choices=[1,2,3,4])
     args=parser.parse_args()
-    if args.schedule_date:
-        print(str(scheduled(dt.date.fromisoformat(args.schedule_date))).lower());return 0
     if not all([args.source,args.toolchain,args.output,args.llvm_sha,args.tileop_sha]):parser.error('source, toolchain, output, llvm-sha and tileop-sha are required')
     source=args.source.resolve();output=args.output.resolve();tools=args.toolchain.resolve()/'bin'
     output.mkdir(parents=True,exist_ok=True);(output/'logs').mkdir(exist_ok=True)
