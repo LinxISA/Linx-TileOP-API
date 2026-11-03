@@ -69,7 +69,7 @@ class LLVM138NarrowTCMPTest(unittest.TestCase):
                         self.assertRegex(operation, r'B\.DIM zero, \$\{4:c\}, ->lb2')
                         if "BSTART.TEPL 13" in operation:
                             self.assertIn(f"i32 1, <{rows} x i32>", operation)
-                            self.assertRegex(operation, rf'i32 {size_code}\)')
+                            self.assertRegex(operation, rf'i32 {size_code}, i32 0\)')
                         else:
                             self.assertIn(f"i32 1, i32 {size_code},", operation)
         self.assertIn("BSTART.TEPL 13", bodies["cross_type32"])
