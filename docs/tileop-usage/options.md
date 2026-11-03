@@ -294,6 +294,12 @@ carrier 的字段容量，跨多个 GPR 的结果需要由调用者拆分 source
 
 ## 6.3 TCMP/TSEL partial-column shape
 
+`TCMP`、Tile 输出 `TCMPS` 及 `TSEL` 显式发射 CUBE_M16/M32 的 `B.DATR.Layout`；
+比较同时保留 `CmpMode`。NORM 仍使用默认布局，不需要新增调用参数。
+CUBE 比较输出是 PredicateCell，不是普通 Numeric U8。两个 PredicateCell 的
+U8 `TAND/TOR/TXOR` 结果使用 U8 basis；与 Numeric U8 混合时结果为 Numeric U8，
+前提是布局与有效形状匹配。循环携带的 COPY 也必须保留这个区分。
+
 `TCMP` 和 `TSEL` 可以处理 `ValidCol < Cols` 的 partial-column Tile，但参与同一
 compare/select 操作的操作数仍必须保持相同的物理 `Rows x Cols` 和 `BLayout`，并且
 valid shape 必须一致。不能用 `[M, N]`、`ValidCol=1` 的 Tile 与物理 `[M, 1]` Tile

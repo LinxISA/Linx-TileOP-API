@@ -1,7 +1,11 @@
 # TSEL
 
-`TSEL` 按照 packed predicate Tile 从 true source 和调用前的 `dst`
+`TSEL` 按照 predicate Tile 从 true source 和调用前的 `dst`
 逐元素选择结果。调用前的 `dst` 是显式的 false source，因此必须先初始化。
+
+接口显式保留数值 Tile 的 CUBE_M16/M32 布局；NORM 布局保持原有默认编码。
+CUBE 比较结果是 PredicateCell，其 basis 必须与 select 的操作类型兼容，
+不能仅因 C++ carrier 为 U8 就当作普通 Numeric U8 使用。
 
 ## C++ 接口
 

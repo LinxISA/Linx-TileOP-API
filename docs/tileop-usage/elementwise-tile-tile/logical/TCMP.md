@@ -1,7 +1,9 @@
 # TCMP
 
-`TCMP` 是由 VEC 执行的比较操作。它产生 packed predicate；该 carrier
-可以通过 `TSEL`/`TSELS` 消费，也可以存入与输出 Tile dtype 匹配的 GM。
+`TCMP` 是由 VEC 执行的比较操作。NORM 布局产生 packed predicate；
+CUBE_M16/M32 布局产生以源操作类型为 basis 的 PredicateCell。接口显式保留
+源 CUBE 布局，不会回落为 NORM。PredicateCell 不是普通 Numeric U8；后续
+`TSEL` 必须使用相同布局，并按比较的 basis 类型消费谓词。
 
 ## C++ 接口
 
