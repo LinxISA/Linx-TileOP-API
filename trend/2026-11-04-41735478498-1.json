@@ -1,0 +1,14 @@
+{
+  "started_at": "2026-11-03T23:01:52.742772+00:00",
+  "run_url": "https://github.com/LinxISA/Linx-TileOP-API/actions/runs/41735478498",
+  "outcome": "baseline-created",
+  "llvm_sha": "3529f346745052582e6e3885e5de43f56a75616b",
+  "tileop_sha": "7baf9f73e4b342c8e4b7bf27998d7478cf67ec64",
+  "supernpubench_sha": "5da6ff660d7e1c76ec37ff357b896250da891db0",
+  "coverage_percent": 100.0,
+  "configurations": 896,
+  "compiled": 781,
+  "build_failures": 115,
+  "total_bundles": 251916,
+  "uncovered_bundles": 0
+}
