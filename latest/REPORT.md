@@ -1,6 +1,6 @@
 # SuperNPUBench TileOp macro coverage
 
-Outcome: **baseline-created**
+Outcome: **no-regression**
 
 Coverage: **100.0000%** = 251,916 / 251,916 static TileOp occurrences.
 Configurations: 896; ELF built: 781; build failures: 115.
@@ -11,16 +11,16 @@ Build failures are excluded from the occurrence denominator. This is presentatio
 
 ## Revisions
 
-- llvm_sha: `3529f346745052582e6e3885e5de43f56a75616b`
+- llvm_sha: `71351b617b79304e6039b0ef47f67c0b51852931`
 - tileop_sha: `7baf9f73e4b342c8e4b7bf27998d7478cf67ec64`
-- supernpubench_sha: `5da6ff660d7e1c76ec37ff357b896250da891db0`
+- supernpubench_sha: `03ea5e180370ce838e3350216ee43454e8439930`
 - toolchain_build_sha: `e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156`
-- started_at: `2026-11-03T23:01:52.742772+00:00`
-- run_url: `https://github.com/LinxISA/Linx-TileOP-API/actions/runs/41735478498`
+- started_at: `2026-11-04T23:29:27.049290+00:00`
+- run_url: `https://github.com/LinxISA/Linx-TileOP-API/actions/runs/41933233783`
 
 ## Changes against previous successful survey
 
-Baseline available: False; regressions: 0; added configurations: 896; removed: 0.
+Baseline available: True; regressions: 0; added configurations: 0; removed: 0.
 Comparisons match normalized configurations and compare gap counts per physical operation/dtype, independently of code addresses. Added/removed configurations are reported separately.
 
 ## Coverage by operation
