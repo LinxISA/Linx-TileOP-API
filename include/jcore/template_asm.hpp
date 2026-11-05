@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "common/pto_tile.hpp"
+#include "common/pto_shared_nd.hpp"
 #include "common/pto_tile_region.hpp"
 
 using namespace pto;
@@ -5252,6 +5253,121 @@ PTO_SHARED_INLINE void TMOV_CUBE_TO_SHARED_ND(
   dst.UpdateAssembledValidShape(static_cast<int>(placed_valid_rows),
                                 static_cast<int>(placed_valid_columns));
 }
+
+// PTO #423 reverse of TMOV_CUBE_TO_SHARED_ND. BSTART and DATR both use
+// DTYPE_NONE so the published Shared descriptor owns the backing type.
+namespace pto::detail {
+
+template <int PEMask>
+PTO_SHARED_INLINE bool shared_nd_to_cube_participates() {
+  static_assert(is_valid_pe_mask(PEMask),
+                "Shared-ND-to-CUBE TMOV requires an encodable PE mask");
+  if constexpr (PEMask == 0) return false;
+  if constexpr (PEMask == 15) return true;
+  return (PEMask & (8u >> __builtin_linx_get_thread_idx())) != 0;
+}
+
+template <typename Cube, typename Contract>
+PTO_SHARED_INLINE auto shared_nd_to_cube_shape(
+    uintptr_t base_units, int valid_rows, int valid_columns) {
+  const auto shape = Contract::shape(base_units, valid_rows, valid_columns);
+  if (!shape.valid) __builtin_trap();
+  if constexpr (Cube::ValidRow != DYNAMIC)
+    if (Cube::ValidRow != shape.rows) __builtin_trap();
+  if constexpr (Cube::ValidCol != DYNAMIC)
+    if (Cube::ValidCol != shape.columns) __builtin_trap();
+  return shape;
+}
+
+template <typename Cube, typename Shape>
+PTO_SHARED_INLINE void shared_nd_to_cube_set_shape(Cube &dst, Shape shape) {
+  if constexpr (Cube::ValidRow == DYNAMIC) dst.RowMaskInternal = shape.rows;
+  if constexpr (Cube::ValidCol == DYNAMIC) dst.ColMaskInternal = shape.columns;
+}
+
+} // namespace pto::detail
+
+#define PTO_SHARED_ND_TO_CUBE_HEADER_ASM                                     \
+  "BSTART.TMOV DTYPE_NONE\n"                                                \
+  ".if %c[Layout] == 21\nB.DATR ND2M32, DTYPE_NONE, Zero\n"                 \
+  ".else\nB.DATR ND2M16, DTYPE_NONE, Zero\n.endif\n"                       \
+  "B.DIM %[ValidCol], 0, ->lb0\n"                                           \
+  "B.DIM %[ValidRow], 0, ->lb1\n"                                           \
+  PTO_PE_MASK_ASM("B.IOS %S[Shared], mask=", "\n")
+
+template <int PEMask = 15, is_local_tile_v Cube, is_shared_tile_v SharedND>
+  requires(!is_range_v<Cube> &&
+           requires(const SharedND &source) { source.handle(); })
+PTO_SHARED_INLINE void TMOV_SHARED_ND_TO_CUBE(Cube &dst,
+                                             const SharedND &src) {
+  using Contract = pto::detail::SharedNDToCubeContract<
+      Cube, SharedND, false, SharedND::LogicalTileBytes>;
+  static_assert(sizeof(Contract) > 0);
+  if constexpr (PEMask != 0) {
+    if (!pto::detail::shared_nd_to_cube_participates<PEMask>()) return;
+    const auto shape = pto::detail::shared_nd_to_cube_shape<Cube, Contract>(
+        0, src.GetValidRow(), src.GetValidCol());
+    asm volatile(
+        PTO_SHARED_ND_TO_CUBE_HEADER_ASM
+        PTO_PE_MASK_ASM("B.IOT mask=", ", last, ->%[Dst]<%Z[Size]>\n")
+        : [Dst] "=Tr"(dst.data())
+        : [Shared] "Sr"(src.handle()), [PEMask] "i"(PEMask),
+          [Layout] "i"(Cube::CubeLoadLayout), [Size] "i"(Cube::TilesizeCode),
+          [ValidCol] "r"(shape.columns), [ValidRow] "r"(shape.rows)
+        : "memory");
+    pto::detail::shared_nd_to_cube_set_shape(dst, shape);
+  } else {
+    static_assert(is_valid_pe_mask(PEMask));
+  }
+}
+
+template <int PEMask = 15, is_local_tile_v Cube, typename Parent,
+          std::size_t LengthUnits, unsigned OffsetUnits, bool RuntimeBase>
+  requires(!is_range_v<Cube>)
+PTO_SHARED_INLINE void TMOV_SHARED_ND_TO_CUBE(
+    Cube &dst, const range::SharedNDSubview<Parent, LengthUnits, OffsetUnits,
+                                          RuntimeBase> &src) {
+  using View = range::SharedNDSubview<Parent, LengthUnits, OffsetUnits, RuntimeBase>;
+  using Contract = pto::detail::SharedNDToCubeContract<
+      Cube, Parent, true, View::CapacityBytes, OffsetUnits, RuntimeBase>;
+  static_assert(sizeof(Contract) > 0);
+  if constexpr (PEMask != 0) {
+    if (!pto::detail::shared_nd_to_cube_participates<PEMask>()) return;
+    const auto shape = pto::detail::shared_nd_to_cube_shape<Cube, Contract>(
+        src.GetRangeBase(), src.parent().GetValidRow(), src.parent().GetValidCol());
+    // Keep a constant source base as zero, and let the compiler allocate a
+    // real GPR for runtime bases. B.SUBVIEW belongs to the Shared binder.
+    if constexpr (RuntimeBase) {
+      asm volatile(
+          PTO_SHARED_ND_TO_CUBE_HEADER_ASM
+          "B.SUBVIEW 0, %[Base], %c[Offset], %c[FragmentSize]\n"
+          PTO_PE_MASK_ASM("B.IOT mask=", ", last, ->%[Dst]<%Z[Size]>\n")
+          : [Dst] "=Tr"(dst.data())
+          : [Shared] "Sr"(src.parent().handle()), [PEMask] "i"(PEMask),
+            [Layout] "i"(Cube::CubeLoadLayout), [Size] "i"(Cube::TilesizeCode),
+            [ValidCol] "r"(shape.columns), [ValidRow] "r"(shape.rows),
+            [Base] "r"(src.GetRangeBase()), [Offset] "i"(OffsetUnits),
+            [FragmentSize] "i"(View::SubviewSizeCode)
+          : "memory");
+    } else {
+      asm volatile(
+          PTO_SHARED_ND_TO_CUBE_HEADER_ASM
+          "B.SUBVIEW 0, zero, %c[Offset], %c[FragmentSize]\n"
+          PTO_PE_MASK_ASM("B.IOT mask=", ", last, ->%[Dst]<%Z[Size]>\n")
+          : [Dst] "=Tr"(dst.data())
+          : [Shared] "Sr"(src.parent().handle()), [PEMask] "i"(PEMask),
+            [Layout] "i"(Cube::CubeLoadLayout), [Size] "i"(Cube::TilesizeCode),
+            [ValidCol] "r"(shape.columns), [ValidRow] "r"(shape.rows),
+            [Offset] "i"(OffsetUnits), [FragmentSize] "i"(View::SubviewSizeCode)
+          : "memory");
+    }
+    pto::detail::shared_nd_to_cube_set_shape(dst, shape);
+  } else {
+    static_assert(is_valid_pe_mask(PEMask));
+  }
+}
+
+#undef PTO_SHARED_ND_TO_CUBE_HEADER_ASM
 
 template <int PEMask = 15, is_tile_data_v tile_shape_dst, typename LocalTile>
 PTO_SHARED_INLINE void

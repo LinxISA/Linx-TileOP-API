@@ -19,6 +19,7 @@ rollback、definedness 或 memory-order 语义。
 | TEPL elementwise、scalar、reduce/expand、irregular | 已实现 | 逐操作页面和 `jcore/template_asm.hpp` 为 wrapper 权威；dtype、valid region、padding 和 selector 仍受 ASL 约束。 |
 | `TEXPDIF` | CPU simulator、JCORE inline-asm 已实现；LLVM MC catalog 已实现；LLVM compiler lowering 尚未完成；AArch64/SME 不支持 | PTO 0.58.7 selector 29。已有 wrapper 不等于 LLVM compiler 已具备从 IR/builtin 到 TEXPDIF 的端到端 lowering。 |
 | TLSU `TLOAD`/`TSTORE`/`TMOV`/`TPREFETCH`/`GMOV` | 已实现 | 传输、peer move 和 prefetch 有独立 C++ 入口；layout conversion 仅对页面列出的组合开放。 |
+| `TMOV_SHARED_ND_TO_CUBE` | API 已实现；要求 LLVM 支持 TMOV Layout 21/22 | Shared ND 完整 parent 或显式连续整行范围转 Local M32/M16；详见 [TMOV](tlsu/load-store-move/TMOV.md)。 |
 | TLSU `MGATHER`/`MSCATTER` 及 atomic/reduction variants | 仅部分 layout 支持 | wrapper 覆盖当前公开 selector；ColumnMajor selector、mask/索引 dtype 和不同 atomic 组合不得由普通 gather/scatter 重载推断。 |
 | CUBE TMATMUL/TGEMV 及 bias/acc/MX variants | 仅部分 layout 支持 | CUBE_M16/CUBE_M32、Shared physical shape、scale layout 和 InternalAcc 由具体 wrapper/操作页限制。 |
 | TEPL layout/rearrangement（`TPERMUTE`、`TSHUF`、`TPACK`、`TUNPACK`、`TGPR2T`） | 仅部分 layout 支持 | 只覆盖已实现的 CUBE/Local 路径和控制字段；未列出的组合保持拒绝。 |

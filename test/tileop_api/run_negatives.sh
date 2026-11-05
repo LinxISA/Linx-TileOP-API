@@ -53,6 +53,7 @@ TCOLSUM_CASES="dest_rows dest_cols dtype"
 ISSUE288_CASES="layout dtype shape valid_shape"
 ISSUE299_CASES="layout dtype shape valid_shape location capacity"
 ISSUE398399_CASES="atomic_add_dtype atomic_inc_dtype atomic_cube_n8 atomic_mask_rowmajor atomic_mask_shape atomic_mask_shared atomic_pe_mask cube_shared_dtype cube_shared_cols cube_shared_capacity cube_shared_writer_size"
+ISSUE423_CASES="dtype columns parent n8 layout rcpe m16_b64 offset range length size_code mask assemble slot old_subview temporary"
 PASS=0; FAIL=0
 
 # A negative suite is meaningless when every compile is rejected before the
@@ -61,7 +62,7 @@ PASS=0; FAIL=0
 # SharedRange.cpp intentionally contains the retired TLOAD_ASS/RowMajor
 # Assemble example; it is not a valid positive preflight for the current API.
 # Keep the actual range legality checks below independent of that fixture.
-for source in TStoreShared.cpp PostProcessNegatives.cpp TStoreSharedNegatives.cpp CubeTCvt.cpp TCvtCubeNegatives.cpp TCvtSameTypeRounding.cpp GMov.cpp TileArrayCube.cpp RangeSubview.cpp; do
+for source in TStoreShared.cpp PostProcessNegatives.cpp TStoreSharedNegatives.cpp CubeTCvt.cpp TCvtCubeNegatives.cpp TCvtSameTypeRounding.cpp GMov.cpp TileArrayCube.cpp RangeSubview.cpp SharedNDToCube.cpp SharedNDToCubeNegatives.cpp; do
   stem=${source%.cpp}
   if ! "$CXX" "${FLAGS[@]}" "src/$source" -o "$OUT/$stem.o" \
       >"$OUT/$stem.stdout" 2>"$OUT/$stem.stderr"; then
@@ -140,6 +141,11 @@ for c in $ISSUE398399_CASES; do
     pattern='no matching function'
   fi
   expect_rejected "issue398399_$c" "$define" Issue398399Negatives.cpp "$pattern"
+done
+for c in $ISSUE423_CASES; do
+  define=SHOULD_FAIL_423_$(echo "$c" | tr '[:lower:]' '[:upper:]')
+  expect_rejected "issue423_$c" "$define" SharedNDToCubeNegatives.cpp \
+    'Shared-ND-to-CUBE TMOV|Shared ND subview|64-bit CUBE_M16|no matching function|deleted function'
 done
 expect_rejected "thistogram_retired" "SHOULD_FAIL_THISTOGRAM_RETIRED" \
   TColSumNegatives.cpp "THISTOGRAM is retired"
