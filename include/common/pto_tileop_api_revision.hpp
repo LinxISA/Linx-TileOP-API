@@ -11,6 +11,7 @@
 
 // Feature gates let consumers fail fast without comparing revision strings.
 #define PTO_TILEOP_API_HAS_LOCAL_M32_TLOAD_ASSEMBLY 1
+#define PTO_TILEOP_API_HAS_SHARED_ND_TO_CUBE 1
 #define PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX 1
 #define PTO_TILEOP_API_HAS_TEXPDIF 1
 #define PTO_TILEOP_API_HAS_ELEMENT_TILE 1

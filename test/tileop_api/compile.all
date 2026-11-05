@@ -26,7 +26,7 @@ fi
 
 ACTIVE_FIXTURES=(
   Issue301LocalM32TLoadAssembly
-  DynamicShape DynamicTlsuStride CubeCellTransport VecCubeLoadStore CubeTCvt CubeToSharedND SharedTranspose SharedRoleView TCI
+  DynamicShape DynamicTlsuStride CubeCellTransport VecCubeLoadStore CubeTCvt CubeToSharedND SharedNDToCube SharedTranspose SharedRoleView TCI
   SharedTransposeNonSquare MatrixIntegerDtypes MXScaleVariants HiF4X2MatmulMX SharedMatmul
   TMatmulAccFullOptions TMatmulAccCScale TMatmulAllOptions TGEMVAllOptions TGEMVOperandOrder
   PostProcessCombos SharedMatrixForms TCmpMode TColSumContract TSort TPrefetch MGatherCas MGatherAtomics MScatterAtomics

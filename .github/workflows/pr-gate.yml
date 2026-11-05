@@ -106,6 +106,14 @@ jobs:
           COMPILER_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
         run: python3 test/test_local_m32_tload_assembly.py
 
+      - name: Validate Shared ND to Local CUBE API
+        working-directory: tileop-api
+        env:
+          COMPILER_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
+          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
+          PTO_REQUIRE_SHARED_ND_OBJECT: '1'
+        run: python3 test/test_shared_nd_to_cube.py -v
+
       - name: Parse template_asm.hpp with Linx Clang
         working-directory: toolchain/src/Linx-TileOP-API
         env:
