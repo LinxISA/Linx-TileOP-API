@@ -927,6 +927,43 @@ def render(name: str, spec: Path, header: str, existing: str = "") -> str:
             count=1,
             flags=re.S,
         )
+    if name.startswith(("MGATHER", "MSCATTER")):
+        rendered = update_indexed_tlsu_range_doc(name, rendered)
+    return rendered
+
+def update_indexed_tlsu_range_doc(name: str, rendered: str) -> str:
+    """Apply the scoped #424 extension over the pinned 0.58.7 prose seed."""
+    rendered = re.sub(
+        r"(# " + re.escape(name) + r"\n\n).*?(?=\n\n## C\+\+ 接口)",
+        lambda m: m.group(1) + "`" + name + "` 使用索引 Tile 中的 S32/U32/S64/U64 "
+        "字节位移访问 GM：每个访问起点为 `Base + displacement`，不进行元素宽度缩放，"
+        "不使用 GM 行 stride。可选 `IndexedByteRange` 传递相对 Base 的有符号 64 位字节边界；"
+        "详见 [indexed TLSU 范围参数](../../indexed-tlsu-range.md)。",
+        rendered, flags=re.S)
+    rendered = re.sub(r"\| `offset` \|[^\n]*", "| `offset` | 相对 GM Base 的显式字节位移 Tile；不按元素宽度缩放。 |", rendered)
+    rendered = re.sub(r"- `B.IOR`[^\n]*", "- `B.IOR` 的首条无标志记录为 `[Base, Min, Max]`；省略范围时 Min/Max 选择器均为 zero。显式范围必须至少有一个非 zero 边界选择器，即使其寄存器值为 0。", rendered)
+    rendered = re.sub(r"B\.IOR[^\n]*StrideGPR[^\n]*", "B.IOR       [BaseGPR, MinIndexGPR, MaxIndexGPR], []", rendered)
+    for old, new in (
+        ("logical element indices", "byte displacements"),
+        ("logical element index", "byte displacement"),
+        ("逻辑线性元素下标", "相对 GM Base 的字节位移"),
+        ("完整的逻辑线性下标", "完整的字节位移"),
+        ("B.IOR 只携带 GM 基地址、不携带行跨度", "B.IOR 携带 GM 基地址和可选字节范围，不携带行跨度"),
+    ):
+        rendered = rendered.replace(old, new)
+    rendered = rendered.replace("非法调用不会发布部分输出或部分副作用。", "范围 Min > Max 时仅当前参与 PE 在副作用前 fault，其他 PE 已有的副作用保留。")
+    # Describe the placement explicitly: macro-generated atomic declarations
+    # are not literal function names in the signature extractor.
+    placements = (
+        "范围重载在 `validCol` 后、可选 `validRow` 前增加 `IndexedByteRange range`。",
+        "范围重载在最后追加 `IndexedByteRange range` 参数。",
+    )
+    for placement in placements:
+        rendered = rendered.replace(placement + "\n\n", "")
+    placement = placements[1] if name in {
+        "MGATHER", "MGATHER_MASK", "MSCATTER", "MSCATTER_MASK"
+    } else placements[0]
+    rendered = rendered.replace("## 使用要求", placement + "\n\n## 使用要求", 1)
     return rendered
 
 def main() -> None:

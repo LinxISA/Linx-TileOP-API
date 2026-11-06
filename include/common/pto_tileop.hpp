@@ -4,6 +4,7 @@
 #include "common/pto_tileop_api_revision.hpp"
 #include "common/pto_tile.hpp"
 #include "common/pto_shared_nd.hpp"
+#include "common/pto_indexed_range.hpp"
 #include "common/pto_tile_region.hpp"
 #include "common/tileop_api.hpp"
 #include "common/global_iterator.hpp"
