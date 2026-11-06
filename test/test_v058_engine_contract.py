@@ -543,9 +543,9 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             self.header)
         self.assertIn(
             'IndexTile::BFractal == ValueTile::BFractal', self.header)
-        # Four explicit CAS branches, four POPC branches, and the two
-        # macro definitions (one each for gather/scatter atomics).
-        self.assertEqual(self.header.count('PTO_ATOM_LAYOUT_ASM'), 18)
+        # Both legacy and range overloads retain four CAS/POPC layout branches
+        # and shared gather/scatter atomic emitters, plus define/undef markers.
+        self.assertEqual(self.header.count('PTO_ATOM_LAYOUT_ASM'), 34)
 
     def test_cube_load_ass_uses_the_canonical_layout_name(self) -> None:
         # The CUBE transport selectors have no numeric B.DATR spelling: the

@@ -29,6 +29,14 @@ rollback、definedness 或 memory-order 语义。
 
 ## 版本边界
 
+### PR #424 indexed TLSU 范围参数
+
+全部 23 个 indexed TLSU wrapper 提供显式 `IndexedByteRange` 重载，
+需要配套 LLVM 的 `R` 约束及范围 lowering 支持。API 基线仍为 0.58.7；
+这是独立扩展，不代表完整升级至 0.59.0。
+语义、调用方法与能力宏见 [范围参数](indexed-tlsu-range.md)。
+
+
 ### 开发分支中的 PredicateCell adapters（未发布）
 
 `predicate::compare_scalar`、`predicate::scatter` 和

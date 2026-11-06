@@ -5,6 +5,7 @@
 
 #include "common/pto_tile.hpp"
 #include "common/pto_shared_nd.hpp"
+#include "common/pto_indexed_range.hpp"
 #include "common/pto_tile_region.hpp"
 
 using namespace pto;
@@ -1320,6 +1321,380 @@ asm volatile(
       "B.IOR [%[base]], []\n"
       :
       : [base] "r"(dst.data()), [src] "Tr"(src.data()),
+        [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
+        [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [ValidCol] "r"(offset.GetValidCol()),
+        [ValidRow] "r"(offset.GetValidRow()),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+}
+
+// Explicit indexed byte-range overloads (PTO #424). The R constraint
+// guarantees descriptor presence even when both bound payloads are zero.
+template <typename tile_shape_out, typename tile_shape_offset, typename gm_shape,
+          TmaPadValue Pad = TmaPadValue::Null>
+inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
+                    const tile_shape_offset &offset, IndexedByteRange range) {
+  // PTO 0.58.7: offset lanes are explicit byte displacements from base.
+  static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
+  static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
+                "MGATHER dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
+                "per DavinciOO v5 B.IOT encoding");
+  if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
+asm volatile(
+      "BSTART.TLSU MGATHER, %D[DataType]\n"
+      PTO_GATHER_PAD_ASM
+      "B.DIM zero, %c[ValidCol], ->LB0\n"
+      "B.DIM zero, %c[ValidRow], ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      : [dst] "=Tr"(dst.data())
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(src.data()), [off] "Tr"(offset.data()),
+        [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [TileSize] "i"(
+            tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [ValidCol] "i"(tile_shape_offset::ValidCol),
+        [ValidRow] "i"(tile_shape_offset::ValidRow),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
+asm volatile(
+      "BSTART.TLSU MGATHER, %D[DataType]\n"
+      PTO_GATHER_PAD_ASM
+      "B.DIM zero, %c[ValidCol], ->LB0\n"
+      "B.DIM %[ValidRow], 0, ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      : [dst] "=Tr"(dst.data())
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(src.data()), [off] "Tr"(offset.data()),
+        [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [TileSize] "i"(
+            tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [ValidCol] "i"(tile_shape_offset::ValidCol),
+        [ValidRow] "r"(offset.GetValidRow()),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
+asm volatile(
+      "BSTART.TLSU MGATHER, %D[DataType]\n"
+      PTO_GATHER_PAD_ASM
+      "B.DIM %[ValidCol], 0, ->LB0\n"
+      "B.DIM zero, %c[ValidRow], ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      : [dst] "=Tr"(dst.data())
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(src.data()), [off] "Tr"(offset.data()),
+        [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [TileSize] "i"(
+            tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [ValidCol] "r"(offset.GetValidCol()),
+        [ValidRow] "i"(tile_shape_offset::ValidRow),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else {
+asm volatile(
+      "BSTART.TLSU MGATHER, %D[DataType]\n"
+      PTO_GATHER_PAD_ASM
+      "B.DIM %[ValidCol], 0, ->LB0\n"
+      "B.DIM %[ValidRow], 0, ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[off], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      : [dst] "=Tr"(dst.data())
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(src.data()), [off] "Tr"(offset.data()),
+        [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [TileSize] "i"(
+            tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [ValidCol] "r"(offset.GetValidCol()),
+        [ValidRow] "r"(offset.GetValidRow()),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+}
+
+template <typename tile_shape_in, typename tile_shape_offset, typename gm_shape>
+inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
+                     const tile_shape_offset &offset, IndexedByteRange range) {
+  // PTO 0.58.7: offset lanes are explicit byte displacements from base.
+  static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
+  static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
+                "MSCATTER src logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
+                "per DavinciOO v5 B.IOT encoding");
+  if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
+asm volatile(
+      "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
+      "B.DIM zero, %c[ValidCol], ->LB0\n"
+      "B.DIM zero, %c[ValidRow], ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[src], %[off], mask=1111, last\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      :
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(dst.data()), [src] "Tr"(src.data()),
+        [off] "Tr"(offset.data()),
+        [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [ValidCol] "i"(tile_shape_offset::ValidCol),
+        [ValidRow] "i"(tile_shape_offset::ValidRow),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
+asm volatile(
+      "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
+      "B.DIM zero, %c[ValidCol], ->LB0\n"
+      "B.DIM %[ValidRow], 0, ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[src], %[off], mask=1111, last\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      :
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(dst.data()), [src] "Tr"(src.data()),
+        [off] "Tr"(offset.data()),
+        [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [ValidCol] "i"(tile_shape_offset::ValidCol),
+        [ValidRow] "r"(offset.GetValidRow()),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
+asm volatile(
+      "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
+      "B.DIM %[ValidCol], 0, ->LB0\n"
+      "B.DIM zero, %c[ValidRow], ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[src], %[off], mask=1111, last\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      :
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(dst.data()), [src] "Tr"(src.data()),
+        [off] "Tr"(offset.data()),
+        [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [ValidCol] "r"(offset.GetValidCol()),
+        [ValidRow] "i"(tile_shape_offset::ValidRow),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else {
+asm volatile(
+      "BSTART.TLSU MSCATTER, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
+      "B.DIM %[ValidCol], 0, ->LB0\n"
+      "B.DIM %[ValidRow], 0, ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[src], %[off], mask=1111, last\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      :
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(dst.data()), [src] "Tr"(src.data()),
+        [off] "Tr"(offset.data()),
+        [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [ValidCol] "r"(offset.GetValidCol()),
+        [ValidRow] "r"(offset.GetValidRow()),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+}
+
+template <typename tile_shape_out, typename tile_shape_offset,
+          typename tile_shape_mask, typename gm_shape,
+          TmaPadValue Pad = TmaPadValue::Null>
+inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
+                         const tile_shape_offset &offset,
+                         const tile_shape_mask &mask, IndexedByteRange range) {
+  static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
+  static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
+                "MGATHER_MASK dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
+                "per DavinciOO v5 B.IOT encoding");
+  if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
+asm volatile(
+      "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
+      PTO_GATHER_PAD_ASM
+      "B.DIM zero, %c[ValidCol], ->LB0\n"
+      "B.DIM zero, %c[ValidRow], ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      : [dst] "=Tr"(dst.data())
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(src.data()), [off] "Tr"(offset.data()),
+        [mask] "Tr"(mask.data()),
+        [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [TileSize] "i"(
+            tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [ValidCol] "i"(tile_shape_offset::ValidCol),
+        [ValidRow] "i"(tile_shape_offset::ValidRow),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
+asm volatile(
+      "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
+      PTO_GATHER_PAD_ASM
+      "B.DIM zero, %c[ValidCol], ->LB0\n"
+      "B.DIM %[ValidRow], 0, ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      : [dst] "=Tr"(dst.data())
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(src.data()), [off] "Tr"(offset.data()),
+        [mask] "Tr"(mask.data()),
+        [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [TileSize] "i"(
+            tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [ValidCol] "i"(tile_shape_offset::ValidCol),
+        [ValidRow] "r"(offset.GetValidRow()),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
+asm volatile(
+      "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
+      PTO_GATHER_PAD_ASM
+      "B.DIM %[ValidCol], 0, ->LB0\n"
+      "B.DIM zero, %c[ValidRow], ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      : [dst] "=Tr"(dst.data())
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(src.data()), [off] "Tr"(offset.data()),
+        [mask] "Tr"(mask.data()),
+        [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [TileSize] "i"(
+            tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [ValidCol] "r"(offset.GetValidCol()),
+        [ValidRow] "i"(tile_shape_offset::ValidRow),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else {
+asm volatile(
+      "BSTART.TLSU MGATHER.MASK, %D[DataType]\n"
+      PTO_GATHER_PAD_ASM
+      "B.DIM %[ValidCol], 0, ->LB0\n"
+      "B.DIM %[ValidRow], 0, ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[off], %[mask], mask=1111, last, ->%[dst]<%Z[TileSize]>\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      : [dst] "=Tr"(dst.data())
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(src.data()), [off] "Tr"(offset.data()),
+        [mask] "Tr"(mask.data()),
+        [DataType] "i"(type_traits<typename tile_shape_out::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_out::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [PadValue] "i"(static_cast<int>(Pad)),
+        [TileSize] "i"(
+            tile_type_traits<typename tile_shape_out::TileDType>::TilesizeCode),
+        [ValidCol] "r"(offset.GetValidCol()),
+        [ValidRow] "r"(offset.GetValidRow()),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+}
+
+template <typename tile_shape_in, typename tile_shape_offset,
+          typename tile_shape_mask, typename gm_shape>
+inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
+                          const tile_shape_offset &offset,
+                          const tile_shape_mask &mask, IndexedByteRange range) {
+  static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
+  static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
+                "MSCATTER_MASK src logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
+                "per DavinciOO v5 B.IOT encoding");
+  if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow > 0) {
+asm volatile(
+      "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
+      "B.DIM zero, %c[ValidCol], ->LB0\n"
+      "B.DIM zero, %c[ValidRow], ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[src], %[off], mask=1111\n"
+      "B.IOT %[mask], mask=1111, last\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      :
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(dst.data()), [src] "Tr"(src.data()),
+        [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
+        [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [ValidCol] "i"(tile_shape_offset::ValidCol),
+        [ValidRow] "i"(tile_shape_offset::ValidRow),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else if constexpr (tile_shape_offset::ValidCol > 0 && tile_shape_offset::ValidRow < 0) {
+asm volatile(
+      "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
+      "B.DIM zero, %c[ValidCol], ->LB0\n"
+      "B.DIM %[ValidRow], 0, ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[src], %[off], mask=1111\n"
+      "B.IOT %[mask], mask=1111, last\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      :
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(dst.data()), [src] "Tr"(src.data()),
+        [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
+        [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [ValidCol] "i"(tile_shape_offset::ValidCol),
+        [ValidRow] "r"(offset.GetValidRow()),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else if constexpr (tile_shape_offset::ValidCol < 0 && tile_shape_offset::ValidRow > 0) {
+asm volatile(
+      "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
+      "B.DIM %[ValidCol], 0, ->LB0\n"
+      "B.DIM zero, %c[ValidRow], ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[src], %[off], mask=1111\n"
+      "B.IOT %[mask], mask=1111, last\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      :
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(dst.data()), [src] "Tr"(src.data()),
+        [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
+        [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
+        [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
+        [ValidCol] "r"(offset.GetValidCol()),
+        [ValidRow] "i"(tile_shape_offset::ValidRow),
+        [Col] "i"(tile_shape_offset::Cols)
+      : "memory");  }
+  else {
+asm volatile(
+      "BSTART.TLSU MSCATTER.MASK, %D[DataType]\n"
+      PTO_SCATTER_LAYOUT_ASM
+      "B.DIM %[ValidCol], 0, ->LB0\n"
+      "B.DIM %[ValidRow], 0, ->LB1\n"
+      "B.DIM zero, %c[Col], ->LB2\n"
+      "B.IOT %[src], %[off], mask=1111\n"
+      "B.IOT %[mask], mask=1111, last\n"
+      "B.IOR [%[base],%[RangeMin],%[RangeMax]], []\n"
+      :
+      : [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [base] "r"(dst.data()), [src] "Tr"(src.data()),
         [off] "Tr"(offset.data()), [mask] "Tr"(mask.data()),
         [DataType] "i"(type_traits<typename tile_shape_in::DType>::TypeCode),
         [ElemLayout] "i"(tile_shape_in::BFractal == BLayout::CubeM32 ? 29 : 0),
@@ -4645,6 +5020,125 @@ asm volatile(
     : "memory");  }
 }
 
+// Explicit signed byte-range overload.
+template <is_tile_data_v DstTile, is_tile_data_v IndexTile,
+          is_tile_data_v ExpectedTile, is_tile_data_v ReplacementTile>
+void MGATHER_CAS(DstTile &observedOld, uint64_t base,
+                 IndexTile &byteDisplacements, ExpectedTile &expected,
+                 ReplacementTile &replacement,
+                 uint32_t validCol, IndexedByteRange range, uint32_t validRow = 1) {
+  static_assert(std::is_same_v<typename ExpectedTile::DType,
+                               typename ReplacementTile::DType> &&
+                    std::is_same_v<typename ExpectedTile::DType,
+                                   typename DstTile::DType>,
+                "MGATHER_CAS expected/replacement/dst must share one transfer "
+                "DataType");
+  constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode;
+  constexpr int TransferType = type_traits<typename DstTile::DType>::TypeCode;
+  static_assert(
+      IndexType == __type_int32 || IndexType == __type_uint32 ||
+          IndexType == __type_int64 || IndexType == __type_uint64,
+      "MGATHER_CAS index tile must use S32, U32, S64, or U64");
+  static_assert(TransferType == __type_uint16 ||
+                    TransferType == __type_uint32 ||
+                    TransferType == __type_uint64,
+                "MGATHER_CAS transfer DataType must be U16, U32, or U64");
+  static_assert(IndexTile::Rows == ExpectedTile::Rows &&
+                    IndexTile::Cols == ExpectedTile::Cols &&
+                    DstTile::Rows == ExpectedTile::Rows &&
+                    DstTile::Cols == ExpectedTile::Cols,
+                "MGATHER_CAS tiles must match the resolved ValidRow x ValidCol");
+  static_assert(IndexTile::BFractal == ExpectedTile::BFractal &&
+                    ExpectedTile::BFractal == ReplacementTile::BFractal &&
+                    ReplacementTile::BFractal == DstTile::BFractal,
+                "MGATHER_CAS index, expected, replacement, and destination "
+                "layouts must match");
+  if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow > 0) {
+asm volatile(
+    "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
+    PTO_ATOM_LAYOUT_ASM
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[Col], ->lb2\n"
+    "B.IOT %[Idx], %[Exp], mask=1111\n"
+    "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"
+    : [Dst] "=&Tr"(observedOld.data())
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
+      [Rep] "Tr"(replacement.data()),
+      [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+      [Base] "r"(base),
+      [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
+      [ElemLayout] "i"(local_layout_code_v<IndexTile>),
+      [VCOL] "i"(DstTile::ValidCol), [VROW] "i"(DstTile::ValidRow),
+      [Col] "i"(DstTile::Cols),
+      [DstSize] "i"(DstTile::TilesizeCode)
+    : "memory");  }
+  else if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow < 0) {
+asm volatile(
+    "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
+    PTO_ATOM_LAYOUT_ASM
+    "B.DIM zero, %c[VCOL], ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[Col], ->lb2\n"
+    "B.IOT %[Idx], %[Exp], mask=1111\n"
+    "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"
+    : [Dst] "=&Tr"(observedOld.data())
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
+      [Rep] "Tr"(replacement.data()),
+      [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+      [Base] "r"(base),
+      [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
+      [ElemLayout] "i"(local_layout_code_v<IndexTile>),
+      [VCOL] "i"(DstTile::ValidCol), [VROW] "r"(validRow),
+      [Col] "i"(DstTile::Cols),
+      [DstSize] "i"(DstTile::TilesizeCode)
+    : "memory");  }
+  else if constexpr (DstTile::ValidCol < 0 && DstTile::ValidRow > 0) {
+asm volatile(
+    "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
+    PTO_ATOM_LAYOUT_ASM
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM zero, %c[VROW], ->lb1\n"
+    "B.DIM zero, %c[Col], ->lb2\n"
+    "B.IOT %[Idx], %[Exp], mask=1111\n"
+    "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"
+    : [Dst] "=&Tr"(observedOld.data())
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
+      [Rep] "Tr"(replacement.data()),
+      [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+      [Base] "r"(base),
+      [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
+      [ElemLayout] "i"(local_layout_code_v<IndexTile>),
+      [VCOL] "r"(validCol), [VROW] "i"(DstTile::ValidRow),
+      [Col] "i"(DstTile::Cols),
+      [DstSize] "i"(DstTile::TilesizeCode)
+    : "memory");  }
+  else {
+asm volatile(
+    "BSTART.TLSU MGATHER.CAS, %D[DataType]\n"
+    PTO_ATOM_LAYOUT_ASM
+    "B.DIM %[VCOL], 0, ->lb0\n"
+    "B.DIM %[VROW], 0, ->lb1\n"
+    "B.DIM zero, %c[Col], ->lb2\n"
+    "B.IOT %[Idx], %[Exp], mask=1111\n"
+    "B.IOT %[Rep], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"
+    "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"
+    : [Dst] "=&Tr"(observedOld.data())
+    : [Idx] "Tr"(byteDisplacements.data()), [Exp] "Tr"(expected.data()),
+      [Rep] "Tr"(replacement.data()),
+      [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+      [Base] "r"(base),
+      [DataType] "i"(type_traits<typename DstTile::DType>::TypeCode),
+      [ElemLayout] "i"(local_layout_code_v<IndexTile>),
+      [VCOL] "r"(validCol), [VROW] "r"(validRow),
+      [Col] "i"(DstTile::Cols),
+      [DstSize] "i"(DstTile::TilesizeCode)
+    : "memory");  }
+}
+
 // PTO ISA TLSU GM_ATOM_VALUE family (functions 9-18): atomic RMW at explicit
 // byte displacements with observed-old-value publication. Every member shares one
 // bundle shape -- a single Local B.IOT binding (IndexTile + one operand tile,
@@ -4910,6 +5404,261 @@ PTO_DEFINE_MSCATTER_ATOM(MSCATTER_XOR, "MSCATTER.XOR", value,
                          PTO_ATOM_TYPES_BITWISE,
                          "MSCATTER_XOR transfer DataType must be U32 or U64")
 
+// Range-bearing atomic/reduction overloads preserve the legacy API.
+#define PTO_DEFINE_MGATHER_RANGE_ATOM(FnName, Mnem, OperandName, TYPE_OK, TYPE_MSG)   \
+  template <is_tile_data_v DstTile, is_tile_data_v IndexTile,                   \
+            is_tile_data_v ValueTile>                                           \
+  void FnName(DstTile &observedOld, uint64_t base, IndexTile &elementIndices,   \
+              ValueTile &OperandName, uint32_t validCol,                        \
+              IndexedByteRange range, uint32_t validRow = 1) {                                          \
+    static_assert(std::is_same_v<typename ValueTile::DType,                     \
+                                 typename DstTile::DType>,                       \
+                  #FnName " operand/dst must share one transfer DataType");     \
+    constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode; \
+    constexpr int TransferType =                                               \
+        type_traits<typename DstTile::DType>::TypeCode;                        \
+    static_assert(                                                              \
+        IndexType == __type_int32 || IndexType == __type_uint32 ||             \
+            IndexType == __type_int64 || IndexType == __type_uint64,           \
+        #FnName " index tile must use S32, U32, S64, or U64");                 \
+    static_assert(IndexTile::BFractal == ValueTile::BFractal &&                \
+                      ValueTile::BFractal == DstTile::BFractal,                \
+                  #FnName " index, value, and destination layouts must match"); \
+    static_assert(TYPE_OK, TYPE_MSG);                                          \
+    static_assert(IndexTile::Rows == ValueTile::Rows &&                        \
+                      IndexTile::Cols == ValueTile::Cols &&                    \
+                      DstTile::Rows == ValueTile::Rows &&                      \
+                      DstTile::Cols == ValueTile::Cols,                        \
+                  #FnName " tiles must match the resolved ValidRow x ValidCol");\
+    if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow > 0) {            \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          PTO_ATOM_LAYOUT_ASM                                                     \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),                \
+            [DataType] "i"(TransferType), [ElemLayout] "i"(local_layout_code_v<IndexTile>),                 \
+            [VCOL] "i"(DstTile::ValidCol),     \
+            [VROW] "i"(DstTile::ValidRow), [Col] "i"(DstTile::Cols),         \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    } else if constexpr (DstTile::ValidCol > 0 && DstTile::ValidRow < 0) {    \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          PTO_ATOM_LAYOUT_ASM                                                     \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),                \
+            [DataType] "i"(TransferType), [ElemLayout] "i"(local_layout_code_v<IndexTile>),                 \
+            [VCOL] "i"(DstTile::ValidCol),     \
+            [VROW] "r"(validRow), [Col] "i"(DstTile::Cols),                  \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    } else if constexpr (DstTile::ValidCol < 0 && DstTile::ValidRow > 0) {    \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          PTO_ATOM_LAYOUT_ASM                                                     \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),                \
+            [DataType] "i"(TransferType), [ElemLayout] "i"(local_layout_code_v<IndexTile>),                 \
+            [VCOL] "r"(validCol),              \
+            [VROW] "i"(DstTile::ValidRow), [Col] "i"(DstTile::Cols),         \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    } else {                                                                  \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          PTO_ATOM_LAYOUT_ASM                                                     \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last, ->%[Dst]<%Z[DstSize]>\n"    \
+          "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"                                             \
+          : [Dst] "=&Tr"(observedOld.data())                                 \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),                \
+            [DataType] "i"(TransferType), [ElemLayout] "i"(local_layout_code_v<IndexTile>),                 \
+            [VCOL] "r"(validCol),              \
+            [VROW] "r"(validRow), [Col] "i"(DstTile::Cols),                  \
+            [DstSize] "i"(DstTile::TilesizeCode)                             \
+          : "memory");                                                        \
+    }                                                                          \
+  }
+
+// Transfer-DataType legality shared by several members (see gm-atom-red.asl).
+#define PTO_ATOM_TYPES_ADD                                                     \
+  (TransferType == __type_fp16 || TransferType == __type_bf16 ||              \
+   TransferType == __type_fp32 || TransferType == __type_fp64 ||             \
+   TransferType == __type_int32 || TransferType == __type_uint32 ||          \
+   TransferType == __type_uint64)
+#define PTO_ATOM_TYPES_MINMAX                                                  \
+  (TransferType == __type_int32 || TransferType == __type_int64 ||           \
+   TransferType == __type_uint32 || TransferType == __type_uint64)
+#define PTO_ATOM_TYPES_BITWISE                                                 \
+  (TransferType == __type_uint32 || TransferType == __type_uint64)
+#define PTO_ATOM_TYPES_U32 (TransferType == __type_uint32)
+
+PTO_DEFINE_MGATHER_RANGE_ATOM(MGATHER_EXCH, "MGATHER.EXCH", replacement,
+                        PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_EXCH transfer DataType must be U32 or U64")
+PTO_DEFINE_MGATHER_RANGE_ATOM(MGATHER_MAX, "MGATHER.MAX", value, PTO_ATOM_TYPES_MINMAX,
+                        "MGATHER_MAX transfer DataType must be S32, S64, U32, "
+                        "or U64")
+PTO_DEFINE_MGATHER_RANGE_ATOM(MGATHER_MIN, "MGATHER.MIN", value, PTO_ATOM_TYPES_MINMAX,
+                        "MGATHER_MIN transfer DataType must be S32, S64, U32, "
+                        "or U64")
+PTO_DEFINE_MGATHER_RANGE_ATOM(MGATHER_ADD, "MGATHER.ADD", value, PTO_ATOM_TYPES_ADD,
+                        "MGATHER_ADD transfer DataType must be FP16, BF16, FP32, "
+                        "FP64, S32, U32, or U64")
+PTO_DEFINE_MGATHER_RANGE_ATOM(MGATHER_INC, "MGATHER.INC", limit, PTO_ATOM_TYPES_U32,
+                        "MGATHER_INC transfer DataType must be U32")
+PTO_DEFINE_MGATHER_RANGE_ATOM(MGATHER_DEC, "MGATHER.DEC", limit, PTO_ATOM_TYPES_U32,
+                        "MGATHER_DEC transfer DataType must be U32")
+PTO_DEFINE_MGATHER_RANGE_ATOM(MGATHER_AND, "MGATHER.AND", value,
+                        PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_AND transfer DataType must be U32 or U64")
+PTO_DEFINE_MGATHER_RANGE_ATOM(MGATHER_OR, "MGATHER.OR", value, PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_OR transfer DataType must be U32 or U64")
+PTO_DEFINE_MGATHER_RANGE_ATOM(MGATHER_XOR, "MGATHER.XOR", value,
+                        PTO_ATOM_TYPES_BITWISE,
+                        "MGATHER_XOR transfer DataType must be U32 or U64")
+
+// PTO ISA TLSU GM_RED_VALUE family (functions 19-26): atomic reduction into GM
+// at logical element indices with no destination and no observed old value.
+// Same bundle as the GM_ATOM_VALUE members minus the destination: a single
+// Local B.IOT binding (IndexTile + one operand tile, last) and a base-only
+// B.IOR. The valid region is taken from the index tile, since there is no
+// destination to publish. Per-op transfer-DataType legality mirrors the
+// corresponding atom member (see GMReductionOperationDataTypeLegal).
+#define PTO_DEFINE_MSCATTER_RANGE_ATOM(FnName, Mnem, OperandName, TYPE_OK, TYPE_MSG)  \
+  template <is_tile_data_v IndexTile, is_tile_data_v ValueTile>                 \
+  void FnName(uint64_t base, IndexTile &elementIndices, ValueTile &OperandName, \
+              uint32_t validCol, IndexedByteRange range, uint32_t validRow = 1) {                       \
+    constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode; \
+    constexpr int TransferType =                                               \
+        type_traits<typename ValueTile::DType>::TypeCode;                      \
+    static_assert(                                                              \
+        IndexType == __type_int32 || IndexType == __type_uint32 ||             \
+            IndexType == __type_int64 || IndexType == __type_uint64,           \
+        #FnName " index tile must use S32, U32, S64, or U64");                 \
+    static_assert(IndexTile::BFractal == ValueTile::BFractal,                  \
+                  #FnName " index and value layouts must match");             \
+    static_assert(TYPE_OK, TYPE_MSG);                                          \
+    static_assert(IndexTile::Rows == ValueTile::Rows &&                        \
+                      IndexTile::Cols == ValueTile::Cols,                      \
+                  #FnName " tiles must match the resolved ValidRow x ValidCol");\
+    if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow > 0) {        \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          PTO_ATOM_LAYOUT_ASM                                                     \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),                \
+            [DataType] "i"(TransferType), [ElemLayout] "i"(local_layout_code_v<IndexTile>),                 \
+            [VCOL] "i"(IndexTile::ValidCol),   \
+            [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)      \
+          : "memory");                                                        \
+    } else if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow < 0) { \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          PTO_ATOM_LAYOUT_ASM                                                     \
+          "B.DIM zero, %c[VCOL], ->lb0\n"                                     \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),                \
+            [DataType] "i"(TransferType), [ElemLayout] "i"(local_layout_code_v<IndexTile>),                 \
+            [VCOL] "i"(IndexTile::ValidCol),   \
+            [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)                 \
+          : "memory");                                                        \
+    } else if constexpr (IndexTile::ValidCol < 0 && IndexTile::ValidRow > 0) { \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          PTO_ATOM_LAYOUT_ASM                                                     \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM zero, %c[VROW], ->lb1\n"                                     \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),                \
+            [DataType] "i"(TransferType), [ElemLayout] "i"(local_layout_code_v<IndexTile>),                 \
+            [VCOL] "r"(validCol),              \
+            [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)      \
+          : "memory");                                                        \
+    } else {                                                                  \
+      asm volatile(                                                            \
+          "BSTART.TLSU " Mnem ", %D[DataType]\n"                              \
+          PTO_ATOM_LAYOUT_ASM                                                     \
+          "B.DIM %[VCOL], 0, ->lb0\n"                                         \
+          "B.DIM %[VROW], 0, ->lb1\n"                                         \
+          "B.DIM zero, %c[Col], ->lb2\n"                                      \
+          "B.IOT %[Idx], %[Val], mask=1111, last\n"                          \
+          "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"                                             \
+          :                                                                   \
+          : [Idx] "Tr"(elementIndices.data()),                               \
+            [Val] "Tr"(OperandName.data()), [Base] "r"(base), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),                \
+            [DataType] "i"(TransferType), [ElemLayout] "i"(local_layout_code_v<IndexTile>),                 \
+            [VCOL] "r"(validCol),              \
+            [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)                 \
+          : "memory");                                                        \
+    }                                                                          \
+  }
+
+PTO_DEFINE_MSCATTER_RANGE_ATOM(MSCATTER_MAX, "MSCATTER.MAX", value,
+                         PTO_ATOM_TYPES_MINMAX,
+                         "MSCATTER_MAX transfer DataType must be S32, S64, U32, "
+                         "or U64")
+PTO_DEFINE_MSCATTER_RANGE_ATOM(MSCATTER_MIN, "MSCATTER.MIN", value,
+                         PTO_ATOM_TYPES_MINMAX,
+                         "MSCATTER_MIN transfer DataType must be S32, S64, U32, "
+                         "or U64")
+PTO_DEFINE_MSCATTER_RANGE_ATOM(MSCATTER_ADD, "MSCATTER.ADD", value,
+                         PTO_ATOM_TYPES_ADD,
+                         "MSCATTER_ADD transfer DataType must be FP16, BF16, "
+                         "FP32, FP64, S32, U32, or U64")
+PTO_DEFINE_MSCATTER_RANGE_ATOM(MSCATTER_INC, "MSCATTER.INC", limit, PTO_ATOM_TYPES_U32,
+                         "MSCATTER_INC transfer DataType must be U32")
+PTO_DEFINE_MSCATTER_RANGE_ATOM(MSCATTER_DEC, "MSCATTER.DEC", limit, PTO_ATOM_TYPES_U32,
+                         "MSCATTER_DEC transfer DataType must be U32")
+PTO_DEFINE_MSCATTER_RANGE_ATOM(MSCATTER_AND, "MSCATTER.AND", value,
+                         PTO_ATOM_TYPES_BITWISE,
+                         "MSCATTER_AND transfer DataType must be U32 or U64")
+PTO_DEFINE_MSCATTER_RANGE_ATOM(MSCATTER_OR, "MSCATTER.OR", value,
+                         PTO_ATOM_TYPES_BITWISE,
+                         "MSCATTER_OR transfer DataType must be U32 or U64")
+PTO_DEFINE_MSCATTER_RANGE_ATOM(MSCATTER_XOR, "MSCATTER.XOR", value,
+                         PTO_ATOM_TYPES_BITWISE,
+                         "MSCATTER_XOR transfer DataType must be U32 or U64")
+
+#undef PTO_DEFINE_MGATHER_RANGE_ATOM
+#undef PTO_DEFINE_MSCATTER_RANGE_ATOM
+
 #undef PTO_DEFINE_MGATHER_ATOM
 #undef PTO_DEFINE_MSCATTER_ATOM
 #undef PTO_ATOM_TYPES_ADD
@@ -4990,6 +5739,86 @@ void MSCATTER_POPC(uint64_t base, IndexTile &elementIndices, uint32_t validCol,
         "B.IOR [%[Base]], []\n"
         :
         : [Idx] "Tr"(elementIndices.data()), [Base] "r"(base),
+          [DataType] "i"(__type_uint32),
+          [ElemLayout] "i"(local_layout_code_v<IndexTile>),
+          [VCOL] "r"(validCol),
+          [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  }
+}
+
+// Explicit signed byte-range overload.
+template <is_tile_data_v IndexTile>
+void MSCATTER_POPC(uint64_t base, IndexTile &elementIndices, uint32_t validCol,
+                   IndexedByteRange range, uint32_t validRow = 1) {
+  constexpr int IndexType = type_traits<typename IndexTile::DType>::TypeCode;
+  static_assert(
+      IndexType == __type_int32 || IndexType == __type_uint32 ||
+          IndexType == __type_int64 || IndexType == __type_uint64,
+      "MSCATTER_POPC index tile must use S32, U32, S64, or U64");
+  if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow > 0) {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        PTO_ATOM_LAYOUT_ASM
+        "B.DIM zero, %c[VCOL], ->lb0\n"
+        "B.DIM zero, %c[VROW], ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+      [Base] "r"(base),
+          [DataType] "i"(__type_uint32),
+          [ElemLayout] "i"(local_layout_code_v<IndexTile>),
+          [VCOL] "i"(IndexTile::ValidCol),
+          [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  } else if constexpr (IndexTile::ValidCol > 0 && IndexTile::ValidRow < 0) {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        PTO_ATOM_LAYOUT_ASM
+        "B.DIM zero, %c[VCOL], ->lb0\n"
+        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+      [Base] "r"(base),
+          [DataType] "i"(__type_uint32),
+          [ElemLayout] "i"(local_layout_code_v<IndexTile>),
+          [VCOL] "i"(IndexTile::ValidCol),
+          [VROW] "r"(validRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  } else if constexpr (IndexTile::ValidCol < 0 && IndexTile::ValidRow > 0) {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        PTO_ATOM_LAYOUT_ASM
+        "B.DIM %[VCOL], 0, ->lb0\n"
+        "B.DIM zero, %c[VROW], ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+      [Base] "r"(base),
+          [DataType] "i"(__type_uint32),
+          [ElemLayout] "i"(local_layout_code_v<IndexTile>),
+          [VCOL] "r"(validCol),
+          [VROW] "i"(IndexTile::ValidRow), [Col] "i"(IndexTile::Cols)
+        : "memory");
+  } else {
+    asm volatile(
+        "BSTART.TLSU MSCATTER.POPC, %D[DataType]\n"
+        PTO_ATOM_LAYOUT_ASM
+        "B.DIM %[VCOL], 0, ->lb0\n"
+        "B.DIM %[VROW], 0, ->lb1\n"
+        "B.DIM zero, %c[Col], ->lb2\n"
+        "B.IOT %[Idx], mask=1111, last\n"
+        "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"
+        :
+        : [Idx] "Tr"(elementIndices.data()), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+      [Base] "r"(base),
           [DataType] "i"(__type_uint32),
           [ElemLayout] "i"(local_layout_code_v<IndexTile>),
           [VCOL] "r"(validCol),

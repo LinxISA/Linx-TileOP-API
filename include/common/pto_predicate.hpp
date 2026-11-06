@@ -2,6 +2,7 @@
 #define PTO_PREDICATE_HPP
 
 #include "common/pto_tile.hpp"
+#include "common/pto_indexed_range.hpp"
 
 namespace pto {
 namespace predicate {
@@ -101,10 +102,19 @@ template <typename Basis> class Predicate {
   template <typename Source, typename Index, typename Value, typename Global>
   friend __attribute__((always_inline)) inline void
   scatter(Global &, const Index &, const Value &, const Predicate<Source> &);
+  template <typename Source, typename Index, typename Value, typename Global>
+  friend __attribute__((always_inline)) inline void
+  scatter(Global &, const Index &, const Value &, const Predicate<Source> &,
+          IndexedByteRange);
   template <bool Invert, typename Source, typename Index, typename Value,
             typename Global>
   friend __attribute__((always_inline)) inline void
   atomic_add(Global &, const Index &, const Value &, const Predicate<Source> &);
+  template <bool Invert, typename Source, typename Index, typename Value,
+            typename Global>
+  friend __attribute__((always_inline)) inline void
+  atomic_add(Global &, const Index &, const Value &, const Predicate<Source> &,
+             IndexedByteRange);
   template <typename Source>
   friend __attribute__((always_inline)) inline decltype(auto)
   detail::atomic_tstore_carrier(const Predicate<Source> &);
@@ -221,6 +231,33 @@ scatter(Global &destination, const Index &offsets, const Value &values,
       : "memory");
 }
 
+template <typename Basis, typename Index, typename Value, typename Global>
+__attribute__((always_inline)) inline void
+scatter(Global &destination, const Index &offsets, const Value &values,
+        const Predicate<Basis> &active, IndexedByteRange range) {
+  validate_consumer<Basis, Index, Value>();
+  static_assert(std::is_same_v<typename Global::DType, typename Value::DType>,
+                "Predicate destination element type must match values");
+  asm volatile(
+      "BSTART.TLSU MSCATTER.MASK, %D[Type]\n"
+      PTO_PREDICATE_LAYOUT_ASM
+      "B.DIM zero, %c[Columns], ->LB0\n"
+      "B.DIM zero, %c[Rows], ->LB1\n"
+      "B.DIM zero, %c[PhysicalColumns], ->LB2\n"
+      "B.IOT %[Values], %[Offsets], mask=1111\n"
+      "B.IOT %[Predicate], mask=1111, last\n"
+      "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"
+      :
+      : [Values] "Tr"(values.data()), [Offsets] "Tr"(offsets.data()),
+        [Predicate] "Tr"(active.Carrier), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [Base] "r"(destination.data()),
+        [Type] "i"(type_traits<typename Value::DType>::TypeCode),
+        [Layout] "i"(Basis::BFractal == BLayout::CubeM16 ? 31 : 29),
+        [Columns] "i"(Basis::ValidCol), [Rows] "i"(Basis::ValidRow),
+        [PhysicalColumns] "i"(Value::Cols)
+      : "memory");
+}
+
 template <bool Invert = false, typename Basis, typename Index, typename Value,
           typename Global>
 __attribute__((always_inline)) inline void
@@ -234,6 +271,21 @@ atomic_add(Global &destination, const Index &offsets, const Value &values,
       type_traits<typename Value::DType>::TypeCode,
       Basis::BFractal == BLayout::CubeM16 ? 31 : 29, destination.data(),
       values.data(), offsets.data(), active.Carrier, Invert);
+}
+
+template <bool Invert = false, typename Basis, typename Index, typename Value,
+          typename Global>
+__attribute__((always_inline)) inline void
+atomic_add(Global &destination, const Index &offsets, const Value &values,
+           const Predicate<Basis> &active, IndexedByteRange range) {
+  validate_consumer<Basis, Index, Value>();
+  static_assert(std::is_same_v<typename Global::DType, typename Value::DType>,
+                "Predicate destination element type must match values");
+  ew_mscatter_add_predicate_range(
+      Basis::ValidRow, Basis::ValidCol, Value::Cols,
+      type_traits<typename Value::DType>::TypeCode,
+      Basis::BFractal == BLayout::CubeM16 ? 31 : 29, destination.data(),
+      values.data(), offsets.data(), active.Carrier, Invert, range.min, range.max);
 }
 
 template <typename Basis, typename Value>
