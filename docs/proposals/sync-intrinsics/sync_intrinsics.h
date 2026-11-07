@@ -5,7 +5,7 @@
  * WSE_DEVICE is supplied by the target compiler; empty for host syntax checks.
  * Scalar messaging/synchronization APIs use lowercase __sync_* names.
  * TileOP APIs keep their existing uppercase names; outputs remain first.
- * This is draft v0.2, not an existing Linx compiler builtin family.
+ * This is draft v0.3, not an existing Linx compiler builtin family.
  * Naming baseline: Linx-TileOP-API ad5a2310664041be1f2fad5be1dd8e9d682f23df.
  */
 #include <stdint.h>
@@ -182,7 +182,7 @@ WSE_DEVICE wse_status_t __sync_group_arrive_async(
 
 typedef struct {
     wse_endpoint_t destination;
-    uint64_t message_id; /* unique per sender/invocation, stable on retry */
+    uint64_t application_message_id; /* unique per sender/invocation, stable on retry */
     uint64_t task_tag;
     const void *payload;
     uint32_t payload_bytes; /* bounded by target capability, not bulk DMA */
@@ -263,11 +263,21 @@ WSE_DEVICE wse_status_t __sync_l1_reads_complete_async(
 typedef enum {
     WSE_MESSAGE_TASK, WSE_MESSAGE_RESOURCE, WSE_MESSAGE_ERROR
 } wse_message_kind_t;
+/* Transport metadata, distinct from caller-assigned application IDs and
+ * claim-specific RX tokens. See msgb-ssr-ack.md for the proposed bit layout.
+ */
+typedef struct {
+    uint32_t source_endpoint;
+    uint32_t source_epoch;
+    uint64_t sequence;
+} wse_transport_message_id_t;
+
 typedef struct {
     wse_message_kind_t kind;
     wse_endpoint_t source;
     uint64_t invocation_id;
-    uint64_t message_id;
+    uint64_t application_message_id;
+    wse_transport_message_id_t transport_message_id;
     uint64_t tag;
     uint32_t payload_bytes;
 } wse_message_info_t;

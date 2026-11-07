@@ -2,7 +2,7 @@
 
 日期：2026-11-07。状态：讨论草案，尚非 PTO ISA 已接受语义或硬件实现说明。
 
-跟踪：[Issue #309](https://github.com/LinxISA/Linx-TileOP-API/issues/309)。具体的发送、接收和逐消息 handler 规则见 [MSGB 实现合同](msgb-implementation.md)；可执行的传输参考见 [msgb_transport.h](reference/msgb_transport.h)。
+跟踪：[Issue #309](https://github.com/LinxISA/Linx-TileOP-API/issues/309)。ACK 的寄存器位域与消息身份见 [SSRSET ACK profile](msgb-ssr-ack.md)；具体的发送、接收和逐消息 handler 规则见 [MSGB 实现合同](msgb-implementation.md)；可执行的传输参考见 [msgb_transport.h](reference/msgb_transport.h)。
 
 本文定义拟议的标量 `__sync_*` 接口、MSGB/HSCB 收发合同及 Tile 依赖协议，并记录其在 WSE Calendar／Superscalar NPU 中的使用场景。文中的消息名、状态字段和伪代码表达候选合同，不表示现有指令、寄存器编码或 SDK 已支持。
 
@@ -13,7 +13,7 @@
 | 用户确认 | 保留 WSE NoC／Calendar，重新设计 Superscalar NPU Core 接口；每核 L1 SRAM 超过 100 MB；MSGB 通过 SSRGET/SSRSET 访问系统寄存器，并连接 HSCB；希望通过 HSCB 解除核间 Tile 依赖 |
 | 用户给出的协议意图 | 消费者订阅，生产者异步上报，SHA/SSA 维护计数及持久 READY，并分发通知；数据就绪与 Buffer 复用分开 |
 | 本文建议 | 大容量地址型 L1 承接网络，L0 Shared/Local Tile 承接计算；采用通用消息封装及带版本的同步对象；每个同步对象由单一逻辑 owner 串行裁决 |
-| 尚未确定 | L0 Shared 是否由 256 KiB 扩到 512 KiB；HSCB 报文格式、可靠性、队列深度；SHA/SSA 模块划分；BWE 的目标事件与等待粒度；指令／SSR 编码 |
+| 尚未确定 | L0 Shared 是否由 256 KiB 扩到 512 KiB；HSCB 其余服务报文格式、可靠性、队列深度；SHA/SSA 模块划分；BWE 的目标事件与等待粒度；指令／SSR 编码 |
 
 公开证据：[华为《昇腾 950 NPU 架构白皮书》](https://public-download.obs.cn-east-2.myhuaweicloud.com/ascend/%E6%98%87%E8%85%BE950%20NPU%E6%9E%B6%E6%9E%84%E7%99%BD%E7%9A%AE%E4%B9%A6.pdf)，关键术语及 §4.4，将 HSCB 用于 STARS 与计算核之间的专用控制交互，并描述其广播能力及与数据 NoC 的区分。本次检索未找到足以确认 SHA/SSA 缩写含义、WAIT/DONE 线格式或 expc_cnt 状态机的公开一手规范。因此下文不将拟议协议归因于已经公开验证的 HSCB 标准。
 
@@ -245,9 +245,11 @@ AllToAllV 仍先交换 counts，再决定有效 payload 与接收计划。运行
 
 需要继续确定：SHA/SSA 的实际模块职责；HSCB 的投递及顺序保证；静态消费者基线是否覆盖目标负载；一个同步对象的可见性域；本地 token 与 BWE 的编码边界；对象退役及 epoch 回绕方式；活动表规模及通知吞吐。
 
+发送采用 SSRSET MSGBD 后 BSE 原子提交；接收 ACK 明确采用 SSRSET MSGBACK 写入精确 RX token。
+
 本提案不改变 PTO/Linx 当前发布规范。声明与参考实现保存在 docs/proposals 下，不由 make install 安装，也不从正式 TileOP umbrella header 导出。
 
-## 14. C intrinsic 接口草案 v0.2
+## 14. C intrinsic 接口草案 v0.3
 
 声明文件：[sync_intrinsics.h](sync_intrinsics.h)。这是纯 C 接口设计，可供 C11/C++17 做语法检查；没有编译器 lowering、设备实现或可链接运行库。`__sync_*` 为拟议的标量消息／同步 intrinsic 名称，`WSE_DEVICE` 由目标工具链定义。结构体布局是本地源级接口，不是 HSCB 线格式，也不承诺最终二进制 ABI。
 
@@ -267,7 +269,7 @@ AllToAllV 仍先交换 counts，再决定有效 payload 与接收计划。运行
 
 本版函数统一使用 `__sync_*` 前缀：对象操作为 `__sync_init_async`、`__sync_subscribe_async` 等；组、任务、资源及本地 token 操作分别为 `__sync_group_*`、`__sync_task_*`、`__sync_resource_*`、`__sync_request_*`、`__sync_event_*`。这些属于标量控制接口，采用小写；现有 TileOP 不改名。该前缀是新设计，尚非上游已有接口。
 
-保留输出参数前置：一个输出时该输出最前；同时返回条件事件和请求 token 时，event 在前、request 次之，再跟输入。QUERY 的 snapshot 在前、request 次之。本轮仅修改函数命名，C 类型、状态常量、配置宏、参数顺序及协议语义不变。不保留旧函数名别名。
+保留输出参数前置：一个输出时该输出最前；同时返回条件事件和请求 token 时，event 在前、request 次之，再跟输入。QUERY 的 snapshot 在前、request 次之。函数命名保持小写 `__sync_*`。v0.3 在应用收件信息中明确区分 application_message_id 与 transport_message_id，ACK 使用的 RX token 由低层管理。不保留旧函数名别名。
 
 ### 14.1 类型与统一约定
 
@@ -306,7 +308,7 @@ AllToAllV 仍先交换 counts，再决定有效 payload 与接收计划。运行
 | BUFFER_FREE | `__sync_free_async(&req, service, notification)` | 同步服务侧校验释放与排空条件后投递；生产者通过 watch_free 得到对应事件 |
 | ARRIVE | `__sync_group_arrive_async(&group_ready, &req, group, member_id, prior_done)` | prior_done 为可空的事件指针，非空时覆盖本成员应先完成的工作；NULL 表示纯到齐且不承诺 payload 可见。req 成功表示报到接受，group_ready 表示全组条件满足 |
 | GROUP_READY | `__sync_group_ready_async(&req, service, notification)` | 同步服务侧向已报到成员的事件槽投递，匹配精确 group generation；不承诺业务 payload 自动完成 |
-| TASK_NOTIFY | `__sync_task_notify_async(&req, message)` | message 包含 destination、稳定 message_id、task_tag、payload 与长度；req 成功表示目的 mailbox 已接纳，不表示任务执行结束 |
+| TASK_NOTIFY | `__sync_task_notify_async(&req, message)` | message 包含 destination、稳定 application_message_id、task_tag、payload 与长度；req 成功表示目的 mailbox 已接纳，不表示任务执行结束 |
 | RESOURCE_RETURN | `__sync_resource_return_async(&req, resource, use_done)` | 按 resource_id＋lease_id 幂等归还一个完整资源授权；use_done 保护实际使用结束。基线不支持裸计数加 N 或部分归还 |
 | ABORT | `__sync_abort_async(&quiescent, &req, key, reason)` | req 成功表示失败转换被接受；quiescent 成功表示旧访问已排空。两者分开，不能收到 abort ACK 就覆盖 Buffer |
 | ERROR | `__sync_error_report_async(&req, error)` | error 包含 key、report_id、code、detail，交给对象 owner 处理。诊断上报本身不自动清除计数或回收 Buffer；不可恢复错误由 owner 发起失败转换 |
@@ -381,7 +383,7 @@ wse_status_t __sync_message_try_recv(
 
 成功时复制并弹出同一完整消息；空队列返回 PENDING；容量不足返回 BUFFER_TOO_SMALL 并写回所需长度，但不弹出消息。TASK 的 payload 是发送者提供的字节串；RESOURCE/ERROR 使用各服务定义的编解码格式，不能把 C 结构体原样当线格式。DATA_READY／BUFFER_FREE／GROUP_READY 投递到依赖事件引擎，不进入这个应用收件箱。
 
-普通 TASK_NOTIFY 不隐含其 payload 中所携带地址的数据已完成。若消息指向一块异步产生的数据，应携带对应 sync key 并执行数据订阅；message_id 只提供消息身份，不能替代数据就绪。
+普通 TASK_NOTIFY 不隐含其 payload 中所携带地址的数据已完成。若消息指向一块异步产生的数据，应携带对应 sync key 并执行数据订阅；application_message_id 只提供应用消息身份，不能替代数据就绪。
 
 ### 14.5 正常路径调用示例
 
@@ -429,3 +431,5 @@ __sync_event_wait_acquire(free_event);    /* 此后才允许覆盖对应旧窗�
 2026-11-07：声明头文件在 C11、C++17 下分别以应用接口和打开 `WSE_SYNC_SERVICE_API` 的服务接口通过 Clang `-Wall -Wextra -Werror -pedantic -fsyntax-only` 检查；14 类消息均有接口，附录引用名称与头文件声明一致。独立设计审查已覆盖事件失败传播、token 生命周期、纯到齐的空前置依赖及通知幂等性。上述结果仅验证声明语法和设计一致性，不证明设备执行、协议活性、硬件顺序或性能；正常路径示意代码不是可运行测试。
 
 v0.2 统一为小写 `__sync_*` 后，重新通过上述四组语法检查，并核对 25 个声明、附录名称及异步接口输出位置。协议语义沿用上一版审查结果；未运行 Linx 目标代码生成或设备执行。
+
+v0.3 将 ACK 固定为 SSRSET MSGBACK，新增 [ID／寄存器字段与状态机](msgb-ssr-ack.md) 和 [ACK 可执行参考](reference/msgb_ack.h)。C 接收信息现在分别携带 application_message_id 和 128 位 transport_message_id；64 位 RX token 仅用于本次快照的 ACK／RELEASE。`make check-sync-proposal` 同时运行声明检查、通用收发参考和 ACK 寄存器模型，覆盖 C11/C++17。模型的单队列槽是测试边界，不代表硬件容量。

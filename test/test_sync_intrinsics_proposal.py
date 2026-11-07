@@ -79,6 +79,15 @@ class SyncIntrinsicsProposalTest(unittest.TestCase):
                 self.compile_and_run(command, standard=standard,
                                      language=language, source=source, run=True)
 
+    def test_ack_register_state_machine_c_and_cpp(self):
+        source = (ROOT / "test/sync_msgb_ack_test.c").read_text(encoding="utf-8")
+        for command, standard, language in (
+            (self.cc, "c11", "c"), (self.cxx, "c++17", "c++")
+        ):
+            with self.subTest(standard=standard):
+                self.compile_and_run(command, standard=standard,
+                                     language=language, source=source, run=True)
+
 
 if __name__ == "__main__":
     unittest.main()
