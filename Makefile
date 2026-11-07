@@ -9,9 +9,10 @@ TILEOP_API_REVISION_IS_EXACT ?= $(shell test -z "$$(git status --porcelain --unt
 CLANG_PREFIX ?=
 INSTALL_DIR = $(shell $(CLANG_PREFIX)/bin/clang -print-resource-dir)/include/$(LIBNAME)
 
-.PHONY: check install uninstall
+.PHONY: check check-sync-proposal install uninstall
 
 check:
+	python3 test/test_sync_intrinsics_proposal.py
 	python3 tools/generate_engine_docs.py --check
 	python3 tools/check_issue_49_docs.py
 	python3 tools/check_issue_269_docs.py
@@ -46,6 +47,9 @@ check:
 	@if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
 		git diff --check; \
 	fi
+
+check-sync-proposal:
+	python3 test/test_sync_intrinsics_proposal.py -v
 
 install:
 	@echo "Installing $(LIBNAME) to Clang toolchain at $(INSTALL_DIR)"
