@@ -15,8 +15,8 @@ Build failures are excluded from the occurrence denominator. This is presentatio
 - tileop_sha: `ad5a2310664041be1f2fad5be1dd8e9d682f23df`
 - supernpubench_sha: `c1d9a4f982d218bd14605376fa8c72eb105887c2`
 - toolchain_build_sha: `e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156`
-- started_at: `2026-11-06T22:51:50.167674+00:00`
-- run_url: `https://github.com/LinxISA/Linx-TileOP-API/actions/runs/42307599803`
+- started_at: `2026-11-07T21:47:39.923780+00:00`
+- run_url: `https://github.com/LinxISA/Linx-TileOP-API/actions/runs/42416591509`
 
 ## Changes against previous successful survey
 
