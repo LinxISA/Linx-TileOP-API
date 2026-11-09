@@ -55,13 +55,16 @@ CC_O += --sysroot=$(LINX_SYSROOT) -nostdinc++ \
         -isystem $(LINX_SYSROOT)/usr/include/c++/v1
 CC_LINK += --sysroot=$(LINX_SYSROOT)
 endif
-# Linx fixtures use the repository startup so the resulting ELF has the
-# expected BSTART.STD entry sequence.  Keep the normal C++ runtime link: only
-# the platform CRT startup files are replaced, while libc++, libc++abi,
-# libunwind, libc, and compiler-rt remain selected by clang++.
-COMM_SRC_FILE += $(ROOT)/test/common/_start.s
+# Linx fixtures use the explicit SSM.PTO v1 adapter.  The compiler-rt group
+# worker executes main on all four PEs, publishes their results around two
+# SYNC.CORE rendezvous, and calls the adapter's legal SYS/ACRC0 completion
+# service.  Keep the normal C++ runtime link: only the platform CRT startup
+# files are replaced, while libc++, libc++abi, libunwind, libc, and compiler-rt
+# remain selected by clang++.
+LINX_RUNTIME_ADAPTER := $(ROOT)/test/common/gfrun_runtime_adapter.c
+COMM_SRC_FILE += $(LINX_RUNTIME_ADAPTER)
 COMM_SRC_DIR = $(shell dirname $(COMM_SRC_FILE))
-COMM_OBJ += $(patsubst %.s, %.o, $(subst $(COMM_SRC_DIR), $(OBJ_DIR), $(COMM_SRC_FILE)))
+COMM_OBJ += $(patsubst %.c, %.o, $(subst $(COMM_SRC_DIR), $(OBJ_DIR), $(COMM_SRC_FILE)))
 CC_LINK += -nostartfiles
 endif
 
@@ -81,6 +84,7 @@ INCLUDE += -I$(ROOT)/include -I$(ROOT)/test/common -I$(ROOT)/test/kernels/src
 QEMU = /remote/lms60/c00622284/qemu/LinxBlockModel/build/qemu-linx
 
 CC_O_ALL = $(CC_O) $(CC_VER) $(CC_OPTS)
+CC_C_O_ALL = $(filter-out -std=c++%,$(CC_O_ALL))
 # $(info "TEST_ROOT is $(TEST_ROOT)")
 # $(info "ELF_HEAD is $(ELF_HEAD)")
 # $(info "OBJ_ROOT is $(OBJ_ROOT)")
@@ -110,15 +114,15 @@ $(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
 
 $(OBJ_DIR)%.o: $(SRC_DIR)%.c
 	@mkdir -p $(shell dirname $@)
-	$(CC) $(CC_O_ALL) $(INCLUDE) $(DEFINES) $< -o $@
+	$(CC) $(CC_C_O_ALL) $(INCLUDE) $(DEFINES) $< -o $@
 
 $(OBJ_DIR)%.o: $(SRC_DIR)%.s
 	@mkdir -p $(shell dirname $@)
 	$(AS) $(CC_O_ALL) $(INCLUDE) $(DEFINES) $< -o $@
 
-$(OBJ_DIR)%.o: $(COMM_SRC_DIR)%.s
+$(OBJ_DIR)%.o: $(COMM_SRC_DIR)%.c
 	@mkdir -p $(shell dirname $@)
-	$(AS) $(CC_O_ALL) $(INCLUDE) $(DEFINES) $< -o $@
+	$(CC) $(CC_C_O_ALL) -ffreestanding -fno-builtin $(INCLUDE) $(DEFINES) $< -o $@
 
 $(TARGET): $(OBJ) $(COMM_OBJ)
 	@mkdir -p $(shell dirname $@)

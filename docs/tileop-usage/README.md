@@ -30,6 +30,8 @@ kernel；其中的旧版本数量、旧 engine inventory 和旧 encoding identit
 - `PTO_TILEOP_API_REVISION`：`make install` 时实际 checkout 的 Git commit；
 - `PTO_TILEOP_API_REVISION_IS_EXACT`：revision 是否来自干净 checkout；
 - `PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX`：local Right B 使用逻辑 `[K,N]` 契约。
+- `PTO_TILEOP_API_HAS_TILE_ARRAY_PARTICIPANT_MASK`：`TileArray` raw `TMOV`
+  assembly 支持显式参与 PE mask。
 
 当前 wrapper 与 PTO 0.58.7 catalog 的覆盖边界见
 [统一支持状态表](support-status.md)。该表区分“已实现”“仅部分 layout 支持”“尚无

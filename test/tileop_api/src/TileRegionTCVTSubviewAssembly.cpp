@@ -3,8 +3,8 @@
 using namespace pto;
 using SourceParent = CubeTileM32<float, 32, 64>;
 using SourceFragment = CubeTileM32<float, 32, 16>;
-using DestinationFragment = Tile<Location::Vec, __bf16, 32, 16, BLayout::RowMajor>;
-using DestinationParent = Tile<Location::Vec, __bf16, 32, 64, BLayout::RowMajor>;
+using DestinationFragment = CubeTileM32<__bf16, 32, 16>;
+using DestinationParent = CubeTileM32<__bf16, 32, 64>;
 __attribute__((noinline)) DestinationParent convert_subviews(SourceParent &parent) {
   auto views = TPARTVIEW<SourceFragment, 1, 4>(parent);
   TileArray<DestinationFragment, 1, 4> output;
