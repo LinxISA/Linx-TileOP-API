@@ -23,7 +23,7 @@ void TCI_COL(tile_shape &dst, T s);
 
 ### 支持的数据类型
 
-支持S32、S16、U32、U16类型。
+支持S64、S32、S16、U64、U32、U16类型。
 
 
 
@@ -51,12 +51,12 @@ void TCI_COL(tile_shape &dst, T s);
 
 - 输出 Tile 必须为 RowMajor 布局，`ValidRow` 必须为 **1**。
 - `ValidCol` 必须非零，物理列数 `Col` 必须至少为 `ValidCol`；输出容量必须足以容纳声明的形状。
-- 若显式提供方向控制，方向值只能为 `0`（递增）或 `1`（递减）；起始值按所选元素宽度解释，高位按规范忽略。未提供时默认起始值为 0 且递增。
+- 若显式提供方向控制，方向值只能为 `0`（递增）或 `1`（递减）；起始值按所选元素宽度解释，高位按规范忽略。C++ 接口必须传入起始值；省略模板方向参数时递增。
 - 该接口没有额外的固定字节容量上限；实际可用规模仍受 Tile 的物理容量和 shape 合法性约束。
 
-`TCI_2D` 仅接受 Matrix-location 的 `CUBE_M16/CUBE_M32`，支持 S32、S16、U32、U16。
+`TCI_2D` 仅接受 Matrix-location 的 `CUBE_M16/CUBE_M32`，支持 S64、S32、S16、U64、U32、U16。
 `row_step` 和 `col_step` 必须是编译期常量 `-1/0/1`；逻辑元素 `(r,c)` 的值为
-`start + r * row_step + c * col_step`，并按 CUBE CELL 物理映射写入。M16 的
+`start + r * row_step + c * col_step`，并按 CUBE CELL 物理映射写入。M16 不支持 S64/U64；M16 的
 `ValidRow` 不得超过 16，M32 的 `ValidRow` 必须为正数。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
@@ -97,7 +97,7 @@ void TCI_COL(tile_shape &dst, T s);
 开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
 
 ```asm
-BSTART.TEPL TCI, S32|S16|U32|U16
+BSTART.TEPL TCI, S64|S32|S16|U64|U32|U16
 B.DATR      all-zero (optional)
 B.DIM       rValidCol, 0, ->LB0
 B.DIM       rValidRow, 0, ->LB1  ; (optional, default 1; when present must equal 1)
@@ -110,7 +110,7 @@ BSTOP
 二维 CUBE bundle 使用：
 
 ```asm
-BSTART.SFU TCI, S32|S16|U32|U16
+BSTART.SFU TCI, S64|S32|S16|U64|U32|U16
 B.DATR      CUBE_M16|CUBE_M32, DTYPE_NONE, Zero
 B.DIM       rValidCol, 0, ->LB0
 B.DIM       rValidRow, 0, ->LB1

@@ -1064,9 +1064,9 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
     def test_deleted_tile_operations_are_migration_stubs(self) -> None:
         # Every deleted tile operation either has no wrapper (truly absent)
         # or is an instance-time static_assert stub; in no case is a
-        # retired TEPL selector emitted by an asm block. TFMOD (5), TLRELU
-        # (46), TRANDOM (105) etc. must not appear next to BSTART.TEPL.
-        for sel in (5, 14, 24, 25, 37, 46, 47, 56, 57, 97, 105):
+        # retired TEPL selector emitted by an asm block. TFMOD (5),
+        # TRANDOM (105), etc. must not emit. Old TLRELU selector 46 is now TLEA.
+        for sel in (5, 14, 24, 25, 37, 47, 56, 57, 97, 105):
             self.assertNotRegex(
                 self.header,
                 rf'BSTART\.TEPL\s+{sel},',
@@ -1206,13 +1206,25 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
             self.assertIn("TESTCASE=TCvt object", calls.read_text(encoding="utf-8"))
 
     def test_pto_identity_verifier_rejects_hostile_elf_notes(self) -> None:
-        verifier = ROOT / "test" / "tileop_api" / "verify_pto_identity.py"
+        self._check_identity_verifier("0.58.3", "verify_pto_identity.py")
+
+    def test_pto059_identity_verifier_rejects_hostile_elf_notes(self) -> None:
+        self._check_identity_verifier("0.59.0", "verify_pto059_identity.py")
+
+    def _check_identity_verifier(self, release, verifier_name) -> None:
+        verifier = ROOT / "test" / "tileop_api" / verifier_name
         expected = (
             b'{"encoding_abi":"pto-isa-0.58.3-mode-function-v1",'
             b'"encoding_projection_sha256":'
             b'"8a48b80e04484c70870f155bf9efc79d2a805cf99e809f4e4e8a7e6a7eb34172",'
             b'"release":"0.58.3"}'
         )
+
+        if release == "0.59.0":
+            pin = json.loads((ROOT / "contracts/pto-isa-0.59.0-sources.json").read_text())["release"]
+            expected = json.dumps({key: pin[key] for key in
+                ("release", "encoding_abi", "encoding_projection_sha256")},
+                sort_keys=True, separators=(",", ":")).encode()
 
         def make_elf(desc: bytes = expected, owner: bytes = b"PTO\0",
                      machine: int = 0xE9, magic: bytes = b"\x7fELF",
@@ -1268,11 +1280,11 @@ int main() { return sizeof(E3M2) + sizeof(E2M3); }
                 "missing": make_elf(owner=b"GNU\0"),
                 "corrupt": make_elf(magic=b"BAD!"),
                 "wrong-machine": make_elf(machine=0x3E),
-                "wrong-identity": make_elf(desc=expected.replace(b"0.58.3", b"0.58.2")),
+                "wrong-identity": make_elf(desc=expected.replace(release.encode(), b"0.58.2")),
                 "trailing-nul": make_elf(desc=expected + b"\0"),
                 "duplicate-segment": make_elf(extra_desc=expected),
                 "conflicting-segment": make_elf(
-                    extra_desc=expected.replace(b"0.58.3", b"0.58.2")),
+                    extra_desc=expected.replace(release.encode(), b"0.58.2")),
             }
             for name, contents in variants.items():
                 path = temporary_path / f"{name}.elf"

@@ -1,6 +1,6 @@
 # MGATHER
 
-`MGATHER` 使用索引 Tile 中的 S32/U32/S64/U64 字节位移访问 GM：每个访问起点为 `Base + displacement`，不进行元素宽度缩放，不使用 GM 行 stride。可选 `IndexedByteRange` 传递相对 Base 的有符号 64 位字节边界；详见 [indexed TLSU 范围参数](../../indexed-tlsu-range.md)。
+`MGATHER` 使用索引 Tile 中的 S32/U32/S64/U64 字节位移访问 GM：地址为 `Base + displacement`，不按元素宽度缩放，不使用 GM 行 stride。`B.IOR` 只绑定 GM base；普通重载的 RegSrc1、RegSrc2、RegDst 必须为零。可选 `IndexedByteRange` 重载遵循尚未合入 main 的 [#424](https://github.com/PTO-ISA/pto-spec/pull/424)，单独固定在 `1981bceffa82`；该重载使用 `[Base, Min, Max]`，详见[范围参数](../../indexed-tlsu-range.md)。
 
 ## C++ 接口
 
@@ -27,12 +27,12 @@ inline void MGATHER(
 
 ### 支持的数据类型
 
-支持索引 Tile 类型 S32、U32、S64、U64；支持传输数据 Tile 类型 FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、S64、S32、S16、S8、U64、U32、U16、U8。
+支持FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、S64、S32、S16、S8、U64、U32、U16、U8类型。
 
 | 操作数角色 | 类型要求 |
 | --- | --- |
-| 数据 Tile | 支持索引 Tile 类型 S32、U32、S64、U64；支持传输数据 Tile 类型 FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、S64、S32、S16、S8、U64、U32、U16、U8。 |
-| 索引 / 地址位移 Tile | 必须使用该操作 contract 允许的整数 dtype 与单位。 |
+| 数据 Tile | 支持FP64、FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E8M0、S64、S32、S16、S8、U64、U32、U16、U8类型。 |
+| 索引 / 地址位移 Tile | S32/U32/S64/U64；相对 GM Base 的字节位移。 |
 
 ### 参数说明
 
@@ -40,11 +40,15 @@ inline void MGATHER(
 | --- | --- |
 | `dst` | 输出 Tile；成功调用后写入操作结果。 |
 | `src` | 输入 Tile 或源数据。 |
-| `offset` | 相对 GM Base 的显式字节位移 Tile；不按元素宽度缩放。 |
+| `offset` | 相对 GM Base 的字节位移 Tile；不按元素宽度缩放。 |
+| `range` | 接口声明的输入参数；其类型、取值范围和作用由该重载及本页约束定义。 |
+
+### 重载选择
+
+这些重载覆盖不同的 Tile location、返回方式或可选操作数。优先选择参数最少且能表达当前数据流的形式；不要通过传入无意义的零值来模拟另一个重载。
 
 
-
-范围重载在最后追加 `IndexedByteRange range` 参数。
+范围重载传递有符号 64 位字节边界：普通 gather/scatter 在参数末尾追加 `IndexedByteRange range`，atomic/reduction 在 `validCol` 后、可选 `validRow` 前传入。
 
 ## 使用要求
 
@@ -75,15 +79,14 @@ inline void MGATHER(
 
 ### 编码字段和省略值
 
-- 省略 `B.DATR` 时，padding 值使用 `Null`，布局使用 `NORM`。
 - `LB0` 给出 `ValidCol`，必须存在且非零；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
-- `B.IOR` 的首条无标志记录为 `[Base, Min, Max]`；省略范围时 Min/Max 选择器均为 zero。显式范围必须至少有一个非 zero 边界选择器，即使其寄存器值为 0。
+- `B.IOR` 是必需描述符；未使用的选择器和字段必须编码为零。
 
 `fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
 
 ## 异常和边界行为
 
-    类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，会在编译期或执行前检查阶段被拒绝。`PE_MASK=0000` 时操作不产生状态或内存影响；范围 Min > Max 时仅当前参与 PE 在副作用前 fault，其他 PE 已有的副作用保留。padding、alias、NaN/无穷值及 fault 行为以本页已经列出的约束和边界说明为准，未明确声明的状态不可依赖。
+    类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，会在编译期或执行前检查阶段被拒绝。`PE_MASK=0000` 时操作不产生状态或内存影响；非法调用不会发布部分输出或部分副作用。padding、alias、NaN/无穷值及 fault 行为以本页已经列出的约束和边界说明为准，未明确声明的状态不可依赖。
 
 ## 结果说明
 
@@ -100,7 +103,7 @@ B.DIM       rValidCol, 0, ->LB0
 B.DIM       rValidRow, 0, ->LB1  ; (optional)
 B.DIM       rCol, 0, ->LB2  ; (optional)
 B.IOT       IndexTile, mask=PE_MASK, last, ->DstTile<TSize>
-B.IOR       [BaseGPR, MinIndexGPR, MaxIndexGPR], []
+B.IOR       BaseGPR, zero, zero, ->zero
 BSTOP
 ```
 

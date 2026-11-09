@@ -1,7 +1,8 @@
 # Indexed TLSU 范围参数（PR #424）
 
 本扩展对应 [PTO-ISA/pto-spec#424](https://github.com/PTO-ISA/pto-spec/pull/424)
-的 `1981bceffa820e6dc0e56d61b2bb2cfd580e0759`，API/catalog 基线仍为 0.58.7。
+的 `1981bceffa820e6dc0e56d61b2bb2cfd580e0759`，该 PR 尚未合入 main；本分支 API 基线为 0.59.0，main 与 #424 的 catalog/ASL 来源分别固定在
+`contracts/pto-isa-0.59.0-sources.json`，范围接口不作为 main 合同的一部分宣称。
 全部 23 个 `MGATHER` / `MSCATTER` 及 MASK、CAS、atomic、reduction、POPC 变体
 可显式传递 `pto::IndexedByteRange{min, max}`。原有调用形式仍可使用。
 
@@ -73,3 +74,8 @@ IR lowering 和 23 个 C++ wrapper 的对象生成；不将编译测试视作硬
 现有 Local Tile wrapper 在 `-O0` 对象生成时存在栈帧处理崩溃，旧无范围
 MGATHER 接口也可复现；本扩展不修复该既有问题。零值 `R` 约束已单独在
 `-O0` / `-O2` 验证。
+
+头文件可在不具备范围扩展的旧编译器上解析；实例化 `IndexedByteRange` 重载
+需要 `__linx_indexed_tlsu_range == 1`，否则产生明确的编译期诊断。
+这只检查范围扩展能力；既有 multi-PE transport 还需要独立的编译器能力，见
+[支持状态](support-status.md#编译器组合的已知限制)。

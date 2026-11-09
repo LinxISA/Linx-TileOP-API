@@ -1,8 +1,8 @@
 # Linx TileOP API
 
-Header-only C++ TileOP bindings for the LinxISA / PTO ISA 0.58.7 architectural contract.
-The checked-in catalog and documentation are generated against the PTO ISA 0.58.7
-baseline (`0.58.7.0`, ABI `pto-isa-0.58.7-mode-function-v1`).
+Header-only C++ TileOP bindings for the LinxISA / PTO ISA 0.59.0 architectural contract.
+The checked-in catalog and documentation are generated against the PTO ISA 0.59.0
+baseline (`0.59.0.0`, ABI `pto-isa-0.59.0-mode-function-v1`).
 
 Installed headers expose their provenance through
 `<common/pto_tileop_api_revision.hpp>`. `PTO_TILEOP_API_VERSION` and
@@ -12,7 +12,7 @@ Installed headers expose their provenance through
 allow consumers to reject toolchains that predate a required fix.
 
 The normative operation inventory comes from the checked-in PTO catalog at
-[`contracts/pto-isa-0.58.7-tile-operations.json`](contracts/pto-isa-0.58.7-tile-operations.json).
+[`contracts/pto-isa-0.59.0-tile-operations.json`](contracts/pto-isa-0.59.0-tile-operations.json).
 The public bindings retain the unique compiled `BSTART.TEPL` carrier for VEC/SFU
 source compatibility and emit the named TLSU/CUBE operation forms accepted by
 the current Linx compiler. The generated engine index is a wrapper compatibility
@@ -20,12 +20,13 @@ view, not a replacement for the PTO ASL/NDF semantics.
 
 ## Documentation
 
+- [0.59 alignment and validation](docs/tileop-usage/migration/pto-0590-alignment.md)
 - [Execution engines and operations](docs/tileop-usage/generated/engines.md)
 - [TLSU operations](docs/tileop-usage/tlsu/load-store-move/TLOAD.md)
 - [CUBE operations](docs/tileop-usage/cube/matrix-matrix/TMATMUL.md)
 - [Tile and Shared-register constraints](docs/tileop-usage/concepts/tile-constraints.md)
 - [Layout helpers](docs/tileop-usage/layout-and-rearrangement/layout/TCONCAT.md)
-- [PTO ISA 0.58.7 CUBE layout operations](docs/tileop-usage/layout-and-rearrangement/layout/TPERMUTE.md)
+- [PTO ISA 0.59.0 CUBE layout operations](docs/tileop-usage/layout-and-rearrangement/layout/TPERMUTE.md)
 - [Comparison operations](docs/tileop-usage/elementwise-tile-tile/logical/TCMP.md)
 - [TEXPDIF](docs/tileop-usage/elementwise-tile-tile/transcendental/TEXPDIF.md)
 - [Sorting operations](docs/tileop-usage/irregular-and-complex/sorting/TSORT.md)
@@ -37,18 +38,23 @@ view, not a replacement for the PTO ASL/NDF semantics.
 make check
 ```
 
-Target compilation requires a Linx LLVM build supporting the PTO ISA 0.58.7
+Target compilation requires a Linx LLVM build supporting the PTO ISA 0.59.0
 encoding ABI. The old PTO ISA 0.58.3 Linx LLVM requirement belongs only to the
 historical migration fixtures under `test/tileop_api` and
 `docs/tileop-usage/migration/pto-0583-migration.md`; it is not the current API
 baseline. Run the catalog and documentation checks before target compilation.
 
-To refresh the pinned projection from the clean, exact reviewed LinxISA
-authority commit recorded by the generator:
+The active 119-operation catalog is pinned to PTO-SPEC `main` at `42067d0f2890`.
+Optional `IndexedByteRange` APIs retain the unmerged [PTO-SPEC #424](https://github.com/PTO-ISA/pto-spec/pull/424)
+extension at `1981bceffa82`. Both normative snapshots and their hashes are
+recorded separately in [the source lock](contracts/pto-isa-0.59.0-sources.json).
+The immutable v0.59.0.0 release catalog is retained for ABI identity tests.
+Range APIs require LLVM `b19e8c0e184c` support; API availability does not imply
+complete runtime or numeric conformance. See [support status](docs/tileop-usage/support-status.md).
 
 ```sh
-python3 tools/sync_linxisa_v058_contract.py \
-  /path/to/linx-isa/isa/v0.58/linxisa-v0.58.json
+python3 tools/sync_pto059_catalog.py /path/to/pto-spec
+python3 tools/check_pto_catalog_alignment.py --spec-repo /path/to/pto-spec --spec-ref origin/main
 python3 tools/generate_engine_docs.py
 make check
 ```

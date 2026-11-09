@@ -1,6 +1,6 @@
 {
   "isa": "PTO Instruction Set Architecture",
-  "operation_count": 118,
+  "operation_count": 119,
   "rejected_review_only_codes": {
     "CUBE": [],
     "TEPL": [
@@ -2302,7 +2302,7 @@
       "operands": [
         {
           "field": "destination0",
-          "role": "new Local same-type numeric destination"
+          "role": "new Local operation-type numeric destination"
         },
         {
           "field": "source0",
@@ -2313,7 +2313,7 @@
       "selector": "0x040",
       "semantic_handler": "ExecuteTileReduction",
       "state_effects": [
-        "operand:destination0:new-local-same-type-destination",
+        "operand:destination0:new-local-operation-type-destination",
         "operand:source0:persistent-local-numeric-source",
         "runtime:CurrentBundlePadValue:numeric-padding"
       ],
@@ -2355,7 +2355,7 @@
       "operands": [
         {
           "field": "destination0",
-          "role": "new Local same-type numeric destination"
+          "role": "new Local operation-type numeric destination"
         },
         {
           "field": "source0",
@@ -2366,7 +2366,7 @@
       "selector": "0x041",
       "semantic_handler": "ExecuteTileReduction",
       "state_effects": [
-        "operand:destination0:new-local-same-type-destination",
+        "operand:destination0:new-local-operation-type-destination",
         "operand:source0:persistent-local-numeric-source",
         "runtime:CurrentBundlePadValue:numeric-padding"
       ],
@@ -2408,7 +2408,7 @@
       "operands": [
         {
           "field": "destination0",
-          "role": "new Local same-type numeric destination"
+          "role": "new Local operation-type numeric destination"
         },
         {
           "field": "source0",
@@ -2419,7 +2419,7 @@
       "selector": "0x042",
       "semantic_handler": "ExecuteTileReduction",
       "state_effects": [
-        "operand:destination0:new-local-same-type-destination",
+        "operand:destination0:new-local-operation-type-destination",
         "operand:source0:persistent-local-numeric-source",
         "runtime:CurrentBundlePadValue:numeric-padding"
       ],
@@ -2461,7 +2461,7 @@
       "operands": [
         {
           "field": "destination0",
-          "role": "new Local same-type numeric destination"
+          "role": "new Local operation-type numeric destination"
         },
         {
           "field": "source0",
@@ -2472,7 +2472,7 @@
       "selector": "0x043",
       "semantic_handler": "ExecuteTileReduction",
       "state_effects": [
-        "operand:destination0:new-local-same-type-destination",
+        "operand:destination0:new-local-operation-type-destination",
         "operand:source0:persistent-local-numeric-source",
         "runtime:CurrentBundlePadValue:numeric-padding"
       ],
@@ -2502,9 +2502,22 @@
       "datr_contract": {
         "allowed_nonzero_fields": [
           "Layout",
-          "PadValueOrByteId"
+          "PadValueOrByteId",
+          "RMode"
         ],
-        "pad_union": "pad-value"
+        "pad_union": "pad-value",
+        "conditional_nonzero_fields": {
+          "RMode": {
+            "semantic_name": "BroadcastByteOffset",
+            "encoded_bits": "B.DATR[17:15]",
+            "applies_when": [
+              "CUBE_M16",
+              "CUBE_M32"
+            ],
+            "otherwise": "RowMajor requires zero",
+            "default": 0
+          }
+        }
       },
       "disposition": "accepted-direct-operation",
       "effect_contract": "ExecuteTileExpand",
@@ -2521,7 +2534,7 @@
         },
         {
           "field": "source0",
-          "role": "persistent Local row-broadcast source"
+          "role": "persistent Local row-broadcast source; CUBE_M16/M32 select an operation-typed slot within the first bound CELL"
         }
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
@@ -2558,9 +2571,22 @@
       "datr_contract": {
         "allowed_nonzero_fields": [
           "Layout",
-          "PadValueOrByteId"
+          "PadValueOrByteId",
+          "RMode"
         ],
-        "pad_union": "pad-value"
+        "pad_union": "pad-value",
+        "conditional_nonzero_fields": {
+          "RMode": {
+            "semantic_name": "BroadcastByteOffset",
+            "encoded_bits": "B.DATR[17:15]",
+            "applies_when": [
+              "CUBE_M16",
+              "CUBE_M32"
+            ],
+            "otherwise": "RowMajor requires zero",
+            "default": 0
+          }
+        }
       },
       "disposition": "accepted-direct-operation",
       "effect_contract": "ExecuteTileExpand",
@@ -2581,7 +2607,7 @@
         },
         {
           "field": "source1",
-          "role": "persistent Local row-broadcast source"
+          "role": "persistent Local row-broadcast source; CUBE_M16/M32 select an operation-typed slot within the first bound CELL"
         }
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
@@ -2619,9 +2645,22 @@
       "datr_contract": {
         "allowed_nonzero_fields": [
           "Layout",
-          "PadValueOrByteId"
+          "PadValueOrByteId",
+          "RMode"
         ],
-        "pad_union": "pad-value"
+        "pad_union": "pad-value",
+        "conditional_nonzero_fields": {
+          "RMode": {
+            "semantic_name": "BroadcastByteOffset",
+            "encoded_bits": "B.DATR[17:15]",
+            "applies_when": [
+              "CUBE_M16",
+              "CUBE_M32"
+            ],
+            "otherwise": "RowMajor requires zero",
+            "default": 0
+          }
+        }
       },
       "disposition": "accepted-direct-operation",
       "effect_contract": "ExecuteTileExpand",
@@ -2642,7 +2681,7 @@
         },
         {
           "field": "source1",
-          "role": "persistent Local row-broadcast source"
+          "role": "persistent Local row-broadcast source; CUBE_M16/M32 select an operation-typed slot within the first bound CELL"
         }
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
@@ -2680,9 +2719,22 @@
       "datr_contract": {
         "allowed_nonzero_fields": [
           "Layout",
-          "PadValueOrByteId"
+          "PadValueOrByteId",
+          "RMode"
         ],
-        "pad_union": "pad-value"
+        "pad_union": "pad-value",
+        "conditional_nonzero_fields": {
+          "RMode": {
+            "semantic_name": "BroadcastByteOffset",
+            "encoded_bits": "B.DATR[17:15]",
+            "applies_when": [
+              "CUBE_M16",
+              "CUBE_M32"
+            ],
+            "otherwise": "RowMajor requires zero",
+            "default": 0
+          }
+        }
       },
       "disposition": "accepted-direct-operation",
       "effect_contract": "ExecuteTileExpand",
@@ -2703,7 +2755,7 @@
         },
         {
           "field": "source1",
-          "role": "persistent Local row-broadcast source"
+          "role": "persistent Local row-broadcast source; CUBE_M16/M32 select an operation-typed slot within the first bound CELL"
         }
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
@@ -2741,9 +2793,22 @@
       "datr_contract": {
         "allowed_nonzero_fields": [
           "Layout",
-          "PadValueOrByteId"
+          "PadValueOrByteId",
+          "RMode"
         ],
-        "pad_union": "pad-value"
+        "pad_union": "pad-value",
+        "conditional_nonzero_fields": {
+          "RMode": {
+            "semantic_name": "BroadcastByteOffset",
+            "encoded_bits": "B.DATR[17:15]",
+            "applies_when": [
+              "CUBE_M16",
+              "CUBE_M32"
+            ],
+            "otherwise": "RowMajor requires zero",
+            "default": 0
+          }
+        }
       },
       "disposition": "accepted-direct-operation",
       "effect_contract": "ExecuteTileExpand",
@@ -2764,7 +2829,7 @@
         },
         {
           "field": "source1",
-          "role": "persistent Local row-broadcast source"
+          "role": "persistent Local row-broadcast source; CUBE_M16/M32 select an operation-typed slot within the first bound CELL"
         }
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
@@ -2802,9 +2867,22 @@
       "datr_contract": {
         "allowed_nonzero_fields": [
           "Layout",
-          "PadValueOrByteId"
+          "PadValueOrByteId",
+          "RMode"
         ],
-        "pad_union": "pad-value"
+        "pad_union": "pad-value",
+        "conditional_nonzero_fields": {
+          "RMode": {
+            "semantic_name": "BroadcastByteOffset",
+            "encoded_bits": "B.DATR[17:15]",
+            "applies_when": [
+              "CUBE_M16",
+              "CUBE_M32"
+            ],
+            "otherwise": "RowMajor requires zero",
+            "default": 0
+          }
+        }
       },
       "disposition": "accepted-direct-operation",
       "effect_contract": "ExecuteTileExpand",
@@ -2825,7 +2903,7 @@
         },
         {
           "field": "source1",
-          "role": "persistent Local row-broadcast source"
+          "role": "persistent Local row-broadcast source; CUBE_M16/M32 select an operation-typed slot within the first bound CELL"
         }
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
@@ -2863,9 +2941,22 @@
       "datr_contract": {
         "allowed_nonzero_fields": [
           "Layout",
-          "PadValueOrByteId"
+          "PadValueOrByteId",
+          "RMode"
         ],
-        "pad_union": "pad-value"
+        "pad_union": "pad-value",
+        "conditional_nonzero_fields": {
+          "RMode": {
+            "semantic_name": "BroadcastByteOffset",
+            "encoded_bits": "B.DATR[17:15]",
+            "applies_when": [
+              "CUBE_M16",
+              "CUBE_M32"
+            ],
+            "otherwise": "RowMajor requires zero",
+            "default": 0
+          }
+        }
       },
       "disposition": "accepted-direct-operation",
       "effect_contract": "ExecuteTileExpand",
@@ -2886,7 +2977,7 @@
         },
         {
           "field": "source1",
-          "role": "persistent Local row-broadcast source"
+          "role": "persistent Local row-broadcast source; CUBE_M16/M32 select an operation-typed slot within the first bound CELL"
         }
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
@@ -2925,9 +3016,22 @@
         "allowed_nonzero_fields": [
           "Layout",
           "DataType",
-          "PadValueOrByteId"
+          "PadValueOrByteId",
+          "RMode"
         ],
-        "pad_union": "pad-value"
+        "pad_union": "pad-value",
+        "conditional_nonzero_fields": {
+          "RMode": {
+            "semantic_name": "BroadcastByteOffset",
+            "encoded_bits": "B.DATR[17:15]",
+            "applies_when": [
+              "CUBE_M16",
+              "CUBE_M32"
+            ],
+            "otherwise": "RowMajor requires zero",
+            "default": 0
+          }
+        }
       },
       "disposition": "accepted-direct-operation",
       "effect_contract": "ExecuteTileExpand",
@@ -2948,7 +3052,7 @@
         },
         {
           "field": "source1",
-          "role": "persistent Local row-broadcast source"
+          "role": "persistent Local row-broadcast source; CUBE_M16/M32 select an operation-typed slot within the first bound CELL"
         }
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
@@ -3104,7 +3208,7 @@
       "operands": [
         {
           "field": "destination0",
-          "role": "new Local same-type numeric destination"
+          "role": "new Local operation-type numeric destination"
         },
         {
           "field": "source0",
@@ -3115,7 +3219,7 @@
       "selector": "0x050",
       "semantic_handler": "ExecuteTileReduction",
       "state_effects": [
-        "operand:destination0:new-local-same-type-destination",
+        "operand:destination0:new-local-operation-type-destination",
         "operand:source0:persistent-local-numeric-source",
         "runtime:CurrentBundlePadValue:numeric-padding"
       ],
@@ -3157,7 +3261,7 @@
       "operands": [
         {
           "field": "destination0",
-          "role": "new Local same-type numeric destination"
+          "role": "new Local operation-type numeric destination"
         },
         {
           "field": "source0",
@@ -3168,7 +3272,7 @@
       "selector": "0x051",
       "semantic_handler": "ExecuteTileReduction",
       "state_effects": [
-        "operand:destination0:new-local-same-type-destination",
+        "operand:destination0:new-local-operation-type-destination",
         "operand:source0:persistent-local-numeric-source",
         "runtime:CurrentBundlePadValue:numeric-padding"
       ],
@@ -3210,7 +3314,7 @@
       "operands": [
         {
           "field": "destination0",
-          "role": "new Local same-type numeric destination"
+          "role": "new Local operation-type numeric destination"
         },
         {
           "field": "source0",
@@ -3221,7 +3325,7 @@
       "selector": "0x052",
       "semantic_handler": "ExecuteTileReduction",
       "state_effects": [
-        "operand:destination0:new-local-same-type-destination",
+        "operand:destination0:new-local-operation-type-destination",
         "operand:source0:persistent-local-numeric-source",
         "runtime:CurrentBundlePadValue:numeric-padding"
       ],
@@ -3263,7 +3367,7 @@
       "operands": [
         {
           "field": "destination0",
-          "role": "new Local same-type numeric destination"
+          "role": "new Local operation-type numeric destination"
         },
         {
           "field": "source0",
@@ -3274,7 +3378,7 @@
       "selector": "0x053",
       "semantic_handler": "ExecuteTileReduction",
       "state_effects": [
-        "operand:destination0:new-local-same-type-destination",
+        "operand:destination0:new-local-operation-type-destination",
         "operand:source0:persistent-local-numeric-source",
         "runtime:CurrentBundlePadValue:numeric-padding"
       ],
@@ -3903,7 +4007,7 @@
       "operands": [
         {
           "field": "destination0",
-          "role": "new Local S32, S16, U32, or U16 destination"
+          "role": "new Local S64, S32, S16, U64, U32, or U16 destination"
         },
         {
           "field": "scalar0",
@@ -4157,7 +4261,9 @@
         "allowed_nonzero_fields": [
           "PadValueOrByteId",
           "Layout",
-          "DataType"
+          "DataType",
+          "Canonicalize",
+          "CMode"
         ],
         "pad_union": "pad-value"
       },
@@ -4349,13 +4455,13 @@
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
       "semantic_handler": "MGATHER",
+      "semantic_summary": "gather using explicit byte displacements.",
       "state_effects": [
         "operand:destination0:destination",
         "operand:address:base-address",
         "operand:source0:byte-displacement-indices",
         "runtime:CurrentBundlePadValue:physical-padding"
       ],
-      "semantic_summary": "gather using explicit byte displacements.",
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -4402,12 +4508,12 @@
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
       "semantic_handler": "MSCATTER",
+      "semantic_summary": "scatter using explicit byte displacements.",
       "state_effects": [
         "operand:address:base-address",
         "operand:source0:source",
         "operand:source1:byte-displacement-indices"
       ],
-      "semantic_summary": "scatter using explicit byte displacements.",
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -4465,6 +4571,7 @@
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
       "semantic_handler": "MGATHER_MASK",
+      "semantic_summary": "Masked gather using explicit byte displacements.",
       "state_effects": [
         "operand:destination0:destination",
         "operand:address:base-address",
@@ -4472,7 +4579,6 @@
         "operand:source1:exact-predicate-mask",
         "runtime:CurrentBundlePadValue:inactive-and-physical-padding"
       ],
-      "semantic_summary": "Masked gather using explicit byte displacements.",
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -4526,13 +4632,13 @@
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
       "semantic_handler": "MSCATTER_MASK",
+      "semantic_summary": "Masked scatter using explicit byte displacements.",
       "state_effects": [
         "operand:address:base-address",
         "operand:source0:source",
         "operand:source1:byte-displacement-indices",
         "operand:source2:exact-predicate-mask"
       ],
-      "semantic_summary": "Masked scatter using explicit byte displacements.",
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -4559,6 +4665,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        81
       ],
       "command_mnemonic": "BSTART.MGATHER.CAS",
       "contract_status": "reviewed-complete",
@@ -4600,6 +4709,7 @@
       ],
       "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
       "semantic_handler": "GM_ATOM_CAS",
+      "semantic_summary": "atomic compare-and-swap gather using explicit byte displacements.",
       "state_effects": [
         "operand:destination0:destination",
         "operand:address:base-address",
@@ -4607,10 +4717,6 @@
         "operand:source1:expected",
         "operand:source2:replacement"
       ],
-      "catalog_indices": [
-        81
-      ],
-      "semantic_summary": "atomic compare-and-swap gather using explicit byte displacements.",
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -5812,6 +5918,9 @@
           "runtime": "CurrentBundlePadValue"
         }
       ],
+      "catalog_indices": [
+        100
+      ],
       "command_mnemonic": "BSTART.MGATHER.EXCH",
       "contract_status": "reviewed-complete",
       "datr_contract": {
@@ -5854,9 +5963,6 @@
         "operand:source0:indices",
         "operand:source1:replacement"
       ],
-      "catalog_indices": [
-        100
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -5880,6 +5986,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        101
       ],
       "command_mnemonic": "BSTART.MGATHER.MAX",
       "contract_status": "reviewed-complete",
@@ -5923,9 +6032,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        101
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -5949,6 +6055,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        102
       ],
       "command_mnemonic": "BSTART.MGATHER.MIN",
       "contract_status": "reviewed-complete",
@@ -5992,9 +6101,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        102
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6018,6 +6124,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        103
       ],
       "command_mnemonic": "BSTART.MGATHER.ADD",
       "contract_status": "reviewed-complete",
@@ -6061,9 +6170,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        103
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6087,6 +6193,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        104
       ],
       "command_mnemonic": "BSTART.MGATHER.INC",
       "contract_status": "reviewed-complete",
@@ -6130,9 +6239,6 @@
         "operand:source0:indices",
         "operand:source1:limit"
       ],
-      "catalog_indices": [
-        104
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6156,6 +6262,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        105
       ],
       "command_mnemonic": "BSTART.MGATHER.DEC",
       "contract_status": "reviewed-complete",
@@ -6199,9 +6308,6 @@
         "operand:source0:indices",
         "operand:source1:limit"
       ],
-      "catalog_indices": [
-        105
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6225,6 +6331,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        106
       ],
       "command_mnemonic": "BSTART.MGATHER.AND",
       "contract_status": "reviewed-complete",
@@ -6268,9 +6377,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        106
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6294,6 +6400,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        107
       ],
       "command_mnemonic": "BSTART.MGATHER.OR",
       "contract_status": "reviewed-complete",
@@ -6337,9 +6446,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        107
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6363,6 +6469,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        108
       ],
       "command_mnemonic": "BSTART.MGATHER.XOR",
       "contract_status": "reviewed-complete",
@@ -6406,9 +6515,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        108
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6429,6 +6535,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        109
       ],
       "command_mnemonic": "BSTART.MSCATTER.MAX",
       "contract_status": "reviewed-complete",
@@ -6467,9 +6576,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        109
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6490,6 +6596,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        110
       ],
       "command_mnemonic": "BSTART.MSCATTER.MIN",
       "contract_status": "reviewed-complete",
@@ -6528,9 +6637,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        110
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6551,6 +6657,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        111
       ],
       "command_mnemonic": "BSTART.MSCATTER.ADD",
       "contract_status": "reviewed-complete",
@@ -6589,9 +6698,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        111
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6612,6 +6718,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        112
       ],
       "command_mnemonic": "BSTART.MSCATTER.INC",
       "contract_status": "reviewed-complete",
@@ -6650,9 +6759,6 @@
         "operand:source0:indices",
         "operand:source1:limit"
       ],
-      "catalog_indices": [
-        112
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6673,6 +6779,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        113
       ],
       "command_mnemonic": "BSTART.MSCATTER.DEC",
       "contract_status": "reviewed-complete",
@@ -6711,9 +6820,6 @@
         "operand:source0:indices",
         "operand:source1:limit"
       ],
-      "catalog_indices": [
-        113
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6734,6 +6840,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        114
       ],
       "command_mnemonic": "BSTART.MSCATTER.AND",
       "contract_status": "reviewed-complete",
@@ -6772,9 +6881,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        114
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6795,6 +6901,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        115
       ],
       "command_mnemonic": "BSTART.MSCATTER.OR",
       "contract_status": "reviewed-complete",
@@ -6833,9 +6942,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        115
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6856,6 +6962,9 @@
         {
           "runtime": "CurrentBundlePadValue"
         }
+      ],
+      "catalog_indices": [
+        116
       ],
       "command_mnemonic": "BSTART.MSCATTER.XOR",
       "contract_status": "reviewed-complete",
@@ -6894,9 +7003,6 @@
         "operand:source0:indices",
         "operand:source1:value"
       ],
-      "catalog_indices": [
-        116
-      ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
     },
@@ -6911,6 +7017,9 @@
         {
           "operand": "source0"
         }
+      ],
+      "catalog_indices": [
+        117
       ],
       "command_mnemonic": "BSTART.MSCATTER.POPC",
       "contract_status": "reviewed-complete",
@@ -6943,9 +7052,6 @@
       "state_effects": [
         "operand:address:base-address",
         "operand:source0:indices"
-      ],
-      "catalog_indices": [
-        117
       ],
       "classification": "memory-and-data-movement",
       "engine": "TLSU"
@@ -7006,6 +7112,61 @@
       ],
       "classification": "elementwise-tile-tile",
       "engine": "SFU"
+    },
+    {
+      "arguments": [
+        {
+          "operand": "destination0"
+        },
+        {
+          "operand": "source0"
+        },
+        {
+          "operand": "scalar0"
+        }
+      ],
+      "command_mnemonic": "BSTART.TEPL",
+      "contract_status": "reviewed-complete",
+      "datr_contract": {
+        "allowed_nonzero_fields": [
+          "PadValueOrByteId",
+          "Layout"
+        ],
+        "pad_union": "pad-value"
+      },
+      "disposition": "accepted-direct-operation",
+      "effect_contract": "TLEA",
+      "family": "TEPL",
+      "fault_contract": "ExecuteTileInstruction",
+      "function": 14,
+      "legality_handler": "TileOperandsLegal_TLEA",
+      "mode": 1,
+      "name": "TLEA",
+      "operands": [
+        {
+          "field": "destination0",
+          "role": "new Local S64/U64 byte-offset destination"
+        },
+        {
+          "field": "source0",
+          "role": "persistent Local S32/U32/S64/U64 element indices"
+        },
+        {
+          "field": "scalar0",
+          "role": "per-PE element width in bits"
+        }
+      ],
+      "restart_contract": "CompleteBundleAtWithAcceptedApplicabilityRules",
+      "selector": "0x02E",
+      "semantic_handler": "TLEA",
+      "state_effects": [
+        "operand:destination0:new-local-byte-offset-destination",
+        "operand:source0:persistent-local-element-indices",
+        "operand:scalar0:element-width-bits",
+        "runtime:CurrentBundlePadValue:numeric-padding"
+      ],
+      "classification": "tile-scalar-and-immediate",
+      "engine": "VEC"
     }
   ],
   "reserved": {
@@ -7045,7 +7206,7 @@
         "0x025"
       ],
       [
-        "0x02E",
+        "0x02F",
         "0x039"
       ],
       [

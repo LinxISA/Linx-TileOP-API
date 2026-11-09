@@ -71,12 +71,12 @@ __attribute__((noinline)) void test_col_vector_src1(T *dst, T *s0, T *s1) {
 }
 
 // Nonzero broadcast byte offsets are only meaningful for CUBE sources.  Keep
-// both supported CUBE layouts in the frontend regression so the offset is
-// checked against the source CELL geometry, not merely accepted by the API.
+// both supported CUBE layouts with two valid columns: byte offset 2 selects
+// the second valid element and must also fit within the source CELL.
 using CubeM16Matrix = VecTileM16<__half, 16, 16>;
-using CubeM16Row = VecTileM16<__half, 16, 1>;
+using CubeM16Row = VecTileM16<__half, 16, 2>;
 using CubeM32Matrix = VecTileM32<__half, 32, 32>;
-using CubeM32Row = VecTileM32<__half, 32, 1>;
+using CubeM32Row = VecTileM32<__half, 32, 2>;
 
 __attribute__((noinline)) void test_row_expand_offsets_m16(
     CubeM16Matrix &dst, CubeM16Matrix &src0, CubeM16Row &src1) {
@@ -93,7 +93,7 @@ __attribute__((noinline)) void test_row_expand_offsets_m16(
 __attribute__((noinline)) void test_row_expand_offsets_m32(
     CubeM32Matrix &dst, CubeM32Matrix &src0, CubeM32Row &src1) {
   // A half M32 CELL has two columns, so byte offset 2 selects its second
-  // element; offset 4 would correctly be rejected by the CELL-boundary check.
+  // valid element; offset 4 is rejected by the CELL-boundary check.
   TROWEXPAND<CubeM32Matrix, CubeM32Row, 2>(dst, src1);
   TROWEXPANDADD<CubeM32Matrix, CubeM32Matrix, CubeM32Row, 2>(dst, src0, src1);
   TROWEXPANDSUB<CubeM32Matrix, CubeM32Matrix, CubeM32Row, 2>(dst, src0, src1);

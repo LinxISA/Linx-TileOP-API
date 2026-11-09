@@ -1,0 +1,37 @@
+{
+  "repository": "https://github.com/PTO-ISA/pto-spec",
+  "release": {
+    "commit": "b0165320a4b575b18d2f4d93faf40178f661ab49",
+    "tag": "v0.59.0.0",
+    "catalog": "pto-isa-0.59.0-release-tile-operations.json",
+    "catalog_sha256": "533db9b8f31f118af5978de813cfaa3fa738de820ee24655faa2ee71f343a706",
+    "release": "0.59.0",
+    "publication_version": "0.59.0.0",
+    "encoding_abi": "pto-isa-0.59.0-mode-function-v1",
+    "encoding_projection_sha256": "91509080ca656eb124f47830dcb09c50389dc177266b3b8df9d2d11dc37d5697"
+  },
+  "active": {
+    "branch": "main",
+    "commit": "42067d0f2890b8c013a868bd1247ebc6437b3179",
+    "catalog": "pto-isa-0.59.0-tile-operations.json",
+    "catalog_sha256": "659b9da8bf6e598b37d40f6151b6ab2622fac3c250dfc18c2feb09fefc566c53",
+    "normative_trees": {
+      "asl": "0285d49a91caff482b649ef7d58b549062d135a5",
+      "spec": "ff4e6840212069fa6731d2aa436e28b8c4b9905c"
+    }
+  },
+  "llvm_validation_commit": "b19e8c0e184cd7e3a1fa5ab57b368cbf978c3aa8",
+  "extensions": {
+    "indexed_tlsu_range": {
+      "commit": "1981bceffa820e6dc0e56d61b2bb2cfd580e0759",
+      "status": "open PR; optional extension, not part of pinned main",
+      "catalog": "pto-isa-0.59.0-extensions-tile-operations.json",
+      "catalog_sha256": "29f1ffe575c701b416b9205ff9377f92f72b5d48a091c1aa3f9c9fc7e0d49033",
+      "pull_request": "https://github.com/PTO-ISA/pto-spec/pull/424",
+      "normative_trees": {
+        "asl": "b95b89532f13751eabba4358e668fbc72f4200ef",
+        "spec": "9b02570c4d260e8df6379c989e923654c0b94b64"
+      }
+    }
+  }
+}

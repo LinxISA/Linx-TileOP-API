@@ -59,7 +59,7 @@ def parse_notes(contents: bytes) -> list[tuple[bytes, int, bytes]]:
     return notes
 
 
-def validate(path: Path) -> None:
+def validate(path: Path, expected_desc: bytes = EXPECTED_DESC) -> None:
     data = path.read_bytes()
     require(len(data) >= 64, "truncated ELF header")
     require(data[:4] == b"\x7fELF", "missing ELF magic")
@@ -133,19 +133,19 @@ def validate(path: Path) -> None:
     identities = [note for notes in note_ranges.values() for note in notes
                   if note[0] == b"PTO\0" and note[1] == 1]
     for _, _, identity_desc in identities:
-        require(len(identity_desc) == 165,
-                "PTO note descriptor size must be 165")
+        require(len(identity_desc) == len(expected_desc),
+                "PTO note descriptor size does not match the expected identity")
         require(not identity_desc.endswith(b"\0"),
                 "PTO JSON must not have a trailing NUL")
-        require(identity_desc == EXPECTED_DESC,
-                "PTO identity JSON is not exact 0.58.3")
+        require(identity_desc == expected_desc,
+                "PTO identity JSON does not match the expected release")
     require(len(identities) == 1,
             "PTO identity must have exactly one note range")
 
     owner, note_type, desc = pto_notes[0]
     require(owner == b"PTO\0", "PTO note owner must be PTO\\0")
     require(note_type == 1, "PTO note type must be 1")
-    require(desc == EXPECTED_DESC, "primary PTO identity payload is invalid")
+    require(desc == expected_desc, "primary PTO identity payload is invalid")
 
 
 def main(argv: list[str]) -> int:

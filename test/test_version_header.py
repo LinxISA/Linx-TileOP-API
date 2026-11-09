@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -13,8 +14,8 @@ UMBRELLA_HEADER = ROOT / "include/common/pto_tileop.hpp"
 class TileOpApiVersionHeaderTest(unittest.TestCase):
     def test_source_header_exposes_version_and_feature(self):
         header = SOURCE_HEADER.read_text(encoding="utf-8")
-        self.assertIn('#define PTO_TILEOP_API_VERSION "0.58.7"', header)
-        self.assertIn('#define PTO_TILEOP_API_SPEC_VERSION "0.58.7"', header)
+        self.assertIn('#define PTO_TILEOP_API_VERSION "0.59.0"', header)
+        self.assertIn('#define PTO_TILEOP_API_SPEC_VERSION "0.59.0"', header)
         self.assertIn('#define PTO_TILEOP_API_REVISION "source-tree"', header)
         self.assertIn('#define PTO_TILEOP_API_REVISION_IS_EXACT 0', header)
         self.assertIn('#define PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX 1', header)
@@ -71,6 +72,11 @@ class TileOpApiVersionHeaderTest(unittest.TestCase):
                 resource_dir
                 / "include/tileop-api/common/pto_tileop_api_revision.hpp"
             ).read_text(encoding="utf-8")
+            source = SOURCE_HEADER.read_text()
+            self.assertEqual(set(re.findall(r"^#define (PTO_TILEOP_API_HAS_\w+) 1$", source, re.M)),
+                             set(re.findall(r"^#define (PTO_TILEOP_API_HAS_\w+) 1$", installed, re.M)))
+            self.assertIn('#define PTO_TILEOP_API_VERSION "0.59.0"', installed)
+            self.assertIn('#define PTO_TILEOP_API_SPEC_VERSION "0.59.0"', installed)
             self.assertIn(f'#define PTO_TILEOP_API_REVISION "{revision}"', installed)
             self.assertIn('#define PTO_TILEOP_API_REVISION_IS_EXACT 1', installed)
             self.assertIn('#define PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX 1', installed)

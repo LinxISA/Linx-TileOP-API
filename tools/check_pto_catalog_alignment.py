@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Fail-closed checks for the pinned PTO ISA 0.58.7 Tile catalog.
+"""Fail-closed checks for the pinned PTO ISA 0.59.0 Tile catalog.
 
-This check deliberately verifies inventory and provenance, not the full ASL/NDF
-semantics. The latter remains owned by PTO-ISA/pto-spec.
+Verifies source provenance, inventory and the indexed scalar-operand contract.
+Full ASL execution and hardware conformance remain separate validation.
 """
 
 from __future__ import annotations
 
+import argparse
+import subprocess
+import hashlib
 import json
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG = ROOT / "contracts" / "pto-isa-0.58.7-tile-operations.json"
+CATALOG = ROOT / "contracts" / "pto-isa-0.59.0-tile-operations.json"
 INCLUDE = ROOT / "include"
 DOCS = ROOT / "docs" / "tileop-usage"
 
@@ -22,11 +25,78 @@ def text(paths: list[Path]) -> str:
     return "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in paths)
 
 
+def source_pins(lock: dict):
+    return [(kind, lock[kind]) for kind in ("release", "active")] + [
+        ("extension:" + name, pin) for name, pin in lock.get("extensions", {}).items()]
+
+
+def verify_sources(lock: dict, spec_repo: Path | None = None,
+                   spec_ref: str | None = None) -> list[str]:
+    failures = []
+    for kind, pin in source_pins(lock):
+        path = ROOT / "contracts" / pin["catalog"]
+        if hashlib.sha256(path.read_bytes()).hexdigest() != pin["catalog_sha256"]:
+            failures.append(f"{kind} catalog does not match its pinned normative snapshot")
+    if spec_ref and not spec_repo:
+        failures.append("--spec-ref requires --spec-repo")
+    if spec_repo:
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(spec_repo), *args],
+                                           stderr=subprocess.PIPE)
+        try:
+            active = lock["active"]
+            ref = spec_ref or active["commit"]
+            if git("rev-parse", ref + "^{commit}").decode().strip() != active["commit"]:
+                failures.append("spec ref differs from the reviewed main commit; review and repin required")
+            for kind, pin in source_pins(lock):
+                data = git("show", pin["commit"] + ":spec/catalog/tile-operations.json")
+                if hashlib.sha256(data).hexdigest() != pin["catalog_sha256"]:
+                    failures.append(f"{kind} source Git catalog differs from lock")
+            for name, pin in lock.get("extensions", {}).items():
+                for path, tree in pin["normative_trees"].items():
+                    if git("rev-parse", pin["commit"] + ":" + path).decode().strip() != tree:
+                        failures.append(f"extension normative tree differs: {name}/{path}")
+            for path, tree in active["normative_trees"].items():
+                if git("rev-parse", ref + ":" + path).decode().strip() != tree:
+                    failures.append(f"spec normative tree differs: {path}")
+        except subprocess.CalledProcessError as error:
+            failures.append("cannot read pinned spec Git objects: " + error.stderr.decode().strip())
+    return failures
+
+
+def verify_indexed_contract(header: str) -> list[str]:
+    failures = []
+    # Inspect each explicit indexed asm block and both atomic macro emitters.
+    # Main emits base only; explicitly pinned #424 overloads emit Base/Min/Max.
+    blocks = re.findall(r'"BSTART\.TLSU M(?:GATHER|SCATTER)[^;]+;', header)
+    blocks += re.findall(r'^#define PTO_DEFINE_M(?:GATHER|SCATTER)(?:_RANGE)?_ATOM\(.*?'
+                         r'(?=^PTO_DEFINE_|^#undef)', header, re.M | re.S)
+    if not blocks:
+        return ["no indexed TLSU emitters found"]
+    for block in blocks:
+        records = re.findall(r'B\.IOR \[((?:%\[[^]]+\]|[^]])*)\],\s*\[([^]]*)\]', block)
+        bounded = "[RangeMin]" in block
+        expected = re.compile(r"%\[[Bb]ase\]" +
+                              (r",\s*%\[RangeMin\],\s*%\[RangeMax\]" if bounded else ""))
+        if not records or any(not expected.fullmatch(source.strip()) or destination.strip()
+                              for source, destination in records):
+            failures.append("indexed TLSU B.IOR must use main base-only or pinned #424 Base/Min/Max schema")
+        if bounded and 'PTO_INDEXED_RANGE_CONSTRAINT(range.min)' not in block:
+            failures.append("#424 bounds must preserve explicit descriptor presence")
+    return failures
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--spec-repo", type=Path, help="verify pinned source Git objects offline")
+    parser.add_argument("--spec-ref", help="also require this ref to equal the reviewed main commit")
+    args = parser.parse_args()
     catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
-    failures: list[str] = []
-    if catalog.get("operation_count") != 118:
-        failures.append("catalog operation_count is not 118")
+    lock = json.loads((ROOT / "contracts/pto-isa-0.59.0-sources.json").read_text())
+    failures = verify_sources(lock, args.spec_repo, args.spec_ref)
+    failures += verify_indexed_contract((INCLUDE / "jcore/template_asm.hpp").read_text())
+    if catalog.get("operation_count") != 119:
+        failures.append("catalog operation_count is not 119")
     operations = catalog.get("operations", [])
     if len(operations) != catalog.get("operation_count"):
         failures.append("catalog operation_count does not match operations length")
@@ -61,7 +131,7 @@ def main() -> int:
     if status_marker not in docs_text:
         failures.append("documentation has no unified wrapper support-status marker")
 
-    # 0.58.7 changed the gather/scatter index interpretation and the expansion
+    # 0.59.0 changed the gather/scatter index interpretation and the expansion
     # operand roles. Keep these contract deltas visible until every wrapper has
     # been audited; names alone are not semantic coverage.
     #
@@ -82,11 +152,11 @@ def main() -> int:
                 failures.append(f"TEXPDIF support status is missing backend dimension: {marker}")
 
     if failures:
-        print("FAIL: PTO 0.58.7 catalog alignment", file=sys.stderr)
+        print("FAIL: PTO 0.59.0 catalog alignment", file=sys.stderr)
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         return 1
-    print(f"PASS: PTO 0.58.7 catalog alignment ({len(names)} active operations)")
+    print(f"PASS: PTO 0.59.0 catalog alignment ({len(names)} active operations; #424 separately pinned)")
     return 0
 
 

@@ -1,12 +1,12 @@
-# LinxISA / PTO ISA v0.58.7 wrapper engine compatibility view
+# LinxISA / PTO ISA 0.59.0 wrapper engine compatibility view
 
 架构定义的引擎类别只有 **VEC**, **TLSU**, **CUBE**, and **SFU**。
 VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。
 TEPL 仍是唯一的编译 carrier 标识。`BSTART.VEC` 和 `BSTART.SFU` 是特定引擎的汇编别名；
 inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 
-下表根据本仓库固定的 LinxISA 历史投影生成，数据记录在
-[`contracts/linxisa-v0.58-engine-ops.json`](../../../contracts/linxisa-v0.58-engine-ops.json) 中。
+下表根据本仓库固定的 PTO-SPEC main (`42067d0f2890`) catalog 生成，数据记录在
+[`contracts/pto-isa-0.59.0-tile-operations.json`](../../../contracts/pto-isa-0.59.0-tile-operations.json) 中。
 
 ## VEC
 
@@ -43,6 +43,7 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 | `TCMPS` | `BSTART.VEC TCMPS` | 45 | tile-scalar-and-immediate |
 | `TSELS` | `BSTART.VEC TSELS` | 58 | tile-scalar-and-immediate |
 | `TEXPANDS` | `BSTART.VEC TEXPANDS` | 59 | tile-scalar-and-immediate |
+| `TLEA` | `BSTART.VEC TLEA` | 46 | tile-scalar-and-immediate |
 
 ## SFU
 
@@ -55,7 +56,6 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 | `TRECIP` | `BSTART.SFU TRECIP` | 20 | elementwise-tile-tile |
 | `TSQRT` | `BSTART.SFU TSQRT` | 21 | elementwise-tile-tile |
 | `TRSQRT` | `BSTART.SFU TRSQRT` | 22 | elementwise-tile-tile |
-| `TEXPDIF` | `BSTART.SFU TEXPDIF` | 29 | elementwise-tile-tile |
 | `TDIVS` | `BSTART.SFU TDIVS` | 35 | tile-scalar-and-immediate |
 | `TREMS` | `BSTART.SFU TREMS` | 36 | tile-scalar-and-immediate |
 | `TROWSUM` | `BSTART.SFU TROWSUM` | 64 | reduce-and-expand |
@@ -86,56 +86,71 @@ inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。
 | `TCOLEXPANDEXPDIF` | `BSTART.SFU TCOLEXPANDEXPDIF` | 91 | reduce-and-expand |
 | `TCOLARGMAX` | `BSTART.SFU TCOLARGMAX` | 92 | reduce-and-expand |
 | `TCOLARGMIN` | `BSTART.SFU TCOLARGMIN` | 93 | reduce-and-expand |
-| `TCONCAT` | `BSTART.SFU TCONCAT` | 96 | layout-and-rearrangement |
-| `TEXTRACT` | `BSTART.SFU TEXTRACT` | 98 | layout-and-rearrangement |
-| `TINSERT` | `BSTART.SFU TINSERT` | 99 | layout-and-rearrangement |
-| `TIMG2COL` | `BSTART.SFU TIMG2COL` | 100 | layout-and-rearrangement |
 | `TCI` | `BSTART.SFU TCI` | 102 | irregular-and-complex |
 | `TTRI` | `BSTART.SFU TTRI` | 103 | irregular-and-complex |
-| `THISTOGRAM` | `BSTART.SFU THISTOGRAM` | 104 | irregular-and-complex |
-| `TQUANT` | `BSTART.SFU TQUANT` | 106 | irregular-and-complex |
-| `TDEQUANT` | `BSTART.SFU TDEQUANT` | 107 | irregular-and-complex |
-| `TSORT` | `BSTART.SFU TSORT` | 108 | irregular-and-complex |
-| `TMRGSORT` | `BSTART.SFU TMRGSORT` | 109 | irregular-and-complex |
 | `TGATHER` | `BSTART.SFU TGATHER` | 111 | irregular-and-complex |
 | `TSCATTER` | `BSTART.SFU TSCATTER` | 112 | irregular-and-complex |
+| `TPERMUTE` | `BSTART.SFU TPERMUTE` | 117 | layout-and-rearrangement |
+| `TSHUF` | `BSTART.SFU TSHUF` | 118 | layout-and-rearrangement |
+| `TPACK` | `BSTART.SFU TPACK` | 119 | layout-and-rearrangement |
+| `TUNPACK` | `BSTART.SFU TUNPACK` | 120 | layout-and-rearrangement |
+| `TGPR2T` | `BSTART.SFU TGPR2T` | 126 | layout-and-rearrangement |
+| `TEXPDIF` | `BSTART.SFU TEXPDIF` | 29 | elementwise-tile-tile |
 
 ## TLSU
 
 | 操作 | 规范 block 起始指令 | Function |
 | --- | --- | ---: |
-| `TLOAD` | `BSTART.TLSU TLOAD` | 0 |
-| `TSTORE` | `BSTART.TLSU TSTORE` | 1 |
-| `TMOV` | `BSTART.TLSU TMOV` | 2 |
-| `TPREFETCH` | `BSTART.TLSU TPREFETCH` | 3 |
-| `MGATHER` | `BSTART.TLSU MGATHER` | 4 |
-| `MSCATTER` | `BSTART.TLSU MSCATTER` | 5 |
-| `MGATHER_MASK` | `BSTART.TLSU MGATHER.MASK` | 6 |
-| `MSCATTER_MASK` | `BSTART.TLSU MSCATTER.MASK` | 7 |
-| `MGATHER_CAS` | `BSTART.TLSU MGATHER.CAS` | 8 |
-| `GMOV` | `BSTART.GMOV` | 13 |
+| `TLOAD` | `BSTART.TLOAD TLOAD` | 0 |
+| `TSTORE` | `BSTART.TSTORE TSTORE` | 1 |
+| `TMOV` | `BSTART.TMOV TMOV` | 2 |
+| `TPREFETCH` | `BSTART.TPREFETCH TPREFETCH` | 3 |
+| `MGATHER` | `BSTART.MGATHER MGATHER` | 4 |
+| `MSCATTER` | `BSTART.MSCATTER MSCATTER` | 5 |
+| `MGATHER_MASK` | `BSTART.MGATHER.MASK MGATHER_MASK` | 6 |
+| `MSCATTER_MASK` | `BSTART.MSCATTER.MASK MSCATTER_MASK` | 7 |
+| `MGATHER_CAS` | `BSTART.MGATHER.CAS MGATHER_CAS` | 8 |
+| `GMOV` | `BSTART.GMOV GMOV` | 13 |
+| `MGATHER_EXCH` | `BSTART.MGATHER.EXCH MGATHER_EXCH` | 9 |
+| `MGATHER_MAX` | `BSTART.MGATHER.MAX MGATHER_MAX` | 10 |
+| `MGATHER_MIN` | `BSTART.MGATHER.MIN MGATHER_MIN` | 11 |
+| `MGATHER_ADD` | `BSTART.MGATHER.ADD MGATHER_ADD` | 12 |
+| `MGATHER_INC` | `BSTART.MGATHER.INC MGATHER_INC` | 14 |
+| `MGATHER_DEC` | `BSTART.MGATHER.DEC MGATHER_DEC` | 15 |
+| `MGATHER_AND` | `BSTART.MGATHER.AND MGATHER_AND` | 16 |
+| `MGATHER_OR` | `BSTART.MGATHER.OR MGATHER_OR` | 17 |
+| `MGATHER_XOR` | `BSTART.MGATHER.XOR MGATHER_XOR` | 18 |
+| `MSCATTER_MAX` | `BSTART.MSCATTER.MAX MSCATTER_MAX` | 19 |
+| `MSCATTER_MIN` | `BSTART.MSCATTER.MIN MSCATTER_MIN` | 20 |
+| `MSCATTER_ADD` | `BSTART.MSCATTER.ADD MSCATTER_ADD` | 21 |
+| `MSCATTER_INC` | `BSTART.MSCATTER.INC MSCATTER_INC` | 22 |
+| `MSCATTER_DEC` | `BSTART.MSCATTER.DEC MSCATTER_DEC` | 23 |
+| `MSCATTER_AND` | `BSTART.MSCATTER.AND MSCATTER_AND` | 24 |
+| `MSCATTER_OR` | `BSTART.MSCATTER.OR MSCATTER_OR` | 25 |
+| `MSCATTER_XOR` | `BSTART.MSCATTER.XOR MSCATTER_XOR` | 26 |
+| `MSCATTER_POPC` | `BSTART.MSCATTER.POPC MSCATTER_POPC` | 27 |
 
 ## CUBE
 
 | 操作 | 规范 block 起始指令 | Function |
 | --- | --- | ---: |
-| `TMATMUL` | `BSTART.CUBE TMATMUL` | 0 |
-| `TMATMUL_BIAS` | `BSTART.CUBE TMATMUL.BIAS` | 1 |
-| `TMATMUL_ACC` | `BSTART.CUBE TMATMUL.ACC` | 2 |
-| `TMATMUL_MX` | `BSTART.CUBE TMATMULMX` | 4 |
-| `TMATMUL_MX_BIAS` | `BSTART.CUBE TMATMULMX.BIAS` | 5 |
-| `TMATMUL_MX_ACC` | `BSTART.CUBE TMATMULMX.ACC` | 6 |
-| `TGEMV` | `BSTART.CUBE TGEMV` | 16 |
-| `TGEMV_BIAS` | `BSTART.CUBE TGEMV.BIAS` | 17 |
-| `TGEMV_ACC` | `BSTART.CUBE TGEMV.ACC` | 18 |
-| `TGEMV_MX` | `BSTART.CUBE TGEMVMX` | 20 |
-| `TGEMV_MX_BIAS` | `BSTART.CUBE TGEMVMX.BIAS` | 21 |
-| `TGEMV_MX_ACC` | `BSTART.CUBE TGEMVMX.ACC` | 22 |
+| `TMATMUL` | `BSTART.TMATMUL TMATMUL` | 0 |
+| `TMATMUL_BIAS` | `BSTART.TMATMUL.BIAS TMATMUL_BIAS` | 1 |
+| `TMATMUL_ACC` | `BSTART.TMATMUL.ACC TMATMUL_ACC` | 2 |
+| `TMATMUL_MX` | `BSTART.TMATMULMX TMATMUL_MX` | 4 |
+| `TMATMUL_MX_BIAS` | `BSTART.TMATMULMX.BIAS TMATMUL_MX_BIAS` | 5 |
+| `TMATMUL_MX_ACC` | `BSTART.TMATMULMX.ACC TMATMUL_MX_ACC` | 6 |
+| `TGEMV` | `BSTART.TGEMV TGEMV` | 16 |
+| `TGEMV_BIAS` | `BSTART.TGEMV.BIAS TGEMV_BIAS` | 17 |
+| `TGEMV_ACC` | `BSTART.TGEMV.ACC TGEMV_ACC` | 18 |
+| `TGEMV_MX` | `BSTART.TGEMVMX TGEMV_MX` | 20 |
+| `TGEMV_MX_BIAS` | `BSTART.TGEMVMX.BIAS TGEMV_MX_BIAS` | 21 |
+| `TGEMV_MX_ACC` | `BSTART.TGEMVMX.ACC TGEMV_MX_ACC` | 22 |
 
 ## 分类语义
 
-PTO ISA 0.58.7 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；
-其底层投影仍保留历史版本的 selector 数据。`elementwise-tile-tile`
+PTO ISA 0.59.0 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；
+其操作清单固定在 42067d0f2890。`elementwise-tile-tile`
 和 `tile-scalar-and-immediate` 类别在 VEC 上执行逐元素操作，但其中的
 `TEXP`、`TLOG`、`TRECIP`、`TSQRT`、`TRSQRT` 由 SFU 执行。
 `reduce-and-expand`、`layout-and-rearrangement` 和 `irregular-and-complex` 类别由 SFU 执行。
@@ -144,8 +159,8 @@ PTO ISA 0.58.7 将执行引擎与操作分类解耦。本表是 wrapper compatib
 
 ## 早期版本中移除的操作
 
-历史版本还提供了一些已从 PTO 0.58.7 active catalog 移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。
-本库不会把已退役的操作生成到当前目录；退役名称的规范列表记录在 contract 的 `deleted_tile_names` 字段中。
+历史版本还提供了一些已从 PTO 0.59.0 active catalog 移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。
+本库不会把已退役的操作生成到当前目录；退役名称的规范列表记录在 contract 的 `deleted_names` 字段中。
 
 ## 使用示例
 

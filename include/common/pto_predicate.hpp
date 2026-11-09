@@ -235,6 +235,7 @@ template <typename Basis, typename Index, typename Value, typename Global>
 __attribute__((always_inline)) inline void
 scatter(Global &destination, const Index &offsets, const Value &values,
         const Predicate<Basis> &active, IndexedByteRange range) {
+  pto::detail::require_indexed_range_compiler<Basis>();
   validate_consumer<Basis, Index, Value>();
   static_assert(std::is_same_v<typename Global::DType, typename Value::DType>,
                 "Predicate destination element type must match values");
@@ -249,7 +250,7 @@ scatter(Global &destination, const Index &offsets, const Value &values,
       "B.IOR [%[Base],%[RangeMin],%[RangeMax]], []\n"
       :
       : [Values] "Tr"(values.data()), [Offsets] "Tr"(offsets.data()),
-        [Predicate] "Tr"(active.Carrier), [RangeMin] "R"(range.min), [RangeMax] "r"(range.max),
+        [Predicate] "Tr"(active.Carrier), [RangeMin] PTO_INDEXED_RANGE_CONSTRAINT(range.min), [RangeMax] "r"(range.max),
         [Base] "r"(destination.data()),
         [Type] "i"(type_traits<typename Value::DType>::TypeCode),
         [Layout] "i"(Basis::BFractal == BLayout::CubeM16 ? 31 : 29),
@@ -278,6 +279,7 @@ template <bool Invert = false, typename Basis, typename Index, typename Value,
 __attribute__((always_inline)) inline void
 atomic_add(Global &destination, const Index &offsets, const Value &values,
            const Predicate<Basis> &active, IndexedByteRange range) {
+  pto::detail::require_indexed_range_compiler<Basis>();
   validate_consumer<Basis, Index, Value>();
   static_assert(std::is_same_v<typename Global::DType, typename Value::DType>,
                 "Predicate destination element type must match values");

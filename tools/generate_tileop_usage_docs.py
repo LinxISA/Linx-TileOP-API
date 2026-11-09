@@ -1,21 +1,36 @@
 #!/usr/bin/env python3
 """Generate self-contained developer-oriented TileOP pages from the API and standards sources."""
 from __future__ import annotations
+import os
+import io
+import tarfile
+import tempfile
+import subprocess
 import json
 import re
 import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC_ROOT = ROOT.parent / "pto-spec"
-if not (SPEC_ROOT / "spec/catalog/tile-operations.json").exists():
-    SPEC_ROOT = ROOT.parent.parent / "pto-spec"
+SOURCES = json.loads((ROOT / "contracts/pto-isa-0.59.0-sources.json").read_text())
+SPEC_ROOT = Path(os.environ.get("PTO_SPEC_ROOT", ROOT.parent.parent / "pto-spec"))
+PTO_SPEC_REF = SOURCES["active"]["commit"]
+# Read the reviewed Git objects, independently of the neighboring checkout.
+# Validate all normative trees before consuming the catalog/ASL/prose together.
+from check_pto_catalog_alignment import verify_sources
+failures = verify_sources(SOURCES, SPEC_ROOT)
+if failures:
+    raise SystemExit("; ".join(failures))
+SPEC_SNAPSHOT = tempfile.TemporaryDirectory(prefix="tileop-pto-main-")
+archive = subprocess.check_output(["git", "-C", str(SPEC_ROOT), "archive", PTO_SPEC_REF])
+SPEC_ROOT = Path(SPEC_SNAPSHOT.name)
+with tarfile.open(fileobj=io.BytesIO(archive)) as source:
+    source.extractall(SPEC_ROOT, filter="data")
 CATALOG = SPEC_ROOT / "spec/catalog/tile-operations.json"
 HEADER = ROOT / "include/jcore/template_asm.hpp"
 DOC_ROOT = ROOT / "docs/tileop-usage"
 SPEC_DOC_ROOT = SPEC_ROOT / "docs/tile"
 ASL_ROOT = SPEC_ROOT / "asl/tile"
-PTO_SPEC_REF = "v0.58.7"
 
 # Names used by the TileDataType encoding.  Keeping this list here makes the
 # documentation generator independent of prose wording in individual SPEC
@@ -241,6 +256,15 @@ def asl_operation_types(name: str) -> tuple[list[str] | None, list[str] | None] 
     # Prefetch validates an encoding selector but has no Tile data operand.
     if name == "TPREFETCH":
         return None
+    if name.startswith(("MGATHER_", "MSCATTER_")) and not name.endswith("_MASK"):
+        operation = name.split("_", 1)[1]
+        family = "GMAtomic" if name.startswith("MGATHER") else "GMReduction"
+        body = ASL_FUNCTIONS[family + "OperationDataTypeLegal"]
+        for selectors, expression in re.findall(r"when ([^=]+)=>\s*return (.*?);", body, re.S):
+            if re.search(r"\b" + family + "_" + operation + r"\b", selectors):
+                values = set(re.findall(r"TileDataType_([A-Za-z0-9]+)", expression))
+                return [value for value in DATA_TYPES if value in values], None
+        raise ValueError("No ASL atomic/reduction dtype contract for " + name)
     paths = list(ASL_ROOT.rglob(f"{name}.asl"))
     if not paths:
         return None
@@ -680,6 +704,21 @@ def output_doc(name: str) -> Path:
     return matches[0]
 
 def signatures(name: str, header: str) -> list[str]:
+    # Atomic wrappers are declared by four macros. Expand their declaration
+    # prefixes so the docs describe the actual public overloads.
+    declarations = []
+    for match in re.finditer(
+            r"^#define (PTO_DEFINE_M(?:GATHER|SCATTER)(?:_RANGE)?_ATOM)\([^\n]*\n"
+            r"((?:[^\n]*\\\n)*)", header, re.M):
+        macro, body = match.groups()
+        prefix = body.replace("\\\n", "\n").split("{", 1)[0].strip()
+        invocation = re.search(r"\b" + macro + r"\(" + re.escape(name) +
+                               r',\s*"[^"\n]+",\s*(\w+)', header)
+        if invocation:
+            prefix = re.sub(r"\bFnName\b", name, prefix)
+            prefix = re.sub(r"\bOperandName\b", invocation[1], prefix)
+            declarations.append(prefix + " {}")
+    header += "\n\n" + "\n\n".join(declarations)
     result = []
     for m in re.finditer(rf"\b{re.escape(name)}\s*\(", header):
         opening = header.find("(", m.start(), m.end())
@@ -918,7 +957,7 @@ def render(name: str, spec: Path, header: str, existing: str = "") -> str:
     old_composition = (section(existing, "Bundle 组成") or
                        section(existing, "Bundle composition"))
     old_asm = re.search(r"```asm\s*\n(.*?)```", old_composition, re.S)
-    if old_asm and "BSTART" in old_asm.group(1):
+    if old_asm and "BSTART" in old_asm.group(1) and not name.startswith(("MGATHER", "MSCATTER")):
         reviewed = format_composition(old_asm.group(1))
         rendered = re.sub(
             r"(## (?:Bundle 组成|Bundle composition)\n.*?```asm\n).*?(\n```)",
@@ -928,42 +967,28 @@ def render(name: str, spec: Path, header: str, existing: str = "") -> str:
             flags=re.S,
         )
     if name.startswith(("MGATHER", "MSCATTER")):
-        rendered = update_indexed_tlsu_range_doc(name, rendered)
+        rendered = update_indexed_doc(name, rendered)
     return rendered
 
-def update_indexed_tlsu_range_doc(name: str, rendered: str) -> str:
-    """Apply the scoped #424 extension over the pinned 0.58.7 prose seed."""
-    rendered = re.sub(
-        r"(# " + re.escape(name) + r"\n\n).*?(?=\n\n## C\+\+ 接口)",
-        lambda m: m.group(1) + "`" + name + "` 使用索引 Tile 中的 S32/U32/S64/U64 "
-        "字节位移访问 GM：每个访问起点为 `Base + displacement`，不进行元素宽度缩放，"
-        "不使用 GM 行 stride。可选 `IndexedByteRange` 传递相对 Base 的有符号 64 位字节边界；"
-        "详见 [indexed TLSU 范围参数](../../indexed-tlsu-range.md)。",
-        rendered, flags=re.S)
-    rendered = re.sub(r"\| `offset` \|[^\n]*", "| `offset` | 相对 GM Base 的显式字节位移 Tile；不按元素宽度缩放。 |", rendered)
-    rendered = re.sub(r"- `B.IOR`[^\n]*", "- `B.IOR` 的首条无标志记录为 `[Base, Min, Max]`；省略范围时 Min/Max 选择器均为 zero。显式范围必须至少有一个非 zero 边界选择器，即使其寄存器值为 0。", rendered)
-    rendered = re.sub(r"B\.IOR[^\n]*StrideGPR[^\n]*", "B.IOR       [BaseGPR, MinIndexGPR, MaxIndexGPR], []", rendered)
-    for old, new in (
-        ("logical element indices", "byte displacements"),
-        ("logical element index", "byte displacement"),
-        ("逻辑线性元素下标", "相对 GM Base 的字节位移"),
-        ("完整的逻辑线性下标", "完整的字节位移"),
-        ("B.IOR 只携带 GM 基地址、不携带行跨度", "B.IOR 携带 GM 基地址和可选字节范围，不携带行跨度"),
-    ):
-        rendered = rendered.replace(old, new)
-    rendered = rendered.replace("非法调用不会发布部分输出或部分副作用。", "范围 Min > Max 时仅当前参与 PE 在副作用前 fault，其他 PE 已有的副作用保留。")
-    # Describe the placement explicitly: macro-generated atomic declarations
-    # are not literal function names in the signature extractor.
-    placements = (
-        "范围重载在 `validCol` 后、可选 `validRow` 前增加 `IndexedByteRange range`。",
-        "范围重载在最后追加 `IndexedByteRange range` 参数。",
-    )
-    for placement in placements:
-        rendered = rendered.replace(placement + "\n\n", "")
-    placement = placements[1] if name in {
-        "MGATHER", "MGATHER_MASK", "MSCATTER", "MSCATTER_MASK"
-    } else placements[0]
-    rendered = rendered.replace("## 使用要求", placement + "\n\n## 使用要求", 1)
+
+def update_indexed_doc(name: str, rendered: str) -> str:
+    intro = (f"`{name}` 使用索引 Tile 中的 S32/U32/S64/U64 字节位移访问 GM："
+             "地址为 `Base + displacement`，不按元素宽度缩放，不使用 GM 行 stride。"
+             "`B.IOR` 只绑定 GM base；RegSrc1、RegSrc2、RegDst 必须为零。")
+    rendered = re.sub(r"(# " + re.escape(name) + r"\n\n).*?(?=\n\n## C\+\+ 接口)",
+                      lambda match: match[1] + intro, rendered, count=1, flags=re.S)
+    rendered = re.sub(r"(\| `(?:offset|elementIndices|byteDisplacements)` \|)[^\n]*",
+                      r"\1 相对 GM Base 的字节位移 Tile；不按元素宽度缩放。 |", rendered)
+    rendered = rendered.replace("逻辑线性元素下标", "字节位移").replace(
+        "| 索引 / 地址位移 Tile | 必须使用该操作 contract 允许的整数 dtype 与单位。 |",
+        "| 索引 / 地址位移 Tile | S32/U32/S64/U64；相对 GM Base 的字节位移。 |")
+    extension = SOURCES["extensions"]["indexed_tlsu_range"]
+    rendered = rendered.replace("RegSrc1、RegSrc2、RegDst 必须为零。",
+        "普通重载的 RegSrc1、RegSrc2、RegDst 必须为零。可选 `IndexedByteRange` 重载遵循尚未合入 main 的 "
+        "[#424](" + extension["pull_request"] + ")，单独固定在 `" + extension["commit"][:12] + "`；"
+        "该重载使用 `[Base, Min, Max]`，详见[范围参数](../../indexed-tlsu-range.md)。")
+    rendered = rendered.replace("## 使用要求", "范围重载传递有符号 64 位字节边界：普通 gather/scatter 在参数末尾追加 "
+        "`IndexedByteRange range`，atomic/reduction 在 `validCol` 后、可选 `validRow` 前传入。\n\n## 使用要求", 1)
     return rendered
 
 def main() -> None:

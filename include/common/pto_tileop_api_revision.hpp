@@ -1,8 +1,8 @@
 #ifndef PTO_TILEOP_API_REVISION_HPP
 #define PTO_TILEOP_API_REVISION_HPP
 
-#define PTO_TILEOP_API_VERSION "0.58.7"
-#define PTO_TILEOP_API_SPEC_VERSION "0.58.7"
+#define PTO_TILEOP_API_VERSION "0.59.0"
+#define PTO_TILEOP_API_SPEC_VERSION "0.59.0"
 
 // Source-tree consumers do not necessarily build from a Git checkout. The
 // install target replaces these two macros with the exact checked-out commit.
@@ -10,6 +10,9 @@
 #define PTO_TILEOP_API_REVISION_IS_EXACT 0
 
 #define PTO_TILEOP_API_HAS_INDEXED_TLSU_RANGE 1
+
+#define PTO_TILEOP_API_HAS_TLEA 1
+#define PTO_TILEOP_API_HAS_TCI64 1
 
 // Feature gates let consumers fail fast without comparing revision strings.
 #define PTO_TILEOP_API_HAS_LOCAL_M32_TLOAD_ASSEMBLY 1

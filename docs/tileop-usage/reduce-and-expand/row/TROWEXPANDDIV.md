@@ -116,3 +116,5 @@ TSTORE(dst_global, dst);
 ```
 
 涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。
+`BroadcastByteOffset` 选出的 operation-typed CELL slot 必须小于源的有效列数；
+静态有效区在编译期检查，动态有效区由目标端合法性检查。

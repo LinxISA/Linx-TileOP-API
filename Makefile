@@ -1,5 +1,5 @@
 LIBNAME = tileop-api
-VERSION = 0.58.7
+VERSION = 0.59.0
 HEADERS = $(wildcard include/*.h) $(wildcard include/*.hpp) include/jcore include/cpu_sim include/aarch64 include/common
 TILEOP_API_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 TILEOP_API_REVISION_IS_EXACT ?= $(shell test -z "$$(git status --porcelain --untracked-files=all 2>/dev/null)" && printf 1 || printf 0)
@@ -29,6 +29,11 @@ check:
 	python3 test/test_local_m32_tload_assembly.py
 	python3 test/test_tpack_element_assembly_api.py
 	python3 test/test_pr_gate_cache_order.py
+	python3 test/test_macro_coverage.py
+	python3 test/test_pto059_gap_api.py
+	python3 test/test_pto_main_contract.py
+	python3 test/test_predicate_adapters.py
+	python3 test/test_indexed_tlsu_range.py
 	python3 test/test_version_header.py
 	python3 test/test_layout_header_link.py
 	python3 test/test_element_tile_api.py
@@ -59,7 +64,7 @@ install:
 		echo '#define PTO_TILEOP_API_REVISION_HPP'; \
 		echo ''; \
 		echo '#define PTO_TILEOP_API_VERSION "$(VERSION)"'; \
-		echo '#define PTO_TILEOP_API_SPEC_VERSION "0.58.7"'; \
+		echo '#define PTO_TILEOP_API_SPEC_VERSION "0.59.0"'; \
 		echo '#define PTO_TILEOP_API_REVISION "$(TILEOP_API_REVISION)"'; \
 		echo '#define PTO_TILEOP_API_REVISION_IS_EXACT $(TILEOP_API_REVISION_IS_EXACT)'; \
 		echo ''; \
@@ -78,6 +83,12 @@ install:
 		echo '#define PTO_TILEOP_API_HAS_DENSE_F16_U16_ELEMENT_TILE 1'; \
 		echo '#define PTO_TILEOP_API_HAS_HIERARCHICAL_ELEMENT_STORAGE 1'; \
 		echo ''; \
+		echo '#define PTO_TILEOP_API_HAS_INDEXED_TLSU_RANGE 1'; \
+		echo '#define PTO_TILEOP_API_HAS_TLEA 1'; \
+		echo '#define PTO_TILEOP_API_HAS_TCI64 1'; \
+		echo '#define PTO_TILEOP_API_HAS_INTEGER_ELEMENT_STORAGE_1024 1'; \
+		echo '#define PTO_TILEOP_API_HAS_I32_ELEMENT_STORAGE_2048 1'; \
+		echo '#define PTO_TILEOP_API_HAS_NORM_U32_ELEMENT_VIEW_V2 1'; \
 		echo '#endif'; \
 	} > $(INSTALL_DIR)/common/pto_tileop_api_revision.hpp
 	@echo "Installation complete. Now you can use #include <$(LIBNAME)/header.h>"

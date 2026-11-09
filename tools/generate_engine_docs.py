@@ -1,17 +1,8 @@
 #!/usr/bin/env python3
-"""Generate the wrapper engine compatibility view from the pinned projection.
+"""Generate the active engine inventory from the pinned PTO main catalog.
 
-The output mirrors the active portion exposed by this wrapper. The checked-in
-projection is historical LinxISA/PTO 0.58.3 data and is not a replacement for
-the PTO ISA 0.58.7 catalog.
-(spec/catalog/tile-operations.json) for the four architectural engine
-classes: **VEC**, **SFU**, **TLSU**, and **CUBE**.  Engine and
-classification are decoupled (per ADR 0057): TEXP/TLOG/... are SFU-executed
-elementwise operations, TGATHER/TSCATTER/TCONCAT are SFU-executed
-layout/irregular operations, and TMOV is a TLSU-executed layout operation.
-TEPL is the unique compiled carrier identity. `BSTART.VEC` / `BSTART.SFU` are
-engine-specific assembly aliases; current inline wrappers retain TEPL so the
-same source also compiles with the preceding 0.58 toolchain.
+Historical LinxISA projections remain inputs only to migration contract tests.
+API subsets and backend limits are documented in support-status.md.
 """
 
 from __future__ import annotations
@@ -22,23 +13,29 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONTRACT = ROOT / "contracts" / "linxisa-v0.58-engine-ops.json"
+CONTRACT = ROOT / "contracts" / "pto-isa-0.59.0-tile-operations.json"
 OUTPUT = ROOT / "docs" / "tileop-usage" / "generated" / "engines.md"
 
 
 def render() -> str:
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
-    deleted_names = set(contract.get("deleted_tile_names", []))
+    deleted_names = set(contract.get("deleted_names", []))
+    operations = contract["operations"]
+    contract["tepl_ops"] = [dict(op, logical_selector=int(op["selector"], 16))
+                            for op in operations if op["family"] == "TEPL"]
+    for family, key in (("TLSU", "tlsu_ops"), ("CUBE", "cube_ops")):
+        contract[key] = [dict(op, mnemonic=op["command_mnemonic"] + " " + op["name"])
+                         for op in operations if op["family"] == family]
     lines = [
-        "# LinxISA / PTO ISA v0.58.7 wrapper engine compatibility view",
+        "# LinxISA / PTO ISA 0.59.0 wrapper engine compatibility view",
         "",
         "架构定义的引擎类别只有 **VEC**, **TLSU**, **CUBE**, and **SFU**。",
         "VEC 只包含逐元素操作；SFU 包含归约、广播、变换、排序以及其他需要更复杂硬件的操作。",
         "TEPL 仍是唯一的编译 carrier 标识。`BSTART.VEC` 和 `BSTART.SFU` 是特定引擎的汇编别名；",
         "inline wrapper 保留 `BSTART.TEPL`，以兼容之前的工具链源码。",
         "",
-        "下表根据本仓库固定的 LinxISA 历史投影生成，数据记录在",
-        "[`contracts/linxisa-v0.58-engine-ops.json`](../../../contracts/linxisa-v0.58-engine-ops.json) 中。",
+        "下表根据本仓库固定的 PTO-SPEC main (`42067d0f2890`) catalog 生成，数据记录在",
+        "[`contracts/pto-isa-0.59.0-tile-operations.json`](../../../contracts/pto-isa-0.59.0-tile-operations.json) 中。",
         "",
     ]
 
@@ -80,8 +77,8 @@ def render() -> str:
         [
             "## 分类语义",
             "",
-            "PTO ISA 0.58.7 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；",
-            "其底层投影仍保留历史版本的 selector 数据。`elementwise-tile-tile`",
+            "PTO ISA 0.59.0 将执行引擎与操作分类解耦。本表是 wrapper compatibility view；",
+            "其操作清单固定在 42067d0f2890。`elementwise-tile-tile`",
             "和 `tile-scalar-and-immediate` 类别在 VEC 上执行逐元素操作，但其中的",
             "`TEXP`、`TLOG`、`TRECIP`、`TSQRT`、`TRSQRT` 由 SFU 执行。",
             "`reduce-and-expand`、`layout-and-rearrangement` 和 `irregular-and-complex` 类别由 SFU 执行。",
@@ -91,14 +88,14 @@ def render() -> str:
         ]
     )
 
-    deleted = contract.get("deleted_tile_names", [])
+    deleted = contract.get("deleted_names", [])
     if deleted:
         lines.extend(
             [
                 "## 早期版本中移除的操作",
                 "",
-                "历史版本还提供了一些已从 PTO 0.58.7 active catalog 移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。",
-                "本库不会把已退役的操作生成到当前目录；退役名称的规范列表记录在 contract 的 `deleted_tile_names` 字段中。",
+                "历史版本还提供了一些已从 PTO 0.59.0 active catalog 移除的 Tile 操作（例如 ACC 风格的后处理辅助操作）。",
+                "本库不会把已退役的操作生成到当前目录；退役名称的规范列表记录在 contract 的 `deleted_names` 字段中。",
                 "",
             ]
         )

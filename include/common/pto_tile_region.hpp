@@ -54,7 +54,8 @@ inline constexpr int local_layout_code_v =
   ".endif\n"
 
 #define PTO_PE_MASK_ASM(PREFIX, SUFFIX)                                      \
-  ".if %c[PEMask] == 1\n" PREFIX "0001" SUFFIX                              \
+  ".if %c[PEMask] == 0\n" PREFIX "0000" SUFFIX \
+  ".elseif %c[PEMask] == 1\n" PREFIX "0001" SUFFIX                              \
   ".elseif %c[PEMask] == 2\n" PREFIX "0010" SUFFIX                          \
   ".elseif %c[PEMask] == 4\n" PREFIX "0100" SUFFIX                          \
   ".elseif %c[PEMask] == 8\n" PREFIX "1000" SUFFIX                          \
