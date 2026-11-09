@@ -35,13 +35,16 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        LLVM_SOURCE_SHA="$({ git ls-remote "${LLVM_REPO}" "refs/heads/${LLVM_REF}" || true; } | awk 'NR == 1 {print $1}')"
+        LLVM_SOURCE_SHA="${LLVM_PIN:-}"
+        if [ -z "${LLVM_SOURCE_SHA}" ]; then
+          LLVM_SOURCE_SHA="$({ git ls-remote "${LLVM_REPO}" "refs/heads/${LLVM_REF}" || true; } | awk 'NR == 1 {print $1}')"
+        fi
         if [ -z "${LLVM_SOURCE_SHA}" ]; then
           echo "ERROR: failed to resolve ${LLVM_REPO} refs/heads/${LLVM_REF}" >&2
           exit 1
         fi
         echo "sha=${LLVM_SOURCE_SHA}" >> "$GITHUB_OUTPUT"
-        echo "Resolved latest LLVM ${LLVM_REF} -> ${LLVM_SOURCE_SHA}"
+        echo "Resolved LLVM ${LLVM_REF} (optional LLVM_PIN) -> ${LLVM_SOURCE_SHA}"
     - name: Restore complete v2 toolchain cache
       id: cache-llvm-v2
       uses: actions/cache/restore@v4

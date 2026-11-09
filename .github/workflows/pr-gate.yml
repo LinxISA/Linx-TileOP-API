@@ -4,10 +4,12 @@ on:
   pull_request:
     branches:
       - linx
+      - "0.59"
   merge_group:
   push:
     branches:
       - linx
+      - "0.59"
   workflow_dispatch:
 
 concurrency:
@@ -28,6 +30,7 @@ jobs:
     env:
       LLVM_REPO: https://github.com/LinxISA/llvm-project.git
       LLVM_REF: dev-llvm15_56
+      LLVM_PIN: b19e8c0e184cd7e3a1fa5ab57b368cbf978c3aa8
       TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
       TOOLCHAIN_REF: e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156
       TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
@@ -61,6 +64,16 @@ jobs:
         run: |
           set -euo pipefail
           git show --check --format= HEAD -- include/jcore/template_asm.hpp
+
+      - name: Check PTO 0.59 main and optional range extension
+        working-directory: tileop-api
+        env:
+          LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
+          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
+        run: |
+          python3 test/test_pto059_gap_api.py -v
+          python3 test/test_pto_main_contract.py -v
+          python3 test/test_indexed_tlsu_range.py -v
 
       - name: Check LLVM issue 138 narrow TCMP carriers
         working-directory: tileop-api
