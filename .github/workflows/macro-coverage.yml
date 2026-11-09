@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   coverage:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 330
     env:
       LLVM_REPO: https://github.com/LinxISA/llvm-project.git
