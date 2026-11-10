@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 330
     env:
       LLVM_REPO: https://github.com/LinxISA/llvm-project.git
-      LLVM_REF: dev-llvm15_56
+      LLVM_REF: '0.59'
       TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
       TOOLCHAIN_REF: e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156
       TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
