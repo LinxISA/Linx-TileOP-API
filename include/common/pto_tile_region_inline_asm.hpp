@@ -2,6 +2,7 @@
 #define PTO_TILE_REGION_INLINE_ASM_HPP
 
 #include "common/pto_tile_region.hpp"
+#include "common/pto_row_expand_asm.hpp"
 
 namespace pto {
 
@@ -1325,17 +1326,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_expand(
       "B.SUBVIEW 0, %8, 0, %c11\n"
       "B.SUBVIEW 1, %9, 0, %c14\n"
       ".if %c12 == 29\n"
-      ".if %c13 == 0\n"
-      "B.DATR CUBE_M32, Null\n"
-      ".else\n"
-      "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c13\n"
-      ".endif\n"
+      PTO_ROW_EXPAND_CUBE_DATR_ASM("CUBE_M32", "%c13")
       ".elseif %c12 == 31\n"
-      ".if %c13 == 0\n"
-      "B.DATR CUBE_M16, Null\n"
-      ".else\n"
-      "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c13\n"
-      ".endif\n"
+      PTO_ROW_EXPAND_CUBE_DATR_ASM("CUBE_M16", "%c13")
       ".endif\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile0::DType>::TypeCode),
@@ -1389,17 +1382,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
       "B.IOT %2, %6, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 0, %7, 0, %c8\n"
       ".if %c11 == 29\n"
-      ".if %c12 == 0\n"
-      "B.DATR CUBE_M32, Null\n"
-      ".else\n"
-      "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c12\n"
-      ".endif\n"
+      PTO_ROW_EXPAND_CUBE_DATR_ASM("CUBE_M32", "%c12")
       ".elseif %c11 == 31\n"
-      ".if %c12 == 0\n"
-      "B.DATR CUBE_M16, Null\n"
-      ".else\n"
-      "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c12\n"
-      ".endif\n"
+      PTO_ROW_EXPAND_CUBE_DATR_ASM("CUBE_M16", "%c12")
       ".endif\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
@@ -1452,17 +1437,9 @@ PTO_REGION_ALWAYS_INLINE void pto_region_row_expand(
       "B.IOT %6, %2, mask=1111, last, ->%0<%Z9>\n"
       "B.SUBVIEW 1, %7, 0, %c8\n"
       ".if %c11 == 29\n"
-      ".if %c12 == 0\n"
-      "B.DATR CUBE_M32, Null\n"
-      ".else\n"
-      "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c12\n"
-      ".endif\n"
+      PTO_ROW_EXPAND_CUBE_DATR_ASM("CUBE_M32", "%c12")
       ".elseif %c11 == 31\n"
-      ".if %c12 == 0\n"
-      "B.DATR CUBE_M16, Null\n"
-      ".else\n"
-      "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c12\n"
-      ".endif\n"
+      PTO_ROW_EXPAND_CUBE_DATR_ASM("CUBE_M16", "%c12")
       ".endif\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode), "Tr"(src1.data()),

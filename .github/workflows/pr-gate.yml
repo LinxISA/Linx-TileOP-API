@@ -82,6 +82,13 @@ jobs:
           LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
         run: python3 test/test_issue312_bias_macro.py -v
 
+      - name: Check issue 314 row-expansion offset object encodings
+        working-directory: tileop-api
+        env:
+          LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
+          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
+        run: python3 test/test_issue314_row_expand_offset.py -v
+
       - name: Check LLVM issue 138 narrow TCMP carriers
         working-directory: tileop-api
         env:

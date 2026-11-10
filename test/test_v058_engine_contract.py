@@ -360,8 +360,8 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
             self.header, re.S).group(1)
         self.assertIn("[ElemLayout] == 29", row_layout)
         self.assertIn("[ElemLayout] == 31", row_layout)
-        self.assertIn("B.DATR CUBE_M32, Null", row_layout)
-        self.assertIn("B.DATR CUBE_M16, Null", row_layout)
+        self.assertIn('PTO_ROW_EXPAND_CUBE_DATR_ASM("CUBE_M32",', row_layout)
+        self.assertIn('PTO_ROW_EXPAND_CUBE_DATR_ASM("CUBE_M16",', row_layout)
         self.assertIn("%c[BroadcastByteOffset]", row_layout)
         # Reductions read the source geometry through B.DIM and normally
         # require the destination layout to match, so the selector comes from

@@ -7,6 +7,7 @@
 #include "common/pto_shared_nd.hpp"
 #include "common/pto_indexed_range.hpp"
 #include "common/pto_tile_region.hpp"
+#include "common/pto_row_expand_asm.hpp"
 
 using namespace pto;
 
@@ -53,22 +54,12 @@ atomic_tstore_carrier(const Predicate<Basis> &);
   ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Null\n"                      \
   ".endif\n"
 
-// TROWEXPAND* uses B.DATR.RMode as a compact byte-offset selector.  RMode is
-// encoded in three bits by the LinxV5 instruction, so the direct API emits the
-// ordinary two-field form for zero and the explicit alias for nonzero values.
-#define PTO_ROW_EXPAND_LAYOUT_ASM                                               \
+// Share the byte-offset field spelling with the SubTileView emitters.
+#define PTO_ROW_EXPAND_LAYOUT_ASM                                              \
   ".if %c[ElemLayout] == 29\n"                                               \
-  ".if %c[BroadcastByteOffset] == 0\n"                                      \
-  "B.DATR CUBE_M32, Null\n"                                                   \
-  ".else\n"                                                                    \
-  "B.DATR CUBE_M32, DTYPE_NONE, Null, EQ, %c[BroadcastByteOffset]\n"          \
-  ".endif\n"                                                                  \
+  PTO_ROW_EXPAND_CUBE_DATR_ASM("CUBE_M32", "%c[BroadcastByteOffset]")          \
   ".elseif %c[ElemLayout] == 31\n"                                           \
-  ".if %c[BroadcastByteOffset] == 0\n"                                      \
-  "B.DATR CUBE_M16, Null\n"                                                   \
-  ".else\n"                                                                    \
-  "B.DATR CUBE_M16, DTYPE_NONE, Null, EQ, %c[BroadcastByteOffset]\n"          \
-  ".endif\n"                                                                  \
+  PTO_ROW_EXPAND_CUBE_DATR_ASM("CUBE_M16", "%c[BroadcastByteOffset]")          \
   ".endif\n"
 
 #define PTO_ROW_EXPAND_OFFSET_CHECK(Tile, Source)                               \
