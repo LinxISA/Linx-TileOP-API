@@ -9190,15 +9190,17 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       : "memory")
 
 // Dispatch ScaleMask (0/1/2) -> MASK and IorMode -> IOR for the fold emitters.
-#define PTO_MX_DISPATCH_FOLD_I(OP, STORAGE, MASK) \
-  if constexpr (IorMode == 0) { PTO_MX_FOLD_##OP(STORAGE, MASK, 0); } \
-  else if constexpr (IorMode == 1) { PTO_MX_FOLD_##OP(STORAGE, MASK, 1); } \
-  else if constexpr (IorMode == 2) { PTO_MX_FOLD_##OP(STORAGE, MASK, 2); } \
-  else { PTO_MX_FOLD_##OP(STORAGE, MASK, 3); }
-#define PTO_MX_DISPATCH_FOLD(OP, STORAGE) \
-  if constexpr (ScaleMask == 0) { PTO_MX_DISPATCH_FOLD_I(OP, STORAGE, 0); } \
-  else if constexpr (ScaleMask == 1) { PTO_MX_DISPATCH_FOLD_I(OP, STORAGE, 1); } \
-  else { PTO_MX_DISPATCH_FOLD_I(OP, STORAGE, 2); }
+// Pass the complete function-like macro name; bare selectors such as BIAS
+// can be expanded by caller definitions before a nested token paste.
+#define PTO_MX_DISPATCH_FOLD_I(EMIT, STORAGE, MASK) \
+  if constexpr (IorMode == 0) { EMIT(STORAGE, MASK, 0); } \
+  else if constexpr (IorMode == 1) { EMIT(STORAGE, MASK, 1); } \
+  else if constexpr (IorMode == 2) { EMIT(STORAGE, MASK, 2); } \
+  else { EMIT(STORAGE, MASK, 3); }
+#define PTO_MX_DISPATCH_FOLD(EMIT, STORAGE) \
+  if constexpr (ScaleMask == 0) { PTO_MX_DISPATCH_FOLD_I(EMIT, STORAGE, 0); } \
+  else if constexpr (ScaleMask == 1) { PTO_MX_DISPATCH_FOLD_I(EMIT, STORAGE, 1); } \
+  else { PTO_MX_DISPATCH_FOLD_I(EMIT, STORAGE, 2); }
 
 #define PTO_GV_MX_SRC_0 "B.IOT %[Vec], %[Mtx], mask=1111\n"
 #define PTO_GV_MX_SRC_1 "B.IOT %[Vec], %[ScaleVec], mask=1111\n" "B.IOT %[Mtx], mask=1111\n"
@@ -9235,15 +9237,16 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
       : [Bias] "Tr"(bias.data()), PTO_GV_MX_INPUTS_##MASK, \
         [QuantGpr] "r"(quant_gpr), [LReluGpr] "r"(lrelu_gpr), PTO_FIXP_ATTR_INPUTS, PTO_MATMUL_COMMON_INPUTS(Dst, Vec, Mtx, M, N, K), [DstSize] "i"(tile_type_traits<typename Dst::TileDType>::TilesizeCode), [RowSize] "i"(tile_type_traits<typename RowOut::TileDType>::TilesizeCode), [GroupSize] "i"(tile_type_traits<typename GroupOut::TileDType>::TilesizeCode) \
       : "memory")
-#define PTO_GV_DISPATCH_FOLD_I(OP, MASK) \
-  if constexpr (IorMode == 0) { PTO_GV_FOLD_##OP(MASK, 0); } \
-  else if constexpr (IorMode == 1) { PTO_GV_FOLD_##OP(MASK, 1); } \
-  else if constexpr (IorMode == 2) { PTO_GV_FOLD_##OP(MASK, 2); } \
-  else { PTO_GV_FOLD_##OP(MASK, 3); }
-#define PTO_GV_DISPATCH_FOLD(OP) \
-  if constexpr (ScaleMask == 0) { PTO_GV_DISPATCH_FOLD_I(OP, 0); } \
-  else if constexpr (ScaleMask == 1) { PTO_GV_DISPATCH_FOLD_I(OP, 1); } \
-  else { PTO_GV_DISPATCH_FOLD_I(OP, 2); }
+// Use the same complete-emitter convention as the matrix fold dispatch.
+#define PTO_GV_DISPATCH_FOLD_I(EMIT, MASK) \
+  if constexpr (IorMode == 0) { EMIT(MASK, 0); } \
+  else if constexpr (IorMode == 1) { EMIT(MASK, 1); } \
+  else if constexpr (IorMode == 2) { EMIT(MASK, 2); } \
+  else { EMIT(MASK, 3); }
+#define PTO_GV_DISPATCH_FOLD(EMIT) \
+  if constexpr (ScaleMask == 0) { PTO_GV_DISPATCH_FOLD_I(EMIT, 0); } \
+  else if constexpr (ScaleMask == 1) { PTO_GV_DISPATCH_FOLD_I(EMIT, 1); } \
+  else { PTO_GV_DISPATCH_FOLD_I(EMIT, 2); }
 #define PTO_GV_MX_OPTIONAL_EMIT(OPCODE, PREFIX, SUFFIX, EXTRA, MASK, SRC, OUT, IOR) \
   asm volatile(PTO_MATMUL_HEADER(OPCODE, PTO_FIXP_ATTR) PREFIX PTO_GV_MX_SRC_##MASK SUFFIX \
       PTO_FIXP_PPSRC_##SRC PTO_FIXP_OUT_##OUT PTO_FIXP_IOR_##IOR \
@@ -9465,25 +9468,25 @@ PTO_SHARED_INLINE void emit_matmul_mx_fixp(
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_FOLD_LOCAL); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_LOCAL); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PLAIN, L); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_PLAIN, L); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_PLAIN_L); }
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) {
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_FOLD_SHARED_A); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_SHARED_A); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PLAIN, SA); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_PLAIN, SA); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_PLAIN_SA); }
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) {
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_FOLD_SHARED_B); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_SHARED_B); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PLAIN, SB); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_PLAIN, SB); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_PLAIN_SB); }
   } else {
     if constexpr (ScaleMask == 3) { PTO_FIXP_DISPATCH(PTO_FIXP_MX_EMIT_SHARED_AB); }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PLAIN, SAB); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_PLAIN, SAB); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_PLAIN_SAB); }
   }
 }
@@ -9516,28 +9519,28 @@ PTO_SHARED_INLINE void emit_matmul_mx_acc_fixp(
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_ACC_FOLD_LOCAL); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_LOCAL); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(ACC, L); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_ACC, L); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_ACC_L); }
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) {
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_ACC_FOLD_SHARED_A); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_SHARED_A); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(ACC, SA); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_ACC, SA); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_ACC_SA); }
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) {
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_ACC_FOLD_SHARED_B); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_SHARED_B); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(ACC, SB); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_ACC, SB); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_ACC_SB); }
   } else {
     if constexpr (ScaleMask == 3) {
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_ACC_FOLD_SHARED_AB); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_ACC_EMIT_SHARED_AB); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(ACC, SAB); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_ACC, SAB); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_ACC_SAB); }
   }
 }
@@ -9568,28 +9571,28 @@ PTO_SHARED_INLINE void emit_matmul_mx_bias_fixp(
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_BIAS_FOLD_LOCAL); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_LOCAL); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(BIAS, L); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_BIAS, L); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_BIAS_L); }
   } else if constexpr (is_shared_tile_v<A> && !is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) {
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_BIAS_FOLD_SHARED_A); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_SHARED_A); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(BIAS, SA); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_BIAS, SA); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_BIAS_SA); }
   } else if constexpr (!is_shared_tile_v<A> && is_shared_tile_v<B>) {
     if constexpr (ScaleMask == 3) {
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_BIAS_FOLD_SHARED_B); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_SHARED_B); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(BIAS, SB); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_BIAS, SB); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_BIAS_SB); }
   } else {
     if constexpr (ScaleMask == 3) {
       if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_MX_BIAS_FOLD_SHARED_AB); }
       else { PTO_FIXP_DISPATCH(PTO_FIXP_MX_BIAS_EMIT_SHARED_AB); }
     }
-    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(BIAS, SAB); }
+    else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_MX_DISPATCH_FOLD(PTO_MX_FOLD_BIAS, SAB); }
     else { PTO_MX_DISPATCH_OPTIONAL(PTO_MX_OPT_BIAS_SAB); }
   }
 }
@@ -9798,7 +9801,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_fixp(
     if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_GV_GVMX_FOLD); }
     else { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMX_EMIT_LOCAL); }
   }
-  else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_GV_DISPATCH_FOLD(PLAIN); }
+  else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_GV_DISPATCH_FOLD(PTO_GV_FOLD_PLAIN); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_PLAIN); }
 }
 
@@ -9830,7 +9833,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_bias_fixp(
     if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_GV_GVMXB_FOLD); }
     else { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXB_EMIT_LOCAL); }
   }
-  else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_GV_DISPATCH_FOLD(BIAS); }
+  else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_GV_DISPATCH_FOLD(PTO_GV_FOLD_BIAS); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_BIAS); }
 }
 
@@ -9862,7 +9865,7 @@ PTO_SHARED_INLINE void emit_gemv_mx_acc_fixp(
     if constexpr (SrcMask == 0 && OutMask == 0) { PTO_FIXP_DISPATCH_IOR(PTO_FIXP_GV_GVMXA_FOLD); }
     else { PTO_FIXP_DISPATCH(PTO_FIXP_GV_GVMXA_EMIT_LOCAL); }
   }
-  else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_GV_DISPATCH_FOLD(ACC); }
+  else if constexpr (SrcMask == 0 && OutMask == 0) { PTO_GV_DISPATCH_FOLD(PTO_GV_FOLD_ACC); }
   else { PTO_MX_DISPATCH_OPTIONAL(PTO_GV_OPT_ACC); }
 }
 

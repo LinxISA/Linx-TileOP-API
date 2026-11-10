@@ -20,6 +20,7 @@ check:
 	python3 tools/check_pto_catalog_alignment.py
 	python3 test/test_packed_global_stride.py
 	python3 test/test_mx_local_scale_contract.py
+	python3 test/test_issue312_bias_macro.py
 	python3 test/test_f32_norm_element_view_api.py
 	python3 test/test_v058_engine_contract.py
 	python3 test/test_pto0585_layout_interfaces.py
