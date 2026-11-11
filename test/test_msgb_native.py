@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check #426 transport instructions in an object built from the public C API."""
+"""Check native #426 transport instructions and freestanding C++ message linkage."""
 import os
 from pathlib import Path
 import re
@@ -22,12 +22,35 @@ int release_probe(linx_msgb_claim claim) { return linx_msgb_release(claim); }
 """
 
 
+TYPED_PROBE = r"""
+#include <common/pto_message.hpp>
+
+struct Message { unsigned char bytes[PAYLOAD_BYTES]; };
+
+extern "C" void kernel(uint32_t destination, const Message &out, Message &in) {
+    (void)pto::PTOSendMessage(destination, out);
+    (void)pto::PTORecvMessage(in);
+}
+"""
+
+
 class MsgbNativeTest(unittest.TestCase):
-    def test_operational_registers_and_sys_blocks(self):
-        compiler = os.environ.get("LINX_CXX")
-        if not compiler:
+    def setUp(self):
+        self.compiler = os.environ.get("LINX_CXX")
+        if not self.compiler:
             self.skipTest("set LINX_CXX to a Linx target clang++")
-        objdump = Path(compiler).parent / "llvm-objdump"
+
+    def build_probe(self, source, obj, language, standard, *flags):
+        subprocess.run([self.compiler, "--target=linx64v5-unknown-linux-musl",
+                        "-x", language, "-std=" + standard, "-ffreestanding",
+                        "-O2", "-I", str(ROOT / "include"), *flags,
+                        "-c", str(source), "-o", str(obj)], check=True)
+
+    def disassemble(self, obj):
+        objdump = Path(self.compiler).parent / "llvm-objdump"
+        return subprocess.check_output([str(objdump), "-d", str(obj)], text=True)
+
+    def test_operational_registers_and_sys_blocks(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "probe.c"
@@ -35,15 +58,29 @@ class MsgbNativeTest(unittest.TestCase):
             source.write_text(PROBE)
             for language, standard in (("c", "c11"), ("c++", "c++20")):
                 with self.subTest(language=language):
-                    subprocess.run([compiler, "--target=linx64v5-unknown-linux-musl",
-                                    "-x", language, "-std=" + standard, "-ffreestanding",
-                                    "-O2", "-I", str(ROOT / "include"), "-c", str(source),
-                                    "-o", str(obj)], check=True)
-                    listing = subprocess.check_output(
-                        [str(objdump), "-d", str(obj)], text=True)
-                    self.check_encodings(listing)
+                    self.build_probe(source, obj, language, standard)
+                    self.check_encodings(self.disassemble(obj))
 
-    def check_encodings(self, listing):
+    def test_freestanding_typed_messages(self):
+        linker = Path(self.compiler).parent / "ld.lld"
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "typed.cpp"
+            obj = work / "typed.o"
+            elf = work / "typed.elf"
+            source.write_text(TYPED_PROBE)
+            for size in (9, 80):
+                with self.subTest(payload_bytes=size):
+                    self.build_probe(source, obj, "c++", "c++17", "-nostdinc++",
+                                     "-fno-exceptions", "-fno-rtti",
+                                     f"-DPAYLOAD_BYTES={size}")
+                    # Link the object alone to expose compiler-generated libc
+                    # calls such as memcpy or memset in either wrapper.
+                    subprocess.run([str(linker), "-e", "kernel", str(obj),
+                                    "-o", str(elf)], check=True)
+                    self.check_encodings(self.disassemble(elf), send_words=(size + 7) // 8)
+
+    def check_encodings(self, listing, send_words=10):
         # Use the ASL masks and encoded header words. Some Linx tools print
         # the SYS header as C.BSTART.AUX.
         instructions = [int(word, 16) for word in re.findall(
@@ -70,8 +107,12 @@ class MsgbNativeTest(unittest.TestCase):
             self.assertEqual(instructions[index - 1], 0x0840)  # C.BSTART.SYS FALL
             self.assertEqual(instructions[index + 1], 0x0800)  # C.BSTART.STD FALL
         data = set(range(0x831, 0x83b))
-        self.assertEqual(reads, data | set(range(0x83c, 0x841)) | set(range(0x843, 0x849)))
-        self.assertEqual(writes, data | {0x83b, 0x841, 0x842})
+        status_reads = set(range(0x83c, 0x841)) | set(range(0x843, 0x849))
+        required_data = set(range(0x831, 0x831 + send_words))
+        self.assertTrue(required_data | status_reads <= reads <= data | status_reads)
+        # A fixed-size send may fold unused cases out of its TX staging switch.
+        required_writes = required_data | {0x83b, 0x841, 0x842}
+        self.assertTrue(required_writes <= writes <= data | {0x83b, 0x841, 0x842})
         self.assertGreater(sends, 0)
 
 

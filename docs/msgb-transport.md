@@ -11,6 +11,55 @@ For a zero-word send, the adapter writes CLAIM=0 before BSE. This checks the
 enabled-bank precondition without acquiring or changing a receive snapshot.
 On #426 a disabled bank faults at that write, before the legacy BSE can run.
 
+## Send and receive a C++ struct
+
+Include `<common/pto_message.hpp>`. Both endpoints agree on one trivially
+copyable struct type. The payload can occupy up to 80 bytes, including
+alignment padding. The following request occupies two mailbox words.
+
+```cpp
+#include <common/pto_message.hpp>
+
+struct WorkRequest {
+    uint64_t job;
+    uint32_t first;
+    uint32_t count;
+};
+
+linx_msgb_result submit(uint32_t worker)
+{
+    WorkRequest request{42, 128, 32};
+    return pto::PTOSendMessage(worker, request);
+}
+
+linx_msgb_result poll(WorkRequest &request)
+{
+    return pto::PTORecvMessage(request);
+}
+```
+
+Send makes one admission attempt. Receive makes one claim attempt, reads the
+snapshot, checks its word count, acknowledges the exact claim, and releases
+it before updating the caller's object. EMPTY or BUSY leaves the object as it
+was. If the word count differs, receive releases the claim without ACK and
+returns BAD_COMMAND on successful release. The matching reader can then claim
+the same queue head. If ACK or RELEASE fails, the operation returns that
+status. Use the register-level recovery API below for a retained snapshot.
+
+The wire format is the object's native byte representation rounded up to a
+whole number of 64-bit words. Send zero-fills the unused **trailing word
+bytes**. Internal struct padding is part of the copied representation. Use
+fixed-width fields and explicit initialized reserved bytes for shared wire
+layouts. Both endpoints must agree on layout, byte order and valid field
+values. MSGB carries only the word count, so different types that occupy the
+same number of words cannot be distinguished. Use a shared tag field when
+multiplexing message kinds. Addresses, references and process-local handles
+require an application-defined meaning at the receiver. The receive argument
+must be a writable complete object of the agreed type, with writable payload
+fields.
+
+## Word-level operations and recovery
+
 | Operation | Observable result |
 | --- | --- |
 | `linx_msgb_try_send(dst, words, count, &id)` | Stages 0–10 words and issues BSE once. On OK or DUPLICATE, returns the admitted 128-bit transport ID. Other results leave `id` untouched. A null `words` pointer is permitted for count zero. |
