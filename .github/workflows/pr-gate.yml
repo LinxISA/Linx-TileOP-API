@@ -39,6 +39,10 @@ jobs:
         with:
           path: tileop-api
 
+      - name: Check scalar sync proposal and MSGB transport reference
+        working-directory: tileop-api
+        run: python3 test/test_sync_intrinsics_proposal.py -v
+
       - name: Prepare shared toolchain and install candidate headers
         id: toolchain
         uses: ./tileop-api/.github/actions/prepare-toolchain
