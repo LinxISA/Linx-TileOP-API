@@ -101,3 +101,24 @@ receiver consumption and service completion are distinct events. Publishing
 or acquiring unrelated Tile or GM data requires its own ordering protocol.
 The service-level scalar interfaces are proposed separately in
 [Linx-TileOP-API #310](https://github.com/LinxISA/Linx-TileOP-API/pull/310).
+
+## Run the 9-byte request and 80-byte reply on two PEs
+
+Use Linx LLVM and the functional gfrun with the resident-worker runtime from
+[SuperScalarModel #1243](https://github.com/LinxISA/SuperScalarModel/pull/1243).
+Run from the API checkout with a fresh output directory:
+
+```sh
+python3 test/msgb_two_pe/run.py --tool-bin "$LINX_BIN" \
+  --gfrun "$MODEL/bin/gfrun" --runtime "$MODEL/runtime/linx-runtime" \
+  --output "$OUT/scheduled-payload"
+```
+
+Both PEs boot and wait. HSCB supplies distinct kernel PCs to them. PE0 sends a
+9-byte request. PE1 uses those received bytes to construct its 80-byte reply.
+The driver checks each PE's DONE against its dispatch ID and return value,
+then checks that both PEs have parked again. It compares both sent and received
+object images, guards and status bytes with an independent 196-byte golden.
+Inspect `result.json` for each field's expected and observed hex and
+`run-state.json` for per-PE park/wake counters. Omit `--runtime` to run
+the same peer exchange from a direct-boot test entry with a test finisher.
