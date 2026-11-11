@@ -39,6 +39,12 @@ jobs:
         with:
           path: tileop-api
 
+      - name: Check wide integer element views and installed feature flag
+        working-directory: tileop-api
+        run: |
+          python3 test/test_element_tile_api.py -v
+          python3 test/test_version_header.py -v
+
       - name: Prepare shared toolchain and install candidate headers
         id: toolchain
         uses: ./tileop-api/.github/actions/prepare-toolchain
