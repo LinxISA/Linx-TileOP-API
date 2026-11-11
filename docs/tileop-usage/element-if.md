@@ -4,7 +4,7 @@ Element-if 允许开发者在 Tile 的逻辑元素上编写普通 C/C++ 表达�
 边界判断、gather 和受支持的 atomic 操作，再由 Linx Clang/LLVM 将循环整体降低为
 Tile 指令和 execution mask。开发者不需要手工拼接 `TCMP + TADD/TSUB + TSEL`。
 
-本页描述已经合入以下组件的接口：
+基础 element-if 接口来自以下组件：
 
 - Linx LLVM `#118`：pragma、条件控制流、Tile SSA 和后端 lowering；
 - TileOP API `#255`：`ElementTile`、typed element view、Tile/element 交替和 assembly；
@@ -50,6 +50,21 @@ void add_if_positive(ElementTile<float, 32> &out_tile,
 `TPARTELEMENT` 不是普通数组 cast。它把 `ElementTile` 的逻辑 dtype、元素数量和
 物理 layout 合同传给编译器。不要用裸 `tile_size` vector、`reinterpret_cast` 或
 同字节数的普通 Tile 替代 typed view。
+
+**宽整数 Tile。** 对于 `int32_t`、`uint32_t`、`int64_t`、`uint64_t`，
+`ElementTile<T, N>` 在 `N = 32, 64, 128, 256, 512` 时都可以整块传给
+`TPARTELEMENT`。布局为 CUBE_M32，形状为 32 行、`N / 32` 列。
+例如，宽哈希查询用 512 元素的 U64 key 和 S32 offset，两个 view 的
+`[element]` 指向同一笔查询。每次 probe 写一个完整的 512 次循环，把
+`element < valid && live[element] != 0` 放进循环体的 `if` 中，编译器据此生成
+逐元素访存条件。较大的 storage parent 仍通过 `TPARTVIEW` 分片。
+
+应用可用 `PTO_TILEOP_API_HAS_WIDE_INTEGER_ELEMENT_VIEWS` 检测头文件支持；
+每种表达式的代码生成取决于编译器。配套 LLVM #146 在 generic-element 模式下
+对超过 64 元素的循环使用 tile mask。基准还传入
+`-mllvm -linxv5-force-element-tile-mask=true`，因此 64 元素版本也使用 tile mask。
+[编译器改动](https://github.com/LinxISA/llvm-project/pull/146) ·
+[完整 probe 源码](https://github.com/PTO-ISA/SuperNPUBench/blob/d3288bd6ff93abc69cb398d0d5a8a15f93b0435d/eval/perf_data/hashtable_lookup/wide_mask/kernel.hpp#L99-L137)
 
 ### 1.2 Scalar-style 入口：`#pragma linx elementwise`
 

@@ -92,7 +92,7 @@ template<class T> concept HasElements = requires(T& tile) { TPARTELEMENT(tile); 
 static_assert(HasElements<ElementTile<uint32_t,32>>);
 static_assert(HasElements<ElementTile<int32_t,32>>);
 static_assert(HasElements<ElementTile<float,32>>);
-static_assert(!HasElements<ElementTile<uint32_t,128>>);
+static_assert(HasElements<ElementTile<uint32_t,128>>);
 static_assert(!HasElements<CubeTileM32<uint32_t,32,1>>);
 static_assert(!HasElements<VecTileM32<uint32_t,32,1>>);
 static_assert(!HasElements<CubeTileN8<unsigned long,2,8>>);
@@ -204,6 +204,69 @@ int main() {
 }
 ''', run=True)
 
+    def test_wide_integer_element_views(self):
+        self.compile(r'''
+#include <cassert>
+using namespace pto;
+
+template<class TileType>
+concept HasElements = requires(TileType& tile) { TPARTELEMENT(tile); };
+
+template<class T, int N>
+void check_view() {
+  using TileType = ElementTile<T, N>;
+  static_assert(TileType::Rows == 32 && TileType::Cols == N / 32);
+  static_assert(TileType::ValidRow == 32 && TileType::ValidCol == N / 32);
+  static_assert(TileType::BFractal == BLayout::CubeM32);
+  static_assert(TileType::LogicalTileBytes == N * sizeof(T));
+  TileType tile;
+  const TileType& input = tile;
+  auto& out = TPARTELEMENT(tile);
+  auto& in = TPARTELEMENT(input);
+  static_assert(std::is_same_v<decltype(out), decltype(tile.data())>);
+  static_assert(std::is_same_v<decltype(in), decltype(input.data())>);
+  static_assert(std::is_same_v<decltype(out[0]), T&>);
+  static_assert(std::is_same_v<decltype(in[0]), const T&>);
+  assert(&out == &tile.data() && &in == &input.data());
+  out[N - 1] = static_cast<T>(-1);
+  assert(in[N - 1] == static_cast<T>(-1));
+}
+
+template<class T>
+void check_widths() {
+  check_view<T, 64>();
+  check_view<T, 128>();
+  check_view<T, 256>();
+  check_view<T, 512>();
+  static_assert(!HasElements<ElementTile<T, 1024>>);
+  static_assert(!HasElements<const ElementTile<T, 1024>>);
+  static_assert(!HasElements<VecTileM32<T, 32, 4>>);
+  static_assert(!HasElements<const VecTileM32<T, 32, 4>>);
+  struct Derived : ElementTile<T, 128> {};
+  static_assert(!HasElements<Derived> && !HasElements<const Derived>);
+  static_assert(!HasElements<VecTileM32<T, 32, 4, 32, 1>>);
+}
+
+static_assert(!HasElements<ElementTile<float, 128>>);
+static_assert(!HasElements<ElementTile<uint16_t, 128>>);
+
+int main() {
+  check_widths<uint32_t>();
+  check_widths<int32_t>();
+  check_widths<uint64_t>();
+  check_widths<int64_t>();
+}
+''', run=True)
+
+    def test_reject_short_valid_wide_element_profile(self):
+        self.compile(r'''
+using namespace pto;
+using Partial = Tile<Location::Vec, uint64_t, 32, 4, BLayout::CubeM32,
+                     32, 3, SLayout::NoneBox, 512, PadValue::Null,
+                     CompactMode::Null, true>;
+void invalid(Partial& tile) { (void)TPARTELEMENT(tile); }
+''', accepts=False)
+
     def test_element_view_compiler_metadata(self):
         header = (ROOT / 'include/common/pto_tile_region.hpp').read_text()
         self.assertIn('#if defined(__clang__) && defined(__linx)', header)
@@ -251,6 +314,10 @@ void instantiate(pto::ElementTile<float,32>& tile) {
             self.assertIn('AnnotateAttr', result.stdout)
             for marker in markers:
                 self.assertIn(f'"{marker}"', result.stdout)
+            for dtype in ('s32', 'u32', 's64', 'u64'):
+                for cols in (2, 4, 8, 16):
+                    marker = f'pto.element.view:v1;dtype={dtype};rows=32;cols={cols};layout=cube_m32'
+                    self.assertIn(f'"{marker}"', result.stdout)
 
     def test_native_pointer_transport_surface(self):
         compiler = os.environ.get('LINX_CXX')
@@ -446,7 +513,7 @@ template void copy_part<uint32_t>(const uint32_t*,uint32_t*,unsigned);
                     run=True, release=True, runtime_reject=True)
 
     def test_reject_unsupported_dtype(self):
-        self.compile('pto::ElementTile<unsigned long,32> unsupported;\n', accepts=False)
+        self.compile('pto::ElementTile<uint8_t,32> unsupported;\n', accepts=False)
         self.compile('pto::ElementTile<int16_t,32> unsupported;\n', accepts=False)
 
     def test_reject_unsupported_capacity(self):
@@ -456,8 +523,8 @@ template void copy_part<uint32_t>(const uint32_t*,uint32_t*,unsigned);
     def test_reject_wrong_part_size(self):
         self.compile('void bad(pto::ElementTile<uint32_t,128>& tile) { auto parts=pto::TPARTVIEW<16>(tile,128); }\n', accepts=False)
 
-    def test_reject_parent_element_indexing(self):
-        self.compile('void bad(pto::ElementTile<uint32_t,128>& tile) { auto& elements=pto::TPARTELEMENT(tile); }\n', accepts=False)
+    def test_reject_storage_only_parent_element_indexing(self):
+        self.compile('void bad(pto::ElementTile<uint32_t,1024>& tile) { auto& elements=pto::TPARTELEMENT(tile); }\n', accepts=False)
 
     def test_reject_raw_layout_as_element_profile(self):
         self.compile('void bad(pto::VecTileM32<uint32_t,32,1>& tile) { auto& elements=pto::TPARTELEMENT(tile); }\n', accepts=False)
