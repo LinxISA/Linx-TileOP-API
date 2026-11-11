@@ -9,8 +9,11 @@
 #define PTO_TILEOP_API_REVISION "source-tree"
 #define PTO_TILEOP_API_REVISION_IS_EXACT 0
 
+#define PTO_TILEOP_API_HAS_INDEXED_TLSU_RANGE 1
+
 // Feature gates let consumers fail fast without comparing revision strings.
 #define PTO_TILEOP_API_HAS_LOCAL_M32_TLOAD_ASSEMBLY 1
+#define PTO_TILEOP_API_HAS_SHARED_ND_TO_CUBE 1
 #define PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX 1
 #define PTO_TILEOP_API_HAS_TEXPDIF 1
 #define PTO_TILEOP_API_HAS_ELEMENT_TILE 1

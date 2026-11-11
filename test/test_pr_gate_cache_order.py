@@ -8,10 +8,12 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/pr-gate.yml"
+SHARED_ACTION = ROOT / ".github/actions/prepare-toolchain/action.yml"
 
 
 def workflow_run_block(step_name: str) -> str:
-    lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
+    lines = SHARED_ACTION.read_text(encoding="utf-8").splitlines()
+    lines = ["  " + line for line in lines]
     name_line = f"      - name: {step_name}"
     start = lines.index(name_line)
     run = next(index for index in range(start + 1, len(lines))
@@ -46,16 +48,18 @@ class PRGateCacheOrderTest(unittest.TestCase):
         )
 
     def test_candidate_overlay_happens_after_clean_cache_save(self):
-        workflow = WORKFLOW.read_text(encoding="utf-8")
+        workflow = SHARED_ACTION.read_text(encoding="utf-8")
+        workflow = "\n".join("  " + line for line in workflow.splitlines())
         save = workflow.index("      - name: Save LLVM build cache")
         overlay = workflow.index(
             "      - name: Replace TileOP source with candidate content"
         )
         install = workflow.index("      - name: Install candidate TileOP headers")
-        parse = workflow.index("      - name: Parse template_asm.hpp with Linx Clang")
+        parse = WORKFLOW.read_text(encoding="utf-8").index("      - name: Parse template_asm.hpp with Linx Clang")
         self.assertLess(save, overlay)
         self.assertLess(overlay, install)
-        self.assertLess(install, parse)
+        gate = WORKFLOW.read_text(encoding="utf-8")
+        self.assertLess(gate.index("uses: ./tileop-api/.github/actions/prepare-toolchain"), parse)
 
         install_block = workflow_run_block("Install candidate TileOP headers")
         self.assertIn('CANDIDATE_SHA="$(git -C tileop-api rev-parse HEAD)"',

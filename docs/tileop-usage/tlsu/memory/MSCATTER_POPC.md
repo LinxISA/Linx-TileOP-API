@@ -1,6 +1,6 @@
 # MSCATTER_POPC
 
-`MSCATTER_POPC` 是由 TLSU 执行的选择器编码 Tile 操作：它按逻辑线性元素下标为每个有效目标 GM 地址贡献一次 U32 自增（population-count 归约）。该操作只有索引 Tile，没有值 Tile，也没有目标 Tile；归约数据类型固定为 U32。
+`MSCATTER_POPC` 使用索引 Tile 中的 S32/U32/S64/U64 字节位移访问 GM：每个访问起点为 `Base + displacement`，不进行元素宽度缩放，不使用 GM 行 stride。可选 `IndexedByteRange` 传递相对 Base 的有符号 64 位字节边界；详见 [indexed TLSU 范围参数](../../indexed-tlsu-range.md)。
 
 ## C++ 接口
 
@@ -13,6 +13,13 @@ void MSCATTER_POPC(
     IndexTile &elementIndices,
     uint32_t validCol,
     uint32_t validRow = 1);
+template <is_tile_data_v IndexTile>
+void MSCATTER_POPC(
+    uint64_t base,
+    IndexTile &elementIndices,
+    uint32_t validCol,
+    IndexedByteRange range,
+    uint32_t validRow = 1);
 ```
 
 ### 支持的数据类型
@@ -21,7 +28,7 @@ void MSCATTER_POPC(
 
 | 操作数角色 | 类型要求 |
 | --- | --- |
-| 索引 Tile | 必须使用整数 dtype；每个值是逻辑线性元素下标。 |
+| 索引 Tile | 必须使用整数 dtype；每个值是相对 GM Base 的字节位移。 |
 | 归约数据 | 固定 U32，每个有效地址贡献一次自增。 |
 
 ### 参数说明
@@ -29,9 +36,11 @@ void MSCATTER_POPC(
 | 参数 | 说明 |
 | --- | --- |
 | `base` | GM 基地址。 |
-| `elementIndices` | 逻辑线性元素下标索引 Tile。 |
+| `elementIndices` | 相对 GM Base 的字节位移索引 Tile。 |
 | `validCol` | 有效区域的列数，仅用于 LB0/LB2。 |
 | `validRow` | 有效区域的行数，省略时使用接口/规范默认值。 |
+
+范围重载在 `validCol` 后、可选 `validRow` 前增加 `IndexedByteRange range`。
 
 ## 使用要求
 
@@ -42,7 +51,7 @@ void MSCATTER_POPC(
 
 ## 约束
 
-内存地址、logical element indices、mask 和 PE 参与集合必须符合 TLSU contract；index 已是完整的逻辑线性下标，B.IOR 只携带 GM 基地址、不携带行跨度。
+内存地址、byte displacements、mask 和 PE 参与集合必须符合 TLSU contract；index 已是完整的字节位移，B.IOR 携带 GM 基地址和可选字节范围，不携带行跨度。
 
     操作数角色、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
@@ -65,7 +74,7 @@ void MSCATTER_POPC(
 
 - 省略 `B.DATR` 时，padding 值使用 `Null`，布局使用 `NORM`。
 - `LB0` 给出 `ValidCol`，必须存在且非零；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
-- `B.IOR` 是必需描述符；`RegSrc0` 是 GM 基地址，其余选择器和字段必须编码为零。
+- `B.IOR` 的首条无标志记录为 `[Base, Min, Max]`；省略范围时 Min/Max 选择器均为 zero。显式范围必须至少有一个非 zero 边界选择器，即使其寄存器值为 0。
 
 `fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
 
@@ -101,7 +110,7 @@ using namespace pto;
 using ElementIndices = Tile<Location::Vec, int32_t, 8, 256, BLayout::RowMajor>;
 
 void popc_reduce(ElementIndices &element_indices) {
-  // 每个 index 是相对于 base 的逻辑线性元素下标；每个有效地址贡献一次 U32 自增。
+  // 每个 index 是相对于 base 的相对 GM Base 的字节位移；每个有效地址贡献一次 U32 自增。
   MSCATTER_POPC(0x1000ull, element_indices, 256, 2);
 }
 ```

@@ -25,6 +25,7 @@ check:
 	python3 test/test_pto0585_layout_interfaces.py
 	python3 test/test_issue_272_276_contract.py
 	python3 test/test_issue_398_399_contract.py
+	python3 test/test_shared_nd_to_cube.py
 	python3 test/test_local_m32_tload_assembly.py
 	python3 test/test_tpack_element_assembly_api.py
 	python3 test/test_pr_gate_cache_order.py
@@ -60,6 +61,7 @@ install:
 		echo '#define PTO_TILEOP_API_REVISION_IS_EXACT $(TILEOP_API_REVISION_IS_EXACT)'; \
 		echo ''; \
 		echo '#define PTO_TILEOP_API_HAS_LOCAL_M32_TLOAD_ASSEMBLY 1'; \
+		echo '#define PTO_TILEOP_API_HAS_SHARED_ND_TO_CUBE 1'; \
 		echo '#define PTO_TILEOP_API_HAS_LOCAL_B_KN_FIX 1'; \
 		echo '#define PTO_TILEOP_API_HAS_TEXPDIF 1'; \
 		echo '#define PTO_TILEOP_API_HAS_ELEMENT_TILE 1'; \

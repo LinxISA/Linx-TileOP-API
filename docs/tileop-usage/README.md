@@ -188,3 +188,5 @@ Tile 的物理容量；Shared Tile、CUBE layout、PE mask 和 range lifecycle �
 
 仍无法定位时，生成 `.s` 并检查 `BSTART`、binder 与相关 modifier 的顺序；详细命令见
 [B.SUBVIEW / B.ASSEMBLE 使用指南](b-subview-b-assemble.md#开发者自检)。
+
+- [Indexed TLSU 字节范围参数（PR #424）](indexed-tlsu-range.md)

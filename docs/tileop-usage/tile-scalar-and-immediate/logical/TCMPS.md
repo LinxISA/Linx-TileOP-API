@@ -2,6 +2,10 @@
 
 `TCMPS` 按照 CMode 将每个有效 Tile 元素与每 PE 标量比较，并将谓词结果编码为 0 或 1。
 
+Tile 输出重载显式保留源 CUBE_M16/M32 布局及比较模式，结果为以源操作类型
+为 basis 的 PredicateCell，而非普通 Numeric U8。NORM 输出保持 packed
+predicate 的既有编码；GPR 输出重载的 carrier 规则不变。
+
 ### 实验性强类型生产者
 
 开发分支新增 `predicate::compare_scalar<Mode>(source, scalar)`，返回私有

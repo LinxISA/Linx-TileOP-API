@@ -1,0 +1,153 @@
+name: SuperNPUBench macro coverage
+
+on:
+  schedule:
+    # Every 24 hours: UTC 18:00 = Beijing 02:00 the following day.
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tileop-macro-coverage
+  cancel-in-progress: false
+
+jobs:
+  coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    env:
+      LLVM_REPO: https://github.com/LinxISA/llvm-project.git
+      LLVM_REF: '0.59'
+      TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
+      TOOLCHAIN_REF: e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156
+      TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
+      LINX_TARGET: linx64v5-unknown-linux-musl
+    steps:
+      - name: Checkout TileOP linx
+        uses: actions/checkout@v4
+        with:
+          ref: linx
+          path: tileop-api
+
+      - name: Prepare shared toolchain and install candidate headers
+        id: toolchain
+        uses: ./tileop-api/.github/actions/prepare-toolchain
+
+      - name: Checkout benchmark main
+        uses: actions/checkout@v4
+        with:
+          repository: PTO-ISA/SuperNPUBench
+          ref: main
+          path: benchmark
+
+      - name: Install benchmark data dependencies
+        run: python3 -m pip install numpy ml_dtypes
+
+      - name: Read previous accepted comparison
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p coverage
+          # A missing reports branch is the expected first-run condition.
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/coverage-reports" > /tmp/coverage-ref.json 2>/tmp/coverage-ref.err; then
+            if gh api -H 'Accept: application/vnd.github.raw+json' \
+              "repos/${GITHUB_REPOSITORY}/contents/latest/comparison.json?ref=coverage-reports" \
+              > coverage/previous.json 2>/tmp/coverage-baseline.err; then
+              echo "Loaded previous accepted coverage baseline."
+            elif grep -q 'HTTP 404' /tmp/coverage-baseline.err; then
+              # An initial infrastructure failure can create history before
+              # any complete survey has been accepted.
+              rm -f coverage/previous.json
+              echo "Report history exists, but no accepted baseline yet."
+            else
+              cat /tmp/coverage-baseline.err >&2
+              exit 1
+            fi
+          elif grep -q 'HTTP 404' /tmp/coverage-ref.err; then
+            echo "First coverage run: no previous report branch."
+          else
+            cat /tmp/coverage-ref.err >&2
+            exit 1
+          fi
+
+      - name: Run complete macro coverage survey
+        id: survey
+        shell: bash
+        env:
+          LLVM_SHA: ${{ steps.toolchain.outputs.llvm-sha }}
+        run: |
+          set -euo pipefail
+          # Keep both hosted runners and larger self-hosted machines safe.
+          # No more than two compilers, each limited to 3 GiB address space.
+          available_mib="$(awk '/MemAvailable:/ {print int($2/1024)}' /proc/meminfo)"
+          budget_mib=$((available_mib - 2048))
+          if [ "$budget_mib" -gt 8192 ]; then budget_mib=8192; fi
+          if [ "$budget_mib" -lt 4096 ]; then
+            echo "Insufficient memory for the survey: ${available_mib} MiB available" >&2
+            exit 1
+          fi
+          workers=2
+          if [ "$budget_mib" -lt 7168 ]; then workers=1; fi
+          set +e
+          sudo systemd-run --scope --unit=tileop-macro-survey --quiet \
+            -p "MemoryMax=${budget_mib}M" -p MemorySwapMax=512M -p CPUQuota=200% \
+            runuser --user "$(id -un)" --preserve-environment -- \
+            env PATH="$PATH" HOME="$HOME" GITHUB_SERVER_URL="$GITHUB_SERVER_URL" \
+              GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_RUN_ID="$GITHUB_RUN_ID" \
+            "$(command -v python3)" tileop-api/tools/macro_coverage/check.py \
+              --source benchmark --toolchain "$TOOLCHAIN_INSTALL_DIR" \
+              --output coverage/report --previous coverage/previous.json \
+              --llvm-sha "$LLVM_SHA" --tileop-sha "$(git -C tileop-api rev-parse HEAD)" \
+              --workers "$workers" 2>&1 | tee coverage/survey.log
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "exit=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Show report summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f coverage/report/REPORT.md ]; then
+            cat coverage/report/REPORT.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Coverage did not finish; inspect the diagnostic artifact. No coverage percentage is available.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload reports and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macro-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            coverage/
+            !coverage/report/qsmla-data/
+            !coverage/report/cases/*/obj/
+            toolchain/build.log
+
+  publish:
+    needs: coverage
+    if: always() && needs.coverage.result != 'skipped' && needs.coverage.result != 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: linx
+          path: tileop-api
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: macro-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics
+      - name: Save historical report and accepted comparison
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tileop-api/tools/macro_coverage/publish.py --artifact diagnostics

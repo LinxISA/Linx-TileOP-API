@@ -1,6 +1,6 @@
 # MGATHER_MASK
 
-`MGATHER_MASK` 是由 TLSU 执行的选择器编码 Tile 操作：它只收集谓词恰为 1 的 lane，并用选定的 padding 值填充禁用的 lane；其当前指令 contract 规定了确切的 bundle 形式和发布边界。
+`MGATHER_MASK` 使用索引 Tile 中的 S32/U32/S64/U64 字节位移访问 GM：每个访问起点为 `Base + displacement`，不进行元素宽度缩放，不使用 GM 行 stride。可选 `IndexedByteRange` 传递相对 Base 的有符号 64 位字节边界；详见 [indexed TLSU 范围参数](../../indexed-tlsu-range.md)。
 
 ## C++ 接口
 
@@ -18,6 +18,18 @@ inline void MGATHER_MASK(
     const gm_shape &src,
     const tile_shape_offset &offset,
     const tile_shape_mask &mask);
+template <
+    typename tile_shape_out,
+    typename tile_shape_offset,
+    typename tile_shape_mask,
+    typename gm_shape,
+    TmaPadValue Pad = TmaPadValue::Null>
+inline void MGATHER_MASK(
+    tile_shape_out &dst,
+    const gm_shape &src,
+    const tile_shape_offset &offset,
+    const tile_shape_mask &mask,
+    IndexedByteRange range);
 ```
 
 ### 支持的数据类型
@@ -35,10 +47,12 @@ inline void MGATHER_MASK(
 | --- | --- |
 | `dst` | 输出 Tile；成功调用后写入操作结果。 |
 | `src` | 输入 Tile 或源数据。 |
-| `offset` | 逻辑线性元素下标；`ValidCol` 将下标拆分为逻辑行和列。 |
+| `offset` | 相对 GM Base 的显式字节位移 Tile；不按元素宽度缩放。 |
 | `mask` | 逐元素掩码 Tile；仅掩码允许的位置参与该重载定义的读写。 |
 
 
+
+范围重载在最后追加 `IndexedByteRange range` 参数。
 
 ## 使用要求
 
@@ -49,7 +63,7 @@ inline void MGATHER_MASK(
 
 ## 约束
 
-内存地址、logical element indices、mask 和 PE 参与集合必须符合 TLSU contract；地址单位和 fault 行为见本页的异常和边界行为说明。
+内存地址、byte displacements、mask 和 PE 参与集合必须符合 TLSU contract；地址单位和 fault 行为见本页的异常和边界行为说明。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
@@ -71,13 +85,13 @@ inline void MGATHER_MASK(
 
 - 省略 `B.DATR` 时，padding 值使用 `Null`，布局使用 `NORM`。
 - `LB0` 给出 `ValidCol`，必须存在且非零；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
-- `B.IOR` 是必需描述符；`RegSrc0` 是 GM 基地址，`RegSrc1` 是以元素计的 GM 行跨度；未使用的选择器和字段必须编码为零。
+- `B.IOR` 的首条无标志记录为 `[Base, Min, Max]`；省略范围时 Min/Max 选择器均为 zero。显式范围必须至少有一个非 zero 边界选择器，即使其寄存器值为 0。
 
 `fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
 
 ## 异常和边界行为
 
-    类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，会在编译期或执行前检查阶段被拒绝。`PE_MASK=0000` 时操作不产生状态或内存影响；非法调用不会发布部分输出或部分副作用。padding、alias、NaN/无穷值及 fault 行为以本页已经列出的约束和边界说明为准，未明确声明的状态不可依赖。
+    类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，会在编译期或执行前检查阶段被拒绝。`PE_MASK=0000` 时操作不产生状态或内存影响；范围 Min > Max 时仅当前参与 PE 在副作用前 fault，其他 PE 已有的副作用保留。padding、alias、NaN/无穷值及 fault 行为以本页已经列出的约束和边界说明为准，未明确声明的状态不可依赖。
 
 ## 结果说明
 
@@ -94,7 +108,7 @@ B.DIM       rValidCol, 0, ->LB0
 B.DIM       rValidRow, 0, ->LB1  ; (optional)
 B.DIM       rCol, 0, ->LB2  ; (optional)
 B.IOT       IndexTile, MaskTile, mask=PE_MASK, last, ->DstTile<TSize>
-B.IOR       BaseGPR, StrideGPR, zero, ->zero
+B.IOR       [BaseGPR, MinIndexGPR, MaxIndexGPR], []
 BSTOP
 ```
 

@@ -52,3 +52,5 @@ python3 tools/sync_linxisa_v058_contract.py \
 python3 tools/generate_engine_docs.py
 make check
 ```
+
+Indexed TLSU 显式字节范围扩展见 [PR #424 使用说明](docs/tileop-usage/indexed-tlsu-range.md)。
