@@ -166,13 +166,14 @@ bit 10 是 reserved，必须为零。低位固定编码由当前实现的 `0x202
 `ElementWiseEn`、`Opc1`、`Opcode` 和 `W` 等 discriminator 必须使用规范规定的固定值。
 固定位不匹配时不会解码为 `B.FPATR`。
 
-可用 `encoding()` 验证 builder 结果：
+builder 返回 `fixp::Options`，其静态成员 `Attr` 保存 `FixpAttr`。可通过
+`Attr.encoding()` 验证编码结果：
 
 ```cpp
 constexpr auto transposed = fixp::keep_acc().transpose_a().transpose_b();
-static_assert(transposed.encoding() == 0x000021a3u);
+static_assert(transposed.Attr.encoding() == 0x000021a3u);
 constexpr auto cscaled = fixp::keep_acc().cscale_enable();
-static_assert(cscaled.encoding() == 0x00002223u);
+static_assert(cscaled.Attr.encoding() == 0x00002223u);
 ```
 
 ## 5. PreQuantMode 取值与参数类别
