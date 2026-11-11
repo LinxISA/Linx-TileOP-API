@@ -1,8 +1,10 @@
 # Scalar message-buffer transport
 
 Include `<common/linx_msgb.h>` in a Linx64 V5 C or C++ kernel whose runtime
-has enabled the MSGB profile for the current Core, PE, ACR and invocation.
-This opt-in header follows draft [PTO-SPEC #426 at d537afa](https://github.com/PTO-ISA/pto-spec/pull/426/commits/d537afa23ea0783b55f994ac52e2154f44b60b0c).
+has enabled the MSGB profile for the current Core, PE, hardware thread, ACR
+and invocation.
+The draft [PTO-SPEC #426](https://github.com/PTO-ISA/pto-spec/pull/426) owns the
+MSGB register and transport behavior.
 ACR0 owns bank selection, domain assignment and enablement. The runtime must
 serialize callers, including callbacks and interrupt handlers using the same
 bank, across staging and status reads and for the lifetime of a receive claim.
@@ -102,23 +104,44 @@ or acquiring unrelated Tile or GM data requires its own ordering protocol.
 The service-level scalar interfaces are proposed separately in
 [Linx-TileOP-API #310](https://github.com/LinxISA/Linx-TileOP-API/pull/310).
 
-## Run the 9-byte request and 80-byte reply on two PEs
+## Run four 9-byte request / 80-byte reply exchanges
 
-Use Linx LLVM and the functional gfrun with the resident-worker runtime from
+Use Linx LLVM and gfrun with the resident-worker runtime from
 [SuperScalarModel #1243](https://github.com/LinxISA/SuperScalarModel/pull/1243).
-Run from the API checkout with a fresh output directory:
+Run from the API checkout with a fresh output directory.
 
 ```sh
-python3 test/msgb_two_pe/run.py --tool-bin "$LINX_BIN" \
+python3 test/msgb_contexts/run.py --tool-bin "$LINX_BIN" \
   --gfrun "$MODEL/bin/gfrun" --runtime "$MODEL/runtime/linx-runtime" \
   --output "$OUT/scheduled-payload"
 ```
 
-Both PEs boot and wait. HSCB supplies distinct kernel PCs to them. PE0 sends a
-9-byte request. PE1 uses those received bytes to construct its 80-byte reply.
-The driver checks each PE's DONE against its dispatch ID and return value,
-then checks that both PEs have parked again. It compares both sent and received
-object images, guards and status bytes with an independent 196-byte golden.
-Inspect `result.json` for each field's expected and observed hex and
-`run-state.json` for per-PE park/wake counters. Omit `--runtime` to run
-the same peer exchange from a direct-boot test entry with a test finisher.
+The default MSGB platform on one gfrun core runs **four physical PEs with two
+hardware threads per PE**. Each hardware thread boots a resident worker with
+its own ACR0 mailbox. The HSCB (High Speed Config Bus) scheduler receives READY
+from all eight workers, queues their first LAUNCH messages, and matches DONE
+messages to the original worker and dispatch ID. Each worker returns to BWE
+after completion. Applications pass the endpoint ID assigned by their
+platform to `PTOSendMessage`.
+
+In this gfrun profile, `worker = 4 * slot + pe` and the ACR0 endpoint is
+`16 * worker`. The test runs four independent exchanges with different
+payload bytes so a swapped bank or delivery to the wrong sibling is visible.
+
+| Requester → responder (worker IDs) | Physical route |
+| --- | --- |
+| 0 → 4 | PE0, slot 0 → slot 1 |
+| 1 → 2 | PE1 → PE2, slot 0 |
+| 3 → 7 | PE3, slot 0 → slot 1 |
+| 5 → 6 | PE1 → PE2, slot 1 |
+
+Every responder uses the received request to construct its 80-byte reply.
+For each pair the host compares both sent and received object images, guard
+bytes, endpoint IDs, and worker markers with a 196-byte golden. The complete
+run checks 784 bytes, all eight dispatch completions, and that both slots of
+every PE have parked again. Inspect `result.json` for expected and observed
+hex and `run-state.json` for per-worker park/wake counts.
+
+Pass `--workers 2` to retain the reduced two-PE single-slot exchange (one
+196-byte golden). Omit `--runtime` to run the same payload check from a
+direct-boot entry with a test finisher.
