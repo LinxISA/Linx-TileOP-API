@@ -27,13 +27,14 @@ def workflow_run_block(step_name: str) -> str:
 
 
 class PRGateCacheOrderTest(unittest.TestCase):
-    def test_automerge_skips_draft_pull_requests(self):
+    def test_gate_never_merges_automatically(self):
+        # Merges into linx require explicit manual confirmation from the
+        # repository owners.  The required gate must never contain an
+        # automerge job or any command that merges a pull request.
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn(
-            "if: github.event_name == 'pull_request' && "
-            "github.event.pull_request.draft == false",
-            workflow,
-        )
+        self.assertNotIn("automerge:", workflow)
+        self.assertNotIn("Auto-merge", workflow)
+        self.assertNotIn("pr merge", workflow)
 
     def test_element_objects_enable_generic_lowering_only(self):
         compile_all = (ROOT / "test/tileop_api/compile.all").read_text(
