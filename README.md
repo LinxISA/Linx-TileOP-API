@@ -20,6 +20,8 @@ view, not a replacement for the PTO ASL/NDF semantics.
 
 ## Documentation
 
+- [Scalar message-buffer transport (PTO-SPEC #426 draft)](docs/msgb-transport.md)
+
 - [Execution engines and operations](docs/tileop-usage/generated/engines.md)
 - [TLSU operations](docs/tileop-usage/tlsu/load-store-move/TLOAD.md)
 - [CUBE operations](docs/tileop-usage/cube/matrix-matrix/TMATMUL.md)
