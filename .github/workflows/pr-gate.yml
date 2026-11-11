@@ -22,7 +22,8 @@ permissions:
 jobs:
   gate:
     name: Validate jcore/template_asm.hpp
-    runs-on: ubuntu-latest
+    # The cached Linx linker uses the 24.04 libxml2 SONAME.
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
 
     env:
@@ -61,6 +62,14 @@ jobs:
         run: |
           set -euo pipefail
           git show --check --format= HEAD -- include/jcore/template_asm.hpp
+
+      - name: Check scalar MSGB transport and native instruction encodings
+        working-directory: tileop-api
+        env:
+          LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
+        run: |
+          python3 test/test_msgb_transport.py -v
+          python3 test/test_msgb_native.py -v
 
       - name: Check LLVM issue 138 narrow TCMP carriers
         working-directory: tileop-api
