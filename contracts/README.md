@@ -39,3 +39,9 @@ python3 tools/check_pto_catalog_alignment.py --spec-repo /path/to/pto-spec --spe
 Source checks read pinned Git objects without switching the spec checkout.
 An explicit ref must match the reviewed main commit; a moved ref requires review
 and repinning. These checks do not execute ASL or certify hardware conformance.
+
+`pto-msgb-sources.json` separately pins the optional, unmerged MSGB interface
+from PTO #426 at `d537afa23ea0783b55f994ac52e2154f44b60b0c`. It records the
+28-register projection and hashes of the owning ASL/catalog files. It does not
+advance the active or release Tile pins. Validate it with
+`python3 tools/check_msgb_contract.py [--spec-repo /path/to/pto-spec]`.

@@ -42,6 +42,10 @@ jobs:
         with:
           path: tileop-api
 
+      - name: Check MSGB protocol and runtime
+        working-directory: tileop-api
+        run: make check-sync-proposal
+
       - name: Prepare shared toolchain and install candidate headers
         id: toolchain
         uses: ./tileop-api/.github/actions/prepare-toolchain

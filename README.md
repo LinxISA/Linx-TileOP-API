@@ -60,3 +60,10 @@ make check
 ```
 
 Indexed TLSU 显式字节范围扩展见 [PR #424 使用说明](docs/tileop-usage/indexed-tlsu-range.md)。
+
+## Experimental scalar messaging
+
+The opt-in [MSGB backend and synchronization runtime](docs/proposals/sync-intrinsics/backend/README.md)
+pins the unmerged PTO #426 interface separately from the active/release Tile
+contract. Run `make check-sync-proposal` for C11/C++17 reference checks. These
+proposal headers are not installed and do not advertise device support.
