@@ -8992,7 +8992,7 @@ PTO_SHARED_INLINE void matmul_acc(Dst &dst, C &c, A &a, B &b, size_t M,
 #define PTO_MX_ACC_L_PREFIX_0 "B.IOT %[C], %[A], mask=1111\n"
 #define PTO_MX_ACC_L_PREFIX_1 "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[ScaleA], %[B], mask=1111\n"
 #define PTO_MX_ACC_L_PREFIX_2 "B.IOT %[C], %[A], mask=1111\n" "B.IOT %[B], %[ScaleB], mask=1111\n"
-#define PTO_MX_ACC_L_TAIL_0(SRC) PTO_FIXP_ACC_EVEN_TAIL_##SRC
+#define PTO_MX_ACC_L_TAIL_0(SRC) PTO_FIXP_ACC_ODD_TAIL_##SRC("%[B]")
 #define PTO_MX_ACC_L_TAIL_1(SRC) PTO_FIXP_ACC_EVEN_TAIL_##SRC
 #define PTO_MX_ACC_L_TAIL_2(SRC) PTO_FIXP_ACC_EVEN_TAIL_##SRC
 
@@ -10043,7 +10043,7 @@ PTO_SHARED_INLINE void matmul_mx_scale_b_local(
       : "memory");
 }
 
-#define PTO_DEFINE_MATMUL_MX_5SRC_HELPER(Name, Opcode, IsAcc)                   \
+#define PTO_DEFINE_MATMUL_MX_BIAS_HELPER(Name, Opcode)                   \
 template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename ScaleA,  \
           typename B, typename ScaleB, typename Extra>                           \
 PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
@@ -10053,11 +10053,8 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   constexpr bool HasScaleB = true;                                               \
   validate_matrix_contract<Attr, Dst, A, B, true>();                                      \
   validate_matrix_scale_contract<Attr, HasScaleA, HasScaleB, ScaleA, A, ScaleB, B>();      \
-  if constexpr (IsAcc)                                                                    \
-    validate_matrix_accumulator_contract<Attr, Dst, Extra, A, B, true>();                       \
-  else                                                                                    \
-    validate_matrix_bias_contract<Attr, Dst, Extra, A, B, true>();                                   \
-  validate_cube_ctrl_contract<Attr, IsAcc>();                                   \
+  validate_matrix_bias_contract<Attr, Dst, Extra, A, B, true>();                \
+  validate_cube_ctrl_contract<Attr, false>();                                   \
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B>) {                \
     asm volatile(                                                               \
         PTO_MATMUL_HEADER(Opcode, PTO_FIXP_ATTR)                               \
@@ -10117,10 +10114,26 @@ PTO_SHARED_INLINE void Name(Dst &dst, A &a, ScaleA &scale_a, B &b,             \
   }                                                                             \
 }
 
-PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_bias, "TMATMULMX.BIAS", false)
-PTO_DEFINE_MATMUL_MX_5SRC_HELPER(matmul_mx_acc, "TMATMULMX.ACC", true)
+PTO_DEFINE_MATMUL_MX_BIAS_HELPER(matmul_mx_bias, "TMATMULMX.BIAS")
 
-#undef PTO_DEFINE_MATMUL_MX_5SRC_HELPER
+#undef PTO_DEFINE_MATMUL_MX_BIAS_HELPER
+
+// ACC owns a leading Local C operand, unlike BIAS's trailing bias. Reuse
+// the ACC emitter so basic and options calls share the same operand roles
+// for Local and Shared matrix groups.
+template <FixpAttr Attr = FixpAttr{}, typename Dst, typename A, typename ScaleA,
+          typename B, typename ScaleB, typename C>
+PTO_SHARED_INLINE void matmul_mx_acc(
+    Dst &dst, A &a, ScaleA &scale_a, B &b, ScaleB &scale_b, C &c,
+    size_t M, size_t N, size_t K) {
+  static_assert(!Attr.CScaleEn,
+                "CScale requires the MX_ACC overload with a CScale tile");
+  // SrcMask/OutMask/CScaleEn are zero; unused operand slots need no Tiles.
+  emit_matmul_mx_acc_fixp<Attr, 3, 0, 0, 0>(
+      dst, c, a, scale_a, b, scale_b, c, c, c, c, dst, dst,
+      0, 0, M, N, K);
+}
+
 #undef PTO_DEFINE_MATMUL_MX_HELPER
 #undef PTO_MX_SCALE_INPUTS
 #undef PTO_DEFINE_MATMUL_3SRC_HELPER
