@@ -70,6 +70,7 @@ jobs:
         run: |
           python3 test/test_msgb_transport.py -v
           python3 test/test_msgb_native.py -v
+          python3 test/test_pto_launch.py -v
 
       - name: Check LLVM issue 138 narrow TCMP carriers
         working-directory: tileop-api
