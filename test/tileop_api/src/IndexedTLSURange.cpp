@@ -3,7 +3,7 @@
 using namespace pto;
 using D = Tile<Location::Vec, uint32_t, 8, 256, BLayout::RowMajor>;
 using I = Tile<Location::Vec, int32_t, 8, 256, BLayout::RowMajor>;
-using P = Tile<Location::Vec, uint32_t, 8, 256, BLayout::RowMajor>;
+using P = Tile<Location::Vec, uint8_t, 8, 256, BLayout::RowMajor>;
 extern "C" void indexed_range_all(D &old, I &ix, D &v, D &expected, P &mask, uint32_t *base, int64_t min, int64_t max) {
   IndexedByteRange range{min, max};
   global_tensor<uint32_t, RowMajor<8, 256>> gm(base);

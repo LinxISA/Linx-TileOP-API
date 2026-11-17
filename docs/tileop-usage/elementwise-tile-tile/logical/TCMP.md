@@ -62,6 +62,8 @@ void TCMP_ASS(D &assembled_dst, A &src0, B &src1); // Mode = EQ
 
 ## 约束
 
+RowMajor/NORM 的 `TCMP/TCMPS` Tile 输出是 packed predicate：每个比较结果占一位，即使目的载体声明为 `uint8_t`，也不是每个 lane 一个 0/1 字节。不能直接传给 `MGATHER_MASK/MSCATTER_MASK`；更改 dtype 或 reinterpret 不会解包。CUBE PredicateCell 也不能仅凭 U8 carrier 当作普通 Numeric U8 使用。indexed TLSU 的合法示例见 [MGATHER_MASK](../../tlsu/memory/MGATHER_MASK.md)。
+
 输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
 
 `src0`、`src1` 和 predicate `dst` 必须具有相同的物理 `Rows x Cols` 与

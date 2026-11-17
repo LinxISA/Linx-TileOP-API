@@ -37,6 +37,9 @@ ACTIVE_FIXTURES=(
   ValidShapeImmediate ValidShapePerDim ValidShapePerDimSweep CoopGroupMOverloads CubeInternalAcc TSELCanonical Issue200TcmpsGpr Issue203CubeTcvtTileArray IssueA2CubeMxFp4Tcvt Issue111SharedSlot Issue290PartialCompareSelect
 )
 
+# Canonical byte-mask contract fixture (#320).
+ACTIVE_FIXTURES+=(IndexedMask)
+
 # Keep element conformance fixtures separate from the upstream operation list.
 # Additions to that list then merge without sharing an edited array line.
 ACTIVE_FIXTURES+=(

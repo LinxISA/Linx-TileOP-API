@@ -54,3 +54,11 @@ make check
 ```
 
 Indexed TLSU 显式字节范围扩展见 [PR #424 使用说明](docs/tileop-usage/indexed-tlsu-range.md)。
+
+`MGATHER_MASK` / `MSCATTER_MASK` 使用每个索引事务一个 U8 字节的 `0/1` 掩码；
+RowMajor `TCMP/TCMPS` 的 packed predicate 不能直接传入。
+合法 `TLOAD` 示例和有效区域要求见 [MGATHER_MASK](docs/tileop-usage/tlsu/memory/MGATHER_MASK.md)
+与 [MSCATTER_MASK](docs/tileop-usage/tlsu/memory/MSCATTER_MASK.md)。
+运行 `python3 test/test_indexed_mask.py -v` 检查载体和文档；设置 `LINX_CXX`、
+`LINX_SYSROOT` 可增加目标编译检查，再设置 `LINX_MODEL_BIN=/path/to/gfrun`
+可验证四个重载的数值结果及非法字节拒绝。主机检查只验证 C++ 契约，不模拟指令。
