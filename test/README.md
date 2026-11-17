@@ -48,3 +48,16 @@ Method 2: pass the qemu-linx binary location through make command parameter e.g.
 ## run all cases
 `make sim_all`
 
+Matrix-MX operand-order regression (issue #319):
+
+```bash
+LINX_CXX=/path/to/clang++ LINX_SYSROOT=/path/to/sysroot \
+  python3 test/test_mx_operand_order.py -v
+```
+
+This checks the compiled Local and Shared source streams for plain MX, ACC,
+and BIAS, all four scale-presence combinations, basic/options calls, RowMax,
+CScale, and explicit groupM. Separate kernels with real Tile producers must
+also assemble. The test overlays this checkout's headers into a temporary
+compiler resource directory. It skips when no target compiler is configured;
+CI configures the compiler explicitly. Numerical model execution is separate.
