@@ -1,128 +1,114 @@
 # TSEL
 
-`TSEL` 按照 predicate Tile 从 true source 和调用前的 `dst`
-逐元素选择结果。调用前的 `dst` 是显式的 false source，因此必须先初始化。
-
-接口显式保留数值 Tile 的 CUBE_M16/M32 布局；NORM 布局保持原有默认编码。
-CUBE 比较结果是 PredicateCell，其 basis 必须与 select 的操作类型兼容，
-不能仅因 C++ carrier 为 U8 就当作普通 Numeric U8 使用。
-
-## C++ 接口
-
-当前 API 中可用的调用形式：
+按 predicate 逐元素选择两个数值源的原始位。接口按 pto-spec
+`d0884b821c6df76a37b82cdd92a36392df9c610a` 的 `PTO-TSEL-CONTRACT-001`
+实现；独立输出不需要预先初始化。
 
 ```cpp
-template <is_tile_data_v tile_shape, is_tile_data_v mask_shape = tile_shape,
-          is_tile_data_v true_shape = tile_shape>
-void TSEL(tile_shape &dst, mask_shape &predicate, true_shape &src_true);
-``
-### 跨类型载体（PTO-ISA 0.58.6，pto-spec #260）
+TSEL(dst, predicate, src_true, src_false);
+TSEL(dst, predicate, src_true); // 等价于 TSEL(dst, predicate, src_true, dst)
+```
 
-src_true（数值源）可使用**等元素位宽、非打包 4-bit** 的异类型载体（对齐目的/操作类型校验），选中位按原始载体数据拷贝。predicate 是 predicate 载体（典型为 TCMP 产生的 U8 载体），**不做位宽校验**。`mask_shape`/`true_shape` 缺省为 `tile_shape`（同类型旧行为不变）。
-`
+predicate 为 1 时选择 `src_true`，为 0 时选择 `src_false`。三参数兼容形式
+以调用前的 `dst` 为 false 源，必须先初始化。源与输出可以别名，选择观察
+写入前的源值；相同 true/false 源也合法。
 
-### 支持的数据类型
+## Predicate 形式
 
-支持FP64、FP32、TF32、HF32、FP16、BF16、E4M3、E5M2、S64、S32、S16、S8、U64、U32、U16、U8类型。
+- RowMajor：`TCMP`/`TCMPS` 产生的 packed predicate Tile。
+- CUBE_M16/M32：`TCMP`/`TCMPS` 产生的 PredicateCell Tile，或
+  `predicate::Predicate<Basis>`。PredicateCell 是逻辑布尔载体，不是普通
+  Numeric U8 Tile；其比较 basis 不限制所选数值的类型或位宽。布局与逻辑
+  有效形状必须匹配数值源，物理列数可以因 U8 存储而不同。
+- CUBE_M16/M32 GPR：16/32/64-bit 操作使用 `uint64_t`；所有 8-bit 操作
+  使用 `predicate::GPRMask{low, high}`，完整提供两个 64-bit mask word。
+  CUBE_M16 不支持 64-bit 数值。
 
+```cpp
+// 类型化 PredicateCell；Basis 与所选数据的类型可以不同。
+auto pred = pto::predicate::compare_scalar<pto::CmpMode::GE>(basis, threshold);
+TSEL(dst, pred, src_true, src_false);
+pto::predicate::select(dst, pred, src_true, src_false); // 同一实现
 
+// GPR：16/32/64-bit 操作。
+TSEL(dst, uint64_t(mask_bits), src_true, src_false);
+// GPR：8-bit 操作，例如 U8、S8、E4M3、E5M2。
+TSEL(dst8, pto::predicate::GPRMask{low_bits, high_bits}, true8, false8);
+```
 
-### 参数说明
+GPR mask 的覆盖范围由操作类型和布局决定：
 
-| 参数 | 说明 |
-| --- | --- |
-| `dst` | 输入/输出 Tile；调用前的值是 false source，成功后被结果覆盖。 |
-| `predicate` | `TCMP`/`TCMPS` 产生的 packed predicate。 |
-| `src_true` | predicate 为真时选择的 Tile。 |
+| 布局 | 有效行上限 | 8-bit 有效列上限（两个 word） | 16-bit | 32-bit | 64-bit |
+| --- | --- | --- | --- | --- | --- |
+| CUBE_M16 | 16 | 8 | 4 | 2 | 不支持 |
+| CUBE_M32 | 32 | 4 | 2 | 2 | 2 |
 
-对每个有效元素，predicate 为真时执行 `dst = src_true`，否则执行
-`dst = prior_dst`。predicate 不是普通数据 Tile。
+每个 word 内第 `column` 个字段使用 `row + column * 行位数` 位；CUBE_M16 每字段占 16 位，
+CUBE_M32 每字段占 32 位。8-bit 类型先消费 low word 的字段，再消费 high
+word 的字段。
 
+## 数值类型与形状
 
+操作类型取 `dst::DType`，支持 FP64、FP32、TF32、HF32、FP16、BF16、
+E4M3、E5M2、S64、S32、S16、S8、U64、U32、U16、U8。两个数值源分别校验，
+可与操作类型不同，但必须是等元素位宽、非 4-bit 的载体。CUBE 数值源
+使用上述类型域；RowMajor 还允许 HiF8、E3M2、E2M3、E8M0 原始载体。
+选择不执行转换、舍入、饱和或 NaN 规范化，也不更新浮点状态。
 
-## 使用要求
+数值操作数必须为非 boxed 的 Local RowMajor/CUBE_M16/CUBE_M32 Tile，
+物理形状、布局和有效形状一致。支持四种静态/动态有效维度组合；动态输出
+的有效形状从源记录，独立输出不会读取未初始化的旧形状。类型化 Predicate
+目前仍由静态有效维度的 producer 构造。
 
-- Tile 类型必须满足接口模板约束；
-- 数据类型、形状、有效区域、布局、容量和存储位置必须满足该操作要求；
-- 输入 Tile 必须已初始化，输出 Tile 必须具有足够容量；
-- 参数顺序必须与接口声明一致，不要添加接口未声明的操作数。
+所有有效源元素与 predicate 必须已定义。PredicateCell 有效字节须为规范的
+0/1，普通 U8 数据不能冒充 predicate。非法描述符、未定义源和非法 predicate
+的执行时拒绝由目标实现负责；C++ 对静态类型和形状使用编译期检查，动态形状
+使用断言。padding 使用 Null，其值和定义性不可作为有效结果读取。
 
-## 约束
+## Bundle
 
-输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
-
-`dst`、`predicate` 和 `src_true` 必须具有相同的物理 `Rows x Cols` 与
-`BLayout`，并且 valid shape 也必须一致。`validCol < Cols` 不会把不同物理列
-布局的 Tile 变成可兼容的 compare/select 操作数。
-
-    操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
-
-### 有效区域与 padding
-
-| 项目 | 规则 |
-| --- | --- |
-| 有效元素 | 逐元素操作通常仅对输入和输出共同的有效区域定义结果；未明确规定的 padding 不应读取或依赖。 |
-| 物理容量 / SizeCode | 只决定容量，不重新定义逻辑 shape。 |
-| 输出 padding | 除非本操作明确规定填充值或传播规则，否则视为不可依赖。 |
-
-
-
-## 默认值
-
- 此页面列出的 C++ 形参没有默认实参；不要把省略某个操作数与传入零值视为等价。
-
-### 编码字段和省略值
-
-- 省略 `B.DATR` 时，padding 值使用 `Null`。
-- `LB0` 给出 `ValidCol`，必须存在且非零；省略 `LB1` 时 `ValidRow=1`，省略 `LB2` 时物理列数等于 `ValidCol`。显式给出的维度不能为零。
-- 显式 padding 编码 `00`、`01`、`10`、`11` 分别选择 `Zero`、`Max`、`Min`、`Null`。
-
-`fixp::Options` 内部字段的默认值和合法组合见 [Options 指南](../../options.md)。
-
-## 异常和边界行为
-
-    类型不匹配、非法形状或布局、未初始化的输入、输出容量不足、非法 PE mask、错误的 Tile 位置或不合法的属性组合，会在编译期或执行前检查阶段被拒绝。`PE_MASK=0000` 时操作不产生状态或内存影响；非法调用不会发布部分输出或部分副作用。padding、alias、NaN/无穷值及 fault 行为以本页已经列出的约束和边界说明为准，未明确声明的状态不可依赖。
-
-## 结果说明
-
-    成功调用后，`TSEL` 更新输出 Tile 的有效区域；输入 Tile 通常保持不变，输出 padding 和未明确声明的副作用不可依赖。若操作的约束或参数说明另有规定，以对应说明为准。
-
-## Bundle 组成
-
-开发者通常直接调用 C++ 接口，无需手工编写 bundle。下面保留对应汇编结构供核对：
+Tile predicate / PredicateCell：
 
 ```asm
-BSTART.VEC TSEL, DataType
-B.DATR      PadValue (optional)
-B.DIM       rValidCol, 0, ->LB0
-B.DIM       rValidRow, 0, ->LB1  ; (optional)
-B.DIM       rCol, 0, ->LB2  ; (optional)
-B.IOT       Predicate, SrcTrue, mask=PE_MASK
-B.IOT       SrcFalse, mask=PE_MASK, last, ->DstTile<TSize>
-BSTOP
+BSTART.TEPL TSEL, DataType
+B.DATR CUBE_M16/CUBE_M32, Null  ; CUBE 形式；RowMajor 省略
+B.DIM ValidCol ->LB0
+B.DIM ValidRow ->LB1
+B.DIM PhysicalCol ->LB2
+B.IOT Predicate, SrcTrue, mask=1111
+B.IOT SrcFalse, mask=1111, last, ->Dst<TSize>
 ```
+
+GPR mask：
+
+```asm
+BSTART.TEPL TSEL, DataType
+B.DATR CUBE_M16/CUBE_M32, Null
+B.DIM ValidCol ->LB0
+B.DIM ValidRow ->LB1
+B.DIM PhysicalCol ->LB2
+B.IOT SrcTrue, SrcFalse, mask=1111, last, ->Dst<TSize>
+B.IOR [MaskLow], []            ; 16/32/64-bit
+; B.IOR [MaskLow, MaskHigh], [] ; 8-bit
+```
+
+当前包装器对所有 PE 发射 `mask=1111`。`PE_MASK=0000` 和通用 ExecutionMask
+控制不通过这些重载暴露。
 
 ## 使用示例
 
 ```cpp
 #include <common/pto_tileop.hpp>
-
 using namespace pto;
-using GM = global_tensor<float, RowMajor<64, 32>>;
 using TileT = Tile<Location::Vec, float, 64, 32>;
-float left_data[64 * 32] = {}, right_data[64 * 32] = {}, dst_data[64 * 32] = {};
-GM left_global(left_data), right_global(right_data), dst_global(dst_data);
-TileT left, right, dst, predicate;
-TLOAD(left, left_global);
-TLOAD(right, right_global);
-TLOAD(dst, right_global); // false source 必须在调用前存入 dst
-TCMP<CmpMode::LT>(predicate, left, right);
-TSEL(dst, predicate, left);
-TSTORE(dst_global, dst);
-```
+using GM = global_tensor<float, RowMajor<64, 32>>;
 
-```cpp
-// TileT dst; TSEL(dst, predicate, src_true); // 错误：dst/false source 未初始化
+void select_values(GM &out, GM &left_mem, GM &right_mem) {
+  TileT left, right, dst, pred;
+  TLOAD(left, left_mem);
+  TLOAD(right, right_mem);
+  TCMP<CmpMode::LT>(pred, left, right);
+  TSEL(dst, pred, left, right);
+  TSTORE(out, dst);
+}
 ```
-
-涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。

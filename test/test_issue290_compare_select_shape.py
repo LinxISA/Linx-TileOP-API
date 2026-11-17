@@ -31,7 +31,8 @@ class Issue290CompareSelectShapeTest(unittest.TestCase):
     def test_header_has_physical_shape_contracts(self):
         text = HEADER.read_text(encoding="utf-8")
         self.assertIn("TCMP source physical shapes and layouts must match", text)
-        self.assertIn("TSEL physical shapes and layouts must match the destination", text)
+        self.assertIn("TSEL physical shapes and layouts must match the destination",
+                      (ROOT / "include/common/pto_select.hpp").read_text())
 
     def test_mismatched_physical_shape_is_compile_error(self):
         if not Path(CXX).is_file() or not SYSROOT.is_dir():

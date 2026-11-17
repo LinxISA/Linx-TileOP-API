@@ -34,6 +34,7 @@ check: check-sync-proposal
 	python3 test/test_macro_coverage.py
 	python3 test/test_pto059_gap_api.py
 	python3 test/test_pto_main_contract.py
+	python3 test/test_tsel_contract.py
 	python3 test/test_predicate_adapters.py
 	python3 test/test_indexed_tlsu_range.py
 	python3 test/test_version_header.py

@@ -3,7 +3,8 @@
 `TCMP` 是由 VEC 执行的比较操作。NORM 布局产生 packed predicate；
 CUBE_M16/M32 布局产生以源操作类型为 basis 的 PredicateCell。接口显式保留
 源 CUBE 布局，不会回落为 NORM。PredicateCell 不是普通 Numeric U8；后续
-`TSEL` 必须使用相同布局，并按比较的 basis 类型消费谓词。
+`TSEL` 按逻辑坐标消费谓词，只要求布局和有效形状匹配；比较 basis
+不限制所选数值的类型或位宽。
 
 ## C++ 接口
 
@@ -131,7 +132,7 @@ using namespace pto;
 using InputGM = global_tensor<float, RowMajor<64, 32>>;
 using ResultGM = global_tensor<float, RowMajor<64, 32>>;
 using InputTile = Tile<Location::Vec, float, 64, 32>;
-// The current TSEL wrapper uses one tile type for mask and data operands.
+// RowMajor packed predicate carrier; TSEL also accepts a distinct carrier type.
 using PredicateTile = Tile<Location::Vec, float, 64, 32>;
 using ResultTile = Tile<Location::Vec, float, 64, 32>;
 
@@ -149,11 +150,10 @@ ResultTile result;
 TLOAD(left, left_global);
 TLOAD(right, right_global);
 TCMP<CmpMode::EQ>(predicate, left, right);
-result = right; // TSEL 的 false source 是调用前的 dst
-TSEL(result, predicate, left);
+TSEL(result, predicate, left, right);
 TSTORE(result_global, result);
 ```
 
-示例选择相等位置的 `left`，其他位置保留预先放入 `result` 的 `right`。
+示例选择相等位置的 `left`，其他位置选择独立 false 源 `right`。
 
 涉及标量、索引、scale 或 bias 的操作，请按上方实际重载替换示例参数。

@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "common/pto_tile.hpp"
+#include "common/pto_select.hpp"
 #include "common/pto_shared_nd.hpp"
 #include "common/pto_indexed_range.hpp"
 #include "common/pto_tile_region.hpp"
@@ -14163,119 +14164,44 @@ void TPRELU(tile_shape &dst, tile_shape &src0, tile_shape &src1) {
 }
 
 
-// TSEL: select true_src where mask is set, otherwise preserve the prior dst.
-// The false source is an explicit ISA operand, so keep dst live as an input
-// and bind it with a second B.IOT before publishing the destination.
-// PTO-ISA #260: mask/true_src backings are checked independently against the
-// destination (operation) type; equal-width non-packed cross-type carriers
-// are legal and the selected bits are copied raw.
-template <is_tile_data_v tile_shape, is_tile_data_v mask_shape = tile_shape,
-          is_tile_data_v true_shape = tile_shape>
-void TSEL(tile_shape &dst, mask_shape &mask, true_shape &true_src) {
-  // PTO-ISA #260: the equal-width reinterpretation rule applies to the
-  // NUMERIC sources (true/false payload). The mask is a predicate carrier
-  // (model-side TileStorage_Predicate, checked by TilePredicateValuesLegal)
-  // and is NOT width-checked against the operation type — the canonical
-  // usage is a U8-backed predicate produced by TCMP with any payload width.
-  static_assert(
-      tile_carrier_width_compatible(
-          type_traits<typename true_shape::DType>::TypeCode,
-          type_traits<typename tile_shape::DType>::TypeCode),
-      "TSEL cross-type numeric sources require equal element width and no "
-      "packed 4-bit types (PTO-ISA #260)");
-  static_assert(mask_shape::ValidRow == tile_shape::ValidRow &&
-                    mask_shape::ValidCol == tile_shape::ValidCol &&
-                    true_shape::ValidRow == tile_shape::ValidRow &&
-                    true_shape::ValidCol == tile_shape::ValidCol,
-                "TSEL mask/true-source valid shapes must match the destination");
-  static_assert(mask_shape::Rows == tile_shape::Rows &&
-                    true_shape::Rows == tile_shape::Rows &&
-                    mask_shape::Cols == tile_shape::Cols &&
-                    true_shape::Cols == tile_shape::Cols &&
-                    mask_shape::BFractal == tile_shape::BFractal &&
-                    true_shape::BFractal == tile_shape::BFractal,
-                "TSEL physical shapes and layouts must match the destination");
-  if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow > 0) {
-  asm volatile(
-    "BSTART.TEPL 26, %D2\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
-    "B.DIM zero, %c3, ->lb0\n"
-    "B.DIM zero, %c4, ->lb1\n"
-    "B.DIM zero, %c5, ->lb2\n"
-    "B.IOT %6, %7, mask=1111\n"
-    "B.IOT %1, mask=1111, last, ->%0<%Z8>\n"
-    ""
-    : [Dst] "=Tr"(dst.data())
-    : [Prior] "0"(dst.data()),
-      [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [ValidCol] "i"(tile_shape::ValidCol),
-      [ValidRow] "i"(tile_shape::ValidRow),
-      [Cols] "i"(tile_shape::Cols),
-      [Mask] "Tr"(mask.data()),
-      [True] "Tr"(true_src.data()),
-      [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [ElemLayout] "i"(local_layout_code_v<tile_shape>)
-  );  } else if constexpr (tile_shape::ValidCol > 0 && tile_shape::ValidRow < 0) {
-  asm volatile(
-    "BSTART.TEPL 26, %D2\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
-    "B.DIM zero, %c3, ->lb0\n"
-    "B.DIM %[mask____dimrow], 0, ->lb1\n"
-    "B.DIM zero, %c5, ->lb2\n"
-    "B.IOT %6, %7, mask=1111\n"
-    "B.IOT %1, mask=1111, last, ->%0<%Z8>\n"
-    ""
-    : [Dst] "=Tr"(dst.data())
-    : [Prior] "0"(dst.data()),
-      [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [ValidCol] "i"(tile_shape::ValidCol),
-      [mask____dimrow] "r"(mask.GetValidRow()),
-      [Cols] "i"(tile_shape::Cols),
-      [Mask] "Tr"(mask.data()),
-      [True] "Tr"(true_src.data()),
-      [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [ElemLayout] "i"(local_layout_code_v<tile_shape>)
-  );  } else if constexpr (tile_shape::ValidCol < 0 && tile_shape::ValidRow > 0) {
-  asm volatile(
-    "BSTART.TEPL 26, %D2\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
-    "B.DIM %[mask____dimcol], 0, ->lb0\n"
-    "B.DIM zero, %c4, ->lb1\n"
-    "B.DIM zero, %c5, ->lb2\n"
-    "B.IOT %6, %7, mask=1111\n"
-    "B.IOT %1, mask=1111, last, ->%0<%Z8>\n"
-    ""
-    : [Dst] "=Tr"(dst.data())
-    : [Prior] "0"(dst.data()),
-      [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [mask____dimcol] "r"(mask.GetValidCol()),
-      [ValidRow] "i"(tile_shape::ValidRow),
-      [Cols] "i"(tile_shape::Cols),
-      [Mask] "Tr"(mask.data()),
-      [True] "Tr"(true_src.data()),
-      [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [ElemLayout] "i"(local_layout_code_v<tile_shape>)
-  );  } else {
-  asm volatile(
-    "BSTART.TEPL 26, %D2\n"
-    PTO_ELEMENTWISE_LAYOUT_ASM
-    "B.DIM %[mask____dimcol], 0, ->lb0\n"
-    "B.DIM %[mask____dimrow], 0, ->lb1\n"
-    "B.DIM zero, %c5, ->lb2\n"
-    "B.IOT %6, %7, mask=1111\n"
-    "B.IOT %1, mask=1111, last, ->%0<%Z8>\n"
-    ""
-    : [Dst] "=Tr"(dst.data())
-    : [Prior] "0"(dst.data()),
-      [DataType] "i"(type_traits<typename tile_shape::DType>::TypeCode),
-      [mask____dimcol] "r"(mask.GetValidCol()),
-      [mask____dimrow] "r"(mask.GetValidRow()),
-      [Cols] "i"(tile_shape::Cols),
-      [Mask] "Tr"(mask.data()),
-      [True] "Tr"(true_src.data()),
-      [TileSize] "i"(tile_type_traits<typename tile_shape::TileDType>::TilesizeCode),
-      [ElemLayout] "i"(local_layout_code_v<tile_shape>)
-  );  }
+// TSEL copies raw source bits; the three-argument form uses the old dst
+// as its explicit false source. Four-argument calls do not read old dst.
+template <is_tile_data_v D, is_tile_data_v P, is_tile_data_v T,
+          is_tile_data_v F>
+PTO_SHARED_INLINE void TSEL(D &dst, const P &mask, const T &when_true,
+                            const F &when_false) {
+  pto::select_detail::validate_mask<D, P, T>(mask, when_true);
+  pto::select_detail::emit_tile(dst, mask.data(), when_true, when_false);
+}
+
+template <is_tile_data_v D, is_tile_data_v P = D, is_tile_data_v T = D>
+PTO_SHARED_INLINE void TSEL(D &dst, const P &mask, const T &when_true) {
+  TSEL(dst, mask, when_true, dst);
+}
+
+// One GPR for 16/32/64-bit operations; two words for every 8-bit type.
+template <is_tile_data_v D, is_tile_data_v T, is_tile_data_v F>
+PTO_SHARED_INLINE void TSEL(D &dst, uint64_t mask, const T &when_true,
+                            const F &when_false) {
+  pto::select_detail::emit_gpr<false>(dst, mask, 0, when_true, when_false);
+}
+
+template <is_tile_data_v D, is_tile_data_v T, is_tile_data_v F>
+PTO_SHARED_INLINE void TSEL(D &dst, pto::predicate::GPRMask mask,
+                            const T &when_true, const F &when_false) {
+  pto::select_detail::emit_gpr<true>(dst, mask.low, mask.high,
+                                    when_true, when_false);
+}
+
+template <is_tile_data_v D, is_tile_data_v T>
+PTO_SHARED_INLINE void TSEL(D &dst, uint64_t mask, const T &when_true) {
+  TSEL(dst, mask, when_true, dst);
+}
+
+template <is_tile_data_v D, is_tile_data_v T>
+PTO_SHARED_INLINE void TSEL(D &dst, pto::predicate::GPRMask mask,
+                            const T &when_true) {
+  TSEL(dst, mask, when_true, dst);
 }
 
 // TABS: dst = |src|

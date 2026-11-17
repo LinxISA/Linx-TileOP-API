@@ -2,6 +2,7 @@
 #define PTO_PREDICATE_HPP
 
 #include "common/pto_tile.hpp"
+#include "common/pto_select.hpp"
 #include "common/pto_indexed_range.hpp"
 
 namespace pto {
@@ -41,9 +42,9 @@ __attribute__((always_inline)) inline auto
 logical_numeric(const Predicate<Basis> &, const Numeric &)
     -> LogicalBasis<Basis>;
 
-template <typename Basis, typename Value>
+template <typename Basis, typename Value, typename True, typename False>
 __attribute__((always_inline)) inline void
-select(Value &, const Predicate<Basis> &, const Value &, const Value &);
+select(Value &, const Predicate<Basis> &, const True &, const False &);
 
 template <typename Basis, typename Value>
 __attribute__((always_inline)) inline void
@@ -92,9 +93,9 @@ template <typename Basis> class Predicate {
   friend __attribute__((always_inline)) inline auto
   logical_numeric(const Predicate<Source> &, const Numeric &)
       -> LogicalBasis<Source>;
-  template <typename Source, typename Value>
+  template <typename Source, typename Value, typename True, typename False>
   friend __attribute__((always_inline)) inline void
-  select(Value &, const Predicate<Source> &, const Value &, const Value &);
+  select(Value &, const Predicate<Source> &, const True &, const False &);
   template <typename Source, typename Value>
   friend __attribute__((always_inline)) inline void
   select_scalar(Value &, const Predicate<Source> &, const Value &,
@@ -478,26 +479,18 @@ logical_numeric(const Predicate<Basis> &active, const Numeric &numeric)
   return result;
 }
 
-template <typename Basis, typename Value>
+template <typename Basis, typename Value, typename True, typename False>
 __attribute__((always_inline)) inline void
 select(Value &destination, const Predicate<Basis> &active,
-       const Value &when_true, const Value &when_false) {
-  validate_selection<Basis, Value>();
-  asm volatile(
-      "BSTART.TEPL TSEL, %D[Type]\n"
-      PTO_PREDICATE_LAYOUT_ASM
-      "B.DIM zero, %c[Columns], ->LB0\n"
-      "B.DIM zero, %c[Rows], ->LB1\n"
-      "B.DIM zero, %c[PhysicalColumns], ->LB2\n"
-      "B.IOT %[Predicate], %[True], mask=1111\n"
-      "B.IOT %[False], mask=1111, last, ->%[Result]<%Z[Size]>\n"
-      : [Result] "=Tr"(destination.data())
-      : [Predicate] "Tr"(active.Carrier), [True] "Tr"(when_true.data()),
-        [False] "Tr"(when_false.data()),
-        [Type] "i"(type_traits<typename Value::DType>::TypeCode),
-        [Layout] "i"(Basis::BFractal == BLayout::CubeM16 ? 31 : 29),
-        [Rows] "i"(Basis::ValidRow), [Columns] "i"(Basis::ValidCol),
-        [PhysicalColumns] "i"(Value::Cols), [Size] "i"(Value::TilesizeCode));
+       const True &when_true, const False &when_false) {
+  static_assert(Value::BFractal == Basis::BFractal,
+                "TSEL PredicateCell layout must match numeric operands");
+  static_assert(select_detail::dimension_matches(Basis::ValidRow, True::ValidRow) &&
+                    select_detail::dimension_matches(Basis::ValidCol, True::ValidCol),
+                "TSEL PredicateCell valid shapes must match numeric operands");
+  assert(when_true.GetValidRow() == Basis::ValidRow &&
+         when_true.GetValidCol() == Basis::ValidCol);
+  select_detail::emit_tile(destination, active.Carrier, when_true, when_false);
 }
 
 template <typename Basis, typename Value>
@@ -525,6 +518,20 @@ select_scalar(Value &destination, const Predicate<Basis> &active,
 #undef PTO_PREDICATE_LAYOUT_ASM
 
 }
+}
+
+// Match the existing global TSEL API while preserving the opaque PredicateCell.
+template <is_tile_data_v D, typename Basis, is_tile_data_v T, is_tile_data_v F>
+__attribute__((always_inline)) inline void
+TSEL(D &dst, const pto::predicate::Predicate<Basis> &mask,
+     const T &when_true, const F &when_false) {
+  pto::predicate::select(dst, mask, when_true, when_false);
+}
+
+template <is_tile_data_v D, typename Basis, is_tile_data_v T>
+__attribute__((always_inline)) inline void
+TSEL(D &dst, const pto::predicate::Predicate<Basis> &mask, const T &when_true) {
+  pto::predicate::select(dst, mask, when_true, dst);
 }
 
 #endif

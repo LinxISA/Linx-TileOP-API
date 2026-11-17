@@ -348,9 +348,10 @@ U8 `TAND/TOR/TXOR` 结果使用 U8 basis；与 Numeric U8 混合时结果为 Num
 前提是布局与有效形状匹配。循环携带的 COPY 也必须保留这个区分。
 
 `TCMP` 和 `TSEL` 可以处理 `ValidCol < Cols` 的 partial-column Tile，但参与同一
-compare/select 操作的操作数仍必须保持相同的物理 `Rows x Cols` 和 `BLayout`，并且
-valid shape 必须一致。不能用 `[M, N]`、`ValidCol=1` 的 Tile 与物理 `[M, 1]` Tile
-混用；这两种 Tile 的行距和 descriptor geometry 不同，应在 API 层编译期拒绝。
+compare/select 操作的数值操作数仍必须保持相同的物理形状和 `BLayout`，并且
+valid shape 必须一致。TSEL 的 CUBE PredicateCell 只需匹配布局和逻辑有效形状，
+其 U8 物理存储和比较 basis 不约束所选数值类型。不能用 `[M, N]`、`ValidCol=1`
+的数值 Tile 与物理 `[M, 1]` 数值 Tile 混用；这两种 Tile 的行距和 descriptor geometry 不同，应在 API 层编译期拒绝。
 
 PTO #311 row-reduction results may retain a wide physical CUBE carrier while
 publishing only `ValidCol=1`. Use `TREDUCEPREFIXVIEW<OneCellTile>(reduction)`

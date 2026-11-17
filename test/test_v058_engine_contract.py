@@ -752,29 +752,15 @@ class LinxISAV058EngineContractTest(unittest.TestCase):
         self.assertIn("row stride in **bytes**", tlsu_doc)
 
     def test_tsel_binds_explicit_false_source_on_both_shape_paths(self) -> None:
-        start = self.header.index("void TSEL(")
-        end = self.header.index("// TABS:", start)
-        tsel = self.header[start:end]
-        # Per-dimension dispatch: four B.DIM combinations, each a full asm
-        # statement with the same binder shape.
-        self.assertEqual(
-            tsel.count('"B.IOT %6, %7, mask=1111\\n"'), 4
-        )
-        self.assertEqual(
-            tsel.count(
-                '"B.IOT %1, mask=1111, last, ->%0<%Z8>\\n"'
-            ),
-            4,
-        )
-        self.assertEqual(tsel.count(': [Dst] "=Tr"(dst.data())'), 4)
-        self.assertEqual(tsel.count('[Prior] "0"(dst.data())'), 4)
-        self.assertIn('"B.DIM zero, %c3, ->lb0\\n"', tsel)
-        self.assertIn('"B.DIM %[mask____dimcol], 0, ->lb0\\n"', tsel)
-        self.assertIn('"B.DIM %[mask____dimrow], 0, ->lb1\\n"', tsel)
-        self.assertIn("::ValidCol > 0 && ", tsel)
-        self.assertNotIn(
-            '"B.IOT %5, %6, mask=1111, last, ->%0<%Z7>\\n"', tsel
-        )
+        # The common emitter owns all four immediate/runtime dimension paths.
+        select = (ROOT / "include/common/pto_select.hpp").read_text()
+        self.assertIn('TSEL(dst, mask, when_true, dst);', self.header)
+        self.assertIn('"B.IOT %[Predicate], %[True], mask=1111\\n"', select)
+        self.assertIn('"B.IOT %[False], mask=1111, last, ->%[Result]<%Z[Size]>\\n"', select)
+        self.assertIn('[False] "Tr"(when_false.data())', select)
+        self.assertIn('"B.DIM zero, %c[Columns], ->LB0', select)
+        self.assertIn('"B.DIM %[Columns], 0, ->LB0', select)
+        self.assertIn('B.DIM %[Rows], 0, ->LB1', select)
 
     def test_valid_shape_immediate_fixture_separates_static_and_dynamic_paths(self) -> None:
         fixture = (ROOT / "test" / "tileop_api" / "src" / "ValidShapeImmediate.cpp").read_text(
