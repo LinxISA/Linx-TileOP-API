@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "pto_memory.hpp"
+
 namespace pto {
 
 template <typename Element>
@@ -904,6 +906,13 @@ struct GlobalTensor {
     return (elements * tile_element_bits_v<DType> + 7) / 8;
   }
 
+  template<MemoryScope Scope> auto scalar_access() {
+    return scalar_view<Scope>(data_);
+  }
+  template<MemoryScope Scope> auto scalar_access() const {
+    return scalar_view<Scope>(static_cast<const DType*>(data_));
+  }
+
   DType *data() { return data_; }
   const DType *data() const { return data_; }
 
@@ -1549,6 +1558,13 @@ public:
             typename = std::enable_if_t<(Rows == DYNAMIC && Cols == DYNAMIC), T>>
   global_tensor(DType* data, int dynamicRow, int dynamicCol)
             : impl_(data, shape_t{}, stride_t(dynamicRow*dynamicCol, dynamicCol, dynamicRow)), layout_(MLayout{}) {}
+
+  template<MemoryScope Scope> auto scalar_access() {
+    return impl_.template scalar_access<Scope>();
+  }
+  template<MemoryScope Scope> auto scalar_access() const {
+    return impl_.template scalar_access<Scope>();
+  }
 
   const DType *data() const { return impl_.data(); }
   DType *data() { return impl_.data(); }

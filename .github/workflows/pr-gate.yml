@@ -55,6 +55,7 @@ jobs:
         run: |
           python3 test/test_macro_coverage.py
           python3 test/test_pr_gate_cache_order.py
+          python3 test/test_scalar_shareability.py
 
       - name: Show resolved source revisions
         run: |

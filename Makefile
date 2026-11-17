@@ -37,6 +37,7 @@ check: check-sync-proposal
 	python3 test/test_tsel_contract.py
 	python3 test/test_predicate_adapters.py
 	python3 test/test_indexed_tlsu_range.py
+	python3 test/test_scalar_shareability.py
 	python3 test/test_version_header.py
 	python3 test/test_layout_header_link.py
 	python3 test/test_element_tile_api.py
@@ -81,6 +82,7 @@ install:
 		echo '#define PTO_TILEOP_API_HAS_ELEMENT_TILE 1'; \
 		echo '#define PTO_TILEOP_API_HAS_ELEMENT_VIEW_METADATA 1'; \
 		echo '#define PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS 1'; \
+		echo '#define PTO_TILEOP_API_HAS_SCALAR_SHAREABILITY 1'; \
 		echo '#define PTO_TILEOP_API_HAS_SYNC_CORE 1'; \
 		echo '#define PTO_TILEOP_API_HAS_GROUP_RUNTIME_ABI 1'; \
 		echo '#define PTO_TILEOP_API_HAS_TILE_ARRAY_PARTICIPANT_MASK 1'; \
