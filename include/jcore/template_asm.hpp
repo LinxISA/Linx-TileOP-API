@@ -6,6 +6,7 @@
 #include "common/pto_tile.hpp"
 #include "common/pto_shared_nd.hpp"
 #include "common/pto_indexed_range.hpp"
+#include "common/pto_indexed_mask.hpp"
 #include "common/pto_tile_region.hpp"
 
 using namespace pto;
@@ -1153,6 +1154,13 @@ template <typename tile_shape_out, typename tile_shape_offset,
 inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
                          const tile_shape_offset &offset,
                          const tile_shape_mask &mask) {
+  // One Local U8 byte (0/1) per index transaction; packed RowMajor
+  // TCMP/TCMPS output is incompatible even in a U8 Tile. Mask and index
+  // valid extents must agree, including runtime extents; physical
+  // shapes/capacities may differ. Disabled gather lanes use PadValue;
+  // no address generation or memory access occurs for disabled lanes.
+  pto::detail::validate_indexed_mask<tile_shape_out, tile_shape_offset,
+                                    tile_shape_mask>();
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
                 "MGATHER_MASK dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
@@ -1248,6 +1256,13 @@ template <typename tile_shape_in, typename tile_shape_offset,
 inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
                           const tile_shape_offset &offset,
                           const tile_shape_mask &mask) {
+  // One Local U8 byte (0/1) per index transaction; packed RowMajor
+  // TCMP/TCMPS output is incompatible even in a U8 Tile. Mask and index
+  // valid extents must agree, including runtime extents; physical
+  // shapes/capacities may differ. Disabled scatter lanes preserve GM;
+  // no address generation or memory access occurs for disabled lanes.
+  pto::detail::validate_indexed_mask<tile_shape_in, tile_shape_offset,
+                                    tile_shape_mask>();
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
                 "MSCATTER_MASK src logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
@@ -1519,6 +1534,13 @@ template <typename tile_shape_out, typename tile_shape_offset,
 inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
                          const tile_shape_offset &offset,
                          const tile_shape_mask &mask, IndexedByteRange range) {
+  // One Local U8 byte (0/1) per index transaction; packed RowMajor
+  // TCMP/TCMPS output is incompatible even in a U8 Tile. Mask and index
+  // valid extents must agree, including runtime extents; physical
+  // shapes/capacities may differ. Disabled gather lanes use PadValue;
+  // no address generation or memory access occurs for disabled lanes.
+  pto::detail::validate_indexed_mask<tile_shape_out, tile_shape_offset,
+                                    tile_shape_mask>();
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
                 "MGATHER_MASK dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
@@ -1618,6 +1640,13 @@ template <typename tile_shape_in, typename tile_shape_offset,
 inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
                           const tile_shape_offset &offset,
                           const tile_shape_mask &mask, IndexedByteRange range) {
+  // One Local U8 byte (0/1) per index transaction; packed RowMajor
+  // TCMP/TCMPS output is incompatible even in a U8 Tile. Mask and index
+  // valid extents must agree, including runtime extents; physical
+  // shapes/capacities may differ. Disabled scatter lanes preserve GM;
+  // no address generation or memory access occurs for disabled lanes.
+  pto::detail::validate_indexed_mask<tile_shape_in, tile_shape_offset,
+                                    tile_shape_mask>();
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
                 "MSCATTER_MASK src logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "

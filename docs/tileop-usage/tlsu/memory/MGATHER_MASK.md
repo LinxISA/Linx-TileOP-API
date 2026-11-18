@@ -48,7 +48,7 @@ inline void MGATHER_MASK(
 | `dst` | 输出 Tile；成功调用后写入操作结果。 |
 | `src` | 输入 Tile 或源数据。 |
 | `offset` | 相对 GM Base 的显式字节位移 Tile；不按元素宽度缩放。 |
-| `mask` | 逐元素掩码 Tile；仅掩码允许的位置参与该重载定义的读写。 |
+| `mask` | Local U8 字节掩码；每个索引事务一个字节，值只能为 0 或 1。 |
 
 
 
@@ -63,18 +63,19 @@ inline void MGATHER_MASK(
 
 ## 约束
 
-内存地址、byte displacements、mask 和 PE 参与集合必须符合 TLSU contract；地址单位和 fault 行为见本页的异常和边界行为说明。
+`mask` 必须是普通 Local `uint8_t` Tile，每个索引事务对应一个字节，字节值只能为 `0x00` 或 `0x01`；`2`、`0xff` 等非 canonical 值在执行时拒绝，不能按非零即 true 解释。mask 的 dtype 与传输数据的 dtype 独立。
+
+mask、index、data 必须使用相同布局类（RowMajor、CUBE_M16 或 CUBE_M32）；mask 与 index 的有效行列必须一致，包括动态有效区域的实际值。每个 Tile 的物理行列和容量可以不同，但必须覆盖访问区域，mask 容量须有合法 SizeCode（128 B..256 KiB）。动态有效区域的一致性和边界由调用方保证，执行侧继续校验。CUBE 布局的发射支持单独跟踪于 [#201](https://github.com/LinxISA/Linx-TileOP-API/issues/201)，本页 RowMajor 示例不作为 CUBE 路径的验证证据。
+
+RowMajor `TCMP/TCMPS` 产生 packed bits，不能直接作为本接口的字节掩码，即使其 Tile dtype 是 U8。reinterpret 或仅修改模板 dtype 不会解包。通过 `TLOAD` 加载预先生成的 0/1 字节是合法生产方式。类型检查只能排除不兼容载体，无法证明数据来源或字节值合法。
+
+mask=0 时不进行对应 lane 的地址生成或内存访问；gather 使用所选 `PadValue`，scatter 保留对应 GM 原值。offset 为相对 Base 的字节位移，不按元素宽度缩放。
 
     操作数角色、数据类型组合、容量、PE mask 和 alias 必须符合上方约束；只能使用所选重载声明的操作数形式。
 
 ### 有效区域与 padding
 
-| 项目 | 规则 |
-| --- | --- |
-| 有效元素 | 逐元素操作通常仅对输入和输出共同的有效区域定义结果；未明确规定的 padding 不应读取或依赖。 |
-| 物理容量 / SizeCode | 只决定容量，不重新定义逻辑 shape。 |
-| 输出 padding | 除非本操作明确规定填充值或传播规则，否则视为不可依赖。 |
-
+mask 与 index 的有效区域必须一致，每个索引事务读取一个 U8 字节。mask=0 的目的位置及有效区域外的物理元素使用所选 `PadValue`；示例显式选择 `TmaPadValue::Zero`。物理容量不改变有效区域。
 
 
 ## 默认值
@@ -95,7 +96,7 @@ inline void MGATHER_MASK(
 
 ## 结果说明
 
-    成功调用后，`MGATHER_MASK` 更新输出 Tile 的有效区域；输入 Tile 通常保持不变，输出 padding 和未明确声明的副作用不可依赖。若操作的约束或参数说明另有规定，以对应说明为准。
+活动位置写入读取值，非活动位置与物理 padding 使用所选 `PadValue`；非活动 lane 不访存。
 
 ## Bundle 组成
 
@@ -114,28 +115,33 @@ BSTOP
 
 ## 使用示例
 
+主机侧准备 32 个字节：`enabled[j] = memory[j] >= 16 ? 1 : 0`。
+`offsets[j] = (int32_t(j) - 16) * int32_t(sizeof(float))`，调用时 Base 指向 `memory + 16`，
+确保负位移也落在已分配内存内。
+
 ```cpp
 #include <common/pto_tileop.hpp>
 
 using namespace pto;
-using Values = Tile<Location::Vec, float, 8, 32, BLayout::RowMajor>;
-using ElementIndices = Tile<Location::Vec, uint32_t, 8, 32, BLayout::RowMajor>;
-using Mask = Tile<Location::Vec, uint8_t, 8, 32, BLayout::RowMajor>;
-using GM = global_tensor<float, RowMajor<8, 1024>>;
-using GMOut = global_tensor<float, RowMajor<8, 32>>;
+using Values = Tile<Location::Vec, float, 1, 32, BLayout::RowMajor>;
+using ByteOffsets = Tile<Location::Vec, int32_t, 1, 32, BLayout::RowMajor>;
+using Mask = Tile<Location::Vec, uint8_t, 1, 128, BLayout::RowMajor, 1, 32>;
+using GM = global_tensor<float, RowMajor<1, 32>>;
+using GMOut = global_tensor<float, RowMajor<1, 32>>;
 
-void gather_masked(float *out, const float *base, const uint32_t *offsets,
+void gather_masked(float *out, const float *base, const int32_t *offsets,
                    const uint8_t *enabled) {
   GM base_gm(base);
   GMOut out_gm(out);
   Values dst;
-  ElementIndices offset;
+  ByteOffsets offset;
   Mask mask;
-  global_tensor<uint32_t, RowMajor<8, 32>> offsets_gm(offsets);
-  global_tensor<uint8_t, RowMajor<8, 32>> enabled_gm(enabled);
+  global_tensor<int32_t, RowMajor<1, 32>> offsets_gm(offsets);
+  global_tensor<uint8_t, RowMajor<1, 32>> enabled_gm(enabled);
   TLOAD(offset, offsets_gm);
+  // enabled[j] must be exactly 0 or 1; each byte controls one transaction.
   TLOAD(mask, enabled_gm);
-  MGATHER_MASK<Values, ElementIndices, Mask, GM, TmaPadValue::Zero>(
+  MGATHER_MASK<Values, ByteOffsets, Mask, GM, TmaPadValue::Zero>(
       dst, base_gm, offset, mask);
   TSTORE(out_gm, dst);
 }

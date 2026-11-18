@@ -344,8 +344,38 @@ PARAMETER_MEANINGS = {
     "tile_role_v<Mtx>": "由矩阵 Tile 角色约束推导的操作数；必须匹配该重载要求的矩阵布局和位置。",
 }
 
+def comparison_mask_contract() -> str:
+    return ("RowMajor/NORM 的 `TCMP/TCMPS` Tile 输出是 packed predicate：每个比较结果占一位，"
+            "即使目的载体声明为 `uint8_t`，也不是每个 lane 一个 0/1 字节。"
+            "不能直接传给 `MGATHER_MASK/MSCATTER_MASK`；更改 dtype 或 reinterpret 不会解包。"
+            "CUBE PredicateCell 也不能仅凭 U8 carrier 当作普通 Numeric U8 使用。"
+            "indexed TLSU 的合法示例见 [MGATHER_MASK](../../tlsu/memory/MGATHER_MASK.md)。")
+
+
+def indexed_mask_contract() -> str:
+    return ("`mask` 必须是普通 Local `uint8_t` Tile，每个索引事务对应一个字节，"
+            "字节值只能为 `0x00` 或 `0x01`；`2`、`0xff` 等非 canonical 值在执行时拒绝，"
+            "不能按非零即 true 解释。mask 的 dtype 与传输数据的 dtype 独立。\n\n"
+            "mask、index、data 必须使用相同布局类（RowMajor、CUBE_M16 或 CUBE_M32）；"
+            "mask 与 index 的有效行列必须一致，包括动态有效区域的实际值。"
+            "每个 Tile 的物理行列和容量可以不同，但必须覆盖访问区域，mask 容量须有合法 SizeCode"
+            "（128 B..256 KiB）。动态有效区域的一致性和边界由调用方保证，执行侧继续校验。"
+            "CUBE 布局的发射支持单独跟踪于 [#201](https://github.com/LinxISA/Linx-TileOP-API/issues/201)，"
+            "本页 RowMajor 示例不作为 CUBE 路径的验证证据。\n\n"
+            "RowMajor `TCMP/TCMPS` 产生 packed bits，不能直接作为本接口的字节掩码，"
+            "即使其 Tile dtype 是 U8。reinterpret 或仅修改模板 dtype 不会解包。"
+            "通过 `TLOAD` 加载预先生成的 0/1 字节是合法生产方式。"
+            "类型检查只能排除不兼容载体，无法证明数据来源或字节值合法。\n\n"
+            "mask=0 时不进行对应 lane 的地址生成或内存访问；gather 使用所选 `PadValue`，"
+            "scatter 保留对应 GM 原值。offset 为相对 Base 的字节位移，不按元素宽度缩放。")
+
+
 def operation_contract(name: str) -> str:
     """Return the developer-relevant contract that is common to an operation family."""
+    if name in {"MGATHER_MASK", "MSCATTER_MASK"}:
+        return indexed_mask_contract()
+    if name in {"TCMP", "TCMPS"}:
+        return comparison_mask_contract()
     if name in {"TLOAD", "TSTORE"}:
         return ("`TLOAD/TSTORE` 的 GM 行 stride 以**字节**计，而不是元素数；普通 Tile 与 "
                 "CUBE Tile 分别走普通传输和布局转换路径。source/destination 的顺序不可互换。")
@@ -438,6 +468,15 @@ def dtype_roles(name: str, types: str) -> str:
     return ""
 
 def valid_region_rules(name: str) -> str:
+    if name == "MGATHER_MASK":
+        return ("### 有效区域与 padding\n\n"
+                "mask 与 index 的有效区域必须一致，每个索引事务读取一个 U8 字节。"
+                "mask=0 的目的位置及有效区域外的物理元素使用所选 `PadValue`；"
+                "示例显式选择 `TmaPadValue::Zero`。物理容量不改变有效区域。")
+    if name == "MSCATTER_MASK":
+        return ("### 有效区域与 padding\n\n"
+                "mask 与 index 的有效区域必须一致，每个索引事务读取一个 U8 字节。"
+                "仅 mask=1 的位置写入 GM；mask=0 的地址保留原值。本操作不分配输出 Tile。")
     if name in {"TLOAD", "TSTORE"}:
         rule = "传输矩形由 Tile 的有效区域和 GM layout 共同限定；不要把物理 padding 当作需要传输的逻辑元素。"
     elif name.startswith(("TMATMUL", "TGEMV")):
@@ -576,7 +615,7 @@ def chinese_intro(name: str, spec_text: str) -> str:
         "TSHLS": "将每个有效整数元素左移一个标量指定的位数，并发布新的 Local 目标。",
         "TSHRS": "将每个有效整数元素右移一个标量指定的位数，并发布新的 Local 目标。",
         "TSELS": "按照 packed predicate Tile，从 Tile 源或每 PE 标量中选择结果。",
-        "TCMPS": "按照 CMode 将每个有效 Tile 元素与每 PE 标量比较，并将谓词结果编码为 0 或 1。",
+        "TCMPS": "按照 CMode 将每个有效 Tile 元素与每 PE 标量比较；RowMajor 输出采用位打包谓词格式。",
     }
     matrix = {
         "TMATMUL_MX_BIAS": "将经过缩放的矩阵相乘后加上 Bias Tile。",
@@ -927,6 +966,16 @@ def render(name: str, spec: Path, header: str, existing: str = "") -> str:
             count=1,
             flags=re.S,
         )
+    if name in {"MGATHER_MASK", "MSCATTER_MASK"}:
+        rendered = re.sub(
+            r"\| `mask` \|[^\n]*",
+            "| `mask` | Local U8 字节掩码；每个索引事务一个字节，值只能为 0 或 1。 |",
+            rendered)
+        result = ("活动位置写入读取值，非活动位置与物理 padding 使用所选 `PadValue`；非活动 lane 不访存。"
+                  if name == "MGATHER_MASK" else
+                  "只更新活动 lane 对应的 GM 地址，非活动地址保留原值；输入 Tile 保持不变。")
+        rendered = re.sub(r"(## 结果说明\n\n).*?(?=\n\n## )",
+                          lambda match: match[1] + result, rendered, flags=re.S)
     if name.startswith(("MGATHER", "MSCATTER")):
         rendered = update_indexed_tlsu_range_doc(name, rendered)
     return rendered

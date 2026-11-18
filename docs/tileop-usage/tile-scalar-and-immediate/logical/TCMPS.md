@@ -1,6 +1,6 @@
 # TCMPS
 
-`TCMPS` 按照 CMode 将每个有效 Tile 元素与每 PE 标量比较，并将谓词结果编码为 0 或 1。
+`TCMPS` 按照 CMode 将每个有效 Tile 元素与每 PE 标量比较；RowMajor 输出采用位打包谓词格式。
 
 Tile 输出重载显式保留源 CUBE_M16/M32 布局及比较模式，结果为以源操作类型
 为 basis 的 PredicateCell，而非普通 Numeric U8。NORM 输出保持 packed
@@ -74,6 +74,8 @@ GPR 输出重载仅接受 `VEC` 上的 `CUBE_M16`/`CUBE_M32` source，并返回�
 - 参数顺序必须与接口声明一致，不要添加接口未声明的操作数。
 
 ## 约束
+
+RowMajor/NORM 的 `TCMP/TCMPS` Tile 输出是 packed predicate：每个比较结果占一位，即使目的载体声明为 `uint8_t`，也不是每个 lane 一个 0/1 字节。不能直接传给 `MGATHER_MASK/MSCATTER_MASK`；更改 dtype 或 reinterpret 不会解包。CUBE PredicateCell 也不能仅凭 U8 carrier 当作普通 Numeric U8 使用。indexed TLSU 的合法示例见 [MGATHER_MASK](../../tlsu/memory/MGATHER_MASK.md)。
 
 输入与输出的 Tile location、layout、dtype、物理 shape 和 valid region 必须满足该操作的 逐项规则；除非本页明确允许，不应假定可原地执行或允许 alias。
 

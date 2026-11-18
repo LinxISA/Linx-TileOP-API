@@ -27,6 +27,7 @@ check:
 	python3 test/test_issue_272_276_contract.py
 	python3 test/test_issue_398_399_contract.py
 	python3 test/test_shared_nd_to_cube.py
+	python3 test/test_indexed_mask.py
 	python3 test/test_local_m32_tload_assembly.py
 	python3 test/test_tpack_element_assembly_api.py
 	python3 test/test_pr_gate_cache_order.py
