@@ -2,6 +2,7 @@
 #define TEMPLATE_ASM_HPP
 
 #include <cassert>
+#include "common/pto_packed_bf16.hpp"
 
 #include "common/pto_tile.hpp"
 #include "common/pto_select.hpp"
@@ -1714,6 +1715,28 @@ struct linx_cvt_false {
   enum { value = 0 };
 };
 
+// Translation-unit capability, supplied by Clang from the selected CPU and
+// final target features. Missing markers on older compilers fail closed.
+// Function attributes such as __vec__ do not change preprocessor capabilities.
+namespace pto::detail {
+#if defined(__linx_simt_contract) && __linx_simt_contract >= 1 && \
+    defined(__linx_simt) && __linx_simt
+inline constexpr bool legacy_simt_enabled = true;
+#else
+inline constexpr bool legacy_simt_enabled = false;
+#endif
+
+template <int>
+struct legacy_simt_available {
+  static constexpr bool value = legacy_simt_enabled;
+};
+} // namespace pto::detail
+
+#define PTO_LEGACY_SIMT_DIAGNOSTIC                                            \
+  "legacy SIMT conversion/BF16 API unavailable on Janus or an unverified "     \
+  "target; use supported Tile TCVT/TADD APIs or an explicit packed scalar "    \
+  "implementation (TileOP issue #325)"
+
 template <int RMode>
 struct linx_valid_rmode {
   enum { value = RMode >= LINX_RNONE && RMode <= LINX_RHB };
@@ -1754,7 +1777,10 @@ struct linx_valid_sat {
   do {                                                                        \
     static_assert(linx_valid_rmode<RMODE>::value, "invalid cvt RMode");       \
     static_assert(linx_valid_sat<SAT>::value, "invalid cvt Sat");             \
-    if constexpr ((RMODE) == LINX_RNONE && (SAT) == LINX_NOSAT) {             \
+    if constexpr (!pto::detail::legacy_simt_enabled) {                        \
+      static_assert(pto::detail::legacy_simt_available<RMODE>::value,          \
+                    PTO_LEGACY_SIMT_DIAGNOSTIC);                              \
+    } else if constexpr ((RMODE) == LINX_RNONE && (SAT) == LINX_NOSAT) {      \
       LINX_CVT_EMIT_NORMAL(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC,                \
                            "RNONE", "nosat");                                 \
@@ -1827,7 +1853,10 @@ struct linx_valid_sat {
   do {                                                                        \
     static_assert(linx_valid_rmode<RMODE>::value, "invalid cvt RMode");       \
     static_assert(linx_valid_sat<SAT>::value, "invalid cvt Sat");             \
-    if constexpr ((RMODE) == LINX_RNONE && (SAT) == LINX_NOSAT) {             \
+    if constexpr (!pto::detail::legacy_simt_enabled) {                        \
+      static_assert(pto::detail::legacy_simt_available<RMODE>::value,          \
+                    PTO_LEGACY_SIMT_DIAGNOSTIC);                              \
+    } else if constexpr ((RMODE) == LINX_RNONE && (SAT) == LINX_NOSAT) {      \
       LINX_CVT_EMIT_PACKED(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG,              \
                            DST_STORAGE, SRC_STORAGE, DST, SRC0, SRC1,         \
                            "RNONE", "nosat");                                 \
@@ -1921,9 +1950,15 @@ LINX_CVT_INLINE void linx_cvt_packed(Dst &, const Src0 &, const Src1 &) {
   LINX_CVT_INLINE void linx_cvt_packed(DST_CPP &dst,                          \
                                        const SRC_CPP &src0,                   \
                                        const SRC_CPP &src1) {                 \
-    LINX_CVT_DISPATCH_PACKED(RMode, Sat, SRC_TYPE, DST_TYPE, SRC_REG,         \
-                             DST_REG, DST_STORAGE, SRC_STORAGE, dst,          \
-                             src0, src1);                                     \
+    if constexpr (!pto::detail::legacy_simt_enabled &&                        \
+                  std::is_same_v<DST_CPP, __bf16x2> &&                        \
+                  std::is_same_v<SRC_CPP, float>) {                           \
+      pto::detail::packed_bf16_convert<RMode, Sat>(dst, src0, src1);          \
+    } else {                                                                  \
+      LINX_CVT_DISPATCH_PACKED(RMode, Sat, SRC_TYPE, DST_TYPE, SRC_REG,       \
+                               DST_REG, DST_STORAGE, SRC_STORAGE, dst,        \
+                               src0, src1);                                   \
+    }                                                                         \
   }
 
 #define LINX_FOR_EACH_NORMAL_SRC(M, DST_CPP, DST_TYPE, DST_REG, DST_STORAGE)  \
@@ -2446,7 +2481,10 @@ enum BlkvBf16Sat {
   do {                                                                        \
     static_assert((RMODE) >= 0 && (RMODE) <= 7, "invalid bf16 RMode");        \
     static_assert((SAT) == 0 || (SAT) == 1, "invalid bf16 Sat");              \
-    if constexpr ((RMODE) == 0 && (SAT) == 0) {                               \
+    if constexpr (!pto::detail::legacy_simt_enabled) {                        \
+      static_assert(pto::detail::legacy_simt_available<RMODE>::value,          \
+                    PTO_LEGACY_SIMT_DIAGNOSTIC);                              \
+    } else if constexpr ((RMODE) == 0 && (SAT) == 0) {                        \
       EMIT(__VA_ARGS__, "RNONE", "nosat");                                    \
     } else if constexpr ((RMODE) == 0 && (SAT) == 1) {                        \
       EMIT(__VA_ARGS__, "RNONE", "sat");                                      \
@@ -2485,6 +2523,9 @@ enum BlkvBf16Sat {
   template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT, class Src>         \
   BLKV_BF16_INLINE void blkv_bf16_##NAME(__bf16 &dst,                         \
                                          const Src &src) {                    \
+    static_assert(                                                            \
+        std::is_same_v<Src, __bf16>,                                          \
+        "BF16 arithmetic requires matching BF16 operand types");              \
     BLKV_BF16_DISPATCH_RMODE_SAT(RMode, Sat, BLKV_BF16_EMIT_UNARY,            \
                                  OP, dst, src);                               \
   }                                                                           \
@@ -2502,6 +2543,10 @@ enum BlkvBf16Sat {
   BLKV_BF16_INLINE void blkv_bf16_##NAME(__bf16 &dst,                         \
                                          const SrcL &src_l,                   \
                                          const SrcR &src_r) {                 \
+    static_assert(                                                            \
+        std::is_same_v<SrcL, __bf16> &&                                       \
+        std::is_same_v<SrcR, __bf16>,                                         \
+        "BF16 arithmetic requires matching BF16 operand types");              \
     BLKV_BF16_DISPATCH_RMODE_SAT(RMode, Sat, BLKV_BF16_EMIT_BINARY,           \
                                  OP, dst, src_l, src_r);                      \
   }                                                                           \
@@ -2522,6 +2567,11 @@ enum BlkvBf16Sat {
                                          const SrcL &src_l,                   \
                                          const SrcR &src_r,                   \
                                          const SrcA &src_a) {                 \
+    static_assert(                                                            \
+        std::is_same_v<SrcL, __bf16> &&                                       \
+        std::is_same_v<SrcR, __bf16> &&                                       \
+        std::is_same_v<SrcA, __bf16>,                                         \
+        "BF16 arithmetic requires matching BF16 operand types");              \
     BLKV_BF16_DISPATCH_RMODE_SAT(RMode, Sat, BLKV_BF16_EMIT_TERNARY,          \
                                  OP, dst, src_l, src_r, src_a);               \
   }                                                                           \
@@ -2600,7 +2650,15 @@ template <class SrcL, class SrcR>
 BLKV_BF16_INLINE void blkv_bf16_fmax(__bf16 &dst,
                                      const SrcL &src_l,
                                      const SrcR &src_r) {
-  BLKV_BF16_EMIT_FMAX(dst, src_l, src_r);
+  static_assert(std::is_same_v<SrcL, __bf16> &&
+                    std::is_same_v<SrcR, __bf16>,
+                "BF16 arithmetic requires matching BF16 operand types");
+  static_assert(pto::detail::legacy_simt_enabled ||
+                    linx_cvt_false<SrcL, SrcR>::value,
+                PTO_LEGACY_SIMT_DIAGNOSTIC);
+  if constexpr (pto::detail::legacy_simt_enabled) {
+    BLKV_BF16_EMIT_FMAX(dst, src_l, src_r);
+  }
 }
 
 template <class SrcL, class SrcR>
@@ -2625,15 +2683,27 @@ BLKV_DEFINE_BF16_TERNARY_ALIAS(madd, fmadd)
 BLKV_DEFINE_BF16_TERNARY_ALIAS(fmmad, fmadd)
 BLKV_DEFINE_BF16_TERNARY_ALIAS(msub, fmsub)
 
+template <int LegacyTarget = 0>
 BLKV_BF16_INLINE void blkv_bf16_max(__bf16 &dst,
                                     const __bf16 &src_l,
                                     const __bf16 &src_r) {
-  blkv_bf16_fmax(dst, src_l, src_r);
+  static_assert(pto::detail::legacy_simt_available<LegacyTarget>::value,
+                PTO_LEGACY_SIMT_DIAGNOSTIC);
+  if constexpr (pto::detail::legacy_simt_enabled) {
+    blkv_bf16_fmax(dst, src_l, src_r);
+  }
 }
 
+template <int LegacyTarget = 0>
 BLKV_BF16_INLINE __bf16 blkv_bf16_max(const __bf16 &src_l,
                                       const __bf16 &src_r) {
-  return blkv_bf16_fmax(src_l, src_r);
+  static_assert(pto::detail::legacy_simt_available<LegacyTarget>::value,
+                PTO_LEGACY_SIMT_DIAGNOSTIC);
+  if constexpr (pto::detail::legacy_simt_enabled) {
+    return blkv_bf16_fmax(src_l, src_r);
+  } else {
+    return {};
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -2684,19 +2754,27 @@ BLKV_BF16_INLINE __bf16 blkv_bf16_max(const __bf16 &src_l,
 
 #define BLKV_BF16X2_EMIT_FMAX(DST, SRC_L, SRC_R)                              \
   asm volatile("v.fmax %1.bfx2, %2.bfx2" BLKV_BF16X2_DST_PREFIX "\n"          \
-               : "=vr"(BLKV_BF16X2_STORAGE(DST))                             \
+               : "=vr"(BLKV_BF16X2_STORAGE(DST))                              \
                : "vr"(BLKV_BF16X2_STORAGE(SRC_L)),                            \
                  "vr"(BLKV_BF16X2_STORAGE(SRC_R)))
 
 #define BLKV_DEFINE_BF16X2_UNARY(NAME, OP)                                    \
-  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT, class Src>         \
+  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT, class Src>          \
   BLKV_BF16_INLINE void blkv_bf16x2_##NAME(BLKV_BF16X2_TYPE &dst,             \
                                            const Src &src) {                  \
-    BLKV_BF16_DISPATCH_RMODE_SAT(RMode, Sat, BLKV_BF16X2_EMIT_UNARY,          \
-                                 OP, dst, src);                               \
+    static_assert(                                                            \
+        std::is_same_v<Src, BLKV_BF16X2_TYPE>,                                \
+        "BF16 arithmetic requires matching BF16 operand types");              \
+    if constexpr (!pto::detail::legacy_simt_enabled) {                        \
+      dst = pto::detail::packed_bf16_unary<                                   \
+          pto::detail::packed_bf16_op::NAME, RMode, Sat>(src);                \
+    } else {                                                                  \
+      BLKV_BF16_DISPATCH_RMODE_SAT(RMode, Sat, BLKV_BF16X2_EMIT_UNARY,        \
+                                   OP, dst, src);                             \
+    }                                                                         \
   }                                                                           \
                                                                               \
-  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT, class Src>         \
+  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT, class Src>          \
   BLKV_BF16_INLINE BLKV_BF16X2_TYPE blkv_bf16x2_##NAME(const Src &src) {      \
     BLKV_BF16X2_TYPE dst;                                                     \
     blkv_bf16x2_##NAME<RMode, Sat>(dst, src);                                 \
@@ -2704,16 +2782,25 @@ BLKV_BF16_INLINE __bf16 blkv_bf16_max(const __bf16 &src_l,
   }
 
 #define BLKV_DEFINE_BF16X2_BINARY(NAME, OP)                                   \
-  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT,                    \
+  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT,                     \
             class SrcL, class SrcR>                                           \
   BLKV_BF16_INLINE void blkv_bf16x2_##NAME(BLKV_BF16X2_TYPE &dst,             \
                                            const SrcL &src_l,                 \
                                            const SrcR &src_r) {               \
-    BLKV_BF16_DISPATCH_RMODE_SAT(RMode, Sat, BLKV_BF16X2_EMIT_BINARY,         \
-                                 OP, dst, src_l, src_r);                      \
+    static_assert(                                                            \
+        std::is_same_v<SrcL, BLKV_BF16X2_TYPE> &&                             \
+        std::is_same_v<SrcR, BLKV_BF16X2_TYPE>,                               \
+        "BF16 arithmetic requires matching BF16 operand types");              \
+    if constexpr (!pto::detail::legacy_simt_enabled) {                        \
+      dst = pto::detail::packed_bf16_binary<                                  \
+          pto::detail::packed_bf16_op::NAME, RMode, Sat>(src_l, src_r);       \
+    } else {                                                                  \
+      BLKV_BF16_DISPATCH_RMODE_SAT(RMode, Sat, BLKV_BF16X2_EMIT_BINARY,       \
+                                   OP, dst, src_l, src_r);                    \
+    }                                                                         \
   }                                                                           \
                                                                               \
-  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT,                    \
+  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT,                     \
             class SrcL, class SrcR>                                           \
   BLKV_BF16_INLINE BLKV_BF16X2_TYPE blkv_bf16x2_##NAME(const SrcL &src_l,     \
                                                        const SrcR &src_r) {   \
@@ -2722,18 +2809,28 @@ BLKV_BF16_INLINE __bf16 blkv_bf16_max(const __bf16 &src_l,
     return dst;                                                               \
   }
 
-#define BLKV_DEFINE_BF16X2_TERNARY(NAME, OP)                                 \
-  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT,                    \
+#define BLKV_DEFINE_BF16X2_TERNARY(NAME, OP)                                  \
+  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT,                     \
             class SrcL, class SrcR, class SrcA>                               \
   BLKV_BF16_INLINE void blkv_bf16x2_##NAME(BLKV_BF16X2_TYPE &dst,             \
                                            const SrcL &src_l,                 \
                                            const SrcR &src_r,                 \
                                            const SrcA &src_a) {               \
-    BLKV_BF16_DISPATCH_RMODE_SAT(RMode, Sat, BLKV_BF16X2_EMIT_TERNARY,        \
-                                 OP, dst, src_l, src_r, src_a);               \
+    static_assert(                                                            \
+        std::is_same_v<SrcL, BLKV_BF16X2_TYPE> &&                             \
+        std::is_same_v<SrcR, BLKV_BF16X2_TYPE> &&                             \
+        std::is_same_v<SrcA, BLKV_BF16X2_TYPE>,                               \
+        "BF16 arithmetic requires matching BF16 operand types");              \
+    if constexpr (!pto::detail::legacy_simt_enabled) {                        \
+      dst = pto::detail::packed_bf16_ternary<                                 \
+          pto::detail::packed_bf16_op::NAME, RMode, Sat>(src_l, src_r, src_a);\
+    } else {                                                                  \
+      BLKV_BF16_DISPATCH_RMODE_SAT(RMode, Sat, BLKV_BF16X2_EMIT_TERNARY,      \
+                                   OP, dst, src_l, src_r, src_a);             \
+    }                                                                         \
   }                                                                           \
                                                                               \
-  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT,                    \
+  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT,                     \
             class SrcL, class SrcR, class SrcA>                               \
   BLKV_BF16_INLINE BLKV_BF16X2_TYPE                                           \
   blkv_bf16x2_##NAME(const SrcL &src_l,                                       \
@@ -2745,20 +2842,20 @@ BLKV_BF16_INLINE __bf16 blkv_bf16_max(const __bf16 &src_l,
   }
 
 #define BLKV_DEFINE_BF16X2_UNARY_ALIAS(ALIAS, TARGET)                         \
-  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT>                    \
+  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT>                     \
   BLKV_BF16_INLINE void blkv_bf16x2_##ALIAS(BLKV_BF16X2_TYPE &dst,            \
                                             const BLKV_BF16X2_TYPE &src) {    \
     blkv_bf16x2_##TARGET<RMode, Sat>(dst, src);                               \
   }                                                                           \
                                                                               \
-  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT>                    \
+  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT>                     \
   BLKV_BF16_INLINE BLKV_BF16X2_TYPE                                           \
   blkv_bf16x2_##ALIAS(const BLKV_BF16X2_TYPE &src) {                          \
     return blkv_bf16x2_##TARGET<RMode, Sat>(src);                             \
   }
 
 #define BLKV_DEFINE_BF16X2_BINARY_ALIAS(ALIAS, TARGET)                        \
-  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT>                    \
+  template <int RMode = BLKV_RNONE, int Sat = BLKV_NOSAT>                     \
   BLKV_BF16_INLINE void blkv_bf16x2_##ALIAS(BLKV_BF16X2_TYPE &dst,            \
                                             const BLKV_BF16X2_TYPE &src_l,    \
                                             const BLKV_BF16X2_TYPE &src_r) {  \
@@ -2810,7 +2907,14 @@ template <class SrcL, class SrcR>
 BLKV_BF16_INLINE void blkv_bf16x2_fmax(BLKV_BF16X2_TYPE &dst,
                                        const SrcL &src_l,
                                        const SrcR &src_r) {
-  BLKV_BF16X2_EMIT_FMAX(dst, src_l, src_r);
+  static_assert(std::is_same_v<SrcL, BLKV_BF16X2_TYPE> &&
+                    std::is_same_v<SrcR, BLKV_BF16X2_TYPE>,
+                "BF16 arithmetic requires matching BF16 operand types");
+  if constexpr (pto::detail::legacy_simt_enabled) {
+    BLKV_BF16X2_EMIT_FMAX(dst, src_l, src_r);
+  } else {
+    dst = pto::detail::packed_bf16_max(src_l, src_r);
+  }
 }
 
 template <class SrcL, class SrcR>
@@ -2835,15 +2939,13 @@ BLKV_DEFINE_BF16X2_TERNARY_ALIAS(fmmad, fmadd)
 BLKV_DEFINE_BF16X2_TERNARY_ALIAS(msub, fmsub)
 
 BLKV_BF16_INLINE void blkv_bf16x2_max(BLKV_BF16X2_TYPE &dst,
-                                      const BLKV_BF16X2_TYPE &src_l,
-                                      const BLKV_BF16X2_TYPE &src_r) {
-  blkv_bf16x2_fmax(dst, src_l, src_r);
+                                      const BLKV_BF16X2_TYPE &a,
+                                      const BLKV_BF16X2_TYPE &b) {
+  blkv_bf16x2_fmax(dst, a, b);
 }
-
 BLKV_BF16_INLINE BLKV_BF16X2_TYPE
-blkv_bf16x2_max(const BLKV_BF16X2_TYPE &src_l,
-                const BLKV_BF16X2_TYPE &src_r) {
-  return blkv_bf16x2_fmax(src_l, src_r);
+blkv_bf16x2_max(const BLKV_BF16X2_TYPE &a, const BLKV_BF16X2_TYPE &b) {
+  return blkv_bf16x2_fmax(a, b);
 }
 
 #endif // BLKV_BF16_OPS_HPP

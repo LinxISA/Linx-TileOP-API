@@ -23,6 +23,10 @@ kernel；其中的旧版本数量、旧 engine inventory 和旧 encoding identit
 当前规范。不要混用历史 headers、compiler 和规范内容；出现汇编编码、SizeCode
 或 bundle 字段不匹配时，先确认三者的版本是否一致。
 
+Janus 已提供 FP32→BF16x2 转换和 packed BF16 算术的软件实现；其余历史
+`linx_cvt*` 和 scalar BF16 接口仍要求 legacy SIMT。支持范围、舍入语义和位读写见
+[legacy SIMT / packed BF16 迁移说明](migration/legacy-simt-packed-bf16.md)。
+
 安装后的 `<common/pto_tileop_api_revision.hpp>` 提供以下自检宏：
 
 - `PTO_TILEOP_API_VERSION`：TileOP C++ API 版本；

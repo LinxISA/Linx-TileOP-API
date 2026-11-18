@@ -13,6 +13,7 @@
 #include "common/debug_utils.hpp"
 
 #ifdef __linx
+#include "common/pto_packed_bits.hpp"
 #include "common/pto_tile_region_inline_asm.hpp"
 #include "common/pto_predicate.hpp"
 #endif

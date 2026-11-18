@@ -38,6 +38,7 @@ struct __int4x2 { unsigned char value; };
 struct __uint4x2 { unsigned char value; };
 struct __fp16x2 { unsigned value; };
 struct __bf16x2 { unsigned value; };
+#define __bf16x2_STORAGE(d) ((d).value)
 struct __uint16x2 { unsigned value; };
 struct __int16x2 { unsigned value; };
 struct __fp8_e4m3x4 { unsigned value; };

@@ -35,6 +35,34 @@ using golden cmp.py to compare python result with tileop_c result
 
 # run case
 
+## Packed BF16 / legacy SIMT issue #325
+
+```sh
+LINX_CXX=/path/to/clang++ LINX_SYSROOT=/path/to/sysroot \
+  python3 test/test_issue325_legacy_simt.py -v
+python3 test/test_packed_bits.py -v
+```
+
+The contract test checks Janus packed conversion/addition, legacy SIMT
+rejection, unsupported controls and invalid operand types. Raw-bit tests
+cover floating and integer carriers. Run the independent numerical oracle:
+
+```sh
+python3 test/test_packed_bf16_numeric.py NumericHost -v
+LINX_CXX=/path/to/clang++ LINX_SYSROOT=/path/to/sysroot \
+LINX_MODEL_ROOT=/path/to/SuperScalarModel \
+LINX_BF16_ARTIFACT_DIR=/tmp/issue325-results \
+  python3 test/test_packed_bf16_numeric.py -v
+```
+
+The target test uses the model's documented `--stop_pc` observer at a separate
+function reached after all outputs are stored. It verifies numerical results,
+not formal kernel End or multi-PE lifecycle behavior. Compiler and model scalar
+memory encodings must match. Without
+`LINX_MODEL_ROOT`, target numerical execution is explicitly skipped. Optional
+`LINX_BUILTINS` points to compiler-rt for an in-tree Clang. See
+[the software profile and migration](../docs/tileop-usage/migration/legacy-simt-packed-bf16.md).
+
 ## set qemu simulator binary
 Method 1: change the `QEMU` variable in Makefile.common to the qemu-linx binary location
 
