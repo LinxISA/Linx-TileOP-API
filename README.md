@@ -31,6 +31,7 @@ view, not a replacement for the PTO ASL/NDF semantics.
 - [TEXPDIF](docs/tileop-usage/elementwise-tile-tile/transcendental/TEXPDIF.md)
 - [Sorting operations](docs/tileop-usage/irregular-and-complex/sorting/TSORT.md)
 - [Fixed-point matrix wrappers](docs/tileop-usage/options.md)
+- [Janus scalar conversion](docs/tileop-usage/scalar-conversion.md)
 
 ## Validation
 

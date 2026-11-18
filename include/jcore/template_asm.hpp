@@ -1704,25 +1704,9 @@ asm volatile(
 #endif
 
 
-enum LinxSat {
-  LINX_NOSAT = 0,
-  LINX_SAT   = 1,
-};
+#include "jcore/ScalarCvt.hpp"
 
-template <class...>
-struct linx_cvt_false {
-  enum { value = 0 };
-};
-
-template <int RMode>
-struct linx_valid_rmode {
-  enum { value = RMode >= LINX_RNONE && RMode <= LINX_RHB };
-};
-
-template <int Sat>
-struct linx_valid_sat {
-  enum { value = Sat == LINX_NOSAT || Sat == LINX_SAT };
-};
+#if defined(__linx_simt) && __linx_simt
 
 #define LINX_CVT_ASM(SRC_TYPE, DST_TYPE, SRC_REG, DST_REG, RMODE, SAT)        \
   "v.cvt." SRC_TYPE "2" DST_TYPE " %1." SRC_REG LINX_CVT_DST_PREFIX DST_REG   \
@@ -2322,6 +2306,36 @@ LINX_CVT_INLINE void linx_cvt_packed(__bf16x2 &dst,
 }
 
 #endif  // PTO_LINX_HOST_CXX
+
+#else
+
+// Janus scalar entry points deliberately share one support matrix. No packed,
+// P2P or address-space overload can fall through to legacy SIMT assembly.
+template <int RMode = LINX_RNONE, int Sat = LINX_NOSAT, class Dst, class Src>
+LINX_CVT_INLINE void linx_cvt(Dst &dst, const Src &src) {
+  static_assert(linx_valid_rmode<RMode>::value, "invalid cvt RMode");
+  static_assert(linx_valid_sat<Sat>::value, "invalid cvt Sat");
+  if constexpr (std::is_same_v<Dst, int32_t> && std::is_same_v<Src, float>) {
+    if constexpr (linx_valid_rmode<RMode>::value && linx_valid_sat<Sat>::value)
+      dst = pto::detail::scalar_cvt_f32_s32<RMode, Sat>(src);
+  } else {
+    static_assert(linx_cvt_false<Dst, Src>::value,
+                  "Janus linx_cvt supports only FP32 to S32; use TCVT for "
+                  "supported Local Tile conversions");
+  }
+}
+
+template <int RMode = LINX_RNONE, int Sat = LINX_NOSAT,
+          class Dst, class Src0, class Src1>
+LINX_CVT_INLINE void linx_cvt_packed(Dst &, const Src0 &, const Src1 &) {
+  static_assert(linx_valid_rmode<RMode>::value, "invalid cvt RMode");
+  static_assert(linx_valid_sat<Sat>::value, "invalid cvt Sat");
+  static_assert(linx_cvt_false<Dst, Src0, Src1>::value,
+                "Janus linx_cvt_packed is unsupported; use TCVT for "
+                "supported Local Tile conversions");
+}
+
+#endif // __linx_simt
 
 template <class Dst, class Src>
 LINX_CVT_INLINE Dst linx_cvt_as(const Src &src) {

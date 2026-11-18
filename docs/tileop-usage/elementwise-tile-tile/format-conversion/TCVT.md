@@ -2,6 +2,9 @@
 
 `TCVT(dst, src)` 将 `src` 的每个有效元素转换为由 `dst` 描述的目标元素类型。C++ Tile 类型决定源数据类型、目标数据类型、布局、有效 shape、物理存储 shape 以及目标 Tile 容量。
 
+普通 C++ 标量转换 `linx_cvt` 的 Janus 支持范围和舍入约定见
+[scalar conversion](../../scalar-conversion.md)。
+
 ## C++ 接口
 
 ```cpp
