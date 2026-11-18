@@ -48,3 +48,21 @@ Method 2: pass the qemu-linx binary location through make command parameter e.g.
 ## run all cases
 `make sim_all`
 
+## Local TIMG2COL issue #323
+
+Run the seven Local M16/M32 fixtures with candidate headers, default O2/O3
+object checks and an independent zero-inline-threshold IR check:
+
+```sh
+LINX_CXX=/path/to/clang++ LINX_SYSROOT=/path/to/sysroot \
+  python3 test/test_issue323_local_timg2col_inline.py -v
+```
+
+Set `LINX_MODEL_ROOT=/path/to/SuperScalarModel` as well to enable four-PE
+execution of all seven cases with independent NHWC goldens and trailing
+canaries. The model must support the selected compiler's encoding and memory
+dump interface. Compilation alone does not establish numerical correctness.
+Use the Janus non-SIMT target; do not enable legacy SIMT. Compiler versions
+that reject the existing error-path `printf` for missing Scalar shareability
+must report that failure rather than disabling the check.
+

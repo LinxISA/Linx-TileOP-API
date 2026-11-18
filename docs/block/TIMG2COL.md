@@ -9,6 +9,9 @@
 ```cpp
 // 直接物化为 Local CUBE（ND/NHWC 源寻址；ND2M16/ND2M32 布局）
 template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
+void TIMG2COL(tile_shape_out &dst, gm_shape &src, TIMG2COLParams params);
+
+template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
 void TIMG2COL(tile_shape_out &dst, gm_shape &src,
               uint64_t param0, uint64_t param1, uint64_t param2);
 
@@ -51,7 +54,7 @@ S32, S16, S8, U32, U16, U8
 
 | 参数 | 说明 |
 | --- | --- |
-| `dst` | 输出 Tile；成功调用后写入操作结果。 |
+| `dst` | 输出 Tile；Local 输出仅在非空分片 PE 上产生可消费的结果。 |
 | `src` | GM feature-map 基址。 |
 | `param0` | 输入尺寸、Cin 和 kernel 尺寸的打包参数字。 |
 | `param1` | padding、dilation、stride 和扩展控制的打包参数字。 |
@@ -81,6 +84,38 @@ S32, S16, S8, U32, U16, U8
 - 数据类型、形状、有效区域、布局、容量和存储位置必须满足该操作要求；
 - 输入 Tile 必须已初始化，输出 Tile 必须具有足够容量；
 - 参数顺序必须与接口声明一致，不要添加接口未声明的操作数。
+
+### Local 输出的协作与消费契约（issue #323）
+
+三个 Local 重载均为强制内联接口，避免 wrapper 返回时通过普通 C++ ABI
+在所有 PE 上保存输出。零行 PE 不分配 Local Tile，也没有 GM 读取、payload
+写入或 definedness 效果，因此不能读取、存储或将其 `dst` 传给后续 Tile 操作。
+四个 PE 仍必须执行 `TIMG2COL`，保持 `mask=1111`；不能用分片判断跳过 producer。
+
+按 `BundleTIMG2COLValidRowForOutput`，令 `M` 为 M16 的 16 或 M32 的 32，
+`R` 为实际传入 `LB1` 的核心总行数，各 PE 的有效行数为：
+
+```text
+peRows = max(0, min(M, R - pe * M))
+```
+
+基础重载的 `R` 来自 `dst.GetValidRow()`，显式协作重载来自 `groupRows`。
+仅 `peRows > 0` 的 PE 可以消费结果；尾分片的输出范围和目标 GM 偏移必须
+匹配其实际有效行数。对 NHWC `[1,4,4,3]`、1x1 kernel、
+`CubeTileM16<float,16,8>` 的 16 行输出：
+
+```cpp
+// params 为合法的三个参数字，四个 PE 使用相同的输入和描述符。
+TIMG2COL(dst, src, params);
+if (get_thread_idx() == 0) {
+  TSTORE(out, dst);
+}
+```
+
+强制内联只消除这三个 API wrapper 的调用边界。用户自定义 `noinline` helper、
+结果跨调用保存以及寄存器压力引起的 spill 仍需要编译器的 per-PE definedness/ABI
+支持，见 [LLVM issue #164](https://github.com/LinxISA/llvm-project/issues/164)。
+不得依赖提高全局 inline threshold 来替代此契约。
 
 ## 约束
 

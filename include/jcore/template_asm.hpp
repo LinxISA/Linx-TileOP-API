@@ -17396,10 +17396,16 @@ void TINSERT(tile_shape_out &dst, tile_shape_in &src, int32_t indexRow, int32_t 
 
 // TIMG2COL: GM feature-map image-to-column materialization.  The source-only
 // B.IOR pair carries GMBase followed by the three packed parameter GPRs.
+// All three Local overloads must stay in the caller: an ordinary function
+// return can spill the result on PEs whose zero-row shard allocated no Tile
+// (issue #323). All four PEs still execute the producer with mask=1111;
+// only nonzero-shard PEs may consume dst. This removes the wrapper boundary,
+// not arbitrary user noinline boundaries, cross-call or pressure spills.
 template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
   requires(tile_shape_out::Loc == Location::Left &&
            (tile_shape_out::BFractal == BLayout::CubeM16 ||
             tile_shape_out::BFractal == BLayout::CubeM32))
+__attribute__((always_inline)) inline
 void TIMG2COL(tile_shape_out &dst, gm_shape &src, TIMG2COLParams params) {
   static_assert(tile_shape_out::ValidRow != 0 &&
                     tile_shape_out::ValidCol != 0,
@@ -17504,6 +17510,7 @@ asm volatile(
 }
 
 template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
+__attribute__((always_inline)) inline
 void TIMG2COL(tile_shape_out &dst, gm_shape &src,
               uint64_t param0, uint64_t param1, uint64_t param2) {
   TIMG2COL(dst, src, TIMG2COLParams{param0, param1, param2});
@@ -17522,6 +17529,7 @@ template <is_tile_data_v tile_shape_out, is_global_data_v gm_shape>
   requires(tile_shape_out::Loc == Location::Left &&
            (tile_shape_out::BFractal == BLayout::CubeM16 ||
             tile_shape_out::BFractal == BLayout::CubeM32))
+__attribute__((always_inline)) inline
 void TIMG2COL(tile_shape_out &dst, gm_shape &src,
               uint64_t param0, uint64_t param1, uint64_t param2,
               size_t groupRows) {
