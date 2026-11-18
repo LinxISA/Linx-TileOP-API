@@ -38,6 +38,7 @@ check: check-sync-proposal
 	python3 test/test_predicate_adapters.py
 	python3 test/test_indexed_tlsu_range.py
 	python3 test/test_scalar_shareability.py
+	python3 test/test_scalar_cvt.py
 	python3 test/test_version_header.py
 	python3 test/test_layout_header_link.py
 	python3 test/test_element_tile_api.py
