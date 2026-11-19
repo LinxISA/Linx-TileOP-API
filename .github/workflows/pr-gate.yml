@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - linx
+      - codex/msgb-transport-426
   merge_group:
   push:
     branches:

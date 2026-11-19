@@ -27,6 +27,11 @@ def workflow_run_block(step_name: str) -> str:
 
 
 class PRGateCacheOrderTest(unittest.TestCase):
+    def test_stacked_msgb_pull_requests_run_the_required_gate(self):
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("      - linx\n", workflow)
+        self.assertIn("      - codex/msgb-transport-426\n", workflow)
+
     def test_toolchain_cache_is_scoped_to_host_abi(self):
         action = SHARED_ACTION.read_text(encoding="utf-8")
         self.assertIn("Identify host toolchain ABI", action)
