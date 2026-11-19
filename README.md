@@ -33,6 +33,14 @@ view, not a replacement for the PTO ASL/NDF semantics.
 
 ## Validation
 
+The proposed lowercase scalar `__sync_*` API and MSGB/HSCB protocol are documented
+in [the sync proposal](docs/proposals/sync-intrinsics/README.md) and its
+[send/receive implementation contract](docs/proposals/sync-intrinsics/msgb-implementation.md).
+These declaration-only APIs and the portable transport reference are not installed
+or exported by the active TileOP headers. Run `make check-sync-proposal` for their
+host checks; target ISA/compiler bindings remain tracked by
+[issue #309](https://github.com/LinxISA/Linx-TileOP-API/issues/309).
+
 ```sh
 make check
 ```
