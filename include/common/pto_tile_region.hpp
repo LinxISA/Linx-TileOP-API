@@ -826,6 +826,45 @@ decltype(auto) TPARTELEMENT(TileType &tile) {
   return tile.data();
 }
 
+// The compiler reads the literal dtype and shape from each view annotation.
+// Restrict each overload to its full ElementTile, preserving const on data().
+#if defined(__clang__) && defined(__linx)
+#define PTO_DETAIL_M32_VIEW_ATTR(dtype, cols)                                   \
+  __attribute__((always_inline, annotate("pto.element.view:v1;dtype=" #dtype    \
+      ";rows=32;cols=" #cols ";layout=cube_m32")))
+#else
+#define PTO_DETAIL_M32_VIEW_ATTR(dtype, cols)
+#endif
+
+#define PTO_DETAIL_WIDE_INTEGER_VIEW(Type, dtype, cols)                        \
+  template <typename TileType>                                                 \
+    requires(std::is_same_v<std::remove_const_t<TileType>,                     \
+                            ElementTile<Type, 32 * cols>>)                     \
+  PTO_DETAIL_M32_VIEW_ATTR(dtype, cols)                                        \
+  decltype(auto) TPARTELEMENT(TileType &tile) { return tile.data(); }
+
+// The 32-bit 32x2 views are declared with the dense element profiles above.
+PTO_DETAIL_WIDE_INTEGER_VIEW(uint64_t, u64, 2)
+PTO_DETAIL_WIDE_INTEGER_VIEW(int64_t,  s64, 2)
+
+PTO_DETAIL_WIDE_INTEGER_VIEW(uint32_t, u32, 4)
+PTO_DETAIL_WIDE_INTEGER_VIEW(int32_t,  s32, 4)
+PTO_DETAIL_WIDE_INTEGER_VIEW(uint64_t, u64, 4)
+PTO_DETAIL_WIDE_INTEGER_VIEW(int64_t,  s64, 4)
+
+PTO_DETAIL_WIDE_INTEGER_VIEW(uint32_t, u32, 8)
+PTO_DETAIL_WIDE_INTEGER_VIEW(int32_t,  s32, 8)
+PTO_DETAIL_WIDE_INTEGER_VIEW(uint64_t, u64, 8)
+PTO_DETAIL_WIDE_INTEGER_VIEW(int64_t,  s64, 8)
+
+PTO_DETAIL_WIDE_INTEGER_VIEW(uint32_t, u32, 16)
+PTO_DETAIL_WIDE_INTEGER_VIEW(int32_t,  s32, 16)
+PTO_DETAIL_WIDE_INTEGER_VIEW(uint64_t, u64, 16)
+PTO_DETAIL_WIDE_INTEGER_VIEW(int64_t,  s64, 16)
+
+#undef PTO_DETAIL_WIDE_INTEGER_VIEW
+#undef PTO_DETAIL_M32_VIEW_ATTR
+
 // Exact FP32 NORM views used by scalar element loops over ordinary contiguous
 // RowMajor storage. The matrix profile exposes all 16x32 physical elements;
 // the row profile exposes one 1x32 Tile. Neither view changes layout or storage.

@@ -55,12 +55,12 @@ dense M32 profile，U32/S32 另提供匹配的 logical64 part。
 
 - `TPARTVIEW<32>(parent, valid_elements)` 复用 `BorrowedTileArray`，提供 `size()`、
   `part(index)` 和 `valid_size(index)`；view 借用 parent，不能超过 parent 的生命周期。
-- `TPARTELEMENT(part_tile)` 接受 logical32 或 logical64 part profile，并返回同一
-  carrier 的强类型元素引用。超过 part 容量的 parent、其他 CUBE shape 和 b64 不得直接索引。
-  U32、S32、F32、F16、U16 携带各自 dtype 与精确 shape，不会把 signed
-  或浮点元素伪装成 U32。正式接口携带元素 view 的类型、shape 和布局合同；普通 indexed gather 的前端
-  必须检查该合同，不能把同大小的原始 vector 自动当作此 view。已安装版本用
-  `PTO_TILEOP_API_HAS_TYPED_ELEMENT_VIEWS` 检查强类型 view 能力。
+- `TPARTELEMENT(tile)` 返回同一 carrier 的引用，并保留 Tile 的 const 属性。
+  U32/S32/U64/S64 支持直接索引完整的 32、64、128、256、512 元素
+  `ElementTile`。宽整数 view 可通过 `PTO_TILEOP_API_HAS_WIDE_INTEGER_ELEMENT_VIEWS`
+  检测。1024 元素整数 parent 和 2048 元素 U32/S32 parent 使用分片接口。
+  F32 支持 logical32 part，F16/U16 支持 logical64 part。编译器根据各 view 携带的
+  dtype、shape 和 layout 解释索引；同字节数的原始 vector 不能替代 typed view。
 - F16/U16 及匹配的 U32/S32 索引使用 `TPARTVIEW<64>`。F16/U16 part 占 128 bytes，
   匹配的 U32/S32 part 占 256 bytes；API 保持同一逻辑元素与 predicate 映射。
   分片内 element 顺序跨两列交错，`logical_index`、`valid_size` 和
