@@ -14,6 +14,7 @@ INSTALL_DIR = $(shell $(CLANG_PREFIX)/bin/clang -print-resource-dir)/include/$(L
 check:
 	python3 test/test_msgb_transport.py
 	python3 test/test_msgb_native.py
+	python3 test/test_pto_launch.py
 	python3 tools/generate_engine_docs.py --check
 	python3 tools/check_issue_49_docs.py
 	python3 tools/check_issue_269_docs.py
