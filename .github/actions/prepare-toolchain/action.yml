@@ -30,6 +30,17 @@ runs:
     - name: Configure git for component clones
       shell: bash
       run: git config --global --add safe.directory '*'
+    - name: Identify host toolchain ABI
+      id: host-abi
+      shell: bash
+      run: |
+        set -euo pipefail
+        . /etc/os-release
+        LIBXML2_VERSION="$(dpkg-query -W -f='${Version}' libxml2 2>/dev/null || echo absent)"
+        ABI_KEY="${ID}-${VERSION_ID}-$(uname -m)-libxml2-${LIBXML2_VERSION}"
+        ABI_KEY="$(printf '%s' "${ABI_KEY}" | tr -c 'A-Za-z0-9._-' '-')"
+        echo "key=${ABI_KEY}" >> "$GITHUB_OUTPUT"
+        echo "Host toolchain ABI: ${ABI_KEY}"
     - name: Resolve latest LLVM branch SHA
       id: llvm-source
       shell: bash
@@ -42,8 +53,8 @@ runs:
         fi
         echo "sha=${LLVM_SOURCE_SHA}" >> "$GITHUB_OUTPUT"
         echo "Resolved latest LLVM ${LLVM_REF} -> ${LLVM_SOURCE_SHA}"
-    - name: Restore complete v2 toolchain cache
-      id: cache-llvm-v2
+    - name: Restore complete ABI-scoped toolchain cache
+      id: cache-llvm-v3
       uses: actions/cache/restore@v4
       with:
         path: |
@@ -51,21 +62,9 @@ runs:
           toolchain/build
           toolchain/stamps
           toolchain/output/linx_blockisa_llvm_musl
-        key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+        key: llvm-${{ runner.os }}-${{ runner.arch }}-${{ steps.host-abi.outputs.key }}-tileop-required-gate-v3-${{ steps.llvm-source.outputs.sha }}
         restore-keys: |
-          llvm-${{ runner.os }}-tileop-required-gate-v2-
-    - name: Restore legacy exact-SHA LLVM cache
-      id: cache-llvm-legacy
-      if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          toolchain/build/build-llvm-musl
-          toolchain/stamps/build-llvm-musl
-          toolchain/output/linx_blockisa_llvm_musl/bin
-          toolchain/output/linx_blockisa_llvm_musl/lib
-          toolchain/output/linx_blockisa_llvm_musl/include
-        key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-v1
+          llvm-${{ runner.os }}-${{ runner.arch }}-${{ steps.host-abi.outputs.key }}-tileop-required-gate-v3-
     - name: Initialize component sources
       working-directory: toolchain
       env:
@@ -93,10 +92,9 @@ runs:
     - name: Restore, incrementally update, or build toolchain
       working-directory: toolchain
       env:
-        V2_CACHE_HIT: ${{ steps.cache-llvm-v2.outputs.cache-hit }}
-        V2_CACHE_MATCHED_KEY: ${{ steps.cache-llvm-v2.outputs.cache-matched-key }}
-        LEGACY_CACHE_HIT: ${{ steps.cache-llvm-legacy.outputs.cache-hit }}
-        EXACT_V2_KEY: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+        V3_CACHE_HIT: ${{ steps.cache-llvm-v3.outputs.cache-hit }}
+        V3_CACHE_MATCHED_KEY: ${{ steps.cache-llvm-v3.outputs.cache-matched-key }}
+        EXACT_V3_KEY: llvm-${{ runner.os }}-${{ runner.arch }}-${{ steps.host-abi.outputs.key }}-tileop-required-gate-v3-${{ steps.llvm-source.outputs.sha }}
         ENABLE_CCACHE: on
         THREADS: '4'
       shell: bash
@@ -104,21 +102,15 @@ runs:
         set -euo pipefail
         export PATH="/usr/lib/ccache:$PATH"
 
-        if [ "${V2_CACHE_HIT}" = "true" ]; then
-          echo "Exact complete toolchain cache hit: ${EXACT_V2_KEY}"
+        if [ "${V3_CACHE_HIT}" = "true" ]; then
+          echo "Exact complete toolchain cache hit: ${EXACT_V3_KEY}"
           echo "Skipping toolchain build."
           exit 0
         fi
 
-        if [ "${LEGACY_CACHE_HIT}" = "true" ] && \
-           [ -x output/linx_blockisa_llvm_musl/bin/clang ]; then
-          echo "Reusing the legacy exact-SHA LLVM cache."
-          mkdir -p stamps
-          touch stamps/check-write-permission
-          touch stamps/build-llvm-musl
-        elif [[ "${V2_CACHE_MATCHED_KEY}" == llvm-${{ runner.os }}-tileop-required-gate-v2-* ]] && \
+        if [[ "${V3_CACHE_MATCHED_KEY}" == llvm-${{ runner.os }}-${{ runner.arch }}-${{ steps.host-abi.outputs.key }}-tileop-required-gate-v3-* ]] && \
              [ -f build/build-llvm-musl/CMakeCache.txt ]; then
-          echo "Updating the nearest v2 LLVM build tree incrementally."
+          echo "Updating the nearest ABI-compatible LLVM build tree incrementally."
           if cmake -S src/llvm-project/llvm -B build/build-llvm-musl && \
              cmake --build build/build-llvm-musl --parallel "${THREADS}" && \
              cmake --install build/build-llvm-musl; then
@@ -146,7 +138,7 @@ runs:
           make WITH_TARGET=linx64v5-linux-musl
         fi
     - name: Save LLVM build cache
-      if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
+      if: steps.cache-llvm-v3.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: |
@@ -154,7 +146,7 @@ runs:
           toolchain/build
           toolchain/stamps
           toolchain/output/linx_blockisa_llvm_musl
-        key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+        key: llvm-${{ runner.os }}-${{ runner.arch }}-${{ steps.host-abi.outputs.key }}-tileop-required-gate-v3-${{ steps.llvm-source.outputs.sha }}
     - name: Replace TileOP source with candidate content
       shell: bash
       run: |
