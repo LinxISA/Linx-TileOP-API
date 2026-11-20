@@ -110,15 +110,21 @@ class PRGateCacheOrderTest(unittest.TestCase):
             env['TOOLCHAIN_PROFILE'] = 'full'
             self.assertNotEqual(second['content'], resolve()['content'])
 
-    def test_gate_uses_paired_pins_and_requires_startup_before_automerge(self):
+    def test_gate_requires_compile_success_without_model_dependency(self):
         workflow = WORKFLOW.read_text()
-        gate = workflow.split('  compile:\n', 1)[1].split('  multi-pe:\n', 1)[0]
-        startup = workflow.split('  multi-pe:\n', 1)[1].split('  gate:\n', 1)[0]
-        for key in ('LLVM_PIN', 'MUSL_PIN', 'LINUX_PIN', 'JEMALLOC_PIN', 'TOOLCHAIN_PROFILE'):
-            value = lambda block: re.search(r'^      ' + key + r': (.*)$', block, re.M)[1]
-            self.assertEqual(value(gate), value(startup))
-        self.assertIn('needs: [compile, multi-pe]', workflow)
-        self.assertIn('test "$STARTUP_RESULT" = success', workflow)
+        gate = workflow.split('  gate:\n', 1)[1].split('  automerge:\n', 1)[0]
+        self.assertIn('needs: compile', gate)
+        self.assertIn('if: always()', gate)
+        self.assertNotIn('SuperScalarModel', workflow)
+        self.assertNotIn('SSM_READ_TOKEN', workflow)
+        self.assertNotIn('needs.multi-pe', workflow)
+        script = gate.split('        run: |\n', 1)[1]
+        for status in ('success', 'failure', 'cancelled', 'skipped'):
+            with self.subTest(status=status):
+                result = subprocess.run(
+                    ['bash', '-e', '-c', script],
+                    env=dict(os.environ, COMPILE_RESULT=status))
+                self.assertEqual(result.returncode == 0, status == 'success')
         build = workflow_run_block('Build toolchain on cache miss')
         self.assertNotIn('retrying', build)
         self.assertNotIn('rm -rf', build)

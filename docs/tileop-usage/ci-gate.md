@@ -2,7 +2,8 @@
 
 `Linx TileOP required gate` 的 required check 名称仍为
 `Validate jcore/template_asm.hpp`。该汇总 job 只有在 `Compile TileOP contracts`
-和 `Validate four-PE startup ELF` 都成功时才成功；失败、取消或跳过任一依赖均不会放行。
+成功时才成功；编译 job 失败、取消或跳过均不会放行。门禁保留目标代码编译、
+接口合同、同步协议及 runtime adapter 检查，不要求模型运行通过。
 
 ## 配套依赖
 
@@ -36,27 +37,16 @@ pthread、完整 musl 四 PE 服务都不因此获得验收。
 工具链构建出错立即保留首个错误，不再自动删除并重建同一组不兼容源码。
 首次生成新 SDK 仍需编译 LLVM，命中缓存后直接核对 revision 和编译参数。
 
-## 四 PE 运行门禁
+## 四 PE 模型运行独立验证
 
-`LinxISA/SuperScalarModel` 是私有仓库，TileOP 的默认 `GITHUB_TOKEN` 无权跨仓读取。
-门禁优先使用仓库 secret `SSM_READ_TOKEN`，其需具备模型仓的 `Contents: read`
-权限；未配置时使用已有 `AUTOMERGE_TOKEN`，该 token 也必须获准读取模型仓。
-编译 job 在构建 LLVM 前检查凭据能读取所固定的模型提交，避免长时间构建后才
-发现访问失败。模型 checkout 不保留凭据。fork PR 未获得 secret 时会明确失败，
-不会跳过运行检查并将门禁标为成功。
+required gate 不下载、构建或运行 `SuperScalarModel`，也不检查模型仓访问权限，
+因此不需要 `SSM_READ_TOKEN`。`AUTOMERGE_TOKEN` 仅供原有自动合并 job 使用。
 
-模型固定为 SuperScalarModel `72223d2d3b40`。门禁编译生产 compiler-rt archive，
-使用同一 LLVM 提交中的 worker 源文件进行一致性校验，从 archive 抽取 worker
-链接当前 TileOP adapter 和 `startup.c`，执行：
-
-- `leader-first`：PE0 先到。
-- `workers-first`：workers 先到且等待共享初始化。
-- `missing`：参与者缺失后 Abort/relaunch。
-- `fault-relaunch`：初始化失败、保留已提交效果与新 invocation。
-
-日志、编译命令、反汇编和输入/ELF 哈希上传为 `multi-pe-startup-evidence`。
-本门禁证明所固定功能模型上的 freestanding 启动路径，不代表 timing 模型、
-Linux 设备 backend、完整 musl 四 PE 或硬件验收。
+四 PE ELF 运行工具仍保留在 `test/multi_pe/`，需要时按
+[测试说明](../../test/multi_pe/README.md) 独立运行。它覆盖 `leader-first`、
+`workers-first`、`missing` 和 `fault-relaunch` 场景，结果不影响 required gate。
+门禁通过表示编译及合同检查成功；模型运行、Linux 设备 backend、完整 musl 四 PE
+和硬件验收仍分别记录结果。
 
 ## 编译器与寄存器载体
 

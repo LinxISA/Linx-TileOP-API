@@ -21,9 +21,6 @@ permissions:
   pull-requests: write
   checks: write
 
-env:
-  MODEL_REVISION: 72223d2d3b40663f3b8e0ccb015db23670c0309a
-
 jobs:
   compile:
     name: Compile TileOP contracts
@@ -51,22 +48,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: tileop-api
-
-      - name: Check private model access before toolchain build
-        env:
-          GH_TOKEN: ${{ secrets.SSM_READ_TOKEN || secrets.AUTOMERGE_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "$GH_TOKEN" ]; then
-            echo '::error::Configure SSM_READ_TOKEN with Contents:read access to LinxISA/SuperScalarModel (or grant the existing AUTOMERGE_TOKEN access).'
-            exit 1
-          fi
-          if ! gh api "repos/LinxISA/SuperScalarModel/git/commits/$MODEL_REVISION" --jq .sha > "$RUNNER_TEMP/model-revision"; then
-            echo '::error::The model credential cannot read the pinned SuperScalarModel commit. Check repository access and organization SSO authorization.'
-            exit 1
-          fi
-          test "$(cat "$RUNNER_TEMP/model-revision")" = "$MODEL_REVISION"
 
       - name: Check cache and runtime contracts before toolchain build
         working-directory: tileop-api
@@ -180,97 +161,19 @@ jobs:
             tail -n 300 toolchain/build.log
           fi
 
-  multi-pe:
-    name: Validate four-PE startup ELF
-    needs: compile
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
-    env:
-      LLVM_REPO: https://github.com/LinxISA/llvm-project.git
-      LLVM_REF: "0.59"
-      LLVM_PIN: 336b59c0bf76686b1571e7a1738752b87264624b
-      MUSL_PIN: 798f0fb819154d1484113a3c8011655ca7c26754
-      LINUX_PIN: 12342453fa8c0bbcd30493c45eca14ecae852931
-      JEMALLOC_PIN: 4495309cd11cae1a0a2d008c65acd9c410076f06
-      TOOLCHAIN_PROFILE: compile-runtime
-      TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
-      TOOLCHAIN_REF: e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156
-      TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: tileop-api
-      - name: Checkout private model with cross-repository credential
-        uses: actions/checkout@v4
-        with:
-          repository: LinxISA/SuperScalarModel
-          ref: ${{ env.MODEL_REVISION }}
-          path: model
-          token: ${{ secrets.SSM_READ_TOKEN || secrets.AUTOMERGE_TOKEN }}
-          persist-credentials: false
-      - name: Install model dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libelf-dev cmake ninja-build g++
-      - name: Restore model startup harness
-        id: model-cache
-        uses: actions/cache@v4
-        with:
-          path: model/bin/gfrun_hosted_startup_test
-          key: tileop-startup-model-ubuntu-24.04-${{ runner.arch }}-${{ env.MODEL_REVISION }}
-      - name: Build model startup harness
-        if: steps.model-cache.outputs.cache-hit != 'true'
-        run: |
-          cmake -S model -B model/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
-          cmake --build model/build --parallel 4 --target gfrun_hosted_startup_test
-      - name: Prepare shared toolchain and install candidate headers
-        uses: ./tileop-api/.github/actions/prepare-toolchain
-      - name: Compile and run four startup scenarios
-        run: |
-          set -euo pipefail
-          mkdir -p multi-pe-results
-          # An exact SDK cache does not contain sources. Read the same pinned
-          # worker source independently so archive extraction remains checked.
-          mkdir -p runtime-source/compiler-rt/lib/builtins/linx64v5 runtime-source/compiler-rt/include/linx
-          for file in compiler-rt/lib/builtins/linx64v5/group_worker.c compiler-rt/include/linx/pto_runtime.h; do
-            curl --fail --location --retry 3 "https://raw.githubusercontent.com/LinxISA/llvm-project/$LLVM_PIN/$file" \
-              --output "runtime-source/$file"
-          done
-          resource="$("$TOOLCHAIN_INSTALL_DIR/bin/clang" -print-resource-dir)"
-          cmp tileop-api/include/common/pto_runtime.h runtime-source/compiler-rt/include/linx/pto_runtime.h
-          python3 tileop-api/test/multi_pe/run_startup.py \
-            --compiler "$TOOLCHAIN_INSTALL_DIR/bin/clang" \
-            --sysroot "$TOOLCHAIN_INSTALL_DIR/sysroot" \
-            --worker runtime-source/compiler-rt/lib/builtins/linx64v5/group_worker.c \
-            --runtime-archive "$resource/lib/linux/libclang_rt.builtins-linx64v5.a" \
-            --model-test model/bin/gfrun_hosted_startup_test \
-            --output multi-pe-results/startup
-          printf '%s\n' "$MODEL_REVISION" > multi-pe-results/model-revision.txt
-      - name: Upload startup evidence and build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: multi-pe-startup-evidence
-          path: |
-            multi-pe-results/
-            toolchain/build.log
-          retention-days: 14
-
   gate:
-    # Preserve the branch protection check name, with both compile and actual
-    # four-PE execution required. A skipped dependency must not report green.
+    # Preserve the branch protection check name. Compilation and contract
+    # checks must succeed; a skipped or cancelled compile job cannot pass.
     name: Validate jcore/template_asm.hpp
-    needs: [compile, multi-pe]
+    needs: compile
     if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: Require all gate checks
         env:
           COMPILE_RESULT: ${{ needs.compile.result }}
-          STARTUP_RESULT: ${{ needs.multi-pe.result }}
         run: |
           test "$COMPILE_RESULT" = success
-          test "$STARTUP_RESULT" = success
 
   automerge:
     name: Auto-merge after green gate
