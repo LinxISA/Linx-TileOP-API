@@ -65,7 +65,7 @@ LINX_RUNTIME_ADAPTER := $(ROOT)/test/common/gfrun_runtime_adapter.c
 COMM_SRC_FILE += $(LINX_RUNTIME_ADAPTER)
 COMM_SRC_DIR = $(shell dirname $(COMM_SRC_FILE))
 COMM_OBJ += $(patsubst %.c, %.o, $(subst $(COMM_SRC_DIR), $(OBJ_DIR), $(COMM_SRC_FILE)))
-CC_LINK += -nostartfiles
+CC_LINK += -nostartfiles -mlinx-group-runtime
 endif
 
 ifeq ($(PY_LIB), on)
@@ -122,7 +122,7 @@ $(OBJ_DIR)%.o: $(SRC_DIR)%.s
 
 $(OBJ_DIR)%.o: $(COMM_SRC_DIR)%.c
 	@mkdir -p $(shell dirname $@)
-	$(CC) $(CC_C_O_ALL) -ffreestanding -fno-builtin $(INCLUDE) $(DEFINES) $< -o $@
+	$(CC) $(CC_C_O_ALL) -ffreestanding -fno-builtin -mlinx-runtime-intra-abi $(INCLUDE) $(DEFINES) $< -o $@
 
 $(TARGET): $(OBJ) $(COMM_OBJ)
 	@mkdir -p $(shell dirname $@)

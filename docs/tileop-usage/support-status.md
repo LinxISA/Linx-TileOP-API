@@ -48,10 +48,11 @@ rollback、definedness 或 memory-order 语义。
 | `IndexedByteRange` | 全部 23 个 indexed TLSU wrapper；有符号 i64 字节边界 | PR #424 开发扩展；LLVM `b19e8c0e184c` 的 `R` 约束及 lowering；未知范围使用原重载 |
 
 Predicate 跨调用 ABI/spill、GPR 自动适配、与 element-if 隐式 mask 的桥接尚未提供。
-对象生成、汇编往返不等于模型数值或硬件验收。既有 multi-PE runtime、
-participant mask 与 hosted adapter 保留；本次不宣称完成 #415 的外部启动 ABI 验收。
-#415 的 worker 启动、每 PE 私有栈、PE0 共享初始化、共同 generation-zero SYNC、异常退出与重启
-由外部 compiler-rt/platform 提供；当前头文件与 hosted adapter 不构成完整启动 ABI 验收。
+对象生成、汇编往返不等于模型数值或硬件验收。多 PE common-entry runtime 已补入
+PE0 process/invocation 初始化钩子、generation-zero 屏障和结果汇总，musl 提供固定地址
+static CRT 接入；Linux 提供带 invocation identity 的管理接口，实际 launch backend
+及完整 hosted 服务仍由平台提供。四 PE ELF 回归与各层验证边界见
+[四 PE 启动、协作计算与退出](multi-pe-lifecycle.md)。
 详见 [PredicateCell adapters](predicate-adapters.md)、[范围参数](indexed-tlsu-range.md)。
 
 ### 已发布基线

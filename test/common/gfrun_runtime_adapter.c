@@ -2,12 +2,27 @@
 // The compiler-rt group worker owns synchronization and result publication;
 // this file owns only model admission, the main() callback, and completion.
 
-#include <stdint.h>
+#define PTO_RUNTIME_INTRA
+#include "common/pto_runtime.h"
 
-struct pto_runtime_group_context;
+extern int main(void) __attribute__((linx_scalar_shareability("intra")));
+extern void __linx_group_worker_start(void)
+    __attribute__((noreturn, linx_scalar_shareability("intra")));
 
-extern int main(void);
-extern void __linx_group_worker_start(void) __attribute__((noreturn));
+// Freestanding process initialization: only PE0 reaches this function, once
+// per loaded image. Hosted libc initialization requires the musl CRT path;
+// this adapter only runs the image's static constructors.
+extern void (*const __init_array_start[])(void) __attribute__((weak));
+extern void (*const __init_array_end[])(void) __attribute__((weak));
+extern void _init(void) __attribute__((weak));
+__attribute__((weak)) int __pto_runtime_process_initialize(void) {
+  if (_init)
+    _init();
+  for (void (*const *p)(void) = __init_array_start;
+       p && p < __init_array_end; ++p)
+    (*p)();
+  return 0;
+}
 
 // Writable slot populated by the gfrun launcher before any PE executes.
 volatile uintptr_t __ssm_pto_group_context;

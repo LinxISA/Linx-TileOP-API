@@ -196,3 +196,5 @@ Tile 的物理容量；Shared Tile、CUBE layout、PE mask 和 range lifecycle �
 [B.SUBVIEW / B.ASSEMBLE 使用指南](b-subview-b-assemble.md#开发者自检)。
 
 - [Indexed TLSU 字节范围参数（PR #424）](indexed-tlsu-range.md)
+
+- [四 PE 启动、协作计算与退出](multi-pe-lifecycle.md)

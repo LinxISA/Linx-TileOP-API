@@ -20,6 +20,8 @@ view, not a replacement for the PTO ASL/NDF semantics.
 
 ## Documentation
 
+- [四 PE 启动、协作计算与退出](docs/tileop-usage/multi-pe-lifecycle.md)
+
 - [0.59 alignment and validation](docs/tileop-usage/migration/pto-0590-alignment.md)
 - [Execution engines and operations](docs/tileop-usage/generated/engines.md)
 - [TLSU operations](docs/tileop-usage/tlsu/load-store-move/TLOAD.md)
