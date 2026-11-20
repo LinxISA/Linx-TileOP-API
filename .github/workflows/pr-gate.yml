@@ -22,25 +22,40 @@ permissions:
   checks: write
 
 jobs:
-  gate:
-    name: Validate jcore/template_asm.hpp
-    runs-on: ubuntu-latest
+  compile:
+    name: Compile TileOP contracts
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
 
     env:
       LLVM_REPO: https://github.com/LinxISA/llvm-project.git
-      LLVM_REF: dev-llvm15_56
-      LLVM_PIN: b19e8c0e184cd7e3a1fa5ab57b368cbf978c3aa8
+      LLVM_REF: "0.59"
+      LLVM_PIN: 336b59c0bf76686b1571e7a1738752b87264624b
+      MUSL_PIN: 798f0fb819154d1484113a3c8011655ca7c26754
+      LINUX_PIN: 12342453fa8c0bbcd30493c45eca14ecae852931
+      JEMALLOC_PIN: 4495309cd11cae1a0a2d008c65acd9c410076f06
+      TOOLCHAIN_PROFILE: compile-runtime
       TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
       TOOLCHAIN_REF: e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156
       TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
       LINX_TARGET: linx64v5-unknown-linux-musl
+      # All external fixture calls use the paired musl IntraCore runtime.
+      # Default compiler contract rejection tests run without this flag.
+      LINX_TEST_CXXFLAGS: -mlinx-runtime-intra-abi -fno-exceptions -fno-builtin
 
     steps:
       - name: Checkout candidate TileOP code
         uses: actions/checkout@v4
         with:
           path: tileop-api
+
+      - name: Check cache and runtime contracts before toolchain build
+        working-directory: tileop-api
+        run: |
+          python3 test/test_pr_gate_cache_order.py
+          python3 test/test_runtime_adapter_contract.py
+          c++ -std=c++17 -Iinclude test/test_sync_core_contract.cpp -o "$RUNNER_TEMP/sync-core-contract"
+          "$RUNNER_TEMP/sync-core-contract"
 
       - name: Check MSGB protocol and runtime
         working-directory: tileop-api
@@ -55,13 +70,13 @@ jobs:
         run: |
           python3 test/test_macro_coverage.py
           python3 test/test_pr_gate_cache_order.py
-          python3 test/test_scalar_shareability.py
 
       - name: Show resolved source revisions
         run: |
           echo "TileOP candidate SHA: $(git -C tileop-api rev-parse HEAD)"
           echo "Toolchain SHA: $(git -C toolchain rev-parse HEAD)"
-          echo "LLVM SHA: $(git -C toolchain/src/llvm-project rev-parse HEAD)"
+          echo "LLVM SHA: $(cat "$TOOLCHAIN_INSTALL_DIR/llvm-revision")"
+          echo "musl SHA: $(cat "$TOOLCHAIN_INSTALL_DIR/musl-revision")"
 
       - name: Check template_asm.hpp whitespace
         working-directory: tileop-api
@@ -70,61 +85,15 @@ jobs:
           set -euo pipefail
           git show --check --format= HEAD -- include/jcore/template_asm.hpp
 
-      - name: Check PTO 0.59 main and optional range extension
+      - name: Run independent target regression suites
         working-directory: tileop-api
         env:
           LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
+          LINX_CLANG: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang
           LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
-        run: |
-          python3 test/test_tsel_contract.py -v
-          python3 test/test_pto059_gap_api.py -v
-          python3 test/test_pto_main_contract.py -v
-          python3 test/test_indexed_tlsu_range.py -v
-
-      - name: Check issue 312 caller BIAS macro compatibility
-        working-directory: tileop-api
-        env:
-          LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
-          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
-        run: python3 test/test_issue312_bias_macro.py -v
-
-      - name: Check issue 314 row-expansion offset object encodings
-        working-directory: tileop-api
-        env:
-          LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
-          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
-        run: python3 test/test_issue314_row_expand_offset.py -v
-
-      - name: Check issue 325 packed BF16 and legacy SIMT contract
-        working-directory: tileop-api
-        env:
-          LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
-          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
-        run: |
-          python3 test/test_packed_bits.py -v
-          python3 test/test_packed_bf16_numeric.py -v
-          python3 test/test_issue325_legacy_simt.py -v
-
-      - name: Check LLVM issue 138 narrow TCMP carriers
-        working-directory: tileop-api
-        env:
-          LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
-          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
-        run: python3 test/test_llvm138_narrow_tcmp.py -v
-
-      - name: Check typed PredicateCell producer and consumers
-        working-directory: tileop-api
-        env:
-          LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
-          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
-        run: python3 test/test_predicate_adapters.py -v
-
-      - name: Check CUBE compare and select layouts
-        working-directory: tileop-api
-        env:
-          LINX_CXX: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin/clang++
-          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
-        run: python3 test/test_toolchain24_cube_layout.py -v
+          COMPILER_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
+          PTO_REQUIRE_SHARED_ND_OBJECT: '1'
+        run: python3 .github/scripts/run-target-checks.py --workers 2 --output ../gate-results
 
       - name: Run DType macro regression with associated APIs
         working-directory: tileop-api
@@ -142,20 +111,6 @@ jobs:
           python3 test/test_pto0585_layout_interfaces.py \
             PTO0585LayoutInterfaceTest.test_selectors \
             PTO0585LayoutInterfaceTest.test_operand_schemas
-
-      - name: Validate Local M32 TLOAD assembly
-        working-directory: tileop-api
-        env:
-          COMPILER_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
-        run: python3 test/test_local_m32_tload_assembly.py
-
-      - name: Validate Shared ND to Local CUBE API
-        working-directory: tileop-api
-        env:
-          COMPILER_DIR: ${{ env.TOOLCHAIN_INSTALL_DIR }}/bin
-          LINX_SYSROOT: ${{ env.TOOLCHAIN_INSTALL_DIR }}/sysroot
-          PTO_REQUIRE_SHARED_ND_OBJECT: '1'
-        run: python3 test/test_shared_nd_to_cube.py -v
 
       - name: Parse template_asm.hpp with Linx Clang
         working-directory: toolchain/src/Linx-TileOP-API
@@ -181,6 +136,15 @@ jobs:
             -fsyntax-only \
             /tmp/template_asm_header_check.cpp
 
+      - name: Upload compile regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tileop-compile-evidence
+          path: gate-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Upload build log on failure
         if: failure() && hashFiles('toolchain/build.log') != ''
         uses: actions/upload-artifact@v4
@@ -196,6 +160,96 @@ jobs:
             echo "===== toolchain/build.log (last 300 lines) ====="
             tail -n 300 toolchain/build.log
           fi
+
+  multi-pe:
+    name: Validate four-PE startup ELF
+    needs: compile
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      LLVM_REPO: https://github.com/LinxISA/llvm-project.git
+      LLVM_REF: "0.59"
+      LLVM_PIN: 336b59c0bf76686b1571e7a1738752b87264624b
+      MUSL_PIN: 798f0fb819154d1484113a3c8011655ca7c26754
+      LINUX_PIN: 12342453fa8c0bbcd30493c45eca14ecae852931
+      JEMALLOC_PIN: 4495309cd11cae1a0a2d008c65acd9c410076f06
+      TOOLCHAIN_PROFILE: compile-runtime
+      TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
+      TOOLCHAIN_REF: e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156
+      TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
+      MODEL_REVISION: 72223d2d3b40663f3b8e0ccb015db23670c0309a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tileop-api
+      - uses: actions/checkout@v4
+        with:
+          repository: LinxISA/SuperScalarModel
+          ref: ${{ env.MODEL_REVISION }}
+          path: model
+      - name: Install model dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libelf-dev cmake ninja-build g++
+      - name: Restore model startup harness
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: model/bin/gfrun_hosted_startup_test
+          key: tileop-startup-model-ubuntu-24.04-${{ runner.arch }}-${{ env.MODEL_REVISION }}
+      - name: Build model startup harness
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -S model -B model/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+          cmake --build model/build --parallel 4 --target gfrun_hosted_startup_test
+      - name: Prepare shared toolchain and install candidate headers
+        uses: ./tileop-api/.github/actions/prepare-toolchain
+      - name: Compile and run four startup scenarios
+        run: |
+          set -euo pipefail
+          mkdir -p multi-pe-results
+          # An exact SDK cache does not contain sources. Read the same pinned
+          # worker source independently so archive extraction remains checked.
+          mkdir -p runtime-source/compiler-rt/lib/builtins/linx64v5 runtime-source/compiler-rt/include/linx
+          for file in compiler-rt/lib/builtins/linx64v5/group_worker.c compiler-rt/include/linx/pto_runtime.h; do
+            curl --fail --location --retry 3 "https://raw.githubusercontent.com/LinxISA/llvm-project/$LLVM_PIN/$file" \
+              --output "runtime-source/$file"
+          done
+          resource="$("$TOOLCHAIN_INSTALL_DIR/bin/clang" -print-resource-dir)"
+          cmp tileop-api/include/common/pto_runtime.h runtime-source/compiler-rt/include/linx/pto_runtime.h
+          python3 tileop-api/test/multi_pe/run_startup.py \
+            --compiler "$TOOLCHAIN_INSTALL_DIR/bin/clang" \
+            --sysroot "$TOOLCHAIN_INSTALL_DIR/sysroot" \
+            --worker runtime-source/compiler-rt/lib/builtins/linx64v5/group_worker.c \
+            --runtime-archive "$resource/lib/linux/libclang_rt.builtins-linx64v5.a" \
+            --model-test model/bin/gfrun_hosted_startup_test \
+            --output multi-pe-results/startup
+          printf '%s\n' "$MODEL_REVISION" > multi-pe-results/model-revision.txt
+      - name: Upload startup evidence and build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multi-pe-startup-evidence
+          path: |
+            multi-pe-results/
+            toolchain/build.log
+          retention-days: 14
+
+  gate:
+    # Preserve the branch protection check name, with both compile and actual
+    # four-PE execution required. A skipped dependency must not report green.
+    name: Validate jcore/template_asm.hpp
+    needs: [compile, multi-pe]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require all gate checks
+        env:
+          COMPILE_RESULT: ${{ needs.compile.result }}
+          STARTUP_RESULT: ${{ needs.multi-pe.result }}
+        run: |
+          test "$COMPILE_RESULT" = success
+          test "$STARTUP_RESULT" = success
 
   automerge:
     name: Auto-merge after green gate

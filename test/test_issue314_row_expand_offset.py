@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Row-expansion offset spelling, native object encoding and legality checks."""
+import shlex
 import ast
 import os
 from pathlib import Path
@@ -71,6 +72,7 @@ class NativeCompilation(unittest.TestCase):
             'LINX_TARGET', 'linx64v5-unknown-linux-musl'),
             '-resource-dir', str(overlay), '-std=c++20', '-O2', '-mlxbc',
             '-fenable-matrix', '-D__linx', '-DENABLE_TENSOR_INSTR']
+        cls.flags += shlex.split(os.environ.get('LINX_TEST_CXXFLAGS', ''))
         if os.environ.get('LINX_SYSROOT'):
             sysroot = Path(os.environ['LINX_SYSROOT'])
             cls.flags += ['--sysroot=' + str(sysroot), '-nostdinc++',

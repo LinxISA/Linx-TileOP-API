@@ -1,3 +1,4 @@
+import shlex
 import os
 import re
 import shutil
@@ -35,6 +36,8 @@ class PredicateAdaptersTest(unittest.TestCase):
             "--sysroot", str(SYSROOT), "-nostdinc++",
             "-isystem", str(SYSROOT / "usr/include/c++/v1"),
         ]
+
+        cls.flags += shlex.split(os.environ.get('LINX_TEST_CXXFLAGS', ''))
 
     def compile(self, body, *arguments, dtype="uint32_t", columns=4):
         source = self.output / "predicate.cpp"
@@ -85,7 +88,7 @@ TSTORE_ATOMIC_DEC<0>(destination, values, active);'''
         text = subprocess.check_output([
             str(CXX.parent / "llvm-objdump"), "-d",
             "--disassembler-options=no-tile-macros", str(obj)], text=True)
-        self.assertEqual(text.count("BSTART.TLSU\tTSTORE"), 3, text)
+        self.assertEqual(text.count("BSTART.TSTORE\t"), 3, text)
         self.assertIn("mask=0001", text)
         self.assertIn("mask=0100", text)
         self.assertIn("mask=0000", text)
@@ -123,7 +126,7 @@ void test(Global &destination, Cube &source) {
         # even when the source Local Tile is reloaded across memory clobbers.
         bindings = re.findall(r"B\.IOS\s+mask=0001,\s+->(S\d+)<", text)
         self.assertEqual(len(bindings), 1, text)
-        self.assertEqual(re.findall(r"B\.IOS\s+(S\d+),\s+mask=0001", text),
+        self.assertEqual(re.findall(r"B\.IOS\s+(S\d+)(?:\.reuse)?,\s+mask=0001", text),
                          bindings * 2, text)
 
     def test_no_uninitialized_predicate(self):

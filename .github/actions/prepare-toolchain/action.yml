@@ -30,138 +30,134 @@ runs:
     - name: Configure git for component clones
       shell: bash
       run: git config --global --add safe.directory '*'
-    - name: Resolve latest LLVM branch SHA
+    - name: Identify host toolchain ABI
+      id: host-abi
+      shell: bash
+      run: |
+        set -euo pipefail
+        . /etc/os-release
+        LIBXML2_VERSION="$(dpkg-query -W -f='${Version}' libxml2 2>/dev/null || echo absent)"
+        ABI_KEY="${ID}-${VERSION_ID}-$(uname -m)-libxml2-${LIBXML2_VERSION}"
+        ABI_KEY="$(printf '%s' "${ABI_KEY}" | tr -c 'A-Za-z0-9._-' '-')"
+        echo "key=${ABI_KEY}" >> "$GITHUB_OUTPUT"
+        echo "Host toolchain ABI: ${ABI_KEY}"
+    - name: Resolve component revisions and cache identity
       id: llvm-source
       shell: bash
       run: |
         set -euo pipefail
-        LLVM_SOURCE_SHA="${LLVM_PIN:-}"
-        if [ -z "${LLVM_SOURCE_SHA}" ]; then
-          LLVM_SOURCE_SHA="$({ git ls-remote "${LLVM_REPO}" "refs/heads/${LLVM_REF}" || true; } | awk 'NR == 1 {print $1}')"
-        fi
-        if [ -z "${LLVM_SOURCE_SHA}" ]; then
-          echo "ERROR: failed to resolve ${LLVM_REPO} refs/heads/${LLVM_REF}" >&2
-          exit 1
-        fi
-        echo "sha=${LLVM_SOURCE_SHA}" >> "$GITHUB_OUTPUT"
-        echo "Resolved LLVM ${LLVM_REF} (optional LLVM_PIN) -> ${LLVM_SOURCE_SHA}"
-    - name: Restore complete v2 toolchain cache
-      id: cache-llvm-v2
+        resolve() {
+          local pin="$1" repo="$2" ref="$3"
+          if [ -n "$pin" ]; then
+            printf '%s\n' "$pin"
+          else
+            git ls-remote "$repo" "refs/heads/$ref" | awk 'NR == 1 {print $1}'
+          fi
+        }
+        LLVM_SOURCE_SHA="$(resolve "${LLVM_PIN:-}" "$LLVM_REPO" "$LLVM_REF")"
+        MUSL_SOURCE_SHA="$(resolve "${MUSL_PIN:-}" https://github.com/LinxISA/linx-musl.git linx)"
+        LINUX_SOURCE_SHA="$(resolve "${LINUX_PIN:-}" https://github.com/LinxISA/linux.git main)"
+        JEMALLOC_SOURCE_SHA="$(resolve "${JEMALLOC_PIN:-}" https://github.com/LinxISA/jemalloc.git linx)"
+        for revision in "$LLVM_SOURCE_SHA" "$MUSL_SOURCE_SHA" "$LINUX_SOURCE_SHA" "$JEMALLOC_SOURCE_SHA"; do
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid component SHA: $revision" >&2; exit 1; }
+        done
+        PROFILE="${TOOLCHAIN_PROFILE:-full}"
+        [[ "$PROFILE" == full || "$PROFILE" == compile-runtime ]] || exit 1
+        TILEOP_SDK_SHA=03978fe69612959ca463e65de200248588c2f0dd
+        # Exact content key: sources, SDK profile and builder changes invalidate
+        # every cached artifact. Never fall back to an unrelated libc/ABI.
+        CONTENT_KEY="$(printf '%s\n' "$LLVM_SOURCE_SHA" "$MUSL_SOURCE_SHA" "$LINUX_SOURCE_SHA" \
+          "$JEMALLOC_SOURCE_SHA" "$TOOLCHAIN_REF" "$PROFILE" "$TILEOP_SDK_SHA" \
+          "$(sha256sum tileop-api/.github/scripts/build-gate-toolchain.sh \
+            tileop-api/.github/actions/prepare-toolchain/action.yml | sha256sum | cut -d' ' -f1)" \
+          | sha256sum | cut -d' ' -f1)"
+        echo "sha=$LLVM_SOURCE_SHA" >> "$GITHUB_OUTPUT"
+        echo "musl=$MUSL_SOURCE_SHA" >> "$GITHUB_OUTPUT"
+        echo "linux=$LINUX_SOURCE_SHA" >> "$GITHUB_OUTPUT"
+        echo "jemalloc=$JEMALLOC_SOURCE_SHA" >> "$GITHUB_OUTPUT"
+        echo "tileop-sdk=$TILEOP_SDK_SHA" >> "$GITHUB_OUTPUT"
+        echo "content=$CONTENT_KEY" >> "$GITHUB_OUTPUT"
+        echo "LLVM=$LLVM_SOURCE_SHA musl=$MUSL_SOURCE_SHA Linux=$LINUX_SOURCE_SHA jemalloc=$JEMALLOC_SOURCE_SHA profile=$PROFILE"
+    - name: Restore complete ABI-scoped toolchain cache
+      id: cache-llvm-v3
       uses: actions/cache/restore@v4
       with:
-        path: |
-          toolchain/src
-          toolchain/build
-          toolchain/stamps
-          toolchain/output/linx_blockisa_llvm_musl
-        key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+        path: toolchain/output/linx_blockisa_llvm_musl
+        key: llvm-${{ runner.os }}-${{ runner.arch }}-${{ steps.host-abi.outputs.key }}-tileop-required-gate-v3-${{ steps.llvm-source.outputs.content }}
+    - name: Restore compiler object cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/tileop-ccache
+        key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ steps.host-abi.outputs.key }}-${{ steps.llvm-source.outputs.content }}
         restore-keys: |
-          llvm-${{ runner.os }}-tileop-required-gate-v2-
-    - name: Restore legacy exact-SHA LLVM cache
-      id: cache-llvm-legacy
-      if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          toolchain/build/build-llvm-musl
-          toolchain/stamps/build-llvm-musl
-          toolchain/output/linx_blockisa_llvm_musl/bin
-          toolchain/output/linx_blockisa_llvm_musl/lib
-          toolchain/output/linx_blockisa_llvm_musl/include
-        key: llvm-${{ steps.llvm-source.outputs.sha }}-${{ runner.os }}-tileop-required-gate-v1
+          ccache-${{ runner.os }}-${{ runner.arch }}-${{ steps.host-abi.outputs.key }}-
     - name: Initialize component sources
+      if: steps.cache-llvm-v3.outputs.cache-hit != 'true'
       working-directory: toolchain
       env:
         LLVM_SOURCE_SHA: ${{ steps.llvm-source.outputs.sha }}
+        MUSL_SOURCE_SHA: ${{ steps.llvm-source.outputs.musl }}
+        LINUX_SOURCE_SHA: ${{ steps.llvm-source.outputs.linux }}
+        JEMALLOC_SOURCE_SHA: ${{ steps.llvm-source.outputs.jemalloc }}
+        TILEOP_SDK_SHA: ${{ steps.llvm-source.outputs.tileop-sdk }}
       shell: bash
       run: |
         set -euo pipefail
 
-        # Older v2 caches were saved after the candidate TileOP checkout was
-        # overlaid, so their embedded API repository can be dirty. Preserve
-        # that cached tree for diagnostics and let init-src create a clean
-        # checkout before it updates component branches.
-        TILEOP_SOURCE=src/Linx-TileOP-API
-        if [ -e "${TILEOP_SOURCE}" ] && \
-           { [ ! -d "${TILEOP_SOURCE}/.git" ] || \
-             [ -n "$(git -C "${TILEOP_SOURCE}" status --porcelain --untracked-files=all)" ]; }; then
-          CACHED_TILEOP_SOURCE="${RUNNER_TEMP}/cached-Linx-TileOP-API"
-          test ! -e "${CACHED_TILEOP_SOURCE}"
-          mv "${TILEOP_SOURCE}" "${CACHED_TILEOP_SOURCE}"
+        checkout_component() {
+          local name="$1" repo="$2" revision="$3"
+          git init "src/$name"
+          git -C "src/$name" remote add origin "$repo"
+          git -C "src/$name" fetch --depth=1 origin "$revision"
+          git -C "src/$name" checkout --detach FETCH_HEAD
+          test "$(git -C "src/$name" rev-parse HEAD)" = "$revision"
+        }
+        checkout_component llvm-project "$LLVM_REPO" "$LLVM_SOURCE_SHA"
+        checkout_component musl https://github.com/LinxISA/linx-musl.git "$MUSL_SOURCE_SHA"
+        checkout_component linux-linxisa https://github.com/LinxISA/linux.git "$LINUX_SOURCE_SHA"
+        checkout_component jemalloc https://github.com/LinxISA/jemalloc.git "$JEMALLOC_SOURCE_SHA"
+        # The full SDK builder also expects a clean TileOP tree. Candidate
+        # content is installed only after the reusable SDK has been saved.
+        if [ "${TOOLCHAIN_PROFILE:-full}" = full ]; then
+          checkout_component Linx-TileOP-API https://github.com/LinxISA/Linx-TileOP-API.git "$TILEOP_SDK_SHA"
         fi
-
-        make init-src
-        git -C src/llvm-project fetch origin "${LLVM_SOURCE_SHA}"
-        git -C src/llvm-project checkout --detach "${LLVM_SOURCE_SHA}"
-    - name: Restore, incrementally update, or build toolchain
-      working-directory: toolchain
+    - name: Build toolchain on cache miss
+      if: steps.cache-llvm-v3.outputs.cache-hit != 'true'
+      shell: bash
       env:
-        V2_CACHE_HIT: ${{ steps.cache-llvm-v2.outputs.cache-hit }}
-        V2_CACHE_MATCHED_KEY: ${{ steps.cache-llvm-v2.outputs.cache-matched-key }}
-        LEGACY_CACHE_HIT: ${{ steps.cache-llvm-legacy.outputs.cache-hit }}
-        EXACT_V2_KEY: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
-        ENABLE_CCACHE: on
-        THREADS: '4'
+        CCACHE_DIR: ${{ runner.temp }}/tileop-ccache
+        CMAKE_BUILD_PARALLEL_LEVEL: '4'
+      run: |
+        set -euo pipefail
+        ccache --max-size=2G
+        # pipefail preserves the first deterministic failure; do not rebuild
+        # the entire toolchain a second time on an incompatible source pair.
+        bash tileop-api/.github/scripts/build-gate-toolchain.sh toolchain 2>&1 | tee toolchain/build.log
+        printf '%s\n' '${{ steps.llvm-source.outputs.sha }}' > "$TOOLCHAIN_INSTALL_DIR/llvm-revision"
+        printf '%s\n' '${{ steps.llvm-source.outputs.musl }}' > "$TOOLCHAIN_INSTALL_DIR/musl-revision"
+        ccache --show-stats
+    - name: Verify cached compiler and runtime ABI
       shell: bash
       run: |
         set -euo pipefail
-        export PATH="/usr/lib/ccache:$PATH"
-
-        if [ "${V2_CACHE_HIT}" = "true" ]; then
-          echo "Exact complete toolchain cache hit: ${EXACT_V2_KEY}"
-          echo "Skipping toolchain build."
-          exit 0
+        test "$(cat "$TOOLCHAIN_INSTALL_DIR/llvm-revision")" = '${{ steps.llvm-source.outputs.sha }}'
+        test "$(cat "$TOOLCHAIN_INSTALL_DIR/musl-revision")" = '${{ steps.llvm-source.outputs.musl }}'
+        if [ "${TOOLCHAIN_PROFILE:-full}" = compile-runtime ]; then
+          "$TOOLCHAIN_INSTALL_DIR/bin/clang" --target=linx64v5-unknown-linux-musl \
+            -mlinx-runtime-intra-abi -fsyntax-only -x c /dev/null
         fi
-
-        if [ "${LEGACY_CACHE_HIT}" = "true" ] && \
-           [ -x output/linx_blockisa_llvm_musl/bin/clang ]; then
-          echo "Reusing the legacy exact-SHA LLVM cache."
-          mkdir -p stamps
-          touch stamps/check-write-permission
-          touch stamps/build-llvm-musl
-        elif [[ "${V2_CACHE_MATCHED_KEY}" == llvm-${{ runner.os }}-tileop-required-gate-v2-* ]] && \
-             [ -f build/build-llvm-musl/CMakeCache.txt ]; then
-          echo "Updating the nearest v2 LLVM build tree incrementally."
-          if cmake -S src/llvm-project/llvm -B build/build-llvm-musl && \
-             cmake --build build/build-llvm-musl --parallel "${THREADS}" && \
-             cmake --install build/build-llvm-musl; then
-            cd output/linx_blockisa_llvm_musl/bin
-            ln -s -f clang linx64v5-linux-musl-clang
-            ln -s -f clang++ linx64v5-linux-musl-clang++
-            cd ../../..
-            mkdir -p stamps
-            touch stamps/build-llvm-musl
-          else
-            echo "Incremental LLVM update failed; falling back to a clean build."
-            rm -rf build/build-llvm-musl output/linx_blockisa_llvm_musl stamps
-          fi
-        else
-          echo "No reusable LLVM build tree found; performing a clean build."
-          rm -f stamps/build-llvm-musl
-        fi
-
-        if ! make WITH_TARGET=linx64v5-linux-musl; then
-          echo "Cached/incremental toolchain completion failed; retrying once cleanly."
-          rm -rf \
-            build/build-llvm-musl \
-            output/linx_blockisa_llvm_musl \
-            stamps
-          make WITH_TARGET=linx64v5-linux-musl
-        fi
+        "$TOOLCHAIN_INSTALL_DIR/bin/clang" --version
     - name: Save LLVM build cache
-      if: steps.cache-llvm-v2.outputs.cache-hit != 'true'
+      if: steps.cache-llvm-v3.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: |
-          toolchain/src
-          toolchain/build
-          toolchain/stamps
-          toolchain/output/linx_blockisa_llvm_musl
-        key: llvm-${{ runner.os }}-tileop-required-gate-v2-${{ steps.llvm-source.outputs.sha }}
+        path: toolchain/output/linx_blockisa_llvm_musl
+        key: llvm-${{ runner.os }}-${{ runner.arch }}-${{ steps.host-abi.outputs.key }}-tileop-required-gate-v3-${{ steps.llvm-source.outputs.content }}
     - name: Replace TileOP source with candidate content
       shell: bash
       run: |
         set -euo pipefail
+        mkdir -p toolchain/src/Linx-TileOP-API
         rsync -a --delete \
           --exclude .git \
           tileop-api/ toolchain/src/Linx-TileOP-API/

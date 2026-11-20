@@ -20,15 +20,19 @@ jobs:
     env:
       LLVM_REPO: https://github.com/LinxISA/llvm-project.git
       LLVM_REF: dev-llvm15_56
+      LLVM_PIN: b19e8c0e184cd7e3a1fa5ab57b368cbf978c3aa8
+      MUSL_PIN: d0e442cf5f7daaa201c4f707810fd559670330df
+      LINUX_PIN: dcd3b96e9bcff4c91055ff9c75a2a7461f770779
+      JEMALLOC_PIN: 4495309cd11cae1a0a2d008c65acd9c410076f06
       TOOLCHAIN_REPO: LinxISA/linx-toolchain-build
       TOOLCHAIN_REF: e6a31efb4cfb17f1f1c33265cbf6dbb61bbba156
       TOOLCHAIN_INSTALL_DIR: ${{ github.workspace }}/toolchain/output/linx_blockisa_llvm_musl
       LINX_TARGET: linx64v5-unknown-linux-musl
     steps:
-      - name: Checkout TileOP linx
+      - name: Checkout workflow TileOP revision
         uses: actions/checkout@v4
         with:
-          ref: linx
+          ref: ${{ github.sha }}
           path: tileop-api
 
       - name: Prepare shared toolchain and install candidate headers
@@ -140,7 +144,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: linx
+          ref: ${{ github.sha }}
           path: tileop-api
           persist-credentials: false
       - uses: actions/download-artifact@v4

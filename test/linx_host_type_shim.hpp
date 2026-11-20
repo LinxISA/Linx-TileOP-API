@@ -22,6 +22,10 @@ using __fp32 = float;
 struct __tf32 { unsigned value; };
 struct __hf32 { unsigned value; };
 using __half = _Float16;
+// GCC and older host Clang do not provide the target's BF16 scalar. This
+// substitute is for layout/template checks only, never numerical execution.
+struct PTOTestBF16 { unsigned short value; };
+#define __bf16 PTOTestBF16
 struct __blkc_bf16 { unsigned short value; };
 struct __hif8 { unsigned char value; };
 struct __fp8_e4m3 { unsigned char value; };

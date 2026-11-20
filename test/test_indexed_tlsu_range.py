@@ -31,11 +31,11 @@ class IndexedTLSURange(unittest.TestCase):
         obj = self.directory / 'range.o'
         self.compile('-O2', '-c', source, '-o', str(obj))
         text = self.disassemble(obj)
-        operations = set(re.findall(r'BSTART.TLSU\s+(M(?:GATHER|SCATTER)(?:\.[A-Z]+)?),', text))
+        operations = set(re.findall(r'BSTART\.(M(?:GATHER|SCATTER)(?:\.[A-Z]+)?)\s+', text))
         self.assertEqual(len(operations), 23, operations)
         self.assertNotIn('ExecMaskPresent', text)
         # Every actual indexed request has an explicit bound selector.
-        bundles = re.findall(r'BSTART.TLSU\s+M(?:GATHER|SCATTER)[, .].*?(?=BSTART|$)', text, re.S)
+        bundles = re.findall(r'BSTART\.M(?:GATHER|SCATTER)[\s.].*?(?=BSTART|$)', text, re.S)
         ranges = [operands for bundle in bundles for operands in
                   re.findall(r'B.IOR\s+\[([^]]+)\],\s*\[\]', bundle)]
         self.assertGreaterEqual(len(ranges), 23)
@@ -86,7 +86,7 @@ void bounded(V &v, I &ix, global_tensor<uint32_t, RowMajor<32, 4>> &gm,
                 continue
             command = match[1]
             if 'BSTART' in command:
-                active = bool(re.search(r'BSTART.TLSU\s+M(?:GATHER|SCATTER)', command))
+                active = bool(re.search(r'BSTART\.M(?:GATHER|SCATTER)', command))
             if active:
                 commands.append(command)
         assembly.write_text('\n'.join(commands) + '\n')
@@ -101,7 +101,7 @@ void bounded(V &v, I &ix, global_tensor<uint32_t, RowMajor<32, 4>> &gm,
         self.assertIn('MSCATTER_ADD', folded)
         self.assertNotIn('ExecMaskPresent', folded)
         for operation in ('MSCATTER.MASK', 'MSCATTER.ADD'):
-            match = re.search(r'BSTART.TLSU\s+' + re.escape(operation) + r',.*?(?=BSTART|$)', text, re.S)
+            match = re.search(r'BSTART\.' + re.escape(operation) + r'\s+.*?(?=BSTART|$)', text, re.S)
             self.assertIsNotNone(match, text)
             self.assertEqual(match.group().count('B.IOR'), 1)
             self.assertNotIn('ExecMaskPresent', match.group())

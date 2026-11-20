@@ -144,7 +144,11 @@ extern "C" void select(D&d,const D&p,const D&t,const D&f) {TSEL(d,p,t,f);}
         # Three input Tile loads (mask/true/false), no old destination load;
         # payload plus both runtime dimensions are published to the result.
         self.assertEqual(len(re.findall(r' = load <', result.stdout)), 3)
-        self.assertEqual(len(re.findall(r'\bstore i32\b', result.stdout)), 2)
+        shape_stores = re.findall(
+            r'call void @llvm\.linx\.scalar\.store\(ptr ([^,]+), i64 [^,]+, i32 4, i32 1\)',
+            result.stdout)
+        self.assertEqual(len(shape_stores), 2, result.stdout)
+        self.assertEqual(len(set(shape_stores)), 2, result.stdout)
 
     def test_illegal_numeric_sources_and_gpr_shapes(self):
         for body, diagnostic in (

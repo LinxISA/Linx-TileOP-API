@@ -4,6 +4,7 @@
 Host checks exercise range/shape validation only; they do not simulate TMOV.
 Native object checks require LLVM's PR #423 selector gate update.
 """
+import shlex
 import os
 import importlib.util
 from pathlib import Path
@@ -226,6 +227,7 @@ class NativeLowering(unittest.TestCase):
                      "-std=c++20", "-O2", "-mlxbc", "-fenable-matrix",
                      "-D__linx", "-DENABLE_TENSOR_INSTR",
                      "-resource-dir", str(overlay)]
+        cls.flags += shlex.split(os.environ.get('LINX_TEST_CXXFLAGS', ''))
         if os.environ.get("LINX_SYSROOT"):
             sysroot = Path(os.environ["LINX_SYSROOT"])
             cls.flags += ["--sysroot=" + str(sysroot), "-nostdinc++",
@@ -290,8 +292,10 @@ class NativeLowering(unittest.TestCase):
             reverse = next(line for line in sections[name].splitlines()
                            if "asm sideeffect" in line and "B.DATR ND2M32" in line)
             self.assertIn(tail, reverse, name)
-        self.assertIn("store i32 19", sections["shared_nd_dynamic_tail"])
-        self.assertIn("store i32 3", sections["shared_nd_dynamic_tail"])
+        self.assertRegex(sections["shared_nd_dynamic_tail"],
+                         r"@llvm\.linx\.scalar\.store\(ptr [^,]+, i64 19, i32 4, i32 1\)")
+        self.assertRegex(sections["shared_nd_dynamic_tail"],
+                         r"@llvm\.linx\.scalar\.store\(ptr [^,]+, i64 3, i32 4, i32 1\)")
         self.assertIn("@llvm.trap", sections["shared_nd_four_pe_m32"])
 
     def test_assembly_register_binding(self):
@@ -301,7 +305,7 @@ class NativeLowering(unittest.TestCase):
         self.compile("-S", "-fno-integrated-as",
                      str(FIXTURES / "SharedNDToCube.cpp"), "-o", str(output))
         text = output.read_text()
-        self.assertRegex(text, r"B\.IOS S\d+, mask=1111")
+        self.assertRegex(text, r"B\.IOS S\d+(?:\.reuse)?, mask=1111")
         self.assertRegex(text, r"B\.SUBVIEW 0, \w+, 0, 6")
         self.assertIn("B.SUBVIEW 0, zero, 64, 6", text)
         self.assertIn("B.DATR ND2M32, DTYPE_NONE, Zero", text)

@@ -4,6 +4,7 @@
 A numerical PASS requires matching every dumped byte at the requested observer
 PC. The observer is not an architectural kernel End or a runtime lifecycle test.
 """
+import shlex
 import ctypes
 from fractions import Fraction
 import hashlib
@@ -248,6 +249,7 @@ class NumericTarget(unittest.TestCase):
         cls.flags=[cxx,'--target=linx64v5-unknown-linux-musl','-mcpu=janus',
                    '-resource-dir',str(overlay),'-std=c++20','-mlxbc','-fenable-matrix',
                    '-O2','-mllvm','-enable-all-vector-as-tilereg=true']
+        cls.flags += shlex.split(os.environ.get('LINX_TEST_CXXFLAGS', ''))
         if os.environ.get('LINX_SYSROOT'):
             sysroot=Path(os.environ['LINX_SYSROOT'])
             cls.flags += ['--sysroot='+str(sysroot),'-nostdinc++','-isystem',str(sysroot/'usr/include/c++/v1')]

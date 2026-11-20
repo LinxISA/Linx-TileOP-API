@@ -33,16 +33,16 @@ public:
   static constexpr unsigned Offset = OffsetUnits;
   static constexpr bool HasRuntimeBase = RuntimeBase;
 
-  explicit SharedNDSubview(const Parent &parent)
+  __attribute__((always_inline)) explicit SharedNDSubview(const Parent &parent)
     requires(!RuntimeBase)
       : parent_(parent), base_units_(0) {}
-  SharedNDSubview(const Parent &parent, uintptr_t base_units)
+  __attribute__((always_inline)) SharedNDSubview(const Parent &parent, uintptr_t base_units)
     requires(RuntimeBase)
       : parent_(parent), base_units_(base_units) {}
   SharedNDSubview(const Parent &&) = delete;
   SharedNDSubview(const Parent &&, uintptr_t) = delete;
-  const Parent &parent() const { return parent_; }
-  uintptr_t GetRangeBase() const { return base_units_; }
+  __attribute__((always_inline)) const Parent &parent() const { return parent_; }
+  __attribute__((always_inline)) uintptr_t GetRangeBase() const { return base_units_; }
 
 private:
   const Parent &parent_;
@@ -50,12 +50,12 @@ private:
 };
 
 template <std::size_t LengthUnits, unsigned OffsetUnits = 0, typename Parent>
-auto shared_nd_subview(const Parent &parent) {
+__attribute__((always_inline)) auto shared_nd_subview(const Parent &parent) {
   return SharedNDSubview<Parent, LengthUnits, OffsetUnits>{parent};
 }
 
 template <std::size_t LengthUnits, unsigned OffsetUnits = 0, typename Parent>
-auto shared_nd_subview(const Parent &parent, uintptr_t base_units) {
+__attribute__((always_inline)) auto shared_nd_subview(const Parent &parent, uintptr_t base_units) {
   return SharedNDSubview<Parent, LengthUnits, OffsetUnits, true>{parent, base_units};
 }
 

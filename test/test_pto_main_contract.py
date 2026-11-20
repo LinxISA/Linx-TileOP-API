@@ -118,7 +118,7 @@ class MainIndexedNative(unittest.TestCase):
         self.compile('-c', str(native.FIXTURES / 'IndexedTLSUMain.cpp'), '-o', str(obj))
         assembly = subprocess.check_output([str(Path(self.compiler).parent / 'llvm-objdump'),
             '-d', '--no-show-raw-insn', '--disassembler-options=no-tile-macros', str(obj)], text=True)
-        bundles = re.findall(r'BSTART.TLSU\s+(M(?:GATHER|SCATTER)(?:\.[A-Z]+)?),'
+        bundles = re.findall(r'BSTART\.(M(?:GATHER|SCATTER)(?:\.[A-Z]+)?)\s+'
                              r'(.*?)(?=BSTART|$)', assembly, re.S)
         self.assertEqual(len({op for op, _ in bundles}), 23, assembly)
         for op, bundle in bundles:

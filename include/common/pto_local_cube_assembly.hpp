@@ -43,7 +43,7 @@ template <typename Assembly, std::size_t Index>
 class LocalCubeAssemblyWriter {
   friend Assembly;
   Assembly &assembly_;
-  explicit LocalCubeAssemblyWriter(Assembly &assembly) : assembly_(assembly) {}
+  __attribute__((always_inline)) explicit LocalCubeAssemblyWriter(Assembly &assembly) : assembly_(assembly) {}
 
 public:
   using Writer = typename Assembly::template WriterType<Index>;
@@ -134,7 +134,7 @@ private:
   }
 
 public:
-  LocalCubeAssembly() = default;
+  __attribute__((always_inline)) LocalCubeAssembly() = default;
   LocalCubeAssembly(const LocalCubeAssembly &) = delete;
   LocalCubeAssembly &operator=(const LocalCubeAssembly &) = delete;
   LocalCubeAssembly(LocalCubeAssembly &&) = delete;

@@ -1,3 +1,4 @@
+import shlex
 import os
 import re
 import shutil
@@ -39,6 +40,8 @@ class LLVM138NarrowTCMPTest(unittest.TestCase):
             "-fenable-matrix", "-O2", "-std=c++20", "-D__linx",
             "-DENABLE_TENSOR_INSTR",
         ]
+
+        cls.flags += shlex.split(os.environ.get('LINX_TEST_CXXFLAGS', ''))
 
     def compile(self, *arguments):
         return subprocess.run(
@@ -104,7 +107,16 @@ class LLVM138NarrowTCMPTest(unittest.TestCase):
                     )
                     self.assertEqual(len(dimensions), 3, match.group())
                     for dimension in dimensions:
-                        self.assertRegex(dimension, r"^(?:zero,\s*)?1$")
+                        if constructor == "static":
+                            self.assertRegex(dimension, r"^(?:zero,\s*)?1$")
+                        else:
+                            # Scoped GM metadata loads cannot be folded across
+                            # Tile operations. Dynamic columns remain real
+                            # IntraCore loads; the constructor IR above checks 1.
+                            register = re.fullmatch(r"(\w+),\s*0", dimension)
+                            self.assertIsNotNone(register, dimension)
+                            self.assertRegex(match.group(),
+                                r"lwui\.intra[^\n]*->" + register[1] + r"\b")
 
     def test_incompatible_carriers_are_rejected(self):
         for rows in (32, 64):

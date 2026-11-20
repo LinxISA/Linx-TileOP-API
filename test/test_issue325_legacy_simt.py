@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Issue #325 target contract: compile diagnostics, never a numerical claim."""
+import shlex
 import os
 from pathlib import Path
 import re
@@ -36,6 +37,7 @@ class LegacySIMTContract(unittest.TestCase):
             '-resource-dir', str(overlay), '-std=c++20', '-mlxbc',
             '-fenable-matrix', '-ferror-limit=0',
             '-mllvm', '-enable-all-vector-as-tilereg=true']
+        cls.flags += shlex.split(os.environ.get('LINX_TEST_CXXFLAGS', ''))
         if os.environ.get('LINX_SYSROOT'):
             sysroot = Path(os.environ['LINX_SYSROOT'])
             cls.flags += ['--sysroot=' + str(sysroot), '-nostdinc++',

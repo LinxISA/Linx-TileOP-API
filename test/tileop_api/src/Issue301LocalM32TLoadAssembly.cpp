@@ -8,7 +8,8 @@ __attribute__((always_inline)) inline void load_all(
     LocalCubeAssembly<VecTileM32<float, 32, 2 * N>,
                       std::conditional_t<(I < N), W, W>...> &assembly,
     const float *input, std::index_sequence<I...>) {
-  auto load = [&]<std::size_t J>() {
+  // An OPEN register assembly cannot cross an ordinary function ABI.
+  auto load = [&]<std::size_t J>() __attribute__((always_inline)) {
     auto slot = assembly.template writer<J>();
     In src(input + J * 64);
     if constexpr (J == 0) TLOAD(slot, src);

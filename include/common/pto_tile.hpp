@@ -851,9 +851,14 @@ struct GlobalTensor {
   static constexpr int RowStride = staticStride[3];
   static constexpr int ColStride = staticStride[4];
 
-  inline GlobalTensor() = default;
+  // Expose descriptor storage before Scalar GM scope assignment. A regular
+  // constructor call would make the descriptor escape and keep calls between
+  // OPEN Local writers, where a Tile cannot cross a normal call ABI.
+  __attribute__((always_inline)) GlobalTensor() = default;
 
-  inline GlobalTensor(DType *data, const Shape &shape = defaultShape, const Stride &stride = defaultStride)
+  __attribute__((always_inline)) GlobalTensor(
+      DType *data, const Shape &shape = defaultShape,
+      const Stride &stride = defaultStride)
   {
     data_ = data;
 
@@ -873,8 +878,9 @@ struct GlobalTensor {
   // Source descriptors are also commonly constructed from read-only buffers.
   // Keep the descriptor representation mutable because the same type is used
   // by store operations, while accepting const pointers at the API boundary.
-  inline GlobalTensor(const DType *data, const Shape &shape = defaultShape,
-                      const Stride &stride = defaultStride)
+  __attribute__((always_inline)) GlobalTensor(
+      const DType *data, const Shape &shape = defaultShape,
+      const Stride &stride = defaultStride)
       : GlobalTensor(const_cast<DType *>(data), shape, stride) {}
 
   inline int GetShape(const int dim) const
@@ -1231,7 +1237,7 @@ public:
       TilesizeCode >= __tilesize_128B && TilesizeCode <= __tilesize_256KB;
 
   // constructor for static shape
-  Tile() { };
+  __attribute__((always_inline)) Tile() { };
   template <int RowMask = ValidRow, int ColMask = ValidCol>
   Tile(std::enable_if_t<(RowMask > 0) && (ColMask > 0), DType> val);
 
@@ -1538,15 +1544,15 @@ public:
 
   template <typename T = void,
             typename = std::enable_if_t<(Rows != DYNAMIC && Cols != DYNAMIC), T>>
-  global_tensor(DType* data)
+  __attribute__((always_inline)) global_tensor(DType* data)
             : impl_(data), layout_(MLayout{}) {}
 
-  global_tensor(const DType* data)
+  __attribute__((always_inline)) global_tensor(const DType* data)
             : impl_(const_cast<DType*>(data)), layout_(MLayout{}) {}
 
   template <typename T = void,
             typename = std::enable_if_t<(Rows == DYNAMIC && Cols != DYNAMIC) || (Rows != DYNAMIC && Cols == DYNAMIC), T>>
-  global_tensor(DType* data, int stride) {
+  __attribute__((always_inline)) global_tensor(DType* data, int stride) {
     if constexpr ((Rows == DYNAMIC && Cols != DYNAMIC && isRowMajor) || (Rows != DYNAMIC && Cols == DYNAMIC && !isRowMajor)) {
       impl_ = Impl(data, shape_t{}, stride_t(stride)); layout_ = MLayout{};
     } else {
@@ -1556,7 +1562,7 @@ public:
 
   template <typename T = void,
             typename = std::enable_if_t<(Rows == DYNAMIC && Cols == DYNAMIC), T>>
-  global_tensor(DType* data, int dynamicRow, int dynamicCol)
+  __attribute__((always_inline)) global_tensor(DType* data, int dynamicRow, int dynamicCol)
             : impl_(data, shape_t{}, stride_t(dynamicRow*dynamicCol, dynamicCol, dynamicRow)), layout_(MLayout{}) {}
 
   template<MemoryScope Scope> auto scalar_access() {
@@ -1741,6 +1747,8 @@ template <typename T> concept is_boxed_data_v = is_boxed_tile<T>;
 // It preserves the wrapped Local Tile's role, shape, dtype and layout exactly
 // (per the LinxISA v0.58 Shared semantics) and owns no Local TileDType payload.
 //
+// Inline these carriers before Scalar GM scope assignment so their reference
+// and opaque handle can be promoted rather than materialized in memory.
 // The compiler allocates the opaque handle to S0..S255. It must not be
 // materialized as an ordinary integer or passed through a normal GPR ABI.
 template <typename LocalTile>
@@ -1787,44 +1795,44 @@ public:
   static constexpr int byteSize = LocalTile::byteSize;
   static constexpr int kBytes = LocalTile::kBytes;
 
-  SharedTile()
+  __attribute__((always_inline)) SharedTile()
       : RowMaskInternal(ValidRow == DYNAMIC ? 0 : ValidRow),
         ColMaskInternal(ValidCol == DYNAMIC ? 0 : ValidCol),
         PendingRowMaskInternal(0), PendingColMaskInternal(0) {}
 
-  explicit SharedTile(const LocalTile &local)
+  __attribute__((always_inline)) explicit SharedTile(const LocalTile &local)
       : RowMaskInternal(local.GetValidRow()),
         ColMaskInternal(local.GetValidCol()), PendingRowMaskInternal(0),
         PendingColMaskInternal(0) {}
 
-  int GetValidRow() const { return RowMaskInternal; }
-  int GetValidCol() const { return ColMaskInternal; }
+  __attribute__((always_inline)) int GetValidRow() const { return RowMaskInternal; }
+  __attribute__((always_inline)) int GetValidCol() const { return ColMaskInternal; }
 
   template <typename TileLike>
-  void SetValidShape(const TileLike &local) {
+  __attribute__((always_inline)) void SetValidShape(const TileLike &local) {
     RowMaskInternal = local.GetValidRow();
     ColMaskInternal = local.GetValidCol();
   }
 
-  void BeginAssembledValidShape(int rows, int columns) {
+  __attribute__((always_inline)) void BeginAssembledValidShape(int rows, int columns) {
     PendingRowMaskInternal = rows;
     PendingColMaskInternal = columns;
   }
 
-  void MergeAssembledValidShape(int rows, int columns) {
+  __attribute__((always_inline)) void MergeAssembledValidShape(int rows, int columns) {
     if (rows > PendingRowMaskInternal)
       PendingRowMaskInternal = rows;
     if (columns > PendingColMaskInternal)
       PendingColMaskInternal = columns;
   }
 
-  void PublishAssembledValidShape() {
+  __attribute__((always_inline)) void PublishAssembledValidShape() {
     RowMaskInternal = PendingRowMaskInternal;
     ColMaskInternal = PendingColMaskInternal;
   }
 
-  unsigned long &handle_ref() { return Handle; }
-  unsigned long handle() const { return Handle; }
+  __attribute__((always_inline)) unsigned long &handle_ref() { return Handle; }
+  __attribute__((always_inline)) unsigned long handle() const { return Handle; }
 
   // No data() accessor: a Shared operand must never be passed to an ordinary
   // tile-register inline-asm operand. Shared-aware operations use handle() with
@@ -1962,13 +1970,13 @@ class SharedTileRoleView {
   static constexpr int byteSize = SourceSharedTile::byteSize;
   static constexpr int kBytes = SourceSharedTile::kBytes;
 
-  explicit constexpr SharedTileRoleView(SourceSharedTile &source)
+  __attribute__((always_inline)) explicit constexpr SharedTileRoleView(SourceSharedTile &source)
       : SourceValue(source) {}
 
-  int GetValidRow() const { return SourceValue.GetValidRow(); }
-  int GetValidCol() const { return SourceValue.GetValidCol(); }
-  unsigned long handle() const { return SourceValue.handle(); }
-  unsigned long &handle_ref() { return SourceValue.handle_ref(); }
+  __attribute__((always_inline)) int GetValidRow() const { return SourceValue.GetValidRow(); }
+  __attribute__((always_inline)) int GetValidCol() const { return SourceValue.GetValidCol(); }
+  __attribute__((always_inline)) unsigned long handle() const { return SourceValue.handle(); }
+  __attribute__((always_inline)) unsigned long &handle_ref() { return SourceValue.handle_ref(); }
 
  private:
   SourceSharedTile &SourceValue;
@@ -2715,23 +2723,23 @@ public:
   static constexpr int TilesizeCode = Parent::TilesizeCode;
   static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
 
-  Subview(Parent &parent, uintptr_t range_base = 0)
+  __attribute__((always_inline)) Subview(Parent &parent, uintptr_t range_base = 0)
       : ParentValue(parent), RangeBaseValue(range_base) {}
 
   // Local sources bind through data(); Shared sources bind through their
   // opaque S-register handle and are emitted as B.IOS by the consumer.
-  decltype(auto) data()
+  __attribute__((always_inline)) decltype(auto) data()
       requires(!is_shared_tile_v<Parent>) { return ParentValue.data(); }
-  decltype(auto) data() const
+  __attribute__((always_inline)) decltype(auto) data() const
       requires(!is_shared_tile_v<Parent>) { return ParentValue.data(); }
-  unsigned long handle()
+  __attribute__((always_inline)) unsigned long handle()
       requires(is_shared_tile_v<Parent>) { return ParentValue.handle(); }
-  unsigned long handle() const
+  __attribute__((always_inline)) unsigned long handle() const
       requires(is_shared_tile_v<Parent>) { return ParentValue.handle(); }
 
-  int GetValidRow() const { return ParentValue.GetValidRow(); }
-  int GetValidCol() const { return ParentValue.GetValidCol(); }
-  uintptr_t GetRangeBase() const { return RangeBaseValue; }
+  __attribute__((always_inline)) int GetValidRow() const { return ParentValue.GetValidRow(); }
+  __attribute__((always_inline)) int GetValidCol() const { return ParentValue.GetValidCol(); }
+  __attribute__((always_inline)) uintptr_t GetRangeBase() const { return RangeBaseValue; }
 
 private:
   Parent &ParentValue;
@@ -2813,36 +2821,36 @@ public:
   static constexpr int TilesizeCode = Parent::TilesizeCode;
   static constexpr bool IsValidActiveSize = Parent::IsValidActiveSize;
 
-  Assemble(Parent &parent, uintptr_t range_base = 0)
+  __attribute__((always_inline)) Assemble(Parent &parent, uintptr_t range_base = 0)
       : ParentValue(parent), RangeBaseValue(range_base) {}
 
   // Local binds through data(); SharedTile binds through handle() (B.IOS).
-  decltype(auto) data()
+  __attribute__((always_inline)) decltype(auto) data()
       requires(!is_shared_tile_v<Parent>) {
     return ParentValue.data();
   }
-  decltype(auto) data() const
+  __attribute__((always_inline)) decltype(auto) data() const
       requires(!is_shared_tile_v<Parent>) {
     return ParentValue.data();
   }
-  unsigned long handle()
+  __attribute__((always_inline)) unsigned long handle()
       requires(is_shared_tile_v<Parent>) {
     return ParentValue.handle();
   }
-  unsigned long handle() const
+  __attribute__((always_inline)) unsigned long handle() const
       requires(is_shared_tile_v<Parent>) {
     return ParentValue.handle();
   }
-  unsigned long &handle_ref()
+  __attribute__((always_inline)) unsigned long &handle_ref()
       requires(is_shared_tile_v<Parent>) {
     return ParentValue.handle_ref();
   }
 
-  int GetValidRow() const { return ParentValue.GetValidRow(); }
-  int GetValidCol() const { return ParentValue.GetValidCol(); }
-  uintptr_t GetRangeBase() const { return RangeBaseValue; }
+  __attribute__((always_inline)) int GetValidRow() const { return ParentValue.GetValidRow(); }
+  __attribute__((always_inline)) int GetValidCol() const { return ParentValue.GetValidCol(); }
+  __attribute__((always_inline)) uintptr_t GetRangeBase() const { return RangeBaseValue; }
 
-  void UpdateAssembledValidShape(int rows, int columns)
+  __attribute__((always_inline)) void UpdateAssembledValidShape(int rows, int columns)
       requires(is_shared_tile_v<Parent>) {
     if constexpr (INIT)
       ParentValue.BeginAssembledValidShape(rows, columns);
@@ -2864,7 +2872,7 @@ private:
 template <std::size_t LengthUnits_ = 0, unsigned OffsetUnits_ = 0,
           typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
-auto subview(Parent &parent)
+__attribute__((always_inline)) auto subview(Parent &parent)
     -> Subview<Parent,
                subview_size_code_for_bytes(
                    LengthUnits_ == 0
@@ -2884,7 +2892,7 @@ auto subview(Parent &parent)
 template <std::size_t LengthUnits_ = 0, unsigned OffsetUnits_ = 0,
           typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
-auto subview(Parent &parent, uintptr_t range_base_units)
+__attribute__((always_inline)) auto subview(Parent &parent, uintptr_t range_base_units)
     -> Subview<Parent,
                subview_size_code_for_bytes(
                    LengthUnits_ == 0
@@ -2903,14 +2911,14 @@ auto subview(Parent &parent, uintptr_t range_base_units)
 
 template <unsigned SubviewSizeCode_, typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
-auto subview_sized(Parent &parent)
+__attribute__((always_inline)) auto subview_sized(Parent &parent)
     -> Subview<Parent, SubviewSizeCode_, 0, 0> {
   return {parent, 0};
 }
 
 template <unsigned SubviewSizeCode_, typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
-auto subview_sized(Parent &parent, uintptr_t range_base)
+__attribute__((always_inline)) auto subview_sized(Parent &parent, uintptr_t range_base)
     -> Subview<Parent, SubviewSizeCode_, 0, AutoRegSrc> {
   return {parent, range_base};
 }
@@ -2936,7 +2944,7 @@ constexpr std::size_t assemble_length_bytes() {
 #define PTO_DEFINE_ASSEMBLE_FACTORY(Name, Init, Last)                         \
   template <std::size_t LengthUnits_ = 0, unsigned OffsetUnits_ = 0,          \
             typename Parent>                                                  \
-  auto Name(Parent &parent)                                                    \
+  __attribute__((always_inline)) auto Name(Parent &parent)                     \
       -> Assemble<Parent,                                                      \
                   Init ? subview_size_code_for_bytes(                          \
                              assemble_length_bytes<LengthUnits_, Parent>())    \
@@ -2952,7 +2960,8 @@ constexpr std::size_t assemble_length_bytes() {
                                                                                \
   template <std::size_t LengthUnits_ = 0, unsigned OffsetUnits_ = 0,          \
             typename Parent>                                                  \
-  auto Name(Parent &parent, uintptr_t range_base_units)                        \
+  __attribute__((always_inline)) auto Name(                                    \
+      Parent &parent, uintptr_t range_base_units)                               \
       -> Assemble<Parent,                                                      \
                   Init ? subview_size_code_for_bytes(                          \
                              assemble_length_bytes<LengthUnits_, Parent>())    \
@@ -2976,35 +2985,35 @@ PTO_DEFINE_ASSEMBLE_FACTORY(assemble_last, false, true)
 // Compatibility aliases for callers using the earlier *_at spelling.
 template <unsigned Offset_, typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
-auto subview_at(Parent &parent)
+__attribute__((always_inline)) auto subview_at(Parent &parent)
     -> decltype(subview<0, Offset_>(parent)) {
   return subview<0, Offset_>(parent);
 }
 
 template <unsigned Offset_, typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
-auto subview_at(Parent &parent, uintptr_t range_base)
+__attribute__((always_inline)) auto subview_at(Parent &parent, uintptr_t range_base)
     -> decltype(subview<0, Offset_>(parent, range_base)) {
   return subview<0, Offset_>(parent, range_base);
 }
 
 template <unsigned SubviewSizeCode_, unsigned Offset_, typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
-auto subview_sized_at(Parent &parent)
+__attribute__((always_inline)) auto subview_sized_at(Parent &parent)
     -> Subview<Parent, SubviewSizeCode_, Offset_, 0> {
   return {parent, 0};
 }
 
 template <unsigned SubviewSizeCode_, unsigned Offset_, typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
-auto subview_sized_at(Parent &parent, uintptr_t range_base)
+__attribute__((always_inline)) auto subview_sized_at(Parent &parent, uintptr_t range_base)
     -> Subview<Parent, SubviewSizeCode_, Offset_, AutoRegSrc> {
   return {parent, range_base};
 }
 
 template <unsigned Offset_, unsigned RegSrc_, typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
-auto subview_at_reg(Parent &parent, uintptr_t range_base = 0)
+__attribute__((always_inline)) auto subview_at_reg(Parent &parent, uintptr_t range_base = 0)
     -> Subview<Parent, Parent::TilesizeCode, Offset_, RegSrc_> {
   return {parent, range_base};
 }
@@ -3012,32 +3021,33 @@ auto subview_at_reg(Parent &parent, uintptr_t range_base = 0)
 template <unsigned SubviewSizeCode_, unsigned Offset_, unsigned RegSrc_,
           typename Parent>
   requires(is_legal_subview_parent_v<Parent>)
-auto subview_sized_at_reg(Parent &parent, uintptr_t range_base = 0)
+__attribute__((always_inline)) auto subview_sized_at_reg(Parent &parent, uintptr_t range_base = 0)
     -> Subview<Parent, SubviewSizeCode_, Offset_, RegSrc_> {
   return {parent, range_base};
 }
 
 template <unsigned OffsetUnits_, typename Parent>
-auto assemble_at(Parent &parent)
+__attribute__((always_inline)) auto assemble_at(Parent &parent)
     -> decltype(assemble<0, OffsetUnits_>(parent)) {
   return assemble<0, OffsetUnits_>(parent);
 }
 
 template <unsigned OffsetUnits_, typename Parent>
-auto assemble_at(Parent &parent, uintptr_t range_base_units)
+__attribute__((always_inline)) auto assemble_at(Parent &parent, uintptr_t range_base_units)
     -> decltype(assemble<0, OffsetUnits_>(parent, range_base_units)) {
   return assemble<0, OffsetUnits_>(parent, range_base_units);
 }
 
 #define PTO_DEFINE_ASSEMBLE_AT_ALIAS(Name)                                    \
   template <unsigned OffsetUnits_, typename Parent>                           \
-  auto Name##_at(Parent &parent)                                               \
+  __attribute__((always_inline)) auto Name##_at(Parent &parent)                  \
       -> decltype(Name<0, OffsetUnits_>(parent)) {                             \
     return Name<0, OffsetUnits_>(parent);                                      \
   }                                                                            \
                                                                                \
   template <unsigned OffsetUnits_, typename Parent>                           \
-  auto Name##_at(Parent &parent, uintptr_t range_base_units)                   \
+  __attribute__((always_inline)) auto Name##_at(                                \
+      Parent &parent, uintptr_t range_base_units)                               \
       -> decltype(Name<0, OffsetUnits_>(parent, range_base_units)) {           \
     return Name<0, OffsetUnits_>(parent, range_base_units);                    \
   }
@@ -3049,14 +3059,14 @@ PTO_DEFINE_ASSEMBLE_AT_ALIAS(assemble_last)
 #undef PTO_DEFINE_ASSEMBLE_AT_ALIAS
 
 template <unsigned OffsetUnits_, unsigned RegSrc_, typename Parent>
-auto assemble_at_reg(Parent &parent, uintptr_t range_base_units = 0)
+__attribute__((always_inline)) auto assemble_at_reg(Parent &parent, uintptr_t range_base_units = 0)
     -> Assemble<Parent, Parent::TilesizeCode, true, false, OffsetUnits_,
                 RegSrc_> {
   return {parent, range_base_units};
 }
 
 template <unsigned OffsetUnits_, unsigned RegSrc_, typename Parent>
-auto assemble_init_last_at_reg(Parent &parent,
+__attribute__((always_inline)) auto assemble_init_last_at_reg(Parent &parent,
                                uintptr_t range_base_units = 0)
     -> Assemble<Parent, Parent::TilesizeCode, true, true, OffsetUnits_,
                 RegSrc_> {
@@ -3064,13 +3074,13 @@ auto assemble_init_last_at_reg(Parent &parent,
 }
 
 template <unsigned OffsetUnits_, unsigned RegSrc_, typename Parent>
-auto assemble_middle_at_reg(Parent &parent, uintptr_t range_base_units = 0)
+__attribute__((always_inline)) auto assemble_middle_at_reg(Parent &parent, uintptr_t range_base_units = 0)
     -> Assemble<Parent, 0, false, false, OffsetUnits_, RegSrc_> {
   return {parent, range_base_units};
 }
 
 template <unsigned OffsetUnits_, unsigned RegSrc_, typename Parent>
-auto assemble_last_at_reg(Parent &parent, uintptr_t range_base_units = 0)
+__attribute__((always_inline)) auto assemble_last_at_reg(Parent &parent, uintptr_t range_base_units = 0)
     -> Assemble<Parent, 0, false, true, OffsetUnits_, RegSrc_> {
   return {parent, range_base_units};
 }

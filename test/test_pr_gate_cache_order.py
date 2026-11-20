@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -68,44 +69,59 @@ class PRGateCacheOrderTest(unittest.TestCase):
         self.assertIn("pto_tile_region.hpp", install_block)
         self.assertIn("template_asm.hpp", install_block)
 
-    def test_dirty_cached_api_is_preserved_before_init_src(self):
-        init_block = workflow_run_block("Initialize component sources")
-        quarantine = init_block.split("make init-src", 1)[0]
+    def test_cached_sdk_uses_exact_component_and_environment_identity(self):
+        action = SHARED_ACTION.read_text()
+        restore = action.split('    - name: Restore complete ABI-scoped toolchain cache\n', 1)[1].split('    - name:', 1)[0]
+        save = action.split('    - name: Save LLVM build cache\n', 1)[1].split('    - name:', 1)[0]
+        key = lambda block: re.search(r'^        key: (.*)$', block, re.M)[1]
+        self.assertEqual(key(restore), key(save))
+        self.assertNotIn('restore-keys', restore)
+        self.assertIn('steps.host-abi.outputs.key', key(restore))
+        self.assertIn('steps.llvm-source.outputs.content', key(restore))
+        for block in (restore, save):
+            self.assertIn('path: toolchain/output/linx_blockisa_llvm_musl', block)
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp = Path(temp_dir)
-            toolchain = temp / "toolchain"
-            cached_api = toolchain / "src/Linx-TileOP-API"
-            runner_temp = temp / "runner-temp"
-            cached_api.mkdir(parents=True)
-            runner_temp.mkdir()
+    def test_source_pins_determine_cache_identity(self):
+        # Run the actual resolver with fixed source revisions: a libc-only update must
+        # invalidate the SDK even when LLVM has not changed.
+        script = workflow_run_block('Resolve component revisions and cache identity')
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            output = temp / 'outputs'
+            env = dict(os.environ, GITHUB_OUTPUT=str(output),
+                       LLVM_REPO='unused', LLVM_REF='0.59',
+                       LLVM_PIN='1'*40, MUSL_PIN='2'*40, LINUX_PIN='3'*40,
+                       JEMALLOC_PIN='4'*40, TOOLCHAIN_REF='5'*40,
+                       TOOLCHAIN_PROFILE='compile-runtime')
+            # Workflow paths are relative to a checkout named tileop-api.
+            (temp / 'tileop-api').symlink_to(ROOT, target_is_directory=True)
+            def resolve():
+                output.write_text('')
+                subprocess.run(['bash', '-euo', 'pipefail', '-c', script],
+                               cwd=temp, env=env, check=True,
+                               capture_output=True, text=True)
+                return dict(line.split('=', 1) for line in output.read_text().splitlines())
+            first = resolve()
+            self.assertEqual(first, resolve())
+            env['MUSL_PIN'] = '6'*40
+            second = resolve()
+            self.assertEqual(first['sha'], second['sha'])
+            self.assertNotEqual(first['content'], second['content'])
+            env['TOOLCHAIN_PROFILE'] = 'full'
+            self.assertNotEqual(second['content'], resolve()['content'])
 
-            subprocess.run(["git", "init", "-q"], cwd=cached_api, check=True)
-            tracked = cached_api / "candidate.hpp"
-            tracked.write_text("baseline\n", encoding="utf-8")
-            subprocess.run(["git", "add", "candidate.hpp"],
-                           cwd=cached_api, check=True)
-            subprocess.run(
-                ["git", "-c", "user.name=CI", "-c", "user.email=ci@example.com",
-                 "-c", "commit.gpgsign=false", "commit", "-q", "-m", "baseline"],
-                cwd=cached_api,
-                check=True,
-            )
-            tracked.write_text("candidate overlay\n", encoding="utf-8")
-
-            env = os.environ.copy()
-            env["RUNNER_TEMP"] = str(runner_temp)
-            subprocess.run(
-                ["bash", "-c", quarantine],
-                cwd=toolchain,
-                env=env,
-                check=True,
-            )
-
-            preserved = runner_temp / "cached-Linx-TileOP-API/candidate.hpp"
-            self.assertFalse(cached_api.exists())
-            self.assertEqual(preserved.read_text(encoding="utf-8"),
-                             "candidate overlay\n")
+    def test_gate_uses_paired_pins_and_requires_startup_before_automerge(self):
+        workflow = WORKFLOW.read_text()
+        gate = workflow.split('  compile:\n', 1)[1].split('  multi-pe:\n', 1)[0]
+        startup = workflow.split('  multi-pe:\n', 1)[1].split('  gate:\n', 1)[0]
+        for key in ('LLVM_PIN', 'MUSL_PIN', 'LINUX_PIN', 'JEMALLOC_PIN', 'TOOLCHAIN_PROFILE'):
+            value = lambda block: re.search(r'^      ' + key + r': (.*)$', block, re.M)[1]
+            self.assertEqual(value(gate), value(startup))
+        self.assertIn('needs: [compile, multi-pe]', workflow)
+        self.assertIn('test "$STARTUP_RESULT" = success', workflow)
+        build = workflow_run_block('Build toolchain on cache miss')
+        self.assertNotIn('retrying', build)
+        self.assertNotIn('rm -rf', build)
 
 
 if __name__ == "__main__":

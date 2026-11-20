@@ -198,3 +198,5 @@ Tile 的物理容量；Shared Tile、CUBE layout、PE mask 和 range lifecycle �
 - [Indexed TLSU 字节范围参数（PR #424）](indexed-tlsu-range.md)
 
 - [四 PE 启动、协作计算与退出](multi-pe-lifecycle.md)
+
+- [0.59 门禁与工具链缓存](ci-gate.md)

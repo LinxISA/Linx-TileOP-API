@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Local M32 writer contracts, lifecycle guards and real TLSU lowering."""
+import shlex
 import os
 from pathlib import Path
 import re
@@ -112,10 +113,11 @@ class NativeLowering(unittest.TestCase):
         shutil.copytree(resource, overlay, ignore=lambda directory, names:
                         ['tileop-api'] if Path(directory) == resource / 'include' else [])
         shutil.copytree(ROOT / 'include', overlay / 'include/tileop-api')
-        cls.flags = [cls.compiler, '-std=c++20', '-O2', '-mlxbc',
+        cls.flags = [cls.compiler, '--target=linx64v5-unknown-linux-musl', '-std=c++20', '-O2', '-mlxbc',
                      '-fenable-matrix', '-D__linx', '-DENABLE_TENSOR_INSTR',
                      '-resource-dir', str(overlay),
                      '-mllvm', '-enable-all-vector-as-tilereg=true']
+        cls.flags += shlex.split(os.environ.get('LINX_TEST_CXXFLAGS', ''))
         if os.environ.get('LINX_SYSROOT'):
             cls.flags += ['--sysroot=' + os.environ['LINX_SYSROOT']]
         cls.objdump = os.environ.get('LINX_OBJDUMP',
@@ -182,11 +184,11 @@ class NativeLowering(unittest.TestCase):
         for name, (count, capacity, sizes, offsets, cols, stride) in cases.items():
             with self.subTest(case=name):
                 text = sections['issue301_' + name]
-                self.assertEqual(len(re.findall(r'BSTART\.TLSU\s+TLOAD,', text)), count)
-                self.assertEqual(len(re.findall(r'BSTART\.TLSU\s+TSTORE,', text)), 1)
+                self.assertEqual(len(re.findall(r'BSTART\.TLOAD\s+', text)), count)
+                self.assertEqual(len(re.findall(r'BSTART\.TSTORE\s+', text)), 1)
                 self.assertEqual(len(re.findall(r'->t<', text)), 1)
                 self.assertIn('->t<' + capacity + '>', text)
-                self.assertEqual(len(re.findall(r'ND2M32\.normal', text)), count)
+                self.assertEqual(len(re.findall(r'ND2M32(?:\.normal)?', text)), count)
                 self.assertNotIn('->lb2', text)
                 self.assertNotRegex(text, r'TMOV|BSTART\.TEPL')
                 modifiers = []
@@ -199,8 +201,8 @@ class NativeLowering(unittest.TestCase):
                 self.assertEqual(modifiers, [
                     (int(i == 0), int(i == count - 1), 0, offsets[i], sizes[i])
                     for i in range(count)])
-                self.assertEqual(len(re.findall(r'B\.IOT\s+t#1, mask=1111, last', text)), count)
-                store = re.split(r'BSTART\.TLSU\s+TSTORE,', text)[1]
+                self.assertEqual(len(re.findall(r'B\.IOT\s+t#1(?:\.reuse)?, mask=1111, last', text)), count)
+                store = re.split(r'BSTART\.TSTORE\s+', text)[1]
                 self.assertRegex(store, rf'(?:C\.B\.DIMI\s+{cols},|B\.DIM\s+zero, {cols},)\s*->lb0')
                 # The constant is materialized just before TSTORE, and its
                 # register is the stride field of B.IOR.
@@ -212,7 +214,7 @@ class NativeLowering(unittest.TestCase):
         self.assertEqual([size for _, size in bindings], ['512B', '256B'])
         parent_queue, temporary_queue = (queue for queue, _ in bindings)
         parent_depth = 1 + int(temporary_queue == parent_queue)
-        references = re.findall(r'B\.IOT\s+([tu]#\d+), mask=1111, last', interleaved)
+        references = re.findall(r'B\.IOT\s+([tu]#\d+)(?:\.reuse)?, mask=1111, last', interleaved)
         self.assertEqual(references, [f'{parent_queue}#{parent_depth}',
                                       f'{parent_queue}#{parent_depth}',
                                       f'{temporary_queue}#1'])
