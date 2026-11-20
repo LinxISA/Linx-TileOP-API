@@ -38,6 +38,13 @@ pthread、完整 musl 四 PE 服务都不因此获得验收。
 
 ## 四 PE 运行门禁
 
+`LinxISA/SuperScalarModel` 是私有仓库，TileOP 的默认 `GITHUB_TOKEN` 无权跨仓读取。
+门禁优先使用仓库 secret `SSM_READ_TOKEN`，其需具备模型仓的 `Contents: read`
+权限；未配置时使用已有 `AUTOMERGE_TOKEN`，该 token 也必须获准读取模型仓。
+编译 job 在构建 LLVM 前检查凭据能读取所固定的模型提交，避免长时间构建后才
+发现访问失败。模型 checkout 不保留凭据。fork PR 未获得 secret 时会明确失败，
+不会跳过运行检查并将门禁标为成功。
+
 模型固定为 SuperScalarModel `72223d2d3b40`。门禁编译生产 compiler-rt archive，
 使用同一 LLVM 提交中的 worker 源文件进行一致性校验，从 archive 抽取 worker
 链接当前 TileOP adapter 和 `startup.c`，执行：
