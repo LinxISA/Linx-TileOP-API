@@ -13,8 +13,8 @@ using Parent16 = SharedTile<Tile<Location::Left, uint16_t, 64, 64>>;
 // Distinct Local inputs may contain any payload; conversion is bitwise.
 extern "C" void shared_nd_singleton_m32(M32 &dst, M32 &input) {
   ND32 shared;
-  TMOV_CUBE_TO_SHARED_ND<8>(shared, input);
-  TMOV_SHARED_ND_TO_CUBE<8>(dst, shared);
+  TMOV<8>(shared, input);
+  TMOV<8>(dst, shared);
 }
 
 extern "C" void shared_nd_singleton_m16(M16 &dst, M16 &input) {
@@ -27,15 +27,15 @@ extern "C" void shared_nd_four_pe_m32(M32 &dst, M32 &input,
                                        uintptr_t source_offset_units) {
   Parent32 shared;
   auto first = range::assemble<32, 0>(shared);
-  TMOV_CUBE_TO_SHARED_ND(first, input);
+  TMOV(first, input);
   auto second = range::assemble_middle<32, 32>(shared);
-  TMOV_CUBE_TO_SHARED_ND(second, input);
+  TMOV(second, input);
   auto third = range::assemble_middle<32, 64>(shared);
-  TMOV_CUBE_TO_SHARED_ND(third, input);
+  TMOV(third, input);
   auto last = range::assemble_last<32, 96>(shared);
-  TMOV_CUBE_TO_SHARED_ND(last, input);
+  TMOV(last, input);
   auto view = range::shared_nd_subview<32>(shared, source_offset_units);
-  TMOV_SHARED_ND_TO_CUBE(dst, view);
+  TMOV(dst, view);
 }
 
 extern "C" void shared_nd_four_pe_m16(M16 &dst, M16 &input,

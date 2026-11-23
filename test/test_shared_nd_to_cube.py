@@ -311,6 +311,27 @@ class NativeLowering(unittest.TestCase):
         self.assertIn("B.DATR ND2M32, DTYPE_NONE, Zero", text)
         self.assertIn("B.DATR ND2M16, DTYPE_NONE, Zero", text)
 
+    def test_shared_movement_overloads(self):
+        for fixture, assertions in {
+            "SharedMovement": (r"BSTART\.TIMG2COL\s+FP16", r"DN2ND\.normal",
+                               r"B\.IOS[^\n]*mask=0010", r"B\.ASSEMBLE",
+                               r"B\.SUBVIEW"),
+            "TStoreShared": (r"BSTART\.TSTORE\s+FP32",
+                             r"B\.IOS[^\n]*mask=1100",
+                             r"B\.SUBVIEW\s+0, zero, 8, 4"),
+        }.items():
+            with self.subTest(fixture=fixture):
+                output = self.directory / (fixture + ".o")
+                self.compile("-c", str(FIXTURES / (fixture + ".cpp")),
+                             "-o", str(output))
+                objdump = Path(self.compiler).parent / "llvm-objdump"
+                result = subprocess.run(
+                    [str(objdump), "-d", "--disassembler-options=no-tile-macros",
+                     str(output)], text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                for pattern in assertions:
+                    self.assertRegex(result.stdout, pattern)
+
     def test_object_with_reverse_capable_compiler(self):
         mc = Path(self.compiler).parent / "llvm-mc"
         probe = subprocess.run([str(mc), "-triple=linx64v5", "-filetype=obj",
