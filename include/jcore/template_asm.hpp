@@ -10288,8 +10288,9 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
   // (group_M == pe_m, e.g. 16/32-row groups). For a multi-shard group
   // use the explicit groupM overload below - a Local A shard cannot
   // supply the core-total row count.
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_c,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -10313,8 +10314,9 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_c &c, tile_shape_a &a,
                 "TMATMUL supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_c,
+                                            tile_shape_a, tile_shape_b>();
   size_t N = __shape.N;
   size_t K = __shape.K;
   // Runtime guard mirroring the ASL dispatch (group_M in 1..128; each PE
@@ -10342,8 +10344,9 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                 "require the overload taking fixp::Options");
   static_assert(!Attr.CScaleEn,
                 "CScale requires the ACC overload with a CScale tile");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -10370,8 +10373,9 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                 "require the overload taking fixp::Options");
   static_assert(!Attr.CScaleEn,
                 "CScale requires the ACC overload with a CScale tile");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_ACC", groupM);
@@ -10444,8 +10448,9 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                                     fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -10550,8 +10555,9 @@ PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_
                                     fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -10676,8 +10682,9 @@ PTO_SHARED_INLINE void TMATMUL(tile_shape_d &d, tile_shape_a &a,
                 "TMATMUL destination valid Row must match the per-PE M block "
                 "(group_M block for cooperative, effective M otherwise)");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t N = __shape.N;
   size_t K = __shape.K;
 
@@ -10736,7 +10743,7 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
   static_assert(tile_role_v<tile_shape_b> == Location::Right,
                 "TMATMUL input B must be a Right tile");
   // Physical and valid M/N/K contracts, including cooperative Shared inputs,
-  // are centralized in resolve_matmul_shape_runtime below.
+  // are centralized in resolve_matmul_shape below.
   static_assert(tile_type_traits<typename tile_shape_d::TileDType>::IsValidActiveSize,
                 "TMATMUL output logical Tile size must be 128 B..256 KiB (SizeCode=1..12)");
 
@@ -10889,8 +10896,9 @@ TMATMUL(tile_shape_d &d, tile_shape_a &a,
         "TMATMUL GroupMaxOut physical Tile must occupy 128 B..256 KiB (SizeCode=1..12)");
   }
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -10937,8 +10945,9 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
                 "TMATMUL_BIAS supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_c,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -10960,8 +10969,9 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
                 "TMATMUL_BIAS supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_c,
+                                            tile_shape_a, tile_shape_b>();
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_BIAS", groupM);
@@ -11000,8 +11010,9 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_c,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11068,8 +11079,9 @@ PTO_SHARED_INLINE void TMATMUL_BIAS(tile_shape_c &c, tile_shape_a &a, tile_shape
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_c,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11110,8 +11122,9 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
                 "TMATMUL_MX supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_c,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11132,8 +11145,9 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
                 "TMATMUL_MX supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_c,
+                                            tile_shape_a, tile_shape_b>();
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_MX", groupM);
@@ -11174,8 +11188,9 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_c,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11244,8 +11259,9 @@ PTO_SHARED_INLINE void TMATMUL_MX(tile_shape_c &c, tile_shape_a &a, tile_shape_a
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(c, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_c,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11289,8 +11305,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
                 "require the overload taking fixp::Options");
   static_assert(!Attr.CScaleEn,
                 "CScale requires the MX_ACC overload with a CScale tile");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11318,8 +11335,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
                 "require the overload taking fixp::Options");
   static_assert(!Attr.CScaleEn,
                 "CScale requires the MX_ACC overload with a CScale tile");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_MX_ACC", groupM);
@@ -11361,8 +11379,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11436,8 +11455,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_ACC(tile_shape_d &d, tile_shape_c &c, tile_sha
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11482,8 +11502,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
                 "TMATMUL_MX_BIAS supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11507,8 +11528,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
                 "TMATMUL_MX_BIAS supports only parameter-free FPATR options "
                 "(keep_acc/f16/bf16/relu); quant, PReLU, RowMax and GroupMax "
                 "require the overload taking fixp::Options");
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t N = __shape.N;
   size_t K = __shape.K;
   pto_matmul_groupm_detail::validate_groupm_runtime("TMATMUL_MX_BIAS", groupM);
@@ -11551,8 +11573,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11623,8 +11646,9 @@ PTO_SHARED_INLINE void TMATMUL_MX_BIAS(tile_shape_d &d, tile_shape_a &a,
   static_assert(HasGroupOut == !std::is_same_v<typename Options::GroupMaxOut, fixp::NoOperand>,
                 "GroupMaxEn requires a GroupMaxOut Tile");
 
-  pto_matmul_detail::MatmulShape __shape =
-      pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+  constexpr auto __shape =
+      pto_matmul_detail::resolve_matmul_shape<Attr, tile_shape_d,
+                                            tile_shape_a, tile_shape_b>();
   size_t M = __shape.M;
   size_t N = __shape.N;
   size_t K = __shape.K;
@@ -11663,7 +11687,8 @@ PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, B &b,
   constexpr FixpAttr Attr = Options::Attr;
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B> &&
                 is_basic_fixp_attr(Attr)) {
-    auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+    constexpr auto shape =
+        pto_matmul_detail::resolve_matmul_shape<Attr, D, A, B>();
     pto_matmul_detail::matmul_mx_no_scale_local<Attr>(
         d, a, b, shape.M, shape.N, shape.K);
   } else {
@@ -11679,7 +11704,8 @@ PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, SA &sa, B &b,
   constexpr FixpAttr Attr = Options::Attr;
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<SA> &&
                 !is_shared_tile_v<B> && is_basic_fixp_attr(Attr)) {
-    auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+    constexpr auto shape =
+        pto_matmul_detail::resolve_matmul_shape<Attr, D, A, B>();
     pto_matmul_detail::matmul_mx_scale_a_local<Attr>(
         d, a, sa, b, shape.M, shape.N, shape.K);
   } else {
@@ -11695,7 +11721,8 @@ PTO_SHARED_INLINE void TMATMUL_MX(D &d, A &a, B &b, SB &sb,
   constexpr FixpAttr Attr = Options::Attr;
   if constexpr (!is_shared_tile_v<A> && !is_shared_tile_v<B> &&
                 !is_shared_tile_v<SB> && is_basic_fixp_attr(Attr)) {
-    auto shape = pto_matmul_detail::resolve_matmul_shape_runtime<Attr>(d, a, b);
+    constexpr auto shape =
+        pto_matmul_detail::resolve_matmul_shape<Attr, D, A, B>();
     pto_matmul_detail::matmul_mx_scale_b_local<Attr>(
         d, a, b, sb, shape.M, shape.N, shape.K);
   } else {

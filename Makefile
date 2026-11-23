@@ -36,6 +36,7 @@ check: check-sync-proposal
 	python3 test/test_pto_main_contract.py
 	python3 test/test_tsel_contract.py
 	python3 test/test_tcvt_select_regressions.py
+	python3 test/test_static_matmul_shapes.py
 	python3 test/test_predicate_adapters.py
 	python3 test/test_indexed_tlsu_range.py
 	python3 test/test_scalar_shareability.py
