@@ -20,6 +20,7 @@ view, not a replacement for the PTO ASL/NDF semantics.
 
 ## Documentation
 
+- [PTO-C TileOP 接口参考](docs/tileop-reference/README.md)（[离线 HTML](docs/tileop-reference/index.html)）
 - [四 PE 启动、协作计算与退出](docs/tileop-usage/multi-pe-lifecycle.md)
 
 - [0.59 alignment and validation](docs/tileop-usage/migration/pto-0590-alignment.md)

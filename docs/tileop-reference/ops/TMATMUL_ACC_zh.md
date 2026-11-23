@@ -1,0 +1,148 @@
+# TMATMUL_ACC
+
+**矩阵与矩阵向量计算** · **CUBE** · 0.59 活动目录
+
+## 简介
+
+`TMATMUL_ACC` 将矩阵相乘的结果累加到提供的累加器 Tile 中。
+
+## 数学语义
+
+逻辑上，`A[M,K] × B[K,N]` 得到 `C[M,N]`。以输入 accumulator 为累加初值，生成新的结果。 逻辑维度与物理 CELL 描述的对应关系以本页的操作数约束为准。
+
+## C++ 接口
+
+```cpp
+PTO_SHARED_INLINE void TMATMUL_ACC(
+    tile_shape_d &d,
+    tile_shape_c &c,
+    tile_shape_a &a,
+    tile_shape_b &b);
+template <
+    is_tile_data_v tile_shape_d,
+    is_tile_data_v tile_shape_c,
+    is_local_or_shared_left tile_shape_a,
+    is_local_or_shared_right tile_shape_b,
+    fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_ACC(
+    tile_shape_d &d,
+    tile_shape_c &c,
+    tile_shape_a &a,
+    tile_shape_b &b,
+    const Options &options);
+PTO_SHARED_INLINE void TMATMUL_ACC(
+    tile_shape_d &d,
+    tile_shape_c &c,
+    tile_shape_a &a,
+    tile_shape_b &b,
+    size_t groupM);
+
+template <is_tile_data_v tile_shape_d, is_tile_data_v tile_shape_c,
+          is_local_or_shared_left tile_shape_a,
+          is_local_or_shared_right tile_shape_b, fixp::is_options_v Options>
+PTO_SHARED_INLINE void TMATMUL_ACC(tile_shape_d &d, tile_shape_c &c, tile_shape_a &a,
+                 tile_shape_b &b, const Options &options, size_t groupM);
+```
+
+### 支持的数据类型
+
+支持FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E2M1X2、E1M2X2、S4X2、U4X2、S16、S8、U16、U8类型。
+
+| 操作数角色 | 类型要求 |
+| --- | --- |
+| A / B 主输入 | 支持FP32、TF32、HF32、FP16、BF16、HiF8、E4M3、E5M2、E3M2、E2M3、E2M1X2、E1M2X2、S4X2、U4X2、S16、S8、U16、U8类型。 A/B 必须属于该矩阵重载允许的数值类。 |
+| C / D（累加器或结果） | 类型由该数值类和重载确定；不能仅因列在支持列表中就任意组合。 |
+| Bias / Scale / 辅助输出 | 必须使用该重载规定的 dtype、shape 与 layout。 |
+
+### 参数说明
+
+| 参数 | 说明 |
+| --- | --- |
+| `d` | 输出 Tile；成功调用后写入操作结果。 |
+| `c` | 累加器或输出 Tile，具体角色由接口名称和重载决定。 |
+| `a` | 左操作数或输入 Tile。 |
+| `b` | 右操作数或输入 Tile。 |
+| `options` | `fixp::Options` 选项对象；携带量化、激活、转置、缩放以及可选辅助输出配置。 |
+| `groupM` | cooperative `Local-A/Shared-B` 场景下的 core-total `group_M`；必须是 `1..128` 的正值。 |
+
+### 重载选择
+
+- **基础重载**：不传 `options`，使用该操作的默认后处理属性。
+- **带 `Options` 的重载**：需要量化、激活、转置、scale 或辅助输出时传入 `options`。它不是重复声明，而是在相同核心操作数上增加显式属性；仅可启用本操作支持的属性。参见[矩阵后处理选项](../helpers_zh.md#矩阵后处理选项)。
+
+- **带 `groupM` 的重载**（basic 与 `options`+`groupM` 两种形式）：仅用于 cooperative 的 `Local-A/Shared-B` 语义；`groupM` 显式提供 LB0 的 core-total `group_M`，而不是从 Local A shard 推导。`D`（以及 ACC 形式的 `C`）的 valid 行数必须等于 per-PE A shard 大小（`M_per_PE`：CubeM16 对应 `group_M <= 64`，CubeM32 对应 `group_M > 64`）。
+
+## 约束与默认值
+
+- 协作 TMATMUL（任一 Shared 操作数）的 `LB0` 携带 core-total `group_M`（1..128），每个 PE 计算 `valid_M = clamp(group_M - i*M_per_PE, 0, M_per_PE)`（`M_per_PE`：group_M≤64 为 16，≥65 为 32）；RowMax/GroupMax 输出的有效行数是 **per-PE 块**（16 或 32 行），不是 `group_M`。
+
+矩阵维度必须满足乘法关系（`M×K` 与 `K×N`，或对应 GEMV 形式）；A/B/D 的 CUBE layout、累加器类型和任何 scale/bias/options 必须构成该重载允许的组合。
+
+### 有效区域与 padding
+
+| 项目 | 规则 |
+| --- | --- |
+| 有效元素 | M/N/K 的有效维度必须与矩阵乘法关系一致；padding 不应被当作数学输入。 |
+| 物理容量 / SizeCode | 只决定容量，不重新定义逻辑 shape。 |
+| 输出 padding | 除非本操作明确规定填充值或传播规则，否则视为不可依赖。 |
+
+### 默认值
+
+#### 编码字段和省略值
+
+- 数据类型编码始终使用 `AType`；省略 `B.DATR` 时，`BType` 沿用 `AType`，`PreQuant=None` 与固定舍入（fixed floating/fixed shift 及 QF322*Pre 固定模式）使用 `RNONE`；仅可编程整数预量化模式保留 `RNE` 舍入选择；`Sat` 始终关闭。
+- 省略 `LB0`、`LB1`、`LB2` 时，`M`、`N`、`K` 分别默认为 1；显式给出的维度必须为正值。
+- 全零 `B.FPATR` 表示不启用转换、激活和归约；只有后处理模式需要时才提供 `B.IOR` 或辅助 `B.IOT` 操作数。
+- `TransA=0`、`TransB=0` 表示不转置；非零转置控制仅可用于规范允许的 `Shared` 主操作数。
+
+## 示例
+
+```cpp
+#include <common/pto_tileop.hpp>
+
+using namespace pto;
+using A = CubeTileM16<float, 16, 16>;
+using B = CubeTileN8<float, 16, 8>; // local B is logical [K, N]
+using Acc = CubeAccumulatorM16<float, 16, 8>;
+using GM16 = global_tensor<float, RowMajor<16, 16>>;
+using GM8 = global_tensor<float, RowMajor<16, 8>>;
+
+void matmul_acc(float *out, const float *accumulator,
+                const float *a_data, const float *b_data) {
+  GM16 a_gm(a_data), c_gm(accumulator);
+  GM8 b_gm(b_data), d_gm(out);
+  A a;
+  B b;
+  Acc c, d;
+  TLOAD(a, a_gm);
+  TLOAD(b, b_gm);
+  TLOAD(c, c_gm);
+  // d = c + a * b；d 与 c 是两个独立的 accumulator Tile。
+  TMATMUL_ACC(d, c, a, b);
+  TSTORE(d_gm, d);
+}
+```
+
+## Bundle 对照
+
+```asm
+BSTART.TMATMUL.ACC AType
+B.DATR      BType, RMode, Sat (optional; BType defaults to AType)
+B.FPATR     PreQuantMode, ReluMode, GroupNCode, RowMaxEn, GroupMaxEn, RowMaxInit, MaxAbsEn, TransA, TransB, CScaleEn (exactly one)
+B.DIM       LB0 M or cooperative group_M (optional, default 1)
+B.DIM       LB1 N (optional, default 1)
+B.DIM       LB2 K (optional, default 1)
+B.IOS       complete right or both matrix operand groups (optional; cooperative mask 1111)
+B.IOT       ordered Local mathematical sources: C CUBE_M16/M32 accumulator matching A with encoded selector distinct from DstTile, A CUBE_M16/M32 primary, B CUBE_N8 primary, optional U8 CScale CUBE_M32 [M,1]
+B.IOT       D matching A's CUBE_M16/M32 layout with a distinct encoded destination index, optional RowMaxOut, optional GroupMaxOut destinations
+B.IOT/B.IOR postprocess operands selected by B.FPATR
+BSTOP       or the next BSTART completion boundary
+```
+
+活动目录编码为 `CUBE`，function `2`。执行引擎为 `CUBE`。
+
+## 参考
+
+[PTO ISA 操作规范](https://github.com/PTO-ISA/pto-spec/blob/42067d0f2890b8c013a868bd1247ebc6437b3179/docs/tile/matrix-and-matrix-vector/matrix-matrix/TMATMUL_ACC.md) · [规范 ASL](https://github.com/PTO-ISA/pto-spec/blob/42067d0f2890b8c013a868bd1247ebc6437b3179/asl/tile/matrix-and-matrix-vector/matrix-matrix/TMATMUL_ACC.asl)
+
+[返回操作索引](../README.md)

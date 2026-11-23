@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PTO-C TileOP 接口参考 · 0.59</title>
+  <style>
+    :root { color-scheme: light; --ink: #142741; --muted: #425a73; --line: #d9e4ee; --panel: #f3f7fb; --accent: #154b93; --selected: #deeafa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: #fff; font: 16px/1.75 system-ui, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+    a { color: var(--accent); text-underline-offset: .18em; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    [hidden] { display: none !important; }
+    .layout { display: grid; grid-template-columns: 17.5rem minmax(0, 1fr); align-items: start; }
+    aside { position: sticky; top: 0; height: 100vh; height: 100dvh; z-index: 2; background: var(--panel); border-right: 1px solid var(--line); }
+    #directory > summary { padding: .85rem 1rem; border-bottom: 1px solid var(--line); cursor: pointer; font-weight: 700; }
+    .brand { margin-left: .4rem; }
+    .version { margin-left: .45rem; font: .78rem ui-monospace, monospace; color: var(--muted); }
+    .directory-scroll { max-height: calc(100vh - 3.6rem); max-height: calc(100dvh - 3.6rem); overflow-y: auto; overscroll-behavior: contain; padding: .85rem .85rem 1.5rem; }
+    input[type="search"] { width: 100%; font: inherit; padding: .4rem .6rem; color: var(--ink); background: white; border: 1px solid #afbed0; border-radius: .4rem; }
+    #navigation ul { list-style: none; padding: 0; margin: .45rem 0; }
+    #navigation a { display: block; padding: .23rem .6rem; border-radius: .35rem; text-decoration: none; line-height: 1.5; overflow-wrap: anywhere; }
+    #navigation a:hover, #navigation a[aria-current] { background: var(--selected); }
+    #navigation a[aria-current] { font-weight: 700; }
+    .category { margin-top: .22rem; }
+    .category summary { cursor: pointer; padding: .23rem .35rem; color: var(--muted); font-size: .88rem; font-weight: 650; }
+    .category a { font-family: ui-monospace, Consolas, monospace; font-size: .86rem; }
+    .category ul { border-left: 1px solid var(--line); margin-left: .85rem !important; }
+    main { padding: 2.25rem clamp(1rem, 4vw, 3.8rem) 5rem; width: 100%; max-width: 80rem; margin: 0 auto; overflow-wrap: anywhere; }
+    article { scroll-margin-top: 1rem; }
+    article + article { margin-top: 3rem; }
+    article[hidden] + article { margin-top: 0; }
+    h1, h2, h3, h4 { line-height: 1.35; scroll-margin-top: 1rem; }
+    h1 { margin: 0 0 1rem; color: #122e54; font-size: clamp(1.9rem, 4vw, 2.8rem); letter-spacing: -.025em; }
+    h2 { margin: 2.15rem 0 .7rem; padding-bottom: .35rem; border-bottom: 1px solid var(--line); font-size: 1.45rem; }
+    h3 { margin: 1.6rem 0 .65rem; font-size: 1.13rem; }
+    h4 { margin: 1.2rem 0 .5rem; }
+    .sections { display: flex; flex-wrap: wrap; gap: .4rem 1rem; margin: 0 0 1.2rem; font-size: .88rem; }
+    .sections a { text-decoration: none; }
+    #home h3 { color: var(--muted); }
+    #home td:first-child { white-space: nowrap; font-weight: 650; }
+    .table-wrap { margin: .9rem 0 1.35rem; overflow-x: auto; border: 1px solid var(--line); border-radius: .5rem; }
+    table { width: 100%; min-width: 31rem; border-collapse: collapse; font-size: .93rem; line-height: 1.6; }
+    th, td { padding: .55rem .7rem; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { background: #ecf2f9; text-align: left; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:nth-child(even) { background: #f7f9fd; }
+    pre { margin: .8rem 0 1.35rem; padding: .8rem 1rem; overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: .5rem; }
+    code { font: .9em ui-monospace, SFMono-Regular, Consolas, monospace; }
+    :not(pre) > code { background: #edf3fb; color: #1c426d; border-radius: .2rem; padding: .1em .2em; }
+    @media(max-width: 54rem) {
+      .layout { display: block; }
+      aside { height: auto; border-right: 0; }
+      .directory-scroll { max-height: 60vh; max-height: 60dvh; border-bottom: 1px solid var(--line); }
+      main { padding-top: 1.4rem; }
+      article, h1, h2, h3, h4 { scroll-margin-top: 4.25rem; }
+    }
+    @media print {
+      aside { display: none; }
+      .layout { display: block; }
+      .table-wrap { overflow: visible; }
+      table { min-width: 0; }
+      main { max-width: none; padding: 0; }
+      pre { white-space: pre-wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <details id="directory" open>
+        <summary><span class="brand">TileOP 接口索引</span><span class="version">0.59</span></summary>
+        <div class="directory-scroll">
+          <input type="search" id="filter" aria-label="搜索操作" placeholder="搜索操作，如 TADD、CUBE" hidden>
+          <p id="empty" role="status" hidden>未找到匹配的操作。</p>
+          <nav id="navigation" aria-label="操作索引">@@SIDEBAR@@</nav>
+        </div>
+      </details>
+    </aside>
+    <main id="content">
+      @@PAGES@@
+    </main>
+  </div>
+  <script>
+    const directory = document.getElementById('directory');
+    const navigation = document.getElementById('navigation');
+    const filter = document.getElementById('filter');
+    const empty = document.getElementById('empty');
+    const narrow = matchMedia('(max-width: 54rem)');
+    const articles = Array.from(document.querySelectorAll('main > article'));
+    const categories = Array.from(navigation.querySelectorAll('.category'));
+    let openedBeforeSearch;
+    let currentArticle;
+
+    function selectedId() {
+      try { return decodeURIComponent(location.hash.slice(1)); }
+      catch { return ''; }
+    }
+
+    function showArticle() {
+      const target = document.getElementById(selectedId());
+      const article = target?.closest('article') || articles[0];
+      for (const item of articles) item.hidden = item !== article;
+      for (const link of navigation.querySelectorAll('a')) {
+        if (link.getAttribute('href') === '#' + article.id) {
+          link.setAttribute('aria-current', 'page');
+          if (!filter.value.trim()) {
+            const group = link.closest('details');
+            if (group) group.open = true;
+          }
+        } else {
+          link.removeAttribute('aria-current');
+        }
+      }
+      document.title = article.id === 'home' ? 'PTO-C TileOP 接口参考 · 0.59' : article.dataset.title + ' · PTO-C TileOP 0.59';
+      if (target && target !== article && article.contains(target)) {
+        target.scrollIntoView();
+      } else if (currentArticle !== article || location.hash) {
+        window.scrollTo(0, 0);
+      }
+      currentArticle = article;
+    }
+
+    function filterDirectory() {
+      const query = filter.value.trim().toLowerCase();
+      if (query && !openedBeforeSearch) openedBeforeSearch = categories.map(category => category.open);
+      let matches = 0;
+      for (const [index, category] of categories.entries()) {
+        let categoryMatches = 0;
+        for (const link of category.querySelectorAll('a')) {
+          const haystack = (link.textContent + ' ' + link.dataset.search).toLowerCase();
+          const visible = query.split(/\s+/).every(word => haystack.includes(word));
+          link.parentElement.hidden = !visible;
+          if (visible) categoryMatches++;
+        }
+        matches += categoryMatches;
+        category.hidden = categoryMatches === 0;
+        if (query) category.open = categoryMatches > 0;
+        else if (openedBeforeSearch) category.open = openedBeforeSearch[index];
+      }
+      if (!query) openedBeforeSearch = undefined;
+      empty.hidden = matches !== 0;
+    }
+
+    function adaptDirectory() { directory.open = !narrow.matches; }
+
+    filter.hidden = false;
+    filter.addEventListener('input', filterDirectory);
+    navigation.addEventListener('click', event => {
+      const link = event.target.closest('a');
+      if (!link) return;
+      if (narrow.matches) directory.open = false;
+      if (link.getAttribute('href') === location.hash) showArticle();
+    });
+    window.addEventListener('hashchange', showArticle);
+    narrow.addEventListener('change', adaptDirectory);
+    adaptDirectory();
+    showArticle();
+  </script>
+</body>
+</html>
