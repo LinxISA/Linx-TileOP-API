@@ -225,7 +225,8 @@ void TCVT_T(tile_shape_out &dst, tile_shape_in &src) {
   static_assert(is_legal_tcvt_datatype_pair(
                     type_traits<typename tile_shape_in::DType>::TypeCode,
                     type_traits<typename tile_shape_out::DType>::TypeCode),
-                "Illegal TCVT datatype pair: RCPE6M2 is source-only and "
+                "Illegal TCVT datatype pair: HiF4X2 is not a standalone TCVT type; "
+                "RCPE6M2 is source-only and "
                 "converts only to FP16/BF16 (pto-spec#322)");
   static_assert(
       !(RMode == LINX_RTO &&
@@ -327,30 +328,30 @@ asm volatile(
   } else {
     static_assert(!tile_shape_out::IsCubeLayout,
                   "TCVT to a CUBE layout requires a CUBE_M16/M32 source");
-    // PTO ISA (PTO-TILE-TCVT legality): "Source and destination have equal
-    // Row, Col, ValidRow, and ValidCol. Their capacities and packing
-    // independently match their own DataTypes." Row/Col are the
-    // capacity-derived physical dimensions
-    // (DerivedTileRows = capacity*8 / (Col * elementBits),
-    // asl/tile/model/shape/rows-columns.asl), NOT the C++ logical Rows/Cols
-    // of the Tile type. A narrowing conversion (e.g. bf16 -> e8m0 [Rows,1])
-    // pads the destination to the 128B minimum TSize, which doubles its
-    // capacity-derived rows; the ISA-legal encoding declares a wider
-    // physical column on both sides (Col=2 keeps the derived rows equal
-    // while ValidCol stays 1). Enforce the ISA condition directly instead
-    // of requiring bitwise-identical C++ Rows/Cols (issue #42).
-    constexpr int SrcDerivedRows =
-        (tile_shape_in::StorageBytes * 8) /
-        (tile_shape_in::Cols *
-         type_traits<typename tile_shape_in::DType>::bits);
-    constexpr int DstDerivedRows =
-        (tile_shape_out::StorageBytes * 8) /
-        (tile_shape_out::Cols *
-         type_traits<typename tile_shape_out::DType>::bits);
+    // PTO-TCVT-CONTRACT-001 preserves physical Row/Col. Packed FP4 uses
+    // logical 4-bit elements with row-local pair padding. Admitted odd-column
+    // profiles preserve declared rows and only require storage to fit TSize;
+    // legacy power-of-two columns still derive rows from the full capacity.
+    constexpr int SrcDerivedRows = ordinary_tcvt_physical_rows_v<tile_shape_in>;
+    constexpr int DstDerivedRows = ordinary_tcvt_physical_rows_v<tile_shape_out>;
+    static_assert(ordinary_tcvt_columns_legal_v<tile_shape_in> &&
+                      ordinary_tcvt_columns_legal_v<tile_shape_out>,
+                  "ordinary TCVT non-power-of-two columns require FP32/FP16/BF16 or packed FP4");
+    static_assert(tile_shape_in::Cols == tile_shape_out::Cols,
+                  "ordinary TCVT source and destination physical columns must match");
+    static_assert(SrcDerivedRows > 0 && DstDerivedRows > 0 &&
+                      (!ordinary_tcvt_has_capacity_tail_v<tile_shape_in> ||
+                       SrcDerivedRows <= tile_shape_in::StorageBytes /
+                           tile_row_storage_bytes<typename tile_shape_in::DType>(tile_shape_in::Cols)) &&
+                      (!ordinary_tcvt_has_capacity_tail_v<tile_shape_out> ||
+                       DstDerivedRows <= tile_shape_out::StorageBytes /
+                           tile_row_storage_bytes<typename tile_shape_out::DType>(tile_shape_out::Cols)),
+                  "ordinary TCVT complete row storage must fit TSize");
     static_assert(SrcDerivedRows == DstDerivedRows,
                   "ordinary TCVT source and destination must have equal "
-                  "capacity-derived physical Rows (ISA PTO-TILE-TCVT: "
-                  "DerivedTileRows(capacity, Col, dtype) must match; for a "
+                  "physical Rows (ISA PTO-TILE-TCVT: "
+                  "admitted odd-column profiles retain declared Rows; "
+                  "otherwise DerivedTileRows(capacity, Col, dtype) must match; for a "
                   "narrowing dtype, declare a wider physical Col on both "
                   "sides, e.g. [Rows,2] with ValidCol=1, so the 128B "
                   "minimum TSize does not double the destination rows)");
@@ -19414,6 +19415,8 @@ void TCOLEXPAND(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLARGMAX: col argmax (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
+  static_assert(std::is_same_v<typename tile_shape_out::DType, uint32_t>,
+                "TCOLARGMAX destination must use U32 indices");
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (SelectedBundleComparisonShapeMatches): B.DIM describes the SOURCE
   // geometry (ValidCol/ValidRow/Col); LB1 must equal the source valid rows.
@@ -19502,6 +19505,8 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
 // TCOLARGMIN: col argmin (DavinciOO ext)
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
 void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
+  static_assert(std::is_same_v<typename tile_shape_out::DType, uint32_t>,
+                "TCOLARGMIN destination must use U32 indices");
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (SelectedBundleComparisonShapeMatches): B.DIM describes the SOURCE
   // geometry (ValidCol/ValidRow/Col); LB1 must equal the source valid rows.

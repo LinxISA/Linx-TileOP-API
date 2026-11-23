@@ -314,19 +314,59 @@ constexpr bool tile_carrier_width_compatible(int StoredCode, int OperationCode) 
   return type_traits_code_bits(StoredCode) == type_traits_code_bits(OperationCode);
 }
 
-// PTO-ISA v0.58 (pto-spec#322) TCVT datatype-pair legality for the derived
+// PTO-ISA TCVT datatype-pair legality for the derived
 // RCPE6M2 type. RCPE6M2 (code 21) reuses the E6M2 code space as a source-only
 // reciprocal type: it has no destination encoding, and the only legal TCVT
-// destinations for an RCPE6M2 source are FP16 and BF16. All other pairs are
+// destinations for an RCPE6M2 source are FP16 and BF16. HiF4X2 is a composite
+// Matrix-MX payload, never a standalone TCVT source or destination. Other pairs are
 // left permissive here so existing conversions (including E6M2, which is not
 // narrowed) remain unaffected.
 constexpr bool is_legal_tcvt_datatype_pair(int SrcCode, int DstCode) {
+  if (SrcCode == __type_fp4_hif4x2 || DstCode == __type_fp4_hif4x2)
+    return false;
   if (DstCode == __type_rcpe6m2)
     return false; // RCPE6M2 has no destination encoding.
   if (SrcCode == __type_rcpe6m2)
     return DstCode == __type_fp16 || DstCode == __type_bf16;
   return true;
 }
+
+template <typename Element>
+inline constexpr bool tile_uses_row_local_pairs_v =
+    type_traits<Element>::TypeCode == __type_fp4_e2m1x2 ||
+    type_traits<Element>::TypeCode == __type_fp4_e1m2x2;
+
+template <typename Element>
+constexpr int tile_row_storage_bytes(int columns) {
+  if constexpr (tile_uses_row_local_pairs_v<Element>)
+    return (columns + 1) / 2;
+  return (columns * tile_element_bits_v<Element> + 7) / 8;
+}
+
+// rows-columns.asl: admitted non-power-of-two RowMajor profiles use TSize
+// as an upper bound. Legacy columns retain capacity-derived physical rows.
+template <typename T>
+inline constexpr bool ordinary_tcvt_has_capacity_tail_v =
+    T::BFractal == BLayout::RowMajor && T::Cols > 0 &&
+    (T::Cols & (T::Cols - 1)) != 0 &&
+    (type_traits<typename T::DType>::TypeCode == __type_fp32 ||
+     type_traits<typename T::DType>::TypeCode == __type_fp16 ||
+     type_traits<typename T::DType>::TypeCode == __type_bf16 ||
+     tile_uses_row_local_pairs_v<typename T::DType>);
+
+template <typename T>
+inline constexpr int ordinary_tcvt_physical_rows_v =
+    ordinary_tcvt_has_capacity_tail_v<T>
+        ? T::Rows
+        : tile_uses_row_local_pairs_v<typename T::DType>
+              ? T::StorageBytes / tile_row_storage_bytes<typename T::DType>(T::Cols)
+              : (T::StorageBytes * 8) /
+                    (T::Cols * tile_element_bits_v<typename T::DType>);
+
+template <typename T>
+inline constexpr bool ordinary_tcvt_columns_legal_v =
+    ordinary_tcvt_has_capacity_tail_v<T> ||
+    (T::Cols > 0 && (T::Cols & (T::Cols - 1)) == 0);
 
 // PTO-SPEC #388: explicit nonzero TCVT rounding modes round same-type
 // floating operands to an integer-valued result. RTO is not applicable to
@@ -1055,10 +1095,14 @@ public:
     while (capacity < bytes) capacity *= 2;
     return capacity;
   }
-  static constexpr int StorageBytes =
-      round_capacity(IsCubeLayout
-                         ? CubeRequiredBytes
-                         : (Rows * Cols * tile_element_bits_v<DType> + 7) / 8);
+  static constexpr int StorageBytes = round_capacity([] {
+    if constexpr (IsCubeLayout) return CubeRequiredBytes;
+    if constexpr (BFractal_ == BLayout::RowMajor &&
+                  SFractal_ == SLayout::NoneBox &&
+                  tile_uses_row_local_pairs_v<DType>)
+      return Rows * tile_row_storage_bytes<DType>(Cols);
+    return (Rows * Cols * tile_element_bits_v<DType> + 7) / 8;
+  }());
   // PTO #399 exact-capacity CUBE geometry.  For M16/M32, every byte selected
   // by SizeCode belongs to the physical descriptor, including capacity tail
   // beyond the minimum logical CELL envelope.  N8 retains its valid-derived
@@ -1310,6 +1354,14 @@ public:
   // record dynamic shape info
   int RowMaskInternal;
   int ColMaskInternal;
+
+  template <typename TileLike>
+  __attribute__((always_inline)) void SetValidShape(const TileLike &source) {
+    const int rows = source.GetValidRow();
+    const int columns = source.GetValidCol();
+    if constexpr (ValidRow == DYNAMIC) RowMaskInternal = rows;
+    if constexpr (ValidCol == DYNAMIC) ColMaskInternal = columns;
+  }
 
   template <int RowMask = ValidRow>
   static constexpr std::enable_if_t<(RowMask > 0), int> GetValidRow() {
@@ -2479,6 +2531,11 @@ public:
   // exposed for const sources; the non-const path keeps the same carrier.
   decltype(auto) data() { return SourceValue.data(); }
   decltype(auto) data() const { return SourceValue.data(); }
+
+  template <typename TileLike>
+  __attribute__((always_inline)) void SetValidShape(const TileLike &source) {
+    SourceValue.SetValidShape(source);
+  }
 
   template <int RowMask = ValidRow>
   static constexpr std::enable_if_t<(RowMask > 0), int> GetValidRow() {

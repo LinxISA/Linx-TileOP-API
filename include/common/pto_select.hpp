@@ -98,8 +98,8 @@ __attribute__((always_inline)) inline void validate_mask(const P &p, const T &t)
 
 template <typename D, typename T>
 __attribute__((always_inline)) inline void publish_shape(D &d, const T &t) {
-  if constexpr (D::ValidRow == DYNAMIC) d.RowMaskInternal = t.GetValidRow();
-  if constexpr (D::ValidCol == DYNAMIC) d.ColMaskInternal = t.GetValidCol();
+  if constexpr (D::ValidRow == DYNAMIC || D::ValidCol == DYNAMIC)
+    d.SetValidShape(t);
 }
 
 #define PTO_SELECT_LAYOUT \
