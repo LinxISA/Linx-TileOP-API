@@ -68,7 +68,7 @@ destination 的物理 shape 必须匹配，目标 dtype 由 assembled destinatio
 
 对于 `RowMajor`、`ColMajor` 等普通布局，源 Tile 和目标 Tile 必须满足以下条件：
 
-- **容量推导的物理行相同**（PTO ISA `PTO-TILE-TCVT` legality："Source and
+- **源描述符的物理行必须能由目标容量表示**。物理列为 2 的幂时，两侧容量推导的物理行必须相同（PTO ISA `PTO-TILE-TCVT` legality："Source and
   destination have equal Row, Col, ValidRow, and ValidCol. Their capacities
   and packing independently match their own DataTypes."，其中 Row/Col 是
   `DerivedTileRows = capacity × 8 / (物理Col × 元素位宽)` 的容量推导值，不是
@@ -91,6 +91,23 @@ using DstE8 = Tile<Location::Vec, __fp8_e8m0, 64, 2, BLayout::RowMajor, 64, 1>;
 // e8m0 128B → DerivedTileRows = 128*8/(2*8)  = 64  ✓ 相等，ISA 合法
 TCVT(dst_e8, src_bf);
 ```
+
+对于允许非 2 的幂物理列的 RowMajor FP32、FP16、BF16 和 packed FP4，
+TCVT 保留源描述符的物理行，目标容量可以有未使用的尾部空间。TLOAD 等 producer
+按完整分配容量推导物理行，不能直接用 C++ `Rows` 或 `ValidRow` 代替。
+例如 `Tile<Location::Vec, __half, 8, 3>` 分配 128B，TLOAD 产生
+`floor(128 / (3 * 2)) = 21` 个物理行；转换到 FP32 需要至少 252B，
+所以同为 `8,3`、仅分配 128B 的 FP32 目标非法。可以将目标声明为：
+
+```cpp
+using SrcOdd = Tile<Location::Vec, __half, 8, 3>;
+using DstOdd = Tile<Location::Vec, float, 21, 3, BLayout::RowMajor, 8, 3>;
+// DstOdd 分配 256B，ValidRow/ValidCol 仍为 8/3。
+```
+
+Packed FP4 每行的字节数为 `ceil(Cols / 2)`，奇数列的半字节填充不能跨行复用。
+当前静态校验按源 Tile 的完整容量推导物理行；若源来自保留了较少物理行的前序
+TCVT，仍按该容量上界校验，因此可能要求更大的目标容量。
 
 示例：
 

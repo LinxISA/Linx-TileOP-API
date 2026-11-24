@@ -343,8 +343,9 @@ constexpr int tile_row_storage_bytes(int columns) {
   return (columns * tile_element_bits_v<Element> + 7) / 8;
 }
 
-// rows-columns.asl: admitted non-power-of-two RowMajor profiles use TSize
-// as an upper bound. Legacy columns retain capacity-derived physical rows.
+// rows-columns.asl: admitted non-power-of-two RowMajor profiles allow unused
+// destination capacity. Producers such as TLOAD still derive source physical
+// rows from their entire allocation, rather than the declared/valid rows.
 template <typename T>
 inline constexpr bool ordinary_tcvt_has_capacity_tail_v =
     T::BFractal == BLayout::RowMajor && T::Cols > 0 &&
@@ -356,12 +357,10 @@ inline constexpr bool ordinary_tcvt_has_capacity_tail_v =
 
 template <typename T>
 inline constexpr int ordinary_tcvt_physical_rows_v =
-    ordinary_tcvt_has_capacity_tail_v<T>
-        ? T::Rows
-        : tile_uses_row_local_pairs_v<typename T::DType>
-              ? T::StorageBytes / tile_row_storage_bytes<typename T::DType>(T::Cols)
-              : (T::StorageBytes * 8) /
-                    (T::Cols * tile_element_bits_v<typename T::DType>);
+    tile_uses_row_local_pairs_v<typename T::DType>
+        ? T::StorageBytes / tile_row_storage_bytes<typename T::DType>(T::Cols)
+        : (T::StorageBytes * 8) /
+              (T::Cols * tile_element_bits_v<typename T::DType>);
 
 template <typename T>
 inline constexpr bool ordinary_tcvt_columns_legal_v =

@@ -329,9 +329,12 @@ asm volatile(
     static_assert(!tile_shape_out::IsCubeLayout,
                   "TCVT to a CUBE layout requires a CUBE_M16/M32 source");
     // PTO-TCVT-CONTRACT-001 preserves physical Row/Col. Packed FP4 uses
-    // logical 4-bit elements with row-local pair padding. Admitted odd-column
-    // profiles preserve declared rows and only require storage to fit TSize;
-    // legacy power-of-two columns still derive rows from the full capacity.
+    // logical 4-bit elements with row-local pair padding. TLOAD and ordinary
+    // producers derive source physical rows from the allocation, including its
+    // capacity tail. Odd-column TCVT preserves those source rows and requires
+    // destination capacity to contain them; power-of-two profiles require exact
+    // equality of capacity-derived rows. A previous odd-column TCVT may
+    // preserve fewer rows; using the full source allocation here is conservative.
     constexpr int SrcDerivedRows = ordinary_tcvt_physical_rows_v<tile_shape_in>;
     constexpr int DstDerivedRows = ordinary_tcvt_physical_rows_v<tile_shape_out>;
     static_assert(ordinary_tcvt_columns_legal_v<tile_shape_in> &&
@@ -339,19 +342,18 @@ asm volatile(
                   "ordinary TCVT non-power-of-two columns require FP32/FP16/BF16 or packed FP4");
     static_assert(tile_shape_in::Cols == tile_shape_out::Cols,
                   "ordinary TCVT source and destination physical columns must match");
-    static_assert(SrcDerivedRows > 0 && DstDerivedRows > 0 &&
-                      (!ordinary_tcvt_has_capacity_tail_v<tile_shape_in> ||
-                       SrcDerivedRows <= tile_shape_in::StorageBytes /
-                           tile_row_storage_bytes<typename tile_shape_in::DType>(tile_shape_in::Cols)) &&
-                      (!ordinary_tcvt_has_capacity_tail_v<tile_shape_out> ||
-                       DstDerivedRows <= tile_shape_out::StorageBytes /
-                           tile_row_storage_bytes<typename tile_shape_out::DType>(tile_shape_out::Cols)),
+    static_assert(SrcDerivedRows > 0 && DstDerivedRows > 0,
                   "ordinary TCVT complete row storage must fit TSize");
-    static_assert(SrcDerivedRows == DstDerivedRows,
+    constexpr bool HasCapacityTail =
+        ordinary_tcvt_has_capacity_tail_v<tile_shape_in> &&
+        ordinary_tcvt_has_capacity_tail_v<tile_shape_out>;
+    static_assert(!HasCapacityTail || SrcDerivedRows <= DstDerivedRows,
+                  "ordinary TCVT destination capacity must contain the source "
+                  "descriptor physical rows, including the producer capacity tail");
+    static_assert(HasCapacityTail || SrcDerivedRows == DstDerivedRows,
                   "ordinary TCVT source and destination must have equal "
                   "physical Rows (ISA PTO-TILE-TCVT: "
-                  "admitted odd-column profiles retain declared Rows; "
-                  "otherwise DerivedTileRows(capacity, Col, dtype) must match; for a "
+                  "DerivedTileRows(capacity, Col, dtype) must match; for a "
                   "narrowing dtype, declare a wider physical Col on both "
                   "sides, e.g. [Rows,2] with ValidCol=1, so the 128B "
                   "minimum TSize does not double the destination rows)");

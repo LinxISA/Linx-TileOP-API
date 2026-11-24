@@ -7,7 +7,7 @@
 
 ## 配套依赖
 
-`.github/workflows/pr-gate.yml` 固定 LLVM `336b59c0bf76`、musl `798f0fb81915`、
+`.github/workflows/pr-gate.yml` 固定 LLVM `44a6a117a102`、musl `798f0fb81915`、
 Linux `12342453fa8c` 和 jemalloc `4495309cd11c`。更新版本时应一起核对编译参数、
 runtime ABI 和测试结果，不应将旧 LLVM 与持续更新的 musl 分支头混用。
 
@@ -40,7 +40,8 @@ pthread、完整 musl 四 PE 服务都不因此获得验收。
 ## 四 PE 模型运行独立验证
 
 required gate 不下载、构建或运行 `SuperScalarModel`，也不检查模型仓访问权限，
-因此不需要 `SSM_READ_TOKEN`。`AUTOMERGE_TOKEN` 仅供原有自动合并 job 使用。
+因此不需要 `SSM_READ_TOKEN`。门禁仅运行检查，不自动合入 PR，也不再使用
+`AUTOMERGE_TOKEN`。检查通过后仍需人工审核、手动合入。
 
 四 PE ELF 运行工具仍保留在 `test/multi_pe/`，需要时按
 [测试说明](../../test/multi_pe/README.md) 独立运行。它覆盖 `leader-first`、
@@ -58,5 +59,5 @@ LLVM 的配套修复仅折叠聚合返回 ABI 产生的地址/聚合转换，再
 不提前执行 DSE 等内存优化。回归同时验证 handle 消除栈存储和两次外部 GM 写入
 均保留 scope。OPEN Tile 与 Shared identity 的合法性检查仍然生效。
 
-目标回归拆成 15 个独立 suite，最多并行 2 个；每个 suite 限时 900 秒，
+目标回归拆成 16 个独立 suite（包括 TCVT producer-to-conversion 回归），最多并行 2 个；每个 suite 限时 900 秒，
 超时终止整个进程组并使门禁失败。每项日志和退出码保存于 `tileop-compile-evidence`。

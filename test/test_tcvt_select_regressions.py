@@ -1,6 +1,7 @@
 """Regression coverage for the PTO 0.59 TCVT, view and column ARG audit."""
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -68,21 +69,23 @@ class NativeTCVTSelectRegression(unittest.TestCase):
         return self.compile(*flags, str(path))
 
     def test_fp4_and_odd_column_conversions(self):
-        # Check both packed formats, round-trip directions, a full-capacity
-        # profile and odd widths that cross an allocation boundary.
+        # Check both packed formats and full-capacity round trips. At odd
+        # widths narrowing fits, but the inverse needs a larger allocation
+        # because a fresh producer fills the narrow type's capacity tail.
         body = ''
         for packed in ('__fp4_e2m1x2', '__fp4_e1m2x2'):
             for rows, cols in ((128, 32), (8, 3), (128, 1), (256, 1)):
                 tag = packed[2:] + f'_{rows}_{cols}'
+                reverse = 'TCVT(s,d);' if cols != 3 else ''
                 body += f'''
 using S_{tag} = Tile<Location::Vec, float, {rows}, {cols}>;
 using D_{tag} = Tile<Location::Vec, {packed}, {rows}, {cols}>;
-void cvt_{tag}(S_{tag} &s, D_{tag} &d) {{ TCVT(d,s); TCVT(s,d); }}
+void cvt_{tag}(S_{tag} &s, D_{tag} &d) {{ TCVT(d,s); {reverse} }}
 '''
         body += '''
 using S = Tile<Location::Vec, float, 8, 3>;
 using D = Tile<Location::Vec, __half, 8, 3>;
-void odd(S &s, D &d) { TCVT(d,s); TCVT(s,d); }
+void odd(S &s, D &d) { TCVT(d,s); }
 using P = Tile<Location::Vec, __fp4_e2m1x2, 128, 1>;
 static_assert(P::StorageBytes == 128);
 using Q = Tile<Location::Vec, __fp4_e2m1x2, 128, 3>;
@@ -111,12 +114,81 @@ void mismatch(S &s, D &d) { TCVT(d,s); }
 
     def test_odd_physical_row_mismatch_is_illegal(self):
         result = self.build('''
-using S = Tile<Location::Vec, float, 8, 3, BLayout::RowMajor, 4, 3>;
-using D = Tile<Location::Vec, __half, 16, 3, BLayout::RowMajor, 4, 3>;
+using S = Tile<Location::Vec, float, 64, 3, BLayout::RowMajor, 4, 3>;
+using D = Tile<Location::Vec, __half, 8, 3, BLayout::RowMajor, 4, 3>;
 void mismatch(S &s, D &d) { TCVT(d,s); }
 ''', '-fsyntax-only')
         self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertIn('physical Rows', result.stdout)
+        self.assertIn('destination capacity must contain the source descriptor physical rows',
+                      result.stdout)
+
+    def test_odd_tload_to_tcvt_rejects_insufficient_capacity(self):
+        # #330: valid_rows=8 does not describe the full TLOAD allocation.
+        # FP16 has floor(128 / 6)=21 physical rows; FP32 needs 252 bytes.
+        for dtype in ('__half', '__bf16', '__fp4_e2m1x2', '__fp4_e1m2x2'):
+            with self.subTest(dtype=dtype):
+                result = self.build(f'''
+extern "C" void undersized({dtype} *input, float *output) {{
+  global_tensor<{dtype}, RowMajor<8, 3>> gm(input);
+  global_tensor<float, RowMajor<8, 3>> out(output);
+  Tile<Location::Vec, {dtype}, 8, 3> src;
+  Tile<Location::Vec, float, 8, 3> dst;
+  TLOAD(src, gm); TCVT(dst, src); TSTORE(out, dst);
+}}
+''', '-c', '-o', str(self.output / 'undersized.o'))
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn(
+                    'destination capacity must contain the source descriptor physical rows',
+                    result.stdout)
+
+    def test_odd_tload_to_tcvt_uses_sufficient_destination_capacity(self):
+        for dtype, rows, capacity in (('__half', 21, 256),
+                                      ('__bf16', 21, 256),
+                                      ('__fp4_e2m1x2', 64, 1024),
+                                      ('__fp4_e1m2x2', 64, 1024)):
+            with self.subTest(dtype=dtype):
+                body = f'''
+using S = Tile<Location::Vec, {dtype}, 8, 3>;
+using D = Tile<Location::Vec, float, {rows}, 3, BLayout::RowMajor, 8, 3>;
+static_assert(ordinary_tcvt_physical_rows_v<S> == {rows});
+static_assert(D::StorageBytes == {capacity});
+extern "C" void sufficient({dtype} *input, float *output) {{
+  global_tensor<{dtype}, RowMajor<8, 3>> gm(input);
+  global_tensor<float, RowMajor<8, 3>> out(output);
+  S src; D dst;
+  TLOAD(src, gm); TCVT(dst, src); TSTORE(out, dst);
+}}
+'''
+                result = self.build(body, '-c', '-o', str(self.output / 'sufficient.o'))
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertGreater((self.output / 'sufficient.o').stat().st_size, 0)
+                result = self.build(body, '-S', '-o', '-')
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertIn('TLOAD', result.stdout)
+                self.assertIn('TCVT', result.stdout)
+                self.assertIn('TSTORE', result.stdout)
+                conversion = re.search(r'BSTART\.TEPL\s+TCVT.*?B\.IOT[^\n]*',
+                                       result.stdout, re.DOTALL)
+                self.assertIsNotNone(conversion, result.stdout)
+                size = f'{capacity}B' if capacity < 1024 else f'{capacity // 1024}KB'
+                self.assertRegex(conversion.group(), rf'->[^\n]*<{size}>')
+                for dimension, value in ((0, 3), (1, 8), (2, 3)):
+                    self.assertRegex(conversion.group(),
+                        rf'(?:B\.DIM\s+zero,\s*|C\.B\.DIMI\s*){value},\s*->lb{dimension}')
+
+    def test_odd_narrowing_does_not_require_equal_allocation_derived_rows(self):
+        result = self.build('''
+extern "C" void narrow(float *input, __half *output) {
+  global_tensor<float, RowMajor<8, 3>> gm(input);
+  global_tensor<__half, RowMajor<8, 3>> out(output);
+  Tile<Location::Vec, float, 8, 3> src;
+  Tile<Location::Vec, __half, 8, 3> dst;
+  static_assert(ordinary_tcvt_physical_rows_v<decltype(src)> == 10);
+  static_assert(ordinary_tcvt_physical_rows_v<decltype(dst)> == 21);
+  TLOAD(src, gm); TCVT(dst, src); TSTORE(out, dst);
+}
+''', '-c', '-o', str(self.output / 'narrow-odd.o'))
+        self.assertEqual(result.returncode, 0, result.stdout)
 
     def test_physical_column_mismatch_is_illegal(self):
         result = self.build('''

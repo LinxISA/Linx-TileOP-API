@@ -18,8 +18,6 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: write
-  checks: write
 
 jobs:
   compile:
@@ -30,7 +28,7 @@ jobs:
     env:
       LLVM_REPO: https://github.com/LinxISA/llvm-project.git
       LLVM_REF: "0.59"
-      LLVM_PIN: 336b59c0bf76686b1571e7a1738752b87264624b
+      LLVM_PIN: 44a6a117a102780b2e43d7271590b22b861ce06d
       MUSL_PIN: 798f0fb819154d1484113a3c8011655ca7c26754
       LINUX_PIN: 12342453fa8c0bbcd30493c45eca14ecae852931
       JEMALLOC_PIN: 4495309cd11cae1a0a2d008c65acd9c410076f06
@@ -174,31 +172,3 @@ jobs:
           COMPILE_RESULT: ${{ needs.compile.result }}
         run: |
           test "$COMPILE_RESULT" = success
-
-  automerge:
-    name: Auto-merge after green gate
-    needs: gate
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Merge the PR (gate already green)
-        env:
-          # GITHUB_TOKEN cannot merge its own PR (integration restriction);
-          # a PAT stored as AUTOMERGE_TOKEN performs the merge instead.
-          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: |
-          # This job only runs when the required gate job is green
-          # (needs: gate + default "wait for successful dependencies").
-          for i in 1 2 3 4 5; do
-            if gh pr merge --squash --auto "$PR_URL" 2>/dev/null || \
-               gh pr merge --squash "$PR_URL"; then
-              echo "PR merged (or queued)"
-              exit 0
-            fi
-            echo "retry $i"
-            sleep 30
-          done
-          echo "could not merge" >&2
-          exit 1

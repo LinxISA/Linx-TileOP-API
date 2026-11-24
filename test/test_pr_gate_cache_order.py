@@ -28,13 +28,12 @@ def workflow_run_block(step_name: str) -> str:
 
 
 class PRGateCacheOrderTest(unittest.TestCase):
-    def test_automerge_skips_draft_pull_requests(self):
+    def test_pr_gate_requires_manual_merge(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn(
-            "if: github.event_name == 'pull_request' && "
-            "github.event.pull_request.draft == false",
-            workflow,
-        )
+        self.assertNotIn("gh pr merge", workflow)
+        self.assertNotIn("AUTOMERGE_TOKEN", workflow)
+        self.assertNotIn("  automerge:", workflow)
+        self.assertNotIn("pull-requests: write", workflow)
 
     def test_element_objects_enable_generic_lowering_only(self):
         compile_all = (ROOT / "test/tileop_api/compile.all").read_text(
@@ -112,7 +111,7 @@ class PRGateCacheOrderTest(unittest.TestCase):
 
     def test_gate_requires_compile_success_without_model_dependency(self):
         workflow = WORKFLOW.read_text()
-        gate = workflow.split('  gate:\n', 1)[1].split('  automerge:\n', 1)[0]
+        gate = workflow.split('  gate:\n', 1)[1]
         self.assertIn('needs: compile', gate)
         self.assertIn('if: always()', gate)
         self.assertNotIn('SuperScalarModel', workflow)

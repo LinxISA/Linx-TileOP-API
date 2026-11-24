@@ -35,6 +35,21 @@ using golden cmp.py to compare python result with tileop_c result
 
 # run case
 
+## TCVT producer capacity regression (#330)
+
+```sh
+LINX_CXX=/path/to/clang++ LINX_SYSROOT=/path/to/sysroot \
+LINX_TEST_CXXFLAGS='-mlinx-runtime-intra-abi -fno-exceptions -fno-builtin' \
+  python3 test/test_tcvt_select_regressions.py -v
+```
+
+The odd-column cases compile TLOAD → TCVT → TSTORE, check the emitted TSize
+and dimensions, and reject destinations that cannot hold the producer's full
+physical rows. FP16/BF16 and both row-padded FP4 formats are covered. Use a
+compiler with the paired odd-row descriptor capacity fix; syntax-only checks
+cannot validate that backend path. These tests do not execute on a model or
+hardware.
+
 ## Packed BF16 / legacy SIMT issue #325
 
 ```sh
