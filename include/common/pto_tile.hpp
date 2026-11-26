@@ -1368,7 +1368,8 @@ public:
   }
 
   template <int RowMask = ValidRow>
-  std::enable_if_t<RowMask == -1, int> GetValidRow() const {
+  __attribute__((always_inline)) std::enable_if_t<RowMask == -1, int>
+  GetValidRow() const {
     return RowMaskInternal;
   }
 
@@ -1378,7 +1379,8 @@ public:
   }
 
   template <int ColMask = ValidCol>
-  std::enable_if_t<ColMask == -1, int> GetValidCol() const {
+  __attribute__((always_inline)) std::enable_if_t<ColMask == -1, int>
+  GetValidCol() const {
     return ColMaskInternal;
   }
 
@@ -2537,13 +2539,15 @@ public:
   static constexpr int PhysicalRows = SourceTile::PhysicalRows;
   static constexpr int PhysicalCols = SourceTile::PhysicalCols;
 
-  explicit constexpr ReinterpretedTileView(SourceTile &Source)
+  // Views carry references to typed registers, not ordinary ABI values.
+  __attribute__((always_inline)) explicit constexpr
+  ReinterpretedTileView(SourceTile &Source)
       : SourceValue(Source) {}
 
   // Same register carrier as the source (no copy). Only const access is
   // exposed for const sources; the non-const path keeps the same carrier.
-  decltype(auto) data() { return SourceValue.data(); }
-  decltype(auto) data() const { return SourceValue.data(); }
+  __attribute__((always_inline)) decltype(auto) data() { return SourceValue.data(); }
+  __attribute__((always_inline)) decltype(auto) data() const { return SourceValue.data(); }
 
   template <typename TileLike>
   __attribute__((always_inline)) void SetValidShape(const TileLike &source) {
@@ -2555,7 +2559,8 @@ public:
     return SourceTile::template GetValidRow<RowMask>();
   }
   template <int RowMask = ValidRow>
-  std::enable_if_t<RowMask == -1, int> GetValidRow() const {
+  __attribute__((always_inline)) std::enable_if_t<RowMask == -1, int>
+  GetValidRow() const {
     return SourceValue.GetValidRow();
   }
   template <int ColMask = ValidCol>
@@ -2563,7 +2568,8 @@ public:
     return SourceTile::template GetValidCol<ColMask>();
   }
   template <int ColMask = ValidCol>
-  std::enable_if_t<ColMask == -1, int> GetValidCol() const {
+  __attribute__((always_inline)) std::enable_if_t<ColMask == -1, int>
+  GetValidCol() const {
     return SourceValue.GetValidCol();
   }
 
@@ -3220,7 +3226,7 @@ constexpr bool reinterpret_tile_storage_compatible_v =
 
 /// Zero-instruction datatype reinterpret over a Local Tile.
 template <typename NewDType, is_tile_data_v SourceTile>
-inline auto reinterpret_tile(SourceTile &Source) {
+__attribute__((always_inline)) inline auto reinterpret_tile(SourceTile &Source) {
   using OldDType = typename SourceTile::DType;
   static_assert(is_supported_dtype_v<NewDType>,
                 "reinterpret_tile target dtype has no PTO TypeCode");

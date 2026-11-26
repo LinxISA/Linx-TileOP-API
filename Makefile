@@ -47,6 +47,7 @@ check: check-sync-proposal
 	python3 test/test_layout_header_link.py
 	python3 test/test_element_tile_api.py
 	python3 test/test_tile_array_participant_mask.py
+	python3 test/test_tile_carrier_boundary_transport.py
 	python3 test/test_i64_element_tile_api.py
 	python3 test/test_i64_element_tile_runtime.py
 	python3 test/test_integer_element_storage.py

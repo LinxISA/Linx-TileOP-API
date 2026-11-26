@@ -223,16 +223,17 @@ public:
   static constexpr int TilesizeCode = SubTile::TilesizeCode;
   static constexpr bool IsValidActiveSize = SubTile::IsValidActiveSize;
 
-  explicit ReductionPrefixView(Parent &parent) : parent_(&parent) {}
+  __attribute__((always_inline)) explicit ReductionPrefixView(Parent &parent)
+      : parent_(&parent) {}
 
   using reduction_prefix_parent = Parent;
 
-  Parent &parent() const { return *parent_; }
-  decltype(auto) data() { return parent_->data(); }
-  decltype(auto) data() const { return parent_->data(); }
-  int GetValidRow() const { return ValidRow; }
-  int GetValidCol() const { return ValidCol; }
-  std::uintptr_t GetRangeBase() const { return 0; }
+  __attribute__((always_inline)) Parent &parent() const { return *parent_; }
+  __attribute__((always_inline)) decltype(auto) data() { return parent_->data(); }
+  __attribute__((always_inline)) decltype(auto) data() const { return parent_->data(); }
+  __attribute__((always_inline)) int GetValidRow() const { return ValidRow; }
+  __attribute__((always_inline)) int GetValidCol() const { return ValidCol; }
+  __attribute__((always_inline)) std::uintptr_t GetRangeBase() const { return 0; }
 
 private:
   Parent *parent_;
@@ -654,7 +655,7 @@ inline constexpr bool is_element_assembly_fragment_v = [] {
 }();
 
 template <typename SubTile, typename Parent>
-auto TREDUCEPREFIXVIEW(Parent &parent)
+__attribute__((always_inline)) inline auto TREDUCEPREFIXVIEW(Parent &parent)
     -> region::ReductionPrefixView<Parent, SubTile> {
   return region::ReductionPrefixView<Parent, SubTile>(parent);
 }
