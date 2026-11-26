@@ -11,6 +11,27 @@ class TileCarrierBoundaryTransport(unittest.TestCase):
     setUpClass = classmethod(native.LLVM138NarrowTCMPTest.setUpClass.__func__)
     compile = native.LLVM138NarrowTCMPTest.compile
 
+    def test_reinterpret_back_to_float_across_call(self):
+        source = self.output / "reinterpret_convert.cpp"
+        source.write_text(r'''
+#include <common/pto_tileop.hpp>
+using namespace pto;
+extern "C" __attribute__((noinline)) void opaque();
+using F=Tile<Location::Vec,float,128,1,BLayout::RowMajor>;
+using B=Tile<Location::Vec,__bf16,128,1,BLayout::RowMajor>;
+extern "C" void roundtrip(B &dst, F &src) {
+  F f=src;
+  auto u=reinterpret_tile<uint32_t>(f);
+  TANDS(u,u,uint32_t(0x7f800000));
+  B b; TCVT(b,f);
+  opaque();
+  TMULS(dst,b,__builtin_bit_cast(__bf16,uint16_t(0x3f80)));
+}
+''')
+        result=self.compile('-mlinx-runtime-intra-abi','-c',str(source),
+                            '-o',str(self.output/'reinterpret_convert.o'))
+        self.assertEqual(result.returncode,0,result.stdout)
+
     def test_typed_boundaries(self):
         source = self.output / "boundaries.cpp"
         source.write_text(r'''
