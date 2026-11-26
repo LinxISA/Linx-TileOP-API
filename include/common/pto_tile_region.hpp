@@ -442,25 +442,31 @@ public:
                               type_traits<typename SubTile::DType>::bits];
 #endif
 
-  TileArray() = default;
+  // Keep the register carrier and assembly slot metadata visible together.
+  // An out-of-line accessor must not save an OPEN parent through C++ memory.
+  __attribute__((always_inline)) TileArray() = default;
   TileArray(const TileArray &) = delete;
   TileArray &operator=(const TileArray &) = delete;
   TileArray(TileArray &&) = default;
   TileArray &operator=(TileArray &&) = default;
 
 #ifdef __linx
-  ParentRegisterType &data() { return data_.Register; }
-  ParentCarrier &carrier() { return data_; }
+  __attribute__((always_inline)) ParentRegisterType &data() {
+    return data_.Register;
+  }
+  __attribute__((always_inline)) ParentCarrier &carrier() { return data_; }
 #else
-  ParentCarrier &data() { return data_; }
-  ParentCarrier &carrier() { return data_; }
+  __attribute__((always_inline)) ParentCarrier &data() { return data_; }
+  __attribute__((always_inline)) ParentCarrier &carrier() { return data_; }
 #endif
 
   class Row {
   public:
-    Row(TileArray &array, int row) : array_(&array), row_(row) {}
+    __attribute__((always_inline)) Row(TileArray &array, int row)
+        : array_(&array), row_(row) {}
 
-    TileArrayOutputRef<SubTile, ParticipantMask> operator[](int col) {
+    __attribute__((always_inline)) TileArrayOutputRef<SubTile, ParticipantMask>
+    operator[](int col) {
       return array_->makeOutputRef(row_, col);
     }
 
@@ -469,11 +475,12 @@ public:
     int row_;
   };
 
-  Row operator[](int row) { return Row(*this, row); }
-  Row row(int row) { return Row(*this, row); }
+  __attribute__((always_inline)) Row operator[](int row) { return Row(*this, row); }
+  __attribute__((always_inline)) Row row(int row) { return Row(*this, row); }
 
 private:
-  TileArrayOutputRef<SubTile, ParticipantMask> makeOutputRef(int row, int col) {
+  __attribute__((always_inline)) TileArrayOutputRef<SubTile, ParticipantMask>
+  makeOutputRef(int row, int col) {
     return TileArrayOutputRef<SubTile, ParticipantMask>(data_, row, col, Cols,
                                        Rows * Cols, ParentSizeCode);
   }
@@ -489,11 +496,13 @@ public:
   template <typename, int, int, unsigned>
   friend class TileArray;
 
-  int row() const { return row_; }
-  int col() const { return col_; }
-  int ordinal() const { return row_ * array_cols_ + col_; }
-  int slot_count() const { return slot_count_; }
-  std::uintptr_t range_base_units() const {
+  __attribute__((always_inline)) int row() const { return row_; }
+  __attribute__((always_inline)) int col() const { return col_; }
+  __attribute__((always_inline)) int ordinal() const {
+    return row_ * array_cols_ + col_;
+  }
+  __attribute__((always_inline)) int slot_count() const { return slot_count_; }
+  __attribute__((always_inline)) std::uintptr_t range_base_units() const {
     static_assert(SubTile::LogicalTileBytes % range::RangeAddressUnitBytes == 0,
                   "Tile assembly offsets must be representable in 128B units");
     return static_cast<std::uintptr_t>(
@@ -525,7 +534,7 @@ public:
   using TileDType = typename SubTile::TileDType;
 
   template <int ParentSizeCode>
-  auto &parent_data() {
+  __attribute__((always_inline)) auto &parent_data() {
     static_assert(ParentSizeCode >= 1 && ParentSizeCode <= 12);
     constexpr std::size_t ParentBytes =
         static_cast<std::size_t>(128) << (ParentSizeCode - 1);
@@ -540,14 +549,17 @@ public:
     return *reinterpret_cast<Carrier *>(array_);
 #endif
   }
-  int GetValidRow() const { return ValidRow; }
-  int GetValidCol() const { return ValidCol; }
-  int parent_size_code() const { return parent_size_code_; }
+  __attribute__((always_inline)) int GetValidRow() const { return ValidRow; }
+  __attribute__((always_inline)) int GetValidCol() const { return ValidCol; }
+  __attribute__((always_inline)) int parent_size_code() const {
+    return parent_size_code_;
+  }
 
 private:
   template <typename, int, int, unsigned>
   friend class TileArray;
   template <typename Carrier>
+  __attribute__((always_inline))
   TileArrayOutputRef(Carrier &array, int row, int col, int array_cols,
                      int slot_count, int parent_size_code)
       : array_(&array), row_(row), col_(col), array_cols_(array_cols),
@@ -953,6 +965,7 @@ decltype(auto) TPARTELEMENT(const TileType &tile) {
 
 template <typename Parent, typename SubTile, int Rows, int Cols,
           unsigned ParticipantMask>
+__attribute__((always_inline))
 auto TASSEMBLY(region::TileArray<SubTile, Rows, Cols, ParticipantMask> &&array) -> Parent {
   static_assert(std::is_same_v<typename Parent::DType,
                                typename SubTile::DType>,

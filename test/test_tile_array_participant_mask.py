@@ -119,11 +119,15 @@ class TileArrayParticipantMaskTest(unittest.TestCase):
                     r"BSTART(?:\.TLSU\s+|\.)TMOV\b[\s\S]*?(?=BSTART|$)", pe0_asm
                 ) if "B.ASSEMBLE" in block
             ]
-            self.assertEqual(len(assembly_blocks), 4)
+            # A retained four-iteration loop has three static writer sites:
+            # FIRST, a repeated middle writer, and LAST. Full unrolling has
+            # four. Check the phase protocol as well as every site's PE mask.
+            self.assertIn(len(assembly_blocks), (3, 4))
             for block in assembly_blocks:
                 self.assertRegex(block, r"B\.IOT[^\n]*mask=1000")
                 self.assertNotRegex(block, r"B\.IOT[^\n]*mask=1111")
             self.assertRegex(pe0_asm, r"B\.ASSEMBLE\s+1, 0, [^,]+, 0, 1")
+            self.assertRegex(pe0_asm, r"B\.ASSEMBLE\s+0, 1,")
             self.assertRegex(pe0_asm, r"BSTART\.TEPL\s+TXOR")
             self.assertEqual(
                 len(re.findall(r"BSTART(?:\.TLSU\s+|\.)TSTORE\b", pe0_asm)), 2
