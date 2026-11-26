@@ -107,16 +107,10 @@ class LLVM138NarrowTCMPTest(unittest.TestCase):
                     )
                     self.assertEqual(len(dimensions), 3, match.group())
                     for dimension in dimensions:
-                        if constructor == "static":
-                            self.assertRegex(dimension, r"^(?:zero,\s*)?1$")
-                        else:
-                            # Scoped GM metadata loads cannot be folded across
-                            # Tile operations. Dynamic columns remain real
-                            # IntraCore loads; the constructor IR above checks 1.
-                            register = re.fullmatch(r"(\w+),\s*0", dimension)
-                            self.assertIsNotNone(register, dimension)
-                            self.assertRegex(match.group(),
-                                r"lwui\.intra[^\n]*->" + register[1] + r"\b")
+                        # Both constructors set this local shape to one.
+                        # Early inlining must expose it before memory scopes
+                        # make a local wrapper field an irreversible GM load.
+                        self.assertRegex(dimension, r"^(?:zero,\s*)?1$")
 
     def test_incompatible_carriers_are_rejected(self):
         for rows in (32, 64):

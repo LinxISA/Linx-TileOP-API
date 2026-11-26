@@ -36,6 +36,11 @@ atomic_tstore_carrier(const Predicate<Basis> &);
   ".elseif %c[RMode] == 7\nB.DATR %D[__pto_DstType], RHB" SUFFIX                \
   ".endif\n"
 
+// Comparison layouts are inherited from the source descriptor. Unlike
+// arithmetic TEPL, TCMP/TCMPS require B.DATR.Layout=NORM even for CUBE.
+#define PTO_COMPARE_LAYOUT_ASM(MODE) \
+  "B.DATR Zero, " #MODE "\n"
+
 // PTO-ISA #291: a TEPL tile operation selects its Local operand layout through
 // B.DATR.Layout, so a CUBE_M16/M32 operand keeps its physical CUBE
 // representation instead of collapsing to the NORM (RowMajor) default. This
@@ -46,11 +51,6 @@ atomic_tstore_carrier(const Predicate<Basis> &);
 // tiles keep their historical encoding. The pad value is spelled out because
 // an explicit B.DATR encodes every field; Null is the same padding an omitted
 // B.DATR selects for a pad-value operation.
-#define PTO_COMPARE_LAYOUT_ASM(MODE)                                          \
-  ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32.normal, Zero, " #MODE "\n"      \
-  ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16.normal, Zero, " #MODE "\n"  \
-  ".else\nB.DATR Zero, " #MODE "\n.endif\n"
-
 #define PTO_ELEMENTWISE_LAYOUT_ASM                                             \
   ".if %c[ElemLayout] == 29\nB.DATR CUBE_M32, Null\n"                          \
   ".elseif %c[ElemLayout] == 31\nB.DATR CUBE_M16, Null\n"                      \
@@ -13969,7 +13969,7 @@ void TMIN(tile_shape &dst, tile_shape &src0, tile_shape &src1,
 // carriers require equal element width and no packed 4-bit types.
 template <CmpMode Mode, is_tile_data_v tile_shape_out,
           is_tile_data_v tile_shape_in0, is_tile_data_v tile_shape_in1 = tile_shape_in0>
-void TCMP(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
+PTO_SHARED_INLINE void TCMP(tile_shape_out &dst, tile_shape_in0 &src0, tile_shape_in1 &src1) {
   static_assert(is_valid_cmp_mode(Mode), "TCMP requires a valid CmpMode");
   static_assert(tile_shape_in0::Rows == tile_shape_out::Rows &&
                     tile_shape_in0::Cols == tile_shape_out::Cols,
@@ -14456,7 +14456,7 @@ asm volatile(
 
 // Deprecated EQ-default form retained for old callers.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
+PTO_SHARED_INLINE void TCMP(tile_shape_out &dst, tile_shape_in &src0, tile_shape_in &src1) {
   TCMP<CmpMode::EQ, tile_shape_out, tile_shape_in, tile_shape_in>(dst, src0, src1);
 }
 
@@ -16695,7 +16695,7 @@ void TCVT(tile_shape_out &dst, View &src) {
 // canonical B.IOR slot, never as a Tile source (PTO 0.58).
 template <CmpMode Mode, is_tile_data_v tile_shape_out,
           is_tile_data_v tile_shape_in>
-void TCMPS(tile_shape_out &dst, tile_shape_in &src,
+PTO_SHARED_INLINE void TCMPS(tile_shape_out &dst, tile_shape_in &src,
            typename tile_shape_in::DType s) {
   static_assert(is_valid_cmp_mode(Mode), "TCMPS requires a valid CmpMode");
   static_assert(tile_shape_in::Rows == tile_shape_out::Rows &&
@@ -17268,7 +17268,7 @@ uint64_t TCMPS(tile_shape_in &src, typename tile_shape_in::DType s) {
 
 // Deprecated EQ-default form retained for old callers.
 template <is_tile_data_v tile_shape_out, is_tile_data_v tile_shape_in>
-void TCMPS(tile_shape_out &dst, tile_shape_in &src,
+PTO_SHARED_INLINE void TCMPS(tile_shape_out &dst, tile_shape_in &src,
            typename tile_shape_in::DType s) {
   TCMPS<CmpMode::EQ>(dst, src, s);
 }

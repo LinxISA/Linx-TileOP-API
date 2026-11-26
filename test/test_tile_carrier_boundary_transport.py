@@ -32,6 +32,38 @@ extern "C" void roundtrip(B &dst, F &src) {
                             '-o',str(self.output/'reinterpret_convert.o'))
         self.assertEqual(result.returncode,0,result.stdout)
 
+    def test_dynamic_predicate_stays_in_registers(self):
+        source=self.output/'dynamic_predicate.cpp'
+        source.write_text(r'''
+#include <common/pto_tileop.hpp>
+using namespace pto;
+using U=Tile<Location::Vec,uint16_t,1,128,BLayout::RowMajor,1,-1>;
+extern "C" void dynamic_select(U &dst,U &a,U &b,int n) {
+  U mask(n);
+  TCMPS<CmpMode::EQ>(mask,a,uint16_t(0));
+  TSEL(dst,mask,a,b);
+}
+using C=VecTileM32<uint16_t,32,2,32,1>;
+extern "C" void cube_compare(C &dst,C &a) {
+  TCMPS<CmpMode::EQ>(dst,a,uint16_t(0));
+}
+''')
+        result=self.compile('-mlinx-runtime-intra-abi','-S','-emit-llvm',str(source),'-o','-')
+        self.assertEqual(result.returncode,0,result.stdout)
+        body=result.stdout.split('@dynamic_select(',1)[1].split('\n}',1)[0]
+        # No predicate may be serialized as an ordinary numeric carrier.
+        self.assertNotRegex(body,r'\b(?:load|store) <\d+ x i32>')
+        compare=re.search(r'(%[\w.]+) = (?:tail )?call [^\n]*BSTART.TEPL 45[^\n]*',body)
+        self.assertIsNotNone(compare,body)
+        select=next(l for l in body.splitlines() if 'BSTART.TEPL TSEL' in l)
+        self.assertIn(compare.group(1),select)
+        cube=result.stdout.split('@cube_compare(',1)[1].split('\n}',1)[0]
+        comparison=next(l for l in cube.splitlines() if 'BSTART.TEPL 45' in l)
+        self.assertNotIn('B.DATR CUBE_',comparison)
+        self.assertIn('B.DATR Zero, EQ',comparison)
+        result=self.compile('-mlinx-runtime-intra-abi','-c',str(source),'-o',str(self.output/'dynamic_predicate.o'))
+        self.assertEqual(result.returncode,0,result.stdout)
+
     def test_typed_boundaries(self):
         source = self.output / "boundaries.cpp"
         source.write_text(r'''

@@ -1282,27 +1282,27 @@ public:
   // constructor for static shape
   __attribute__((always_inline)) Tile() { };
   template <int RowMask = ValidRow, int ColMask = ValidCol>
-  Tile(std::enable_if_t<(RowMask > 0) && (ColMask > 0), DType> val);
+  __attribute__((always_inline)) Tile(std::enable_if_t<(RowMask > 0) && (ColMask > 0), DType> val);
 
   // constructor for both dimensions are runtime variables
   template <int RowMask = ValidRow, int ColMask = ValidCol>
-  Tile(std::enable_if_t<RowMask == -1 && ColMask == -1, size_t> VR,
+  __attribute__((always_inline)) Tile(std::enable_if_t<RowMask == -1 && ColMask == -1, size_t> VR,
        std::enable_if_t<RowMask == -1 && ColMask == -1, size_t> VC);
   template <int RowMask = ValidRow, int ColMask = ValidCol>
-  Tile(DType val, std::enable_if_t<RowMask == -1 && ColMask == -1, size_t> VR,
+  __attribute__((always_inline)) Tile(DType val, std::enable_if_t<RowMask == -1 && ColMask == -1, size_t> VR,
                   std::enable_if_t<RowMask == -1 && ColMask == -1, size_t> VC);
 
   // constructor for row dimension is runtime variables
   template <int RowMask = ValidRow, int ColMask = ValidCol>
-  Tile(std::enable_if_t<(RowMask == -1) && (ColMask > 0), size_t> VR);
+  __attribute__((always_inline)) Tile(std::enable_if_t<(RowMask == -1) && (ColMask > 0), size_t> VR);
   template <int RowMask = ValidRow, int ColMask = ValidCol>
-  Tile(DType val, std::enable_if_t<(RowMask == -1) && (ColMask > 0), size_t> VR);
+  __attribute__((always_inline)) Tile(DType val, std::enable_if_t<(RowMask == -1) && (ColMask > 0), size_t> VR);
 
   // constructor for col dimension is runtime variables
   template <int RowMask = ValidRow, int ColMask = ValidCol>
-  Tile(std::enable_if_t<(RowMask > 0) && (ColMask == -1), size_t> VC);
+  __attribute__((always_inline)) Tile(std::enable_if_t<(RowMask > 0) && (ColMask == -1), size_t> VC);
   template <int RowMask = ValidRow, int ColMask = ValidCol>
-  Tile(DType val, std::enable_if_t<(RowMask > 0) && (ColMask == -1), size_t> VC);
+  __attribute__((always_inline)) Tile(DType val, std::enable_if_t<(RowMask > 0) && (ColMask == -1), size_t> VC);
 
   static constexpr int byteSize = 32;
   static constexpr bool isBoxedLayout = (SFractal != SLayout::NoneBox);
