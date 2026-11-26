@@ -1596,6 +1596,9 @@ PTO_REGION_COL_EXPAND_MIXED_WRAPPER(TCOLEXPANDEXPDIF, 91)
 #undef PTO_REGION_ROW_EXPAND_MIXED_WRAPPER
 #undef PTO_REGION_COL_EXPAND_MIXED_WRAPPER
 
+// Bind the original typed Tile carrier so Clang retains its transport
+// contract across a memory boundary. B.SUBVIEW supplies the prefix extent;
+// the parent load must retain its CUBE descriptor rather than a raw vector.
 template <int Opcode, typename Out, typename Tile, typename Parent,
           typename SubTile>
 PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
@@ -1628,7 +1631,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
       "B.SUBVIEW 1, %7, 0, %c9\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode),
-        "Tr"(src0.data()), "Tr"(src1.data()),
+        "Tr"(src0.data()), "Tr"(src1.parent().data()),
         "i"(Tile::ValidCol), "i"(Tile::Cols),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         "r"(prefix_base_units), "i"(Opcode),
@@ -1647,7 +1650,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
       "B.SUBVIEW 1, %8, 0, %c10\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename Tile::DType>::TypeCode),
-        "Tr"(src0.data()), "Tr"(src1.data()),
+        "Tr"(src0.data()), "Tr"(src1.parent().data()),
         "i"(Tile::ValidCol), "i"(Tile::ValidRow), "i"(Tile::Cols),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         "r"(prefix_base_units), "i"(Opcode),
@@ -1687,7 +1690,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
       "B.SUBVIEW 0, %7, 0, %c9\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
-        "Tr"(src0.data()), "Tr"(src1.data()),
+        "Tr"(src0.parent().data()), "Tr"(src1.data()),
         "i"(SubTile::ValidCol), "i"(SubTile::Cols),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         "r"(prefix_base_units), "i"(Opcode),
@@ -1706,7 +1709,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
       "B.SUBVIEW 0, %8, 0, %c10\n"
       : [Dst] "=Tr"(dst.data())
       : "i"(type_traits<typename SubTile::DType>::TypeCode),
-        "Tr"(src0.data()), "Tr"(src1.data()),
+        "Tr"(src0.parent().data()), "Tr"(src1.data()),
         "i"(SubTile::ValidCol), "i"(SubTile::ValidRow), "i"(SubTile::Cols),
         "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
         "r"(prefix_base_units), "i"(Opcode),
@@ -1753,7 +1756,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
         "B.SUBVIEW 1, %8, 0, %c10\n"
         : [Dst] "=Tr"(dst.data())
         : "i"(type_traits<typename SubTile0::DType>::TypeCode),
-          "Tr"(src0.data()), "Tr"(src1.data()),
+          "Tr"(src0.parent().data()), "Tr"(src1.parent().data()),
           "i"(SubTile0::ValidCol), "i"(SubTile0::Cols),
           "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),
           "r"(prefix_base0_units), "r"(prefix_base1_units), "i"(Opcode),
@@ -1773,7 +1776,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_binary_reduction_prefix(
         "B.SUBVIEW 1, %9, 0, %c11\n"
         : [Dst] "=Tr"(dst.data())
         : "i"(type_traits<typename SubTile0::DType>::TypeCode),
-          "Tr"(src0.data()), "Tr"(src1.data()),
+          "Tr"(src0.parent().data()), "Tr"(src1.parent().data()),
           "i"(SubTile0::ValidCol), "i"(SubTile0::ValidRow),
           "i"(SubTile0::Cols),
           "i"(tile_type_traits<typename Out::TileDType>::TilesizeCode),

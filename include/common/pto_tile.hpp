@@ -2153,6 +2153,9 @@ template <int GroupN> constexpr uint8_t group_n_code() {
   return 9;
 }
 
+// Inline the complete options builder chain before scalar shareability
+// lowering. Otherwise pointer fields become scoped memory operations and
+// register-only U64/CUBE_N8 operands cannot be promoted out of memory.
 template <FixpAttr Attr_, typename QuantTile_ = NoOperand,
           typename ReluTile_ = NoOperand, typename RowMaxIn_ = NoOperand,
           typename RowMaxOut_ = NoOperand,
@@ -2175,17 +2178,18 @@ struct Options {
   GroupMaxOut *GroupOut = nullptr;
   CScaleTile *CScale = nullptr;
 
-  constexpr Options() = default;
+  __attribute__((always_inline)) constexpr Options() = default;
 
-  constexpr Options(uint64_t QuantDescriptor, uint64_t LReluDescriptor,
-                    QuantTile *Quant, ReluTile *Relu, RowMaxIn *RowIn,
-                    RowMaxOut *RowOut, GroupMaxOut *GroupOut,
-                    CScaleTile *CScale = nullptr)
+  __attribute__((always_inline)) constexpr Options(
+      uint64_t QuantDescriptor, uint64_t LReluDescriptor, QuantTile *Quant,
+      ReluTile *Relu, RowMaxIn *RowIn, RowMaxOut *RowOut,
+      GroupMaxOut *GroupOut, CScaleTile *CScale = nullptr)
       : QuantDescriptor(QuantDescriptor), LReluDescriptor(LReluDescriptor),
         Quant(Quant), Relu(Relu), RowIn(RowIn), RowOut(RowOut),
         GroupOut(GroupOut), CScale(CScale) {}
 
-  template <bool Enable = true> constexpr auto transpose_a() const {
+  template <bool Enable = true>
+  __attribute__((always_inline)) constexpr auto transpose_a() const {
     constexpr FixpAttr NewAttr = Attr.transpose_a(Enable);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
                    GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
@@ -2193,7 +2197,8 @@ struct Options {
                                             GroupOut, CScale);
   }
 
-  template <bool Enable = true> constexpr auto transpose_b() const {
+  template <bool Enable = true>
+  __attribute__((always_inline)) constexpr auto transpose_b() const {
     constexpr FixpAttr NewAttr = Attr.transpose_b(Enable);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
                    GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
@@ -2201,7 +2206,8 @@ struct Options {
                                             GroupOut, CScale);
   }
 
-  template <bool Enable = true> constexpr auto cscale_enable() const {
+  template <bool Enable = true>
+  __attribute__((always_inline)) constexpr auto cscale_enable() const {
     constexpr FixpAttr NewAttr = Attr.cscale_enable(Enable);
     return Options<NewAttr, QuantTile, ReluTile, RowMaxIn, RowMaxOut,
                    GroupMaxOut, CScaleTile>(QuantDescriptor, LReluDescriptor,
@@ -2209,7 +2215,7 @@ struct Options {
                                             GroupOut, CScale);
   }
 
-  constexpr auto relu() const {
+  __attribute__((always_inline)) constexpr auto relu() const {
     static_assert(Attr.Relu == FixpReluMode::None,
                   "FPATR config ReLU mode was already selected");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::Relu);
@@ -2219,7 +2225,7 @@ struct Options {
                                             GroupOut, CScale);
   }
 
-  constexpr auto lrelu(uint64_t Descriptor) const {
+  __attribute__((always_inline)) constexpr auto lrelu(uint64_t Descriptor) const {
     static_assert(Attr.Relu == FixpReluMode::None,
                   "FPATR config ReLU mode was already selected");
     constexpr FixpAttr NewAttr = with_relu(Attr, FixpReluMode::LRelu);
@@ -2230,7 +2236,7 @@ struct Options {
   }
 
   template <is_local_tile_v Tile>
-  constexpr auto prelu(Tile &Parameter) const {
+  __attribute__((always_inline)) constexpr auto prelu(Tile &Parameter) const {
     static_assert(Attr.Relu == FixpReluMode::None,
                   "FPATR config ReLU mode was already selected");
     static_assert(std::is_same_v<ReluTile, NoOperand>,
@@ -2243,7 +2249,7 @@ struct Options {
   }
 
   template <is_local_tile_v Tile>
-  constexpr auto row_max(Tile &Output) const {
+  __attribute__((always_inline)) constexpr auto row_max(Tile &Output) const {
     static_assert(!Attr.RowMaxEn,
                   "FPATR config RowMax was already enabled");
     static_assert(std::is_same_v<RowMaxIn, NoOperand> &&
@@ -2257,7 +2263,8 @@ struct Options {
   }
 
   template <is_local_tile_v InputTile, is_local_tile_v OutputTile>
-  constexpr auto row_max(InputTile &Input, OutputTile &Output) const {
+  __attribute__((always_inline)) constexpr auto
+  row_max(InputTile &Input, OutputTile &Output) const {
     static_assert(!Attr.RowMaxEn,
                   "FPATR config RowMax was already enabled");
     static_assert(std::is_same_v<RowMaxIn, NoOperand> &&
@@ -2271,7 +2278,7 @@ struct Options {
   }
 
   template <int GroupN, is_local_tile_v Tile>
-  constexpr auto group_max(Tile &Output) const {
+  __attribute__((always_inline)) constexpr auto group_max(Tile &Output) const {
     static_assert(!Attr.GroupMaxEn,
                   "FPATR config GroupMax was already enabled");
     static_assert(std::is_same_v<GroupMaxOut, NoOperand>,
@@ -2283,7 +2290,7 @@ struct Options {
                                RowIn, RowOut, &Output, CScale);
   }
 
-  constexpr auto max_abs() const {
+  __attribute__((always_inline)) constexpr auto max_abs() const {
     static_assert(Attr.RowMaxEn || Attr.GroupMaxEn,
                   "FPATR config max_abs requires RowMax or GroupMax");
     constexpr FixpAttr NewAttr = with_max_abs(Attr);
@@ -2294,7 +2301,7 @@ struct Options {
   }
 
   template <is_local_tile_v Tile>
-  constexpr auto cscale(Tile &Scale) const {
+  __attribute__((always_inline)) constexpr auto cscale(Tile &Scale) const {
     static_assert(std::is_same_v<CScaleTile, NoOperand>,
                   "FPATR CScale tile was already supplied");
     constexpr FixpAttr NewAttr = Attr.cscale_enable();
@@ -2305,7 +2312,7 @@ struct Options {
 
   // CUBE InternalAcc controls (issue: PTO-ISA spec#236). These only change
   // the B.DATR CCTRL bits; operands and all other attributes are carried.
-  constexpr auto raw_acc() const {
+  __attribute__((always_inline)) constexpr auto raw_acc() const {
     static_assert(Attr.CubeCtrl == CubeCtrlNone ||
                       Attr.CubeCtrl == CubeCtrlRawAccAndHint,
                   "CCTRL raw-accumulator bit was already configured");
@@ -2317,7 +2324,7 @@ struct Options {
                                             Quant, Relu, RowIn, RowOut,
                                             GroupOut, CScale);
   }
-  constexpr auto acc_hint() const {
+  __attribute__((always_inline)) constexpr auto acc_hint() const {
     static_assert(Attr.CubeCtrl == CubeCtrlNone ||
                       Attr.CubeCtrl == CubeCtrlRawAccumulator,
                   "CCTRL InternalAcc hint bit was already configured");
@@ -2332,7 +2339,7 @@ struct Options {
 };
 
 template <FixpPreQuantMode Mode = FixpPreQuantMode::None>
-constexpr auto convert() {
+__attribute__((always_inline)) constexpr auto convert() {
   static_assert(is_parameter_free_fixp_pre_quant(Mode),
                 "fixp::convert accepts only parameter-free PreQuant modes");
   constexpr FixpAttr Attr = [] {
@@ -2344,7 +2351,7 @@ constexpr auto convert() {
 }
 
 template <FixpPreQuantMode Mode>
-constexpr auto scalar(uint64_t QuantDescriptor) {
+__attribute__((always_inline)) constexpr auto scalar(uint64_t QuantDescriptor) {
   static_assert(is_scalar_fixp_pre_quant(Mode),
                 "fixp::scalar requires a scalar-parameter PreQuant mode");
   constexpr FixpAttr Attr = [] {
@@ -2357,7 +2364,7 @@ constexpr auto scalar(uint64_t QuantDescriptor) {
 }
 
 template <FixpPreQuantMode Mode, is_local_tile_v Tile>
-constexpr auto vector(Tile &QuantParameter) {
+__attribute__((always_inline)) constexpr auto vector(Tile &QuantParameter) {
   static_assert(is_vector_fixp_pre_quant(Mode),
                 "fixp::vector requires a vector-parameter PreQuant mode");
   constexpr FixpAttr Attr = [] {
@@ -2369,14 +2376,21 @@ constexpr auto vector(Tile &QuantParameter) {
                              nullptr);
 }
 
-constexpr auto keep_acc() { return convert<FixpPreQuantMode::None>(); }
-constexpr auto f16() { return convert<FixpPreQuantMode::F322F16>(); }
-constexpr auto bf16() { return convert<FixpPreQuantMode::F322BF16>(); }
-constexpr auto s8(uint64_t QuantDescriptor) {
+__attribute__((always_inline)) constexpr auto keep_acc() {
+  return convert<FixpPreQuantMode::None>();
+}
+__attribute__((always_inline)) constexpr auto f16() {
+  return convert<FixpPreQuantMode::F322F16>();
+}
+__attribute__((always_inline)) constexpr auto bf16() {
+  return convert<FixpPreQuantMode::F322BF16>();
+}
+__attribute__((always_inline)) constexpr auto s8(uint64_t QuantDescriptor) {
   return scalar<FixpPreQuantMode::QF322S8Pre>(QuantDescriptor);
 }
 
-template <is_local_tile_v Tile> constexpr auto s8(Tile &QuantParameter) {
+template <is_local_tile_v Tile>
+__attribute__((always_inline)) constexpr auto s8(Tile &QuantParameter) {
   return vector<FixpPreQuantMode::VQF322S8Pre>(QuantParameter);
 }
 
