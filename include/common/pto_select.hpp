@@ -102,9 +102,9 @@ __attribute__((always_inline)) inline void publish_shape(D &d, const T &t) {
     d.SetValidShape(t);
 }
 
-#define PTO_SELECT_LAYOUT \
-  ".if %c[Layout] == 31\nB.DATR CUBE_M16, Null\n" \
-  ".elseif %c[Layout] == 29\nB.DATR CUBE_M32, Null\n.endif\n"
+// TSEL inherits the numeric sources' layout. Layout is not an applicable
+// B.DATR field, including for CUBE sources; omission retains Null padding.
+#define PTO_SELECT_LAYOUT ""
 
 // Keep constant dimensions immediate and runtime dimensions in GPRs.
 #define PTO_SELECT_EMIT(BINDINGS, ...) \

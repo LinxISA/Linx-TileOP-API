@@ -882,7 +882,7 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
     // record has L=1). The math input shares the final record.
     if constexpr (SourceCubeM) {
       asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
-                   "B.IOT %3, %0, mask=1111, last\n"
+                   "B.IOT %3.reuse, %0.reuse, mask=1111, last\n"
                    "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                    :
                    : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -891,7 +891,7 @@ pto_region_tcvt_assemble(region::TileArrayOutputRef<SubTile> &dst, In &src) {
     } else {
       asm volatile(PTO_REGION_TCVT_ASSEMBLY_PREFIX
                    "B.DIM zero, %c6, ->lb2\n"
-                   "B.IOT %3, %0, mask=1111, last\n"
+                   "B.IOT %3.reuse, %0.reuse, mask=1111, last\n"
                    "B.ASSEMBLE %c10, %c11, %8, 0, %c9\n"
                    :
                    : [Dst] "Tr"(dst.template parent_data<ParentSize>()),
@@ -992,7 +992,7 @@ PTO_REGION_ALWAYS_INLINE void pto_region_tcvt_subview_assemble(
   "B.DATR %D2, RNONE\n"                                                    \
   "B.DIM zero, %c4, ->lb0\n"                                                   \
   "B.DIM zero, %c5, ->lb1\n"                                                   \
-  "B.IOT %3, %0, mask=1111, last\n"                                       \
+  "B.IOT %3.reuse, %0.reuse, mask=1111, last\n"                                       \
   "B.SUBVIEW 0, %7, 0, %c8\n"                                             \
   "B.ASSEMBLE %c11, %c12, %9, 0, %c10\n"
 #define PTO_REGION_TCVT_SUBVIEW_ASSEMBLY_INPUTS                            \
