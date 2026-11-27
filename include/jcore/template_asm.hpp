@@ -953,10 +953,24 @@ enum class TmaPadValue : int {
   ".endif\n"
 
 
+namespace pto::detail {
+// PTO IndexedTLSUMemoryIndexDataTypeLegal applies to byte displacements,
+// independently of the data payload width (and of Tile TGATHER indices).
+template <typename OffsetTile>
+constexpr void check_indexed_tlsu_offset_type() {
+  constexpr int Type = type_traits<typename OffsetTile::DType>::TypeCode;
+  static_assert(Type == __type_int32 || Type == __type_uint32 ||
+                    Type == __type_int64 || Type == __type_uint64,
+                "indexed TLSU byte offsets must use S32, U32, S64, or U64");
+}
+} // namespace pto::detail
+
+
 template <typename tile_shape_out, typename tile_shape_offset, typename gm_shape,
           TmaPadValue Pad = TmaPadValue::Null>
 inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
                     const tile_shape_offset &offset) {
+  pto::detail::check_indexed_tlsu_offset_type<tile_shape_offset>();
   // PTO 0.58.7: offset lanes are explicit byte displacements from base.
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
@@ -1047,6 +1061,7 @@ asm volatile(
 template <typename tile_shape_in, typename tile_shape_offset, typename gm_shape>
 inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
                      const tile_shape_offset &offset) {
+  pto::detail::check_indexed_tlsu_offset_type<tile_shape_offset>();
   // PTO 0.58.7: offset lanes are explicit byte displacements from base.
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
@@ -1132,6 +1147,7 @@ template <typename tile_shape_out, typename tile_shape_offset,
 inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
                          const tile_shape_offset &offset,
                          const tile_shape_mask &mask) {
+  pto::detail::check_indexed_tlsu_offset_type<tile_shape_offset>();
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
                 "MGATHER_MASK dst logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
@@ -1227,6 +1243,7 @@ template <typename tile_shape_in, typename tile_shape_offset,
 inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
                           const tile_shape_offset &offset,
                           const tile_shape_mask &mask) {
+  pto::detail::check_indexed_tlsu_offset_type<tile_shape_offset>();
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,
                 "MSCATTER_MASK src logical Tile size must be 128 B..256 KiB (SizeCode=1..12) "
@@ -1315,6 +1332,7 @@ template <typename tile_shape_out, typename tile_shape_offset, typename gm_shape
           TmaPadValue Pad = TmaPadValue::Null>
 inline void MGATHER(tile_shape_out &dst, const gm_shape &src,
                     const tile_shape_offset &offset, IndexedByteRange range) {
+  pto::detail::check_indexed_tlsu_offset_type<tile_shape_offset>();
   pto::detail::require_indexed_range_compiler<decltype(offset)>();
   // PTO 0.58.7: offset lanes are explicit byte displacements from base.
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
@@ -1410,6 +1428,7 @@ asm volatile(
 template <typename tile_shape_in, typename tile_shape_offset, typename gm_shape>
 inline void MSCATTER(gm_shape &dst, const tile_shape_in &src,
                      const tile_shape_offset &offset, IndexedByteRange range) {
+  pto::detail::check_indexed_tlsu_offset_type<tile_shape_offset>();
   pto::detail::require_indexed_range_compiler<decltype(offset)>();
   // PTO 0.58.7: offset lanes are explicit byte displacements from base.
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
@@ -1500,6 +1519,7 @@ template <typename tile_shape_out, typename tile_shape_offset,
 inline void MGATHER_MASK(tile_shape_out &dst, const gm_shape &src,
                          const tile_shape_offset &offset,
                          const tile_shape_mask &mask, IndexedByteRange range) {
+  pto::detail::check_indexed_tlsu_offset_type<tile_shape_offset>();
   pto::detail::require_indexed_range_compiler<decltype(offset)>();
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_out::TileDType>::IsValidActiveSize,
@@ -1600,6 +1620,7 @@ template <typename tile_shape_in, typename tile_shape_offset,
 inline void MSCATTER_MASK(gm_shape &dst, const tile_shape_in &src,
                           const tile_shape_offset &offset,
                           const tile_shape_mask &mask, IndexedByteRange range) {
+  pto::detail::check_indexed_tlsu_offset_type<tile_shape_offset>();
   pto::detail::require_indexed_range_compiler<decltype(offset)>();
   static_assert(tile_shape_offset::ValidCol <= tile_shape_offset::Cols, "");
   static_assert(tile_type_traits<typename tile_shape_in::TileDType>::IsValidActiveSize,

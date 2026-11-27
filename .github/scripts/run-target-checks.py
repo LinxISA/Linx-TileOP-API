@@ -13,7 +13,7 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 SUITES = (
     'test_scalar_shareability', 'test_tsel_contract', 'test_pto059_gap_api',
-    'test_pto_main_contract', 'test_indexed_tlsu_range',
+    'test_pto_main_contract', 'test_indexed_tlsu_range', 'test_indexed_tlsu_offset_types',
     'test_issue312_bias_macro', 'test_issue314_row_expand_offset',
     'test_packed_bits', 'test_packed_bf16_numeric', 'test_issue325_legacy_simt',
     'test_llvm138_narrow_tcmp', 'test_tcvt_select_regressions', 'test_predicate_adapters',
