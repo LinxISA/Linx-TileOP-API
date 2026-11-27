@@ -87,6 +87,9 @@ void select_{tag}(D{tag}&d,const D{tag}&t,const D{tag}&f,{mask_type} p) {{ TSEL(
         for bundle in bundles:
             self.assertEqual(bundle.count('B.IOT'), 1, bundle)
             self.assertEqual(bundle.count('B.IOR'), 1, bundle)
+            # CUBE is inferred from the source descriptor. TSEL may not
+            # encode a nonzero B.DATR Layout even in the GPR mask form.
+            self.assertNotRegex(bundle, r'B\.DATR[^\n]*CUBE_M(?:16|32)')
         # Complete source-only B.IOR: no destination GPR, two words only
         # for the four 8-bit cases (two layouts, S8/U8).
         two_words = sum(bool(re.search(r'B.IOR\s+\[[^\]]*,[^\]]*\], \[\]', b))
@@ -143,7 +146,9 @@ extern "C" void select(D&d,const D&p,const D&t,const D&f) {TSEL(d,p,t,f);}
         self.assertNotIn('poison', operations[0])
         # Three input Tile loads (mask/true/false), no old destination load;
         # payload plus both runtime dimensions are published to the result.
-        self.assertEqual(len(re.findall(r' = load <', result.stdout)), 3)
+        loads = len(re.findall(r' = load <', result.stdout))
+        transports = len(re.findall(r' = (?:tail )?call <[^\n]*@llvm\.linx\.blk\.tload', result.stdout))
+        self.assertEqual(loads + transports, 3)
         shape_stores = re.findall(
             r'call void @llvm\.linx\.scalar\.store\(ptr ([^,]+), i64 [^,]+, i32 4, i32 1\)',
             result.stdout)

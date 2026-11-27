@@ -1384,7 +1384,15 @@ public:
     return ColMaskInternal;
   }
 
-  void assignData(TileDType data) { data_ = data; }
+  __attribute__((always_inline)) void assignData(const TileDType &data) {
+#ifdef __linx
+    // Keep a completed assembly parent in its register carrier. An outlined
+    // aggregate assignment would save/reload it as an untyped i32 vector.
+    this->data() = data.Register;
+#else
+    data_ = data;
+#endif
+  }
 
   TileDType data_;
 };
