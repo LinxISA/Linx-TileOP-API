@@ -19632,14 +19632,26 @@ void TCOLARGMAX(tile_shape_out &dst, tile_shape_in &src) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (SelectedBundleComparisonShapeMatches): B.DIM describes the SOURCE
   // geometry (ValidCol/ValidRow/Col); LB1 must equal the source valid rows.
-  // The destination is rule-derived: exactly one valid row (1 x N) with the
-  // source column geometry.
+  // The destination is rule-derived: one valid row and source.ValidCol
+  // U32 indices; CUBE physical columns follow the result's U32 CELLs.
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_out::ValidRow == 1,
                 "TCOLARGMAX destination must have exactly one valid row (1 x N)");
   static_assert(tile_shape_out::ValidCol == DYNAMIC ||
-                    (tile_shape_out::ValidCol == tile_shape_in::ValidCol &&
-                     tile_shape_out::Cols == tile_shape_in::Cols),
-                "TCOLARGMAX destination columns must match the source columns");
+                    tile_shape_out::ValidCol == tile_shape_in::ValidCol,
+                "TCOLARGMAX destination valid columns must match the source columns");
+  // CUBE results use U32 CELL geometry, independently of the source dtype
+  // and physical width. RowMajor results retain the source row pitch.
+  if constexpr (tile_shape_out::BFractal == BLayout::CubeM16 ||
+                tile_shape_out::BFractal == BLayout::CubeM32) {
+    constexpr int CellCols = tile_shape_out::BFractal == BLayout::CubeM16 ? 2 : 1;
+    static_assert(tile_shape_in::ValidCol == DYNAMIC ||
+                      tile_shape_out::PhysicalCols ==
+                          ((tile_shape_in::ValidCol + CellCols - 1) / CellCols) * CellCols,
+                  "TCOLARGMAX destination physical columns must match U32 CELL geometry");
+  } else {
+    static_assert(tile_shape_out::Cols == tile_shape_in::Cols,
+                  "TCOLARGMAX destination physical columns must match the source columns");
+  }
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
                 "TCOLARGMAX destination layout must match the source "
                 "layout (B.DATR.Layout is shared by both operands)");
@@ -19722,14 +19734,26 @@ void TCOLARGMIN(tile_shape_out &dst, tile_shape_in &src) {
   PTO_NO_SUBTILE_VIEW_ASSERT(tile_shape_in);
   // ASL (SelectedBundleComparisonShapeMatches): B.DIM describes the SOURCE
   // geometry (ValidCol/ValidRow/Col); LB1 must equal the source valid rows.
-  // The destination is rule-derived: exactly one valid row (1 x N) with the
-  // source column geometry.
+  // The destination is rule-derived: one valid row and source.ValidCol
+  // U32 indices; CUBE physical columns follow the result's U32 CELLs.
   static_assert(tile_shape_out::ValidRow == DYNAMIC || tile_shape_out::ValidRow == 1,
                 "TCOLARGMIN destination must have exactly one valid row (1 x N)");
   static_assert(tile_shape_out::ValidCol == DYNAMIC ||
-                    (tile_shape_out::ValidCol == tile_shape_in::ValidCol &&
-                     tile_shape_out::Cols == tile_shape_in::Cols),
-                "TCOLARGMIN destination columns must match the source columns");
+                    tile_shape_out::ValidCol == tile_shape_in::ValidCol,
+                "TCOLARGMIN destination valid columns must match the source columns");
+  // CUBE results use U32 CELL geometry, independently of the source dtype
+  // and physical width. RowMajor results retain the source row pitch.
+  if constexpr (tile_shape_out::BFractal == BLayout::CubeM16 ||
+                tile_shape_out::BFractal == BLayout::CubeM32) {
+    constexpr int CellCols = tile_shape_out::BFractal == BLayout::CubeM16 ? 2 : 1;
+    static_assert(tile_shape_in::ValidCol == DYNAMIC ||
+                      tile_shape_out::PhysicalCols ==
+                          ((tile_shape_in::ValidCol + CellCols - 1) / CellCols) * CellCols,
+                  "TCOLARGMIN destination physical columns must match U32 CELL geometry");
+  } else {
+    static_assert(tile_shape_out::Cols == tile_shape_in::Cols,
+                  "TCOLARGMIN destination physical columns must match the source columns");
+  }
   static_assert(tile_shape_out::BFractal == tile_shape_in::BFractal,
                 "TCOLARGMIN destination layout must match the source "
                 "layout (B.DATR.Layout is shared by both operands)");

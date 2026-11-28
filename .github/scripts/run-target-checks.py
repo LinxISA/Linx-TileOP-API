@@ -18,7 +18,7 @@ SUITES = (
     'test_packed_bits', 'test_packed_bf16_numeric', 'test_issue325_legacy_simt',
     'test_llvm138_narrow_tcmp', 'test_tcvt_select_regressions', 'test_predicate_adapters',
     'test_toolchain24_cube_layout', 'test_local_m32_tload_assembly',
-    'test_shared_nd_to_cube',
+    'test_shared_nd_to_cube', 'test_static_matmul_shapes',
 )
 
 
