@@ -240,6 +240,41 @@ void forbidden(S &s, D &d) {{ TCVT(d,s); }}
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertIn('Illegal TCVT datatype pair: HiF4X2', result.stdout)
 
+    def test_column_arg_cube_uses_u32_cell_width(self):
+        for op in ('TCOLARGMAX', 'TCOLARGMIN'):
+            for layout, rows, source_cols, result_cols, valid in (
+                    ('CubeM16', 16, 4, 2, 2), ('CubeM32', 32, 4, 2, 2),
+                    ('CubeM16', 16, 4, 2, 1), ('CubeM32', 32, 4, 1, 1)):
+                with self.subTest(op=op, layout=layout, valid=valid):
+                    body = f'''
+using S = Tile<Location::Vec, __half, {rows}, {source_cols},
+               BLayout::{layout}, {rows}, {valid}>;
+using D = Tile<Location::Vec, uint32_t, 1, {result_cols},
+               BLayout::{layout}, 1, {valid}>;
+static_assert(S::PhysicalCols == {source_cols});
+static_assert(D::PhysicalCols == {result_cols});
+extern "C" void reduce(S &s, D &d) {{ {op}(d,s); }}
+'''
+                    result = self.build(body, '-c', '-o',
+                                        str(self.output / 'column-arg.o'))
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    self.assertGreater((self.output / 'column-arg.o').stat().st_size, 0)
+
+    def test_column_arg_rejects_wrong_valid_or_physical_width(self):
+        for op in ('TCOLARGMAX', 'TCOLARGMIN'):
+            for layout, cols, valid, diagnostic in (
+                    ('CubeM16', 2, 1, 'destination valid columns'),
+                    ('CubeM16', 4, 2, 'U32 CELL geometry'),
+                    ('RowMajor', 2, 2, 'destination physical columns')):
+                with self.subTest(op=op, layout=layout, cols=cols, valid=valid):
+                    result = self.build(f'''
+using S = Tile<Location::Vec, __half, 16, 4, BLayout::{layout}, 16, 2>;
+using D = Tile<Location::Vec, uint32_t, 1, {cols}, BLayout::{layout}, 1, {valid}>;
+void reduce(S &s, D &d) {{ {op}(d,s); }}
+''', '-fsyntax-only')
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn(diagnostic, result.stdout)
+
     def test_column_arg_requires_u32(self):
         for op in ('TCOLARGMAX', 'TCOLARGMIN'):
             for dtype in ('uint32_t', 'float', '__half'):

@@ -28,7 +28,7 @@ jobs:
     env:
       LLVM_REPO: https://github.com/LinxISA/llvm-project.git
       LLVM_REF: "0.59"
-      LLVM_PIN: 44a6a117a102780b2e43d7271590b22b861ce06d
+      LLVM_PIN: 78fd9590d758a15287906794a4cbe71b6fc373ef
       MUSL_PIN: 798f0fb819154d1484113a3c8011655ca7c26754
       LINUX_PIN: 12342453fa8c0bbcd30493c45eca14ecae852931
       JEMALLOC_PIN: 4495309cd11cae1a0a2d008c65acd9c410076f06
